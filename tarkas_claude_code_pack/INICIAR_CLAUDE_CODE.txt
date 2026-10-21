@@ -1,0 +1,3 @@
+Abra Claude Code na raiz do repositório e envie:
+
+Leia CLAUDE.md, README.md e docs/CLAUDE_CODE_FIRST_PROMPT.md. Siga o prompt inicial literalmente: faça apenas auditoria do ambiente e do repositório, não implemente funcionalidades ainda, não sobrescreva arquivos e reporte resultados reais. Aguarde aprovação antes da próxima fase.

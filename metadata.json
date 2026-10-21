@@ -1,0 +1,6 @@
+{
+  "name": "Tarkas",
+  "description": "Central musical Android com reprodução, diagnóstico honesto de áudio, perfis sonoros, curiosidades verificadas e assistente contextual.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

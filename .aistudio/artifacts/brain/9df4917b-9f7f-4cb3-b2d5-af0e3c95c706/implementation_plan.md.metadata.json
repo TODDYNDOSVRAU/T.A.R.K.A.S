@@ -1,0 +1,6 @@
+{
+  "summary":  "Plano de implementação para reestruturação visual estilo Poweramp Equalizer, espectro de frequência FFT em tempo real, marcações puras em Hz, reconhecimento de voz in-app sem pop-up do Google, busca compacta com dropdown suspenso, e integração com API do Gemini para curiosidades da música atual.",
+  "updatedAt":  "2026-10-21T04:17:40.044188828Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}
