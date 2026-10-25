@@ -1,83 +1,94 @@
 package com.example.ui.screens
 
+import android.content.Context
+import android.media.AudioManager
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.automirrored.filled.VolumeDown
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Equalizer
+import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Forward5
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Replay5
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Curiosity
+import com.example.data.model.Playlist
+import com.example.data.model.RepeatMode
 import com.example.data.model.Track
 import com.example.ui.components.CuriosityDetailDialog
-import com.example.ui.components.WaveformVisualizer
-import com.example.ui.theme.AppleMusicPink
-import com.example.ui.theme.SpaceGrotesk
+import com.example.ui.components.TarkasSectionTitle
+import com.example.ui.components.TrackActionsMenu
+import kotlin.math.roundToInt
 
 @Composable
 fun MusicScreen(
@@ -97,6 +108,18 @@ fun MusicScreen(
   onAddLocalTrack: (String, String, String, Long) -> Unit,
   onSearchAudius: (String) -> Unit,
   onLoadAudiusTrending: () -> Unit,
+  isShuffle: Boolean,
+  repeatMode: RepeatMode,
+  favoriteIds: List<String>,
+  playlists: List<Playlist>,
+  onToggleShuffle: () -> Unit,
+  onCycleRepeat: () -> Unit,
+  onToggleFavorite: (Track) -> Unit,
+  onPlayNext: (Track) -> Unit,
+  onAddToQueue: (Track) -> Unit,
+  onAddToPlaylist: (String, Track) -> Unit,
+  onCreatePlaylist: (String, Track) -> Unit,
+  onOpenQueue: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
@@ -117,391 +140,406 @@ fun MusicScreen(
           }
         }
       } catch (_: Exception) {}
-      onAddLocalTrack(displayName, "Biblioteca Local", it.toString(), 180000L)
+      // Read the real duration; fall back to 3 min only if the file has no metadata.
+      var realDurationMs = 0L
+      try {
+        val retriever = android.media.MediaMetadataRetriever()
+        retriever.setDataSource(context, it)
+        realDurationMs = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+        retriever.release()
+      } catch (_: Exception) {}
+      onAddLocalTrack(displayName, "Biblioteca Local", it.toString(), if (realDurationMs > 0) realDurationMs else 180000L)
     }
   }
 
-  LazyColumn(
-    modifier = modifier
-      .fillMaxSize()
-      .padding(horizontal = 16.dp),
-    contentPadding = PaddingValues(vertical = 12.dp),
-    verticalArrangement = Arrangement.spacedBy(16.dp)
-  ) {
+  // The Now Playing page takes its tint from the artwork, like the Apple Music player sheet.
+  val trackColor = Color(currentTrack?.colorHex ?: 0xFF46C9D3)
+  val pageTop = lerp(trackColor, Color.Black, 0.5f)
+  val pageBottom = lerp(trackColor, Color.Black, 0.82f)
+  val onPage = Color.White
+  val onPageMuted = Color.White.copy(alpha = 0.72f)
+  val trackFill = Color.White.copy(alpha = 0.28f)
 
-    // 1. Audius Search Bar (Search and Play Streaming API)
-    item {
-      Column {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Text(
-            text = "Explorar Audius",
-            fontFamily = SpaceGrotesk,
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp,
-            color = MaterialTheme.colorScheme.onBackground
-          )
+  val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+  val maxVolume = remember { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1) }
+  var volume by remember { mutableFloatStateOf(audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / maxVolume) }
 
-          OutlinedButton(
-            onClick = onLoadAudiusTrending,
-            shape = RoundedCornerShape(12.dp),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-            modifier = Modifier.testTag("btn_audius_trending")
-          ) {
-            Icon(
-              imageVector = Icons.AutoMirrored.Filled.TrendingUp,
-              contentDescription = null,
-              modifier = Modifier.size(14.dp),
-              tint = AppleMusicPink
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text("Trending", fontSize = 11.sp, color = AppleMusicPink)
-          }
-        }
+  BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    val pageHeight = maxHeight
 
-        Spacer(modifier = Modifier.height(8.dp))
+    LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(bottom = 40.dp)
+    ) {
 
-        OutlinedTextField(
-          value = searchQuery,
-          onValueChange = { searchQuery = it },
-          placeholder = { Text("Buscar músicas e artistas no Audius...", fontSize = 13.sp) },
-          leadingIcon = {
-            Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-          },
-          trailingIcon = {
-            if (isSearchingAudius) {
-              CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-            } else if (searchQuery.isNotBlank()) {
-              IconButton(onClick = { searchQuery = "" }) {
-                Icon(imageVector = Icons.Default.Close, contentDescription = "Limpar")
-              }
-            }
-          },
-          singleLine = true,
-          shape = RoundedCornerShape(16.dp),
-          colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surface,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surface
-          ),
-          modifier = Modifier
-            .fillMaxWidth()
-            .testTag("audius_search_input")
-        )
-
-        AnimatedVisibility(visible = searchQuery.isNotBlank()) {
-          Button(
-            onClick = { onSearchAudius(searchQuery.trim()) },
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(top = 6.dp)
-              .testTag("btn_audius_search_submit")
-          ) {
-            Text("Pesquisar no Audius", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-          }
-        }
-      }
-    }
-
-    // 2. Apple Music Hero Player Card
-    item {
-      Card(
-        modifier = Modifier
-          .fillMaxWidth()
-          .clip(RoundedCornerShape(26.dp))
-          .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(26.dp))
-          .testTag("music_full_player_card"),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
-      ) {
+      // 1. Now Playing page (fills the screen; everything else is reached by scrolling down)
+      item {
         Column(
           modifier = Modifier
             .fillMaxWidth()
-            .padding(20.dp),
+            .height(pageHeight)
+            .background(Brush.verticalGradient(listOf(pageTop, pageBottom)))
+            .statusBarsPadding()
+            .padding(horizontal = 24.dp)
+            .testTag("music_full_player_card"),
           horizontalAlignment = Alignment.CenterHorizontally
         ) {
-
-          // Ambient Artwork
-          val trackColor = Color(currentTrack?.colorHex ?: 0xFFFA243C)
+          Spacer(modifier = Modifier.height(10.dp))
           Box(
             modifier = Modifier
-              .size(150.dp)
-              .clip(RoundedCornerShape(22.dp))
+              .width(40.dp)
+              .height(5.dp)
+              .clip(CircleShape)
+              .background(Color.White.copy(alpha = 0.4f))
+          )
+
+          Spacer(modifier = Modifier.weight(1f))
+
+          Box(
+            modifier = Modifier
+              .fillMaxWidth(0.8f)
+              .aspectRatio(1f)
+              .shadow(24.dp, RoundedCornerShape(10.dp))
+              .clip(RoundedCornerShape(10.dp))
               .background(
-                Brush.radialGradient(
-                  colors = listOf(
-                    trackColor,
-                    trackColor.copy(alpha = 0.8f),
-                    Color(0xFF0F0F12)
-                  )
+                Brush.linearGradient(
+                  listOf(trackColor, lerp(trackColor, Color.Black, 0.45f))
                 )
-              )
-              .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(22.dp)),
+              ),
             contentAlignment = Alignment.Center
           ) {
             Icon(
               imageVector = Icons.Default.MusicNote,
               contentDescription = null,
               tint = Color.White,
-              modifier = Modifier.size(64.dp)
+              modifier = Modifier.size(72.dp)
             )
           }
 
-          Spacer(modifier = Modifier.height(16.dp))
+          Spacer(modifier = Modifier.weight(1f))
 
-          Text(
-            text = currentTrack?.title ?: "Selecione uma faixa",
-            fontFamily = SpaceGrotesk,
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-          )
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                text = currentTrack?.title ?: "Selecione uma faixa",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                color = onPage,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
+              Text(
+                text = currentTrack?.artist ?: "Escolha uma música na lista abaixo",
+                fontSize = 22.sp,
+                color = onPageMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
+            }
+            if (currentTrack != null) {
+              val isFav = currentTrack.id in favoriteIds
+              Box(
+                modifier = Modifier
+                  .size(40.dp)
+                  .clip(CircleShape)
+                  .background(Color.White.copy(alpha = 0.22f)),
+                contentAlignment = Alignment.Center
+              ) {
+                TrackActionsMenu(
+                  track = currentTrack,
+                  isFavorite = isFav,
+                  playlists = playlists,
+                  onToggleFavorite = { onToggleFavorite(currentTrack) },
+                  onPlayNext = { onPlayNext(currentTrack) },
+                  onAddToQueue = { onAddToQueue(currentTrack) },
+                  onAddToPlaylist = { id -> onAddToPlaylist(id, currentTrack) },
+                  onCreatePlaylist = { name -> onCreatePlaylist(name, currentTrack) },
+                  iconTint = onPage,
+                  icon = Icons.Default.MoreHoriz
+                )
+              }
+            }
+          }
 
-          Text(
-            text = "${currentTrack?.artist ?: ""} • ${currentTrack?.album ?: ""}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-          )
+          Spacer(modifier = Modifier.height(18.dp))
 
-          Spacer(modifier = Modifier.height(10.dp))
-
-          // Real-time audio waveform visualizer
-          WaveformVisualizer(
-            energy = if (isPlaying) waveformEnergy else 0.1f,
-            barCount = 28,
-            modifier = Modifier
-              .fillMaxWidth()
-              .height(34.dp)
-              .clip(RoundedCornerShape(8.dp))
-              .background(MaterialTheme.colorScheme.background.copy(alpha = 0.6f))
-              .padding(horizontal = 8.dp, vertical = 4.dp),
-            barColor = MaterialTheme.colorScheme.primary
-          )
-
-          Spacer(modifier = Modifier.height(6.dp))
-
-          // Scrubber
           val progress = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
-          Slider(
-            value = progress,
-            onValueChange = { frac ->
-              val target = (frac * durationMs).toLong()
-              onSeekTo(target)
-            },
-            modifier = Modifier
-              .fillMaxWidth()
-              .testTag("music_progress_slider"),
-            colors = SliderDefaults.colors(
-              thumbColor = MaterialTheme.colorScheme.primary,
-              activeTrackColor = MaterialTheme.colorScheme.primary,
-              inactiveTrackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-            )
+          ScrubBar(
+            fraction = progress,
+            description = "Progresso da faixa",
+            filled = onPage.copy(alpha = 0.85f),
+            track = trackFill,
+            onChange = { frac -> if (durationMs > 0) onSeekTo((frac * durationMs).toLong()) },
+            modifier = Modifier.testTag("music_progress_slider")
           )
-
           Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
           ) {
-            val currSec = currentPositionMs / 1000
-            val durSec = durationMs / 1000
-            Text(
-              text = String.format("%02d:%02d", currSec / 60, currSec % 60),
-              fontSize = 12.sp,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-              text = String.format("%02d:%02d", durSec / 60, durSec % 60),
-              fontSize = 12.sp,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text(text = formatClock(currentPositionMs), fontSize = 13.sp, color = onPageMuted)
+            Text(text = "-" + formatClock((durationMs - currentPositionMs).coerceAtLeast(0L)), fontSize = 13.sp, color = onPageMuted)
           }
 
-          Spacer(modifier = Modifier.height(8.dp))
+          Spacer(modifier = Modifier.height(10.dp))
 
-          // Transport controls
+          // Transport: rewind, play, fast-forward
           Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
           ) {
             IconButton(
-              onClick = { onSeekTo((currentPositionMs - 5000L).coerceAtLeast(0L)) },
-              modifier = Modifier.size(44.dp)
-            ) {
-              Icon(imageVector = Icons.Default.Replay5, contentDescription = "Voltar 5s", modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-
-            IconButton(
               onClick = onPreviousTrack,
-              modifier = Modifier.size(50.dp).testTag("music_btn_previous")
+              modifier = Modifier.size(72.dp).testTag("music_btn_previous")
             ) {
-              Icon(imageVector = Icons.Default.SkipPrevious, contentDescription = "Faixa Anterior", modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurface)
+              Icon(Icons.Default.FastRewind, contentDescription = "Faixa Anterior", modifier = Modifier.size(52.dp), tint = onPage)
             }
-
-            Button(
+            IconButton(
               onClick = onTogglePlayPause,
-              modifier = Modifier
-                .size(66.dp)
-                .clip(CircleShape)
-                .testTag("music_btn_play_pause"),
-              colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-              contentPadding = PaddingValues(0.dp)
+              modifier = Modifier.size(88.dp).testTag("music_btn_play_pause")
             ) {
               Icon(
                 imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                 contentDescription = if (isPlaying) "Pausar" else "Reproduzir",
-                tint = Color.White,
-                modifier = Modifier.size(36.dp)
+                tint = onPage,
+                modifier = Modifier.size(76.dp)
               )
             }
-
             IconButton(
               onClick = onNextTrack,
-              modifier = Modifier.size(50.dp).testTag("music_btn_next")
+              modifier = Modifier.size(72.dp).testTag("music_btn_next")
             ) {
-              Icon(imageVector = Icons.Default.SkipNext, contentDescription = "Próxima Faixa", modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurface)
-            }
-
-            IconButton(
-              onClick = { onSeekTo((currentPositionMs + 5000L).coerceAtMost(durationMs)) },
-              modifier = Modifier.size(44.dp)
-            ) {
-              Icon(imageVector = Icons.Default.Forward5, contentDescription = "Avançar 5s", modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+              Icon(Icons.Default.FastForward, contentDescription = "Próxima Faixa", modifier = Modifier.size(52.dp), tint = onPage)
             }
           }
 
-          // Curiosity preview button (clicking it opens the dialog)
-          if (activeCuriosity != null) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Surface(
+          Spacer(modifier = Modifier.height(10.dp))
+
+          // Volume
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Icon(Icons.AutoMirrored.Filled.VolumeDown, contentDescription = null, tint = onPageMuted, modifier = Modifier.size(22.dp))
+            ScrubBar(
+              fraction = volume,
+              description = "Volume",
+              filled = onPage.copy(alpha = 0.85f),
+              track = trackFill,
+              onChange = { frac ->
+                volume = frac
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, (frac * maxVolume).roundToInt(), 0)
+              },
+              modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp)
+                .testTag("music_volume_slider")
+            )
+            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, tint = onPageMuted, modifier = Modifier.size(22.dp))
+          }
+
+          Spacer(modifier = Modifier.height(6.dp))
+
+          // Shuffle, repeat, curiosity and queue (the Apple Music bottom row)
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            IconButton(onClick = onToggleShuffle, modifier = Modifier.size(52.dp).testTag("music_btn_shuffle")) {
+              Icon(
+                imageVector = Icons.Default.Shuffle,
+                contentDescription = if (isShuffle) "Aleatório ligado" else "Aleatório desligado",
+                tint = if (isShuffle) onPage else onPageMuted.copy(alpha = 0.6f)
+              )
+            }
+            IconButton(onClick = onCycleRepeat, modifier = Modifier.size(52.dp).testTag("music_btn_repeat")) {
+              Icon(
+                imageVector = if (repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                contentDescription = when (repeatMode) {
+                  RepeatMode.OFF -> "Repetir desligado"
+                  RepeatMode.ALL -> "Repetir tudo"
+                  RepeatMode.ONE -> "Repetir uma faixa"
+                },
+                tint = if (repeatMode != RepeatMode.OFF) onPage else onPageMuted.copy(alpha = 0.6f)
+              )
+            }
+            IconButton(
+              onClick = { showCuriosityDialog = true },
+              enabled = activeCuriosity != null,
+              modifier = Modifier.size(52.dp).testTag("music_btn_curiosity")
+            ) {
+              Icon(
+                imageVector = Icons.Default.Lightbulb,
+                contentDescription = "Curiosidade da faixa",
+                tint = if (activeCuriosity != null) onPage else onPageMuted.copy(alpha = 0.3f)
+              )
+            }
+            IconButton(onClick = onOpenQueue, modifier = Modifier.size(52.dp).testTag("music_btn_queue")) {
+              Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Fila de reprodução", tint = onPageMuted)
+            }
+          }
+          Spacer(modifier = Modifier.height(8.dp))
+        }
+      }
+
+      // 2. Audius search (streaming)
+      item {
+        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp)) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            TarkasSectionTitle("Explorar Audius")
+            AudiusTrendingLink(onClick = onLoadAudiusTrending)
+          }
+
+          Spacer(modifier = Modifier.height(10.dp))
+
+          TextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            placeholder = { Text("Buscar músicas e artistas no Audius", fontSize = 17.sp) },
+            leadingIcon = {
+              Icon(imageVector = Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            },
+            trailingIcon = {
+              if (isSearchingAudius) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+              } else if (searchQuery.isNotBlank()) {
+                IconButton(onClick = { searchQuery = "" }) {
+                  Icon(imageVector = Icons.Default.Close, contentDescription = "Limpar")
+                }
+              }
+            },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp),
+            colors = TextFieldDefaults.colors(
+              unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+              focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+              unfocusedIndicatorColor = Color.Transparent,
+              focusedIndicatorColor = Color.Transparent
+            ),
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("audius_search_input")
+          )
+
+          AnimatedVisibility(visible = searchQuery.isNotBlank()) {
+            Button(
+              onClick = { onSearchAudius(searchQuery.trim()) },
               shape = RoundedCornerShape(12.dp),
-              color = MaterialTheme.colorScheme.surface,
+              colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
               modifier = Modifier
                 .fillMaxWidth()
-                .clickable { showCuriosityDialog = true }
+                .padding(top = 8.dp)
+                .height(48.dp)
+                .testTag("btn_audius_search_submit")
             ) {
-              Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-              ) {
-                Icon(imageVector = Icons.Default.Lightbulb, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                  text = "Curiosidade: ${activeCuriosity.shortTrivia.take(50)}...",
-                  fontSize = 11.sp,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis,
-                  modifier = Modifier.weight(1f)
-                )
-                Text("Ler", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-              }
+              Text("Pesquisar no Audius", fontWeight = FontWeight.Bold, fontSize = 15.sp)
             }
           }
         }
       }
-    }
 
-    // 3. Local Audio SAF Picker Action
-    item {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Text(
-          text = "Faixas Disponíveis (${tracks.size})",
-          fontFamily = SpaceGrotesk,
-          fontWeight = FontWeight.Bold,
-          fontSize = 17.sp,
-          color = MaterialTheme.colorScheme.onBackground
-        )
-
-        OutlinedButton(
-          onClick = { audioPickerLauncher.launch("audio/*") },
-          shape = RoundedCornerShape(10.dp),
-          contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-          modifier = Modifier.testTag("music_btn_open_local")
-        ) {
-          Icon(imageVector = Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(14.dp))
-          Spacer(modifier = Modifier.width(4.dp))
-          Text("Abrir do Aparelho", fontSize = 11.sp)
-        }
-      }
-    }
-
-    // 4. Track List
-    items(tracks) { track ->
-      val isSelected = currentTrack?.id == track.id
-      Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface,
-        modifier = Modifier
-          .fillMaxWidth()
-          .clickable { onPlayTrack(track) }
-          .testTag("track_row_${track.id}")
-      ) {
+      // 3. Track list
+      item {
         Row(
           modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 20.dp),
+          horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically
         ) {
-          Box(
+          TarkasSectionTitle("Faixas (${tracks.size})")
+          Row(
             modifier = Modifier
-              .size(44.dp)
-              .clip(RoundedCornerShape(10.dp))
-              .background(Color(track.colorHex)),
-            contentAlignment = Alignment.Center
+              .clip(RoundedCornerShape(12.dp))
+              .clickable { audioPickerLauncher.launch("audio/*") }
+              .padding(horizontal = 10.dp, vertical = 12.dp)
+              .testTag("music_btn_open_local"),
+            verticalAlignment = Alignment.CenterVertically
           ) {
-            Icon(
-              imageVector = if (isSelected && isPlaying) Icons.Default.Equalizer else Icons.Default.MusicNote,
-              contentDescription = null,
-              tint = Color.White,
-              modifier = Modifier.size(22.dp)
-            )
+            Icon(Icons.Default.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Abrir do aparelho", fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
           }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+      }
 
-          Spacer(modifier = Modifier.width(12.dp))
+      items(tracks) { track ->
+        val isSelected = currentTrack?.id == track.id
+        Column(modifier = Modifier.padding(horizontal = 20.dp).testTag("track_row_${track.id}")) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .clickable { onPlayTrack(track) }
+              .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Box(
+              modifier = Modifier
+                .size(64.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(Brush.verticalGradient(listOf(Color(track.colorHex), Color(track.colorHex).copy(alpha = 0.6f)))),
+              contentAlignment = Alignment.Center
+            ) {
+              Icon(
+                imageVector = if (isSelected && isPlaying) Icons.Default.Equalizer else Icons.Default.MusicNote,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(26.dp)
+              )
+            }
 
-          Column(modifier = Modifier.weight(1f)) {
+            Spacer(modifier = Modifier.width(14.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                text = track.title,
+                fontSize = 17.sp,
+                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
+              Text(
+                text = "${track.artist} • ${track.album}",
+                fontSize = 15.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
+            }
+
             Text(
-              text = track.title,
-              fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-              fontSize = 14.sp,
-              color = MaterialTheme.colorScheme.onSurface,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis
-            )
-            Text(
-              text = "${track.artist} • ${track.album}",
-              fontSize = 11.sp,
+              text = track.formattedDuration(),
+              fontSize = 15.sp,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis
+              modifier = Modifier.padding(start = 8.dp)
+            )
+
+            TrackActionsMenu(
+              track = track,
+              isFavorite = track.id in favoriteIds,
+              playlists = playlists,
+              onToggleFavorite = { onToggleFavorite(track) },
+              onPlayNext = { onPlayNext(track) },
+              onAddToQueue = { onAddToQueue(track) },
+              onAddToPlaylist = { id -> onAddToPlaylist(id, track) },
+              onCreatePlaylist = { name -> onCreatePlaylist(name, track) }
             )
           }
-
-          Text(
-            text = track.formattedDuration(),
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 8.dp)
+          HorizontalDivider(
+            modifier = Modifier.padding(start = 78.dp),
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
           )
         }
       }
-    }
-
-    item {
-      Spacer(modifier = Modifier.height(40.dp))
     }
   }
 
@@ -512,4 +550,73 @@ fun MusicScreen(
       onDismiss = { showCuriosityDialog = false }
     )
   }
+}
+
+/** "Trending" link next to the Audius title. */
+@Composable
+private fun AudiusTrendingLink(onClick: () -> Unit) {
+  Row(
+    modifier = Modifier
+      .clip(RoundedCornerShape(12.dp))
+      .clickable(onClick = onClick)
+      .padding(horizontal = 10.dp, vertical = 12.dp)
+      .testTag("btn_audius_trending"),
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    Icon(
+      imageVector = Icons.AutoMirrored.Filled.TrendingUp,
+      contentDescription = null,
+      tint = MaterialTheme.colorScheme.primary,
+      modifier = Modifier.size(20.dp)
+    )
+    Spacer(modifier = Modifier.width(6.dp))
+    Text("Em alta", fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
+  }
+}
+
+/** Thin rounded progress bar that can be tapped or dragged (track position and volume). */
+@Composable
+private fun ScrubBar(
+  fraction: Float,
+  description: String,
+  filled: Color,
+  track: Color,
+  onChange: (Float) -> Unit,
+  modifier: Modifier = Modifier
+) {
+  Box(
+    modifier = modifier
+      .fillMaxWidth()
+      .height(28.dp)
+      .semantics { contentDescription = "$description ${(fraction * 100).roundToInt()}%" }
+      .pointerInput(Unit) {
+        detectTapGestures { offset -> onChange((offset.x / size.width).coerceIn(0f, 1f)) }
+      }
+      .pointerInput(Unit) {
+        detectHorizontalDragGestures { change, _ ->
+          onChange((change.position.x / size.width).coerceIn(0f, 1f))
+        }
+      },
+    contentAlignment = Alignment.CenterStart
+  ) {
+    Box(
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(6.dp)
+        .clip(CircleShape)
+        .background(track)
+    )
+    Box(
+      modifier = Modifier
+        .fillMaxWidth(fraction.coerceIn(0f, 1f))
+        .height(6.dp)
+        .clip(CircleShape)
+        .background(filled)
+    )
+  }
+}
+
+private fun formatClock(ms: Long): String {
+  val totalSec = (ms / 1000).coerceAtLeast(0)
+  return String.format("%d:%02d", totalSec / 60, totalSec % 60)
 }

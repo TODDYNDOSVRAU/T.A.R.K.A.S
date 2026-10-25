@@ -1,13 +1,12 @@
 package com.example.ui.screens
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -26,10 +25,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -37,27 +38,27 @@ import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Equalizer
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.HelpOutline
-import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,21 +69,22 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.AssistantMessage
 import com.example.data.model.LocalReminder
 import com.example.data.model.LocalTimer
 import com.example.data.model.MessageSender
-import com.example.data.model.ToolExecutionReport
 import com.example.ui.components.ToolReportCard
-import com.example.ui.theme.AppleMusicCyan
-import com.example.ui.theme.AppleMusicPink
-import com.example.ui.theme.AppleMusicPurple
 import com.example.ui.theme.SpaceGrotesk
 import java.util.Locale
 
@@ -99,475 +101,388 @@ fun AssistantScreen(
   onOpenCuriositySettings: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
-  val context = LocalContext.current
-  var isTextMode by remember { mutableStateOf(false) }
   var textInput by remember { mutableStateOf("") }
   var isListening by remember { mutableStateOf(false) }
+  var voiceError by remember { mutableStateOf<String?>(null) }
+  val listState = rememberLazyListState()
+  val colors = MaterialTheme.colorScheme
 
-  // Speech Recognizer Launcher for Audio/Microphone
+  // System speech recognizer for the microphone button
   val speechLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.StartActivityForResult()
   ) { result ->
     isListening = false
     if (result.resultCode == Activity.RESULT_OK) {
-      val data = result.data
-      val matches = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-      val query = matches?.firstOrNull()
-      if (!query.isNullOrBlank()) {
-        onSendMessage(query)
-      }
+      val query = result.data
+        ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+        ?.firstOrNull()
+      if (!query.isNullOrBlank()) onSendMessage(query)
     }
   }
 
   fun launchVoiceInput() {
+    voiceError = null
     try {
       isListening = true
       val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
         putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-        putExtra(RecognizerIntent.EXTRA_PROMPT, "Ouvindo... Peça uma análise, curioso sobre a música, ou ajuste o som")
+        putExtra(RecognizerIntent.EXTRA_PROMPT, "Peça uma análise, troque de faixa ou ajuste o som")
       }
       speechLauncher.launch(intent)
+    } catch (_: ActivityNotFoundException) {
+      isListening = false
+      voiceError = "Este aparelho não tem reconhecimento de voz. Digite o comando abaixo."
     } catch (_: Exception) {
       isListening = false
-      isTextMode = true
+      voiceError = "Não foi possível abrir o reconhecimento de voz. Digite o comando abaixo."
     }
   }
 
-  val lastAssistantMsg = messages.lastOrNull { it.sender == MessageSender.ASSISTANT }
-  val lastUserMsg = messages.lastOrNull { it.sender == MessageSender.USER }
+  // Keep the newest message in view: index 0 is the header, messages follow.
+  LaunchedEffect(messages.size) {
+    if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size)
+  }
 
-  LazyColumn(
-    modifier = modifier
-      .fillMaxSize()
-      .padding(horizontal = 16.dp),
-    contentPadding = PaddingValues(vertical = 12.dp),
-    horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(16.dp)
-  ) {
+  Column(modifier = modifier.fillMaxSize()) {
+    LazyColumn(
+      state = listState,
+      modifier = Modifier
+        .weight(1f)
+        .fillMaxWidth()
+        .padding(horizontal = 20.dp),
+      contentPadding = PaddingValues(top = 4.dp, bottom = 12.dp),
+      verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
 
-    // 1. Siri / Google Assistant Orb & Voice Area
-    item {
-      Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(top = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-      ) {
-
-        // Mode switch pills (Áudio / Microfone vs Teclado)
-        Row(
-          modifier = Modifier.padding(bottom = 14.dp),
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-          verticalAlignment = Alignment.CenterVertically
+      // Header: orb, status, active timers and curiosity settings
+      item {
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalAlignment = Alignment.CenterHorizontally
         ) {
-          Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = if (!isTextMode) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier
-              .clickable { isTextMode = false }
-              .testTag("btn_mode_voice")
-          ) {
-            Row(
-              modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Icon(imageVector = Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(16.dp), tint = if (!isTextMode) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
-              Spacer(modifier = Modifier.width(6.dp))
-              Text("Modo Voz", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (!isTextMode) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-          }
+          val infiniteTransition = rememberInfiniteTransition(label = "AssistantOrb")
+          val pulseScale by infiniteTransition.animateFloat(
+            initialValue = 0.95f,
+            targetValue = 1.06f,
+            animationSpec = infiniteRepeatable(
+              animation = tween(1200, easing = FastOutSlowInEasing),
+              repeatMode = RepeatMode.Reverse
+            ),
+            label = "pulse"
+          )
 
-          Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = if (isTextMode) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier
-              .clickable { isTextMode = true }
-              .testTag("btn_mode_text")
-          ) {
-            Row(
-              modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Icon(imageVector = Icons.Default.Keyboard, contentDescription = null, modifier = Modifier.size(16.dp), tint = if (isTextMode) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
-              Spacer(modifier = Modifier.width(6.dp))
-              Text("Modo Texto", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (isTextMode) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-          }
-
-          // Help chip
-          Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.clickable { onSendMessage("help") }
-          ) {
-            Icon(
-              imageVector = Icons.AutoMirrored.Filled.HelpOutline,
-              contentDescription = "Ajuda e Comandos",
-              modifier = Modifier
-                .padding(6.dp)
-                .size(18.dp),
-              tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-          }
-        }
-
-        // Animated Siri Orb
-        val infiniteTransition = rememberInfiniteTransition(label = "SiriOrb")
-        val pulseScale by infiniteTransition.animateFloat(
-          initialValue = 0.95f,
-          targetValue = 1.08f,
-          animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-          ),
-          label = "pulse"
-        )
-        val glowAlpha by infiniteTransition.animateFloat(
-          initialValue = 0.4f,
-          targetValue = 0.85f,
-          animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-          ),
-          label = "glow"
-        )
-
-        Box(
-          modifier = Modifier
-            .size(140.dp)
-            .scale(if (isListening || isProcessing) pulseScale else 1f)
-            .clip(CircleShape)
-            .background(
-              Brush.radialGradient(
-                listOf(
-                  AppleMusicPink.copy(alpha = glowAlpha),
-                  AppleMusicPurple.copy(alpha = 0.6f),
-                  AppleMusicCyan.copy(alpha = 0.4f),
-                  Color.Transparent
-                )
-              )
-            )
-            .clickable { launchVoiceInput() }
-            .testTag("siri_voice_orb"),
-          contentAlignment = Alignment.Center
-        ) {
           Box(
             modifier = Modifier
-              .size(76.dp)
+              .size(112.dp)
+              .scale(if (isListening || isProcessing) pulseScale else 1f)
               .clip(CircleShape)
-              .background(Color(0xFF0D0D10)),
-            contentAlignment = Alignment.Center
-          ) {
-            Icon(
-              imageVector = if (isProcessing) Icons.Default.GraphicEq else Icons.Default.Mic,
-              contentDescription = "Falar com Assistente",
-              tint = if (isListening) AppleMusicPink else Color.White,
-              modifier = Modifier.size(36.dp)
-            )
-          }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        Text(
-          text = if (isListening) "Ouvindo você..." else if (isProcessing) "Pesquisando e analisando..." else "Toque no orbe para falar",
-          fontFamily = SpaceGrotesk,
-          fontWeight = FontWeight.Bold,
-          fontSize = 17.sp,
-          color = MaterialTheme.colorScheme.onBackground
-        )
-
-        Text(
-          text = "ou digite seu comando abaixo (ex: 'analisar música')",
-          fontSize = 11.sp,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-      }
-    }
-
-    // 2. Siri / Assistant Response Card
-    if (lastAssistantMsg != null) {
-      item {
-        Card(
-          modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
-            .testTag("assistant_siri_response_card"),
-          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-          elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-          Column(modifier = Modifier.padding(18.dp)) {
-            // If there was a user request, display it as a query badge
-            if (lastUserMsg != null) {
-              Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.padding(bottom = 10.dp)
-              ) {
-                Text(
-                  text = "\"${lastUserMsg.text}\"",
-                  fontSize = 12.sp,
-                  fontWeight = FontWeight.Medium,
-                  color = MaterialTheme.colorScheme.primary,
-                  modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+              .background(
+                Brush.radialGradient(
+                  listOf(
+                    colors.primary.copy(alpha = 0.85f),
+                    colors.secondary.copy(alpha = 0.45f),
+                    Color.Transparent
+                  )
                 )
-              }
-            }
-
-            Text(
-              text = lastAssistantMsg.text,
-              style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.onSurface,
-              fontSize = 14.sp,
-              lineHeight = 20.sp
-            )
-
-            lastAssistantMsg.toolReport?.let { report ->
-              Spacer(modifier = Modifier.height(8.dp))
-              ToolReportCard(report = report)
-            }
-          }
-        }
-      }
-    }
-
-    // 2. Curiosidades Musicais Feature Card
-    item {
-      Card(
-        modifier = Modifier
-          .fillMaxWidth()
-          .clip(RoundedCornerShape(20.dp))
-          .clickable { onOpenCuriositySettings() }
-          .testTag("btn_assistant_curiosidades_musicais"),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-      ) {
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-          Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically
+              )
+              .clickable { launchVoiceInput() }
+              .testTag("siri_voice_orb"),
+            contentAlignment = Alignment.Center
           ) {
             Box(
               modifier = Modifier
-                .size(44.dp)
+                .size(62.dp)
                 .clip(CircleShape)
-                .background(Brush.linearGradient(listOf(AppleMusicPink, AppleMusicPurple))),
+                .background(colors.background),
               contentAlignment = Alignment.Center
             ) {
               Icon(
-                imageVector = Icons.Default.AutoAwesome,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(22.dp)
-              )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column {
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                  text = "Curiosidades Musicais",
-                  fontFamily = SpaceGrotesk,
-                  fontWeight = FontWeight.Bold,
-                  fontSize = 14.sp,
-                  color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Surface(
-                  shape = RoundedCornerShape(8.dp),
-                  color = if (curiosityConfig?.enabled != false) AppleMusicPink.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surface,
-                  modifier = Modifier.padding(horizontal = 2.dp)
-                ) {
-                  Text(
-                    text = if (curiosityConfig?.enabled != false) "ATIVADO" else "DESATIVADO",
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (curiosityConfig?.enabled != false) AppleMusicPink else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                  )
-                }
-              }
-
-              val timingText = curiosityConfig?.timing?.label ?: "Ao final da música"
-              Text(
-                text = "Narração por IA: $timingText • Configurar voz e momento",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 15.sp
+                imageVector = if (isProcessing) Icons.Default.GraphicEq else Icons.Default.Mic,
+                contentDescription = "Falar com o assistente",
+                tint = colors.primary,
+                modifier = Modifier.size(30.dp)
               )
             }
           }
 
-          Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-          ) {
-            Text(
-              text = "Ajustar",
-              fontSize = 11.sp,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.onPrimaryContainer,
-              modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-            )
-          }
-        }
-      }
-    }
+          Spacer(modifier = Modifier.height(10.dp))
 
-    // 3. Quick Action Chips (Contextual Shortcuts)
-    item {
-      Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-          text = "Ações Rápidas",
-          fontFamily = SpaceGrotesk,
-          fontWeight = FontWeight.Bold,
-          fontSize = 13.sp,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        LazyRow(
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-          contentPadding = PaddingValues(horizontal = 2.dp)
-        ) {
-          val actions = listOf(
-            Pair("Curiosidades Musicais", Icons.Default.AutoAwesome),
-            Pair("Analisar música tocando", Icons.Default.Search),
-            Pair("Equalizador 15 bandas", Icons.Default.Equalizer),
-            Pair("Diagnóstico de áudio", Icons.Default.GraphicEq),
-            Pair("Timer de 15 minutos", Icons.Default.Timer),
-            Pair("help", Icons.AutoMirrored.Filled.HelpOutline)
+          Text(
+            text = when {
+              isListening -> "Ouvindo…"
+              isProcessing -> "Pensando…"
+              else -> "Toque no orbe para falar"
+            },
+            fontFamily = SpaceGrotesk,
+            fontWeight = FontWeight.Bold,
+            fontSize = 16.sp,
+            color = colors.onBackground
           )
-          items(actions) { (act, icon) ->
+          Text(
+            text = if (hasGeminiKey) "Comandos locais e IA (Gemini)" else "Comandos locais, sem IA online",
+            fontSize = 12.sp,
+            color = colors.onSurfaceVariant
+          )
+          if (voiceError != null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(text = voiceError ?: "", fontSize = 12.sp, color = colors.error)
+          }
+
+          if (activeTimers.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(12.dp))
             Surface(
               shape = RoundedCornerShape(16.dp),
-              color = MaterialTheme.colorScheme.surface,
-              modifier = Modifier
-                .clickable {
-                  if (act == "Curiosidades Musicais") {
-                    onOpenCuriositySettings()
-                  } else {
-                    onSendMessage(act)
+              color = colors.surfaceVariant,
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
+                activeTimers.forEach { timer ->
+                  Row(
+                    modifier = Modifier
+                      .fillMaxWidth()
+                      .padding(vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                  ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                      Icon(
+                        imageVector = if (timer.isCompleted) Icons.Default.Alarm else Icons.Default.Timer,
+                        contentDescription = null,
+                        tint = colors.primary,
+                        modifier = Modifier.size(18.dp)
+                      )
+                      Spacer(modifier = Modifier.width(8.dp))
+                      Text(
+                        text = "${timer.label}: ${timer.formattedTime()}",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        color = colors.onSurface
+                      )
+                    }
+                    IconButton(onClick = { onCancelTimer(timer.id) }, modifier = Modifier.size(32.dp)) {
+                      Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Cancelar timer",
+                        tint = colors.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                      )
+                    }
                   }
                 }
-                .testTag("assistant_action_${act.take(6)}")
+              }
+            }
+          }
+
+          Spacer(modifier = Modifier.height(12.dp))
+
+          // Curiosity narration settings, as a flat row
+          Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = colors.surfaceVariant,
+            modifier = Modifier
+              .fillMaxWidth()
+              .clickable { onOpenCuriositySettings() }
+              .testTag("btn_assistant_curiosidades_musicais")
+          ) {
+            Row(
+              modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+              verticalAlignment = Alignment.CenterVertically
             ) {
-              Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-              ) {
-                Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(act, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // 4. Active Timers Section (if any)
-    if (activeTimers.isNotEmpty()) {
-      item {
-        Card(
-          modifier = Modifier.fillMaxWidth(),
-          shape = RoundedCornerShape(16.dp),
-          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-          Column(modifier = Modifier.padding(14.dp)) {
-            Text("TEMPORIZADORES LOCAIS", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.height(6.dp))
-            activeTimers.forEach { timer ->
-              Row(
+              Box(
                 modifier = Modifier
-                  .fillMaxWidth()
-                  .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                  .size(36.dp)
+                  .clip(CircleShape)
+                  .background(colors.primary.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
               ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                  Icon(
-                    imageVector = if (timer.isCompleted) Icons.Default.Alarm else Icons.Default.Timer,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(16.dp)
-                  )
-                  Spacer(modifier = Modifier.width(8.dp))
-                  Text(
-                    text = "${timer.label}: ${timer.formattedTime()}",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp
-                  )
-                }
-                IconButton(onClick = { onCancelTimer(timer.id) }, modifier = Modifier.size(28.dp)) {
-                  Icon(imageVector = Icons.Default.Close, contentDescription = "Cancelar", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
-                }
+                Icon(
+                  imageVector = Icons.Default.AutoAwesome,
+                  contentDescription = null,
+                  tint = colors.primary,
+                  modifier = Modifier.size(18.dp)
+                )
               }
+              Spacer(modifier = Modifier.width(12.dp))
+              Column(modifier = Modifier.weight(1f)) {
+                val enabled = curiosityConfig?.enabled != false
+                Text(
+                  text = "Curiosidades musicais • ${if (enabled) "Ativadas" else "Desativadas"}",
+                  fontSize = 17.sp,
+                  color = colors.onSurface
+                )
+                Text(
+                  text = "Narração: ${curiosityConfig?.timing?.label ?: "Ao final da música"}",
+                  fontSize = 15.sp,
+                  color = colors.onSurfaceVariant
+                )
+              }
+              Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = "Ajustar",
+                tint = colors.onSurfaceVariant
+              )
             }
           }
         }
       }
-    }
 
-    // 5. Text Input field (always accessible or in Text Mode)
-    item {
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .padding(top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        OutlinedTextField(
-          value = textInput,
-          onValueChange = { textInput = it },
-          placeholder = { Text("Digite comando ou 'help'...", fontSize = 13.sp) },
-          singleLine = true,
-          shape = RoundedCornerShape(24.dp),
-          colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surface,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surface
-          ),
-          modifier = Modifier
-            .weight(1f)
-            .testTag("siri_text_input")
-        )
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        IconButton(
-          onClick = {
-            if (textInput.isNotBlank()) {
-              val send = textInput.trim()
-              textInput = ""
-              onSendMessage(send)
-            }
-          },
-          modifier = Modifier
-            .size(48.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primary)
-            .testTag("siri_send_button")
-        ) {
-          Icon(
-            imageVector = Icons.AutoMirrored.Filled.Send,
-            contentDescription = "Enviar",
-            tint = Color.White,
-            modifier = Modifier.size(20.dp)
-          )
-        }
+      // Conversation
+      items(messages, key = { it.id }) { message ->
+        MessageBubble(message)
       }
     }
 
-    item {
-      Spacer(modifier = Modifier.height(60.dp))
+    // Suggestions and input stay pinned above the bottom bar
+    QuickActions(onSendMessage = onSendMessage, onOpenCuriositySettings = onOpenCuriositySettings)
+
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 20.dp, vertical = 8.dp),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      TextField(
+        value = textInput,
+        onValueChange = { textInput = it },
+        placeholder = { Text("Peça algo ou digite \"ajuda\"", fontSize = 17.sp) },
+        singleLine = true,
+        shape = RoundedCornerShape(12.dp),
+        colors = TextFieldDefaults.colors(
+          focusedContainerColor = colors.surfaceVariant,
+          unfocusedContainerColor = colors.surfaceVariant,
+          focusedIndicatorColor = Color.Transparent,
+          unfocusedIndicatorColor = Color.Transparent
+        ),
+        modifier = Modifier
+          .weight(1f)
+          .testTag("siri_text_input")
+      )
+
+      Spacer(modifier = Modifier.width(8.dp))
+
+      IconButton(
+        onClick = {
+          if (textInput.isNotBlank()) {
+            val send = textInput.trim()
+            textInput = ""
+            onSendMessage(send)
+          }
+        },
+        modifier = Modifier
+          .size(48.dp)
+          .clip(CircleShape)
+          .background(colors.primary)
+          .testTag("siri_send_button")
+      ) {
+        Icon(
+          imageVector = Icons.AutoMirrored.Filled.Send,
+          contentDescription = "Enviar",
+          tint = colors.onPrimary,
+          modifier = Modifier.size(20.dp)
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun MessageBubble(message: AssistantMessage) {
+  val colors = MaterialTheme.colorScheme
+  val isUser = message.sender == MessageSender.USER
+
+  Column(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
+  ) {
+    Surface(
+      shape = RoundedCornerShape(
+        topStart = 18.dp,
+        topEnd = 18.dp,
+        bottomStart = if (isUser) 18.dp else 4.dp,
+        bottomEnd = if (isUser) 4.dp else 18.dp
+      ),
+      color = if (isUser) colors.primary else colors.surfaceVariant,
+      modifier = Modifier
+        .widthIn(max = 320.dp)
+        .testTag(if (isUser) "message_user" else "message_assistant")
+    ) {
+      Text(
+        text = lightMarkdown(message.text),
+        fontSize = 17.sp,
+        lineHeight = 24.sp,
+        color = if (isUser) colors.onPrimary else colors.onSurface,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+      )
+    }
+    message.toolReport?.let { report ->
+      Spacer(modifier = Modifier.height(4.dp))
+      ToolReportCard(report = report, modifier = Modifier.widthIn(max = 320.dp))
+    }
+  }
+}
+
+@Composable
+private fun QuickActions(
+  onSendMessage: (String) -> Unit,
+  onOpenCuriositySettings: () -> Unit
+) {
+  val actions: List<Triple<String, ImageVector, String>> = listOf(
+    Triple("Próxima faixa", Icons.Default.SkipNext, "próxima faixa"),
+    Triple("Aleatório", Icons.Default.Shuffle, "aleatório"),
+    Triple("Repetir", Icons.Default.Repeat, "repetir"),
+    Triple("Favoritar", Icons.Default.Favorite, "favoritar"),
+    Triple("Analisar música", Icons.Default.Search, "analisar música"),
+    Triple("Diagnóstico de áudio", Icons.Default.GraphicEq, "diagnóstico de áudio"),
+    Triple("Equalizador flat", Icons.Default.Equalizer, "equalizador flat"),
+    Triple("Timer de 15 min", Icons.Default.Timer, "timer de 15 minutos"),
+    Triple("Ajuda", Icons.AutoMirrored.Filled.HelpOutline, "help")
+  )
+  LazyRow(
+    horizontalArrangement = Arrangement.spacedBy(8.dp),
+    contentPadding = PaddingValues(horizontal = 20.dp),
+    modifier = Modifier.fillMaxWidth()
+  ) {
+    items(actions) { (label, icon, command) ->
+      Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier
+          .clickable { onSendMessage(command) }
+          .testTag("assistant_action_${command.take(8)}")
+      ) {
+        Row(
+          modifier = Modifier.heightIn(min = 44.dp).padding(horizontal = 14.dp),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(label, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+        }
+      }
+    }
+  }
+}
+
+/** Renders **bold** and *italic* markers instead of showing the asterisks. */
+private fun lightMarkdown(text: String): AnnotatedString = buildAnnotatedString {
+  var bold = false
+  var italic = false
+  var i = 0
+  while (i < text.length) {
+    when {
+      text.startsWith("**", i) -> { bold = !bold; i += 2 }
+      text[i] == '*' -> { italic = !italic; i += 1 }
+      else -> {
+        val start = i
+        while (i < text.length && text[i] != '*') i++
+        withStyle(
+          SpanStyle(
+            fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
+            fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal
+          )
+        ) { append(text.substring(start, i)) }
+      }
     }
   }
 }

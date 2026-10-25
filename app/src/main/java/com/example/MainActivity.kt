@@ -19,6 +19,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -39,6 +41,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.core.view.WindowCompat
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -54,10 +58,11 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.components.MiniPlayerBar
 import com.example.ui.components.TarkasBottomNav
-import com.example.ui.components.TarkasTopBar
+import com.example.ui.components.TarkasLargeTitle
 import com.example.ui.screens.AssistantScreen
 import com.example.ui.screens.AudioScreen
 import com.example.ui.screens.HomeScreen
+import com.example.ui.screens.LibraryScreen
 import com.example.ui.screens.MusicScreen
 import com.example.ui.screens.MusicalCuriositySettingsScreen
 import com.example.ui.screens.SettingsScreen
@@ -110,13 +115,23 @@ class MainActivity : ComponentActivity() {
               result.data!!
             )
           } catch (e: Exception) {
-            android.util.Log.e("MainActivity", "AudioCaptureService start failed, falling back to Spotify connection mode", e)
-            viewModel.simulateExternalSpotifyConnection()
+            android.util.Log.e("MainActivity", "AudioCaptureService start failed", e)
+            viewModel.markSystemCaptureUnavailable("Não foi possível iniciar o serviço de captura de áudio.")
           }
         } else {
-          // If rejected or cancelled, connect simulation mode
-          viewModel.simulateExternalSpotifyConnection()
+          viewModel.markSystemCaptureUnavailable("Permissão de captura negada. O medidor continua desligado.")
         }
+      }
+
+      // Status and navigation bar icons must follow the app theme, not only the system theme.
+      val isDarkApp = when (themeMode) {
+        "amoled", "dark" -> true
+        "light" -> false
+        else -> isSystemInDarkTheme()
+      }
+      SideEffect {
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.isAppearanceLightNavigationBars = !isDarkApp
       }
 
       TarkasTheme(themeMode = themeMode) {
@@ -127,7 +142,7 @@ class MainActivity : ComponentActivity() {
             if (intent != null) {
               mediaProjectionLauncher.launch(intent)
             } else {
-              viewModel.simulateExternalSpotifyConnection()
+              viewModel.markSystemCaptureUnavailable("Este aparelho não oferece captura de áudio do sistema.")
             }
           }
         )
@@ -162,12 +177,33 @@ fun TarkasAppContent(
   val isSearchingAudius by viewModel.isSearchingAudius.collectAsState()
   val spectrumBars by viewModel.audioEngineManager.spectrumBars.collectAsState()
   val allCuriosities = viewModel.curiosityRepository.getAllCuriosities()
+  val favoriteIds by viewModel.favorites.collectAsState()
+  val playlists by viewModel.playlists.collectAsState()
+  val savedTracks by viewModel.savedTracks.collectAsState()
+  val queue by viewModel.queue.collectAsState()
+  val isShuffle by viewModel.shuffle.collectAsState()
+  val repeatMode by viewModel.repeatMode.collectAsState()
+  val favoriteTracks = favoriteIds.mapNotNull { id -> tracks.firstOrNull { it.id == id } ?: savedTracks[id] }
 
   val isShowingCuriositySettings by viewModel.isShowingCuriositySettings.collectAsState()
   val curiosityConfig by viewModel.curiosityConfig.collectAsState()
   val isAiSpeakingCuriosity by viewModel.isAiSpeakingCuriosity.collectAsState()
   val currentCuriositySpeechText by viewModel.currentCuriositySpeechText.collectAsState()
   val curiositySpeechStage by viewModel.curiositySpeechStage.collectAsState()
+
+  // Status bar icons follow the app theme, except on the Now Playing page, which is always a dark tint.
+  val hostView = LocalView.current
+  val isDarkTheme = when (themeMode) {
+    "amoled", "dark" -> true
+    "light" -> false
+    else -> isSystemInDarkTheme()
+  }
+  val statusOverDarkPage = currentTab == TarkasNavTab.MUSIC && !isShowingCuriositySettings
+  SideEffect {
+    val activityWindow = (hostView.context as? android.app.Activity)?.window ?: return@SideEffect
+    WindowCompat.getInsetsController(activityWindow, hostView).isAppearanceLightStatusBars =
+      !(isDarkTheme || statusOverDarkPage)
+  }
 
   // Hardware / gesture back button handling
   BackHandler(enabled = isShowingCuriositySettings || currentTab != TarkasNavTab.HOME) {
@@ -182,11 +218,13 @@ fun TarkasAppContent(
     modifier = Modifier.fillMaxSize(),
     contentWindowInsets = WindowInsets.safeDrawing,
     topBar = {
-      TarkasTopBar(
-        currentTab = currentTab,
-        activeRouteName = if (systemAudioStatus.isCapturing) "SISTEMA (${systemAudioStatus.detectedApp?.take(10) ?: "SPOTIFY"})" else capabilities.activeRouteName,
-        onOpenSettings = { viewModel.setTab(TarkasNavTab.SETTINGS) }
-      )
+      // The full player has its own chrome (grabber + artwork), like the Apple Music Now Playing sheet
+      if (currentTab != TarkasNavTab.MUSIC && !isShowingCuriositySettings) {
+        TarkasLargeTitle(
+          title = currentTab.label,
+          onOpenSettings = { viewModel.setTab(TarkasNavTab.SETTINGS) }
+        )
+      }
     },
     bottomBar = {
       Column {
@@ -285,10 +323,16 @@ fun TarkasAppContent(
       }
     }
   ) { innerPadding ->
+    // The player page draws under the status bar (it is tinted by the artwork), so it keeps only the bottom inset
+    val contentPadding = if (currentTab == TarkasNavTab.MUSIC && !isShowingCuriositySettings) {
+      PaddingValues(bottom = innerPadding.calculateBottomPadding())
+    } else {
+      innerPadding
+    }
     Box(
       modifier = Modifier
         .fillMaxSize()
-        .padding(innerPadding)
+        .padding(contentPadding)
     ) {
       if (isShowingCuriositySettings) {
         MusicalCuriositySettingsScreen(
@@ -310,6 +354,13 @@ fun TarkasAppContent(
             waveformEnergy = waveformEnergy,
             activeCuriosity = activeCuriosity,
             allCuriosities = allCuriosities,
+            favoriteIds = favoriteIds,
+            playlists = playlists,
+            onToggleFavorite = { track -> viewModel.toggleFavorite(track) },
+            onPlayNext = { track -> viewModel.playNext(track) },
+            onAddToQueue = { track -> viewModel.addToQueue(track) },
+            onAddToPlaylist = { id, track -> viewModel.addToPlaylist(id, track) },
+            onCreatePlaylist = { name, track -> viewModel.createPlaylist(name, track) },
             onPlayTrack = { track -> viewModel.playTrack(track) },
             onTogglePlayPause = { viewModel.togglePlayPause() },
             onNextTrack = { viewModel.playNextTrack() },
@@ -341,7 +392,41 @@ fun TarkasAppContent(
               viewModel.addLocalAudio(title, artist, uri, dur)
             },
             onSearchAudius = { q -> viewModel.searchAudius(q) },
-            onLoadAudiusTrending = { viewModel.loadAudiusTrending() }
+            onLoadAudiusTrending = { viewModel.loadAudiusTrending() },
+            isShuffle = isShuffle,
+            repeatMode = repeatMode,
+            favoriteIds = favoriteIds,
+            playlists = playlists,
+            onToggleShuffle = { viewModel.toggleShuffle() },
+            onCycleRepeat = { viewModel.cycleRepeatMode() },
+            onToggleFavorite = { track -> viewModel.toggleFavorite(track) },
+            onPlayNext = { track -> viewModel.playNext(track) },
+            onAddToQueue = { track -> viewModel.addToQueue(track) },
+            onAddToPlaylist = { id, track -> viewModel.addToPlaylist(id, track) },
+            onCreatePlaylist = { name, track -> viewModel.createPlaylist(name, track) },
+            onOpenQueue = { viewModel.setTab(TarkasNavTab.LIBRARY) }
+          )
+        }
+
+        TarkasNavTab.LIBRARY -> {
+          LibraryScreen(
+            playlists = playlists,
+            favoriteTracks = favoriteTracks,
+            savedTracks = savedTracks,
+            allTracks = tracks,
+            queue = queue,
+            currentTrack = currentTrack,
+            isPlaying = isPlaying,
+            onPlayFromList = { track, list -> viewModel.playFromList(track, list) },
+            onShuffleList = { list -> viewModel.shuffleFrom(list) },
+            onCreatePlaylist = { name -> viewModel.createPlaylist(name) },
+            onRenamePlaylist = { id, name -> viewModel.renamePlaylist(id, name) },
+            onDeletePlaylist = { id -> viewModel.deletePlaylist(id) },
+            onRemoveFromPlaylist = { id, trackId -> viewModel.removeFromPlaylist(id, trackId) },
+            onToggleFavorite = { track -> viewModel.toggleFavorite(track) },
+            onPlayQueueItem = { index -> viewModel.playFromQueue(index) },
+            onRemoveQueueItem = { index -> viewModel.removeFromQueue(index) },
+            onClearQueue = { viewModel.clearQueue() }
           )
         }
 
@@ -394,7 +479,8 @@ fun TarkasAppContent(
             onThemeModeChange = { mode -> viewModel.setThemeMode(mode) },
             onBackToHome = { viewModel.setTab(TarkasNavTab.HOME) },
             curiosityConfig = curiosityConfig,
-            onOpenCuriositySettings = { viewModel.openCuriositySettings() }
+            onOpenCuriositySettings = { viewModel.openCuriositySettings() },
+            hasGeminiKey = viewModel.assistantEngine.hasGeminiKey
           )
         }
       }

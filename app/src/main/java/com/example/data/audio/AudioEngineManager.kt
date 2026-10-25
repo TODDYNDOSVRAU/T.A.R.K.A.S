@@ -1,9 +1,16 @@
 package com.example.data.audio
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaPlayer
+import android.os.PowerManager
+import androidx.core.content.ContextCompat
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
@@ -27,6 +34,11 @@ import java.io.File
 
 class AudioEngineManager(private val context: Context) {
   private val TAG = "AudioEngineManager"
+
+  private companion object {
+    // Volume while another app needs a moment of the audio focus (a navigation prompt, for example).
+    const val DUCK_VOLUME = 0.25f
+  }
   private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
   private var mediaPlayer: MediaPlayer? = null
@@ -67,27 +79,153 @@ class AudioEngineManager(private val context: Context) {
     updateCapabilities()
   }
 
+  // --- audio focus, noisy-output handling ---
+
+  private val playbackAttributes = AudioAttributes.Builder()
+    .setUsage(AudioAttributes.USAGE_MEDIA)
+    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+    .build()
+
+  private val focusPolicy = AudioFocusPolicy()
+  private var focusRequest: AudioFocusRequest? = null
+
+  private val focusListener = AudioManager.OnAudioFocusChangeListener { change ->
+    // Focus callbacks can arrive on any thread; the player is driven from the main one.
+    coroutineScope.launch { handleFocusChange(change) }
+  }
+
+  private val noisyReceiver = object : BroadcastReceiver() {
+    override fun onReceive(context: Context?, intent: Intent?) {
+      // Headphones unplugged or Bluetooth disconnected: stop blasting the speaker.
+      if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY && _isPlaying.value) {
+        pauseByUser()
+      }
+    }
+  }
+  private var noisyReceiverRegistered = false
+
+  private fun requestFocus(): Boolean {
+    val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+        .setAudioAttributes(playbackAttributes)
+        .setOnAudioFocusChangeListener(focusListener)
+        .build()
+      focusRequest = request
+      audioManager.requestAudioFocus(request)
+    } else {
+      @Suppress("DEPRECATION")
+      audioManager.requestAudioFocus(focusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
+    }
+    val granted = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+    if (granted) focusPolicy.reset()
+    return granted
+  }
+
+  private fun abandonFocus() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+    } else {
+      @Suppress("DEPRECATION")
+      audioManager.abandonAudioFocus(focusListener)
+    }
+    focusRequest = null
+    focusPolicy.reset()
+  }
+
+  private fun registerNoisyReceiver() {
+    if (noisyReceiverRegistered) return
+    ContextCompat.registerReceiver(
+      context,
+      noisyReceiver,
+      IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
+      ContextCompat.RECEIVER_NOT_EXPORTED
+    )
+    noisyReceiverRegistered = true
+  }
+
+  private fun unregisterNoisyReceiver() {
+    if (!noisyReceiverRegistered) return
+    try {
+      context.unregisterReceiver(noisyReceiver)
+    } catch (_: Exception) {
+    }
+    noisyReceiverRegistered = false
+  }
+
+  private fun handleFocusChange(change: Int) {
+    val mp = mediaPlayer ?: return
+    try {
+      when (focusPolicy.onChange(change, _isPlaying.value)) {
+        AudioFocusPolicy.Action.PAUSE_AND_ABANDON -> {
+          if (mp.isPlaying) mp.pause()
+          _isPlaying.value = false
+          abandonFocus()
+          unregisterNoisyReceiver()
+        }
+        AudioFocusPolicy.Action.PAUSE -> {
+          if (mp.isPlaying) mp.pause()
+          _isPlaying.value = false
+        }
+        AudioFocusPolicy.Action.DUCK -> mp.setVolume(DUCK_VOLUME, DUCK_VOLUME)
+        AudioFocusPolicy.Action.RESUME -> {
+          mp.setVolume(1f, 1f)
+          mp.start()
+          _isPlaying.value = true
+        }
+        AudioFocusPolicy.Action.UNDUCK -> mp.setVolume(1f, 1f)
+        AudioFocusPolicy.Action.NONE -> Unit
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "Error handling audio focus change $change", e)
+    }
+  }
+
+  /** Pause that the user (or a noisy-output event) asked for: give the focus back too. */
+  private fun pauseByUser() {
+    val mp = mediaPlayer ?: return
+    try {
+      if (mp.isPlaying) mp.pause()
+    } catch (e: Exception) {
+      Log.e(TAG, "Error pausing", e)
+    }
+    _isPlaying.value = false
+    abandonFocus()
+    unregisterNoisyReceiver()
+  }
+
   fun playTrack(filePathOrUri: String, onCompletion: () -> Unit = {}) {
     try {
       stopPlayback()
 
+      val isRemoteOrContent = filePathOrUri.startsWith("content://") || filePathOrUri.startsWith("file://") ||
+        filePathOrUri.startsWith("http://") || filePathOrUri.startsWith("https://")
+      // Validate before creating the player so a missing file never leaves a half-built MediaPlayer behind.
+      if (!isRemoteOrContent && !File(filePathOrUri).exists()) {
+        Log.e(TAG, "Audio file does not exist: $filePathOrUri")
+        return
+      }
+
       mediaPlayer = MediaPlayer().apply {
+        setAudioAttributes(playbackAttributes)
+        // Keeps the CPU awake while a track plays with the screen off.
+        setWakeMode(context, PowerManager.PARTIAL_WAKE_LOCK)
         if (filePathOrUri.startsWith("content://") || filePathOrUri.startsWith("file://")) {
           setDataSource(context, Uri.parse(filePathOrUri))
         } else if (filePathOrUri.startsWith("http://") || filePathOrUri.startsWith("https://")) {
           setDataSource(filePathOrUri)
         } else {
-          val f = File(filePathOrUri)
-          if (f.exists()) {
-            setDataSource(f.absolutePath)
-          } else {
-            Log.e(TAG, "Audio file does not exist: $filePathOrUri")
-            return
-          }
+          setDataSource(File(filePathOrUri).absolutePath)
         }
 
         setOnPreparedListener { mp ->
+          // No focus (for example during a phone call): do not start talking over it.
+          if (!requestFocus()) {
+            Log.w(TAG, "Audio focus denied; not starting playback")
+            stopPlayback()
+            return@setOnPreparedListener
+          }
           mp.start()
+          registerNoisyReceiver()
           _isPlaying.value = true
           _durationMs.value = mp.duration.toLong().coerceAtLeast(1L)
           attachAudioEffects(mp.audioSessionId)
@@ -96,6 +234,9 @@ class AudioEngineManager(private val context: Context) {
         }
 
         setOnCompletionListener {
+          // Give the focus back between tracks; the next track asks for it again.
+          abandonFocus()
+          unregisterNoisyReceiver()
           _isPlaying.value = false
           _currentPositionMs.value = 0L
           _waveformEnergy.value = 0.05f
@@ -105,8 +246,9 @@ class AudioEngineManager(private val context: Context) {
 
         setOnErrorListener { _, what, extra ->
           Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra")
-          _isPlaying.value = false
-          false
+          // Release the broken player and reset state; returning true means the error is handled.
+          stopPlayback()
+          true
         }
 
         prepareAsync()
@@ -121,11 +263,14 @@ class AudioEngineManager(private val context: Context) {
     mediaPlayer?.let { mp ->
       try {
         if (mp.isPlaying) {
-          mp.pause()
-          _isPlaying.value = false
-        } else {
+          pauseByUser()
+        } else if (requestFocus()) {
+          mp.setVolume(1f, 1f)
           mp.start()
+          registerNoisyReceiver()
           _isPlaying.value = true
+        } else {
+          Log.w(TAG, "Audio focus denied; staying paused")
         }
       } catch (e: Exception) {
         Log.e(TAG, "Error in togglePlayPause", e)
@@ -156,6 +301,8 @@ class AudioEngineManager(private val context: Context) {
     } finally {
       mediaPlayer = null
       _isPlaying.value = false
+      abandonFocus()
+      unregisterNoisyReceiver()
       _currentPositionMs.value = 0L
       _spectrumBars.value = List(15) { 0.05f }
       releaseAudioEffects()
@@ -177,18 +324,10 @@ class AudioEngineManager(private val context: Context) {
               val pulse = 0.25f + 0.5f * kotlin.math.sin(beat * Math.PI.toFloat())
               _waveformEnergy.value = pulse.coerceIn(0.1f, 0.95f)
 
-              // Compute real-time 15-band spectrum energy reacting with music if hardware FFT is inactive
+              // Without a real FFT (no RECORD_AUDIO or unsupported device) show a flat floor,
+              // never a fake animated spectrum.
               if (!isRealFftActive) {
-                val posSec = pos / 1000f
-                val newBars = (0 until 15).map { bandIdx ->
-                  val freqFactor = 1.0f + (bandIdx * 0.32f)
-                  val wave1 = kotlin.math.sin(posSec * 4.2f * freqFactor)
-                  val wave2 = kotlin.math.cos(posSec * 2.3f * freqFactor + bandIdx * 0.7f)
-                  val rawAmp = (wave1 * 0.38f + wave2 * 0.32f + 0.45f).coerceIn(0.08f, 0.92f)
-                  val eqGain = _activeProfile.value.bandLevelsMb.getOrElse(bandIdx) { 0.toShort() }.toFloat() / 1500f
-                  (rawAmp * (1f + eqGain * 0.35f)).coerceIn(0.05f, 1f)
-                }
-                _spectrumBars.value = newBars
+                _spectrumBars.value = List(15) { 0.05f }
               }
             }
           }

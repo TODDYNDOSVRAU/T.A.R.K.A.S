@@ -24,6 +24,27 @@ import org.json.JSONObject
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
+/** Player actions the assistant can trigger. The app runs them and reports what really happened. */
+enum class PlayerCommand { NEXT, PREVIOUS, PLAY, PAUSE, TOGGLE_SHUFFLE, CYCLE_REPEAT, FAVORITE }
+
+/**
+ * Maps a lowercase sentence to a player command and its tool name, or null.
+ * Whole-word matches only, so "toca" inside "que música toca?" never triggers a command.
+ */
+internal fun playerCommandFor(lower: String): Pair<PlayerCommand, String>? {
+  fun has(vararg words: String) = Regex("\\b(${words.joinToString("|")})\\b").containsMatchIn(lower)
+  return when {
+    has("próxima", "proxima", "próximo", "proximo", "pular") -> PlayerCommand.NEXT to "next_track"
+    has("anterior", "voltar") -> PlayerCommand.PREVIOUS to "previous_track"
+    has("pausar", "pause", "pausa") -> PlayerCommand.PAUSE to "pause"
+    has("tocar", "toque", "continuar", "retomar", "play", "reproduzir") -> PlayerCommand.PLAY to "play"
+    has("aleatório", "aleatorio", "embaralhar", "shuffle") -> PlayerCommand.TOGGLE_SHUFFLE to "toggle_shuffle"
+    has("repetir", "repetição", "repeat") -> PlayerCommand.CYCLE_REPEAT to "cycle_repeat"
+    has("favoritar", "curtir", "favorito") -> PlayerCommand.FAVORITE to "toggle_favorite"
+    else -> null
+  }
+}
+
 class AssistantEngine(
   private val musicRepository: MusicRepository,
   private val curiosityRepository: CuriosityRepository,
@@ -31,7 +52,9 @@ class AssistantEngine(
   private val onTimerCreated: (LocalTimer) -> Unit,
   private val onTimerCancelled: (String) -> Unit,
   private val onReminderCreated: (LocalReminder) -> Unit,
-  private val onCuriosityUpdated: (Curiosity) -> Unit = {}
+  private val onCuriosityUpdated: (Curiosity) -> Unit = {},
+  // Returns a short description of the result, or null when the command could not run.
+  private val onPlayerCommand: suspend (PlayerCommand) -> String? = { null }
 ) {
   private val TAG = "AssistantEngine"
   private val okHttpClient = OkHttpClient.Builder()
@@ -78,7 +101,7 @@ class AssistantEngine(
   }
 
   // Parses natural language and direct tool commands
-  private fun tryParseLocalTool(input: String): AssistantMessage? {
+  private suspend fun tryParseLocalTool(input: String): AssistantMessage? {
     val lower = input.lowercase()
 
     // Command: HELP / AJUDA (Only here does it describe all its functions!)
@@ -90,6 +113,8 @@ class AssistantEngine(
         • **"equalizador flat"** (ou rock, vocal, graves): aplica perfis de 15 bandas
         • **"timer de [X] minutos"**: inicia temporizador local
         • **"que música toca?"**: exibe a faixa atual
+        • **"próxima"**, **"anterior"**, **"pausar"**, **"tocar"**: controlam o player
+        • **"aleatório"**, **"repetir"**, **"favoritar"**: ligam o modo ou guardam a faixa
       """.trimIndent()
       return AssistantMessage(
         id = UUID.randomUUID().toString(),
@@ -98,11 +123,27 @@ class AssistantEngine(
       )
     }
 
+    // Player controls: run through the app and report the real result
+    playerCommandFor(lower)?.let { (command, toolName) ->
+      val result = onPlayerCommand(command)
+      return AssistantMessage(
+        id = UUID.randomUUID().toString(),
+        sender = MessageSender.ASSISTANT,
+        text = result ?: "Não consegui executar isso agora. Escolha uma faixa primeiro.",
+        toolReport = ToolExecutionReport(
+          toolName = toolName,
+          arguments = emptyMap(),
+          success = result != null,
+          resultSummary = result ?: "Nenhuma faixa disponível"
+        )
+      )
+    }
+
     // Feature: Analisar a música em reprodução e pesquisar curiosidades
     if (lower.contains("analis") || lower.contains("pesquisar curiosidade") || lower.contains("curiosidade")) {
       val track = musicRepository.currentTrack.value
       if (track != null) {
-        val curiosity = curiosityRepository.getCuriosityForTrack(track.id)
+        val curiosity = curiosityRepository.getCuriosityForTrack(track)
         onCuriosityUpdated(curiosity)
 
         val report = ToolExecutionReport(
@@ -112,7 +153,7 @@ class AssistantEngine(
           resultSummary = "Análise concluída: ${curiosity.status.label}"
         )
 
-        val siriStyleAnswer = "Analisei **${track.title}** (${track.artist}):\n\n${curiosity.shortTrivia}\n\n*Fontes: ${curiosity.sources.firstOrNull() ?: "Arquivo Tarkas"}*"
+        val siriStyleAnswer = "Analisei **${track.title}** (${track.artist}):\n\n${curiosity.shortTrivia}\n\n*Fontes: ${curiosity.sources.firstOrNull() ?: "nenhuma fonte encontrada"}*"
 
         return AssistantMessage(
           id = UUID.randomUUID().toString(),
@@ -130,7 +171,7 @@ class AssistantEngine(
     }
 
     // Tool: get_current_track
-    if (lower.contains("que música") || lower.contains("faixa atual") || lower.contains("tocando agora")) {
+    if (lower.contains("que música") || lower.contains("que musica") || lower.contains("faixa atual") || lower.contains("tocando agora")) {
       val track = musicRepository.currentTrack.value
       val report = ToolExecutionReport(
         toolName = "get_current_track",
@@ -152,7 +193,7 @@ class AssistantEngine(
     }
 
     // Tool: get_audio_capabilities
-    if (lower.contains("diagnóstico") || lower.contains("hardware") || lower.contains("rota")) {
+    if (lower.contains("diagnóstico") || lower.contains("diagnostico") || lower.contains("hardware") || Regex("\\brota\\b").containsMatchIn(lower)) {
       val caps = audioEngineManager.capabilities.value
       val report = ToolExecutionReport(
         toolName = "get_audio_capabilities",
@@ -170,7 +211,7 @@ class AssistantEngine(
     }
 
     // Tool: apply_audio_profile
-    if (lower.contains("perfil") || lower.contains("equalizador") || lower.contains("preset") || lower.contains("som")) {
+    if (lower.contains("perfil") || lower.contains("equalizador") || lower.contains("preset") || Regex("\\bsom\\b").containsMatchIn(lower)) {
       val target = when {
         lower.contains("flat") || lower.contains("linear") || lower.contains("neutro") -> AudioProfile.FLAT
         lower.contains("prog") || lower.contains("rock") -> AudioProfile.PROG_ROCK
@@ -256,7 +297,7 @@ class AssistantEngine(
     val lower = input.lowercase()
 
     val responseText = when {
-      lower.contains("olá") || lower.contains("oi") -> {
+      Regex("\\b(olá|ola|oi)\\b").containsMatchIn(lower) -> {
         "Olá! Em que posso ajudar com sua música ou áudio hoje?"
       }
       lower.contains("tarkus") -> {
@@ -288,7 +329,8 @@ class AssistantEngine(
       Música tocando agora: '${currentTrack?.title ?: "Nenhuma"}' (${currentTrack?.artist ?: ""}).
     """.trimIndent()
 
-    val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey"
+    // Key goes in a header, not the URL, so it never lands in logs or proxies.
+    val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
     val payload = JSONObject().apply {
       put("systemInstruction", JSONObject().apply {
@@ -305,12 +347,12 @@ class AssistantEngine(
     }
 
     val body = payload.toString().toRequestBody("application/json".toMediaType())
-    val request = Request.Builder().url(url).post(body).build()
+    val request = Request.Builder().url(url).header("x-goog-api-key", apiKey).post(body).build()
 
-    val response = okHttpClient.newCall(request).execute()
-    if (!response.isSuccessful) return null
-
-    val respBody = response.body?.string() ?: return null
+    val respBody = okHttpClient.newCall(request).execute().use { response ->
+      if (!response.isSuccessful) return null
+      response.body?.string()
+    } ?: return null
     val jsonResp = JSONObject(respBody)
     val candidates = jsonResp.optJSONArray("candidates") ?: return null
     if (candidates.length() == 0) return null

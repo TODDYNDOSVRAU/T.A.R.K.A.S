@@ -28,7 +28,8 @@ data class SystemAudioStatus(
   val detectedArtist: String? = null,
   val currentRmsEnergy: Float = 0f,
   val isMediaProjectionSupported: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
-  val permissionGranted: Boolean = false
+  val permissionGranted: Boolean = false,
+  val errorMessage: String? = null
 )
 
 class SystemAudioCaptureManager(private val context: Context) {
@@ -82,13 +83,16 @@ class SystemAudioCaptureManager(private val context: Context) {
         .setBufferSizeInBytes(bufferSize)
         .build()
 
-      if (record.state == AudioRecord.STATE_INITIALIZED) {
+      if (record.state != AudioRecord.STATE_INITIALIZED) {
+        record.release()
+        _status.value = _status.value.copy(isCapturing = false, errorMessage = "O Android recusou a captura de áudio dos outros apps.")
+      } else {
         record.startRecording()
         audioRecord = record
         _status.value = _status.value.copy(
           isCapturing = true,
           permissionGranted = true,
-          detectedApp = "Spotify / YouTube Music (Áudio do Sistema)"
+          errorMessage = null
         )
 
         captureJob = scope.launch {
@@ -108,17 +112,16 @@ class SystemAudioCaptureManager(private val context: Context) {
       }
     } catch (e: Exception) {
       Log.e(TAG, "Error starting AudioPlaybackCapture", e)
-      _status.value = _status.value.copy(isCapturing = false)
+      _status.value = _status.value.copy(
+        isCapturing = false,
+        errorMessage = "Não foi possível iniciar a captura de áudio neste aparelho."
+      )
     }
   }
 
-  fun simulateExternalTrackDetection(appName: String, title: String, artist: String) {
-    _status.value = _status.value.copy(
-      detectedApp = appName,
-      detectedTrackTitle = title,
-      detectedArtist = artist,
-      isCapturing = true
-    )
+  /** Reports why capture is not running, instead of pretending it works. */
+  fun markUnavailable(reason: String) {
+    _status.value = _status.value.copy(isCapturing = false, currentRmsEnergy = 0f, errorMessage = reason)
   }
 
   fun stopCapture() {

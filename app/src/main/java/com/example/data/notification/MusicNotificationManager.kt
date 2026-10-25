@@ -20,9 +20,13 @@ import com.example.data.model.Track
 
 object MusicNotificationManager {
   private const val CHANNEL_ID = "tarkas_playback_channel"
-  private const val NOTIFICATION_ID = 1001
+  const val NOTIFICATION_ID = 1001
 
   private var mediaSession: MediaSession? = null
+
+  // The playback service shows this same notification while it runs in the foreground.
+  @Volatile
+  private var lastNotification: Notification? = null
   var onSeekToRequested: ((Long) -> Unit)? = null
 
   fun getOrCreateMediaSession(context: Context): MediaSession {
@@ -205,13 +209,33 @@ object MusicNotificationManager {
         .addAction(Notification.Action.Builder(android.R.drawable.ic_media_next, "Próxima", nextPending).build())
         .build()
 
+      lastNotification = notification
       val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
       notificationManager.notify(NOTIFICATION_ID, notification)
     } catch (_: SecurityException) {
     } catch (_: Exception) {}
   }
 
+  /** The latest playback notification, or a plain one if none was built yet. */
+  fun currentOrPlaceholder(context: Context): Notification {
+    lastNotification?.let { return it }
+    createNotificationChannel(context)
+    val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      Notification.Builder(context, CHANNEL_ID)
+    } else {
+      @Suppress("DEPRECATION")
+      Notification.Builder(context)
+    }
+    return builder
+      .setSmallIcon(android.R.drawable.ic_media_play)
+      .setContentTitle("Tarkas")
+      .setContentText("Reproduzindo")
+      .setOngoing(true)
+      .build()
+  }
+
   fun clearNotification(context: Context) {
+    lastNotification = null
     try {
       val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
       notificationManager.cancel(NOTIFICATION_ID)

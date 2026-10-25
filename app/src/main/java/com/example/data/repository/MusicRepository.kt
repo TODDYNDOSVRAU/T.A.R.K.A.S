@@ -32,7 +32,7 @@ class MusicRepository(private val context: Context) {
         genre = "Rock Progressivo",
         era = "1971",
         filePath = fileMap["track_tarkus"],
-        colorHex = 0xFF00E5FF
+        colorHex = 0xFF46C9D3
       ),
       Track(
         id = "track_tubular",
@@ -43,7 +43,7 @@ class MusicRepository(private val context: Context) {
         genre = "Minimalismo / Prog",
         era = "1973",
         filePath = fileMap["track_tubular"],
-        colorHex = 0xFF38BDF8
+        colorHex = 0xFF2F8FA8
       ),
       Track(
         id = "track_debussy",
@@ -54,7 +54,7 @@ class MusicRepository(private val context: Context) {
         genre = "Impressionismo Clássico",
         era = "1905",
         filePath = fileMap["track_debussy"],
-        colorHex = 0xFFF59E0B
+        colorHex = 0xFF0E7C86
       ),
       Track(
         id = "track_satie",
@@ -65,7 +65,7 @@ class MusicRepository(private val context: Context) {
         genre = "Música Ambiente / Modal",
         era = "1888",
         filePath = fileMap["track_satie"],
-        colorHex = 0xFF10B981
+        colorHex = 0xFF5B7C99
       ),
       Track(
         id = "track_sweep",
@@ -76,7 +76,7 @@ class MusicRepository(private val context: Context) {
         genre = "Calibração Acústica",
         era = "2026",
         filePath = fileMap["track_sweep"],
-        colorHex = 0xFFA855F7
+        colorHex = 0xFF7A8A99
       )
     )
 
@@ -154,7 +154,7 @@ class MusicRepository(private val context: Context) {
       era = "Local",
       isLocalFile = true,
       filePath = uriString,
-      colorHex = 0xFF14B8A6
+      colorHex = 0xFF3A9FA8
     )
     _tracks.value = listOf(newTrack) + _tracks.value
     _currentTrack.value = newTrack

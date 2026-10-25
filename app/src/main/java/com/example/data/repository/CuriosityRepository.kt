@@ -94,54 +94,28 @@ class CuriosityRepository {
   )
 
   fun getCuriosityForTrack(trackId: String): Curiosity {
-    return curiosityDatabase[trackId] ?: Curiosity(
-      trackId = trackId,
-      trackTitle = "Faixa",
-      artist = "Artista",
-      shortTrivia = "Esta gravação utiliza produção acústica dinâmica com ênfase em harmonia e equilíbrio tonal.",
-      wordCount = 14,
-      documentedFacts = "Catalogada no arquivo digital do Tarkas com processamento estéreo de alta fidelidade.",
-      musicalInterpretation = "Linhas melódicas limpas com espacialidade ampla em campo estéreo.",
-      sources = listOf("Arquivo Tarkas Music Lab"),
-      status = VerificationStatus.HISTORICAL_ANALYSIS,
-      verifiedDate = "2026-10-21",
-      deepDive = "A produção foca no balanço harmônico entre frequências graves e resposta cristalina nos agudos."
-    )
+    return curiosityDatabase[trackId] ?: unverified(trackId, "Faixa", "Artista")
   }
 
   fun getCuriosityForTrack(track: com.example.data.model.Track): Curiosity {
-    curiosityDatabase[track.id]?.let { return it }
+    return curiosityDatabase[track.id] ?: unverified(track.id, track.title, track.artist)
+  }
 
-    val titleLower = track.title.lowercase()
-    val artistLower = track.artist.lowercase()
-
-    val trivia = when {
-      titleLower.contains("remix") || titleLower.contains("club") || titleLower.contains("edm") || titleLower.contains("dance") ->
-        "Esta produção explora sintetizadores digitais contemporâneos e graves estéreo comprimidos em 128 BPM, proporcionando impacto direto no equalizador."
-      titleLower.contains("chill") || titleLower.contains("lo-fi") || titleLower.contains("lofi") || titleLower.contains("sleep") || titleLower.contains("ambient") ->
-        "Composta com saturação analógica suave e ambiência espacial estéreo, a faixa convida a uma audição relaxante com frequências médias aveludadas."
-      titleLower.contains("guitar") || titleLower.contains("rock") || titleLower.contains("live") || titleLower.contains("acustic") || titleLower.contains("acoustic") ->
-        "Destaca a ressonância das cordas com microfonação próxima e dinâmica estéreo aberta, preservando os harmônicos naturais da execução ao vivo."
-      titleLower.contains("piano") || titleLower.contains("classic") || titleLower.contains("nocturne") || titleLower.contains("waltz") ->
-        "A estrutura harmônica explora o decaimento ressonante das cordas percutidas, valorizando a sutileza do toque dinâmico e espacialidade da sala."
-      artistLower.contains("orchestra") || artistLower.contains("ensemble") ->
-        "Uma rica sobreposição orquestral com instrumentação polifônica, equilibrando metais ressonantes com madeiras sutis no espectro de áudio."
-      else ->
-        "Composta por ${track.artist}, a faixa destaca arranjo cativante com clareza vocal e transições melódicas desenhadas para alta fidelidade estéreo."
-    }
-
+  // Tracks outside the curated database get an honest "no source" answer. Never invent trivia or sources.
+  private fun unverified(trackId: String, title: String, artist: String): Curiosity {
+    val message = "Não encontrei informação verificada sobre esta faixa."
     return Curiosity(
-      trackId = track.id,
-      trackTitle = track.title,
-      artist = track.artist,
-      shortTrivia = trivia,
-      wordCount = trivia.split(" ").size,
-      documentedFacts = "Faixa do catálogo online Audius / biblioteca local, otimizada com processamento acústico 15 bandas do Tarkas.",
-      musicalInterpretation = "Equilíbrio sonoro projetado para ressonância harmônica em transdutores estéreo.",
-      sources = listOf("Audius Discovery Network", "Tarkas Acoustic Engine"),
-      status = VerificationStatus.HISTORICAL_ANALYSIS,
-      verifiedDate = "2026-10-21",
-      deepDive = "Os transientes e resposta de frequência desta gravação interagem diretamente com o perfil de equalização ativo no Tarkas."
+      trackId = trackId,
+      trackTitle = title,
+      artist = artist,
+      shortTrivia = message,
+      wordCount = message.split(" ").size,
+      documentedFacts = "Nenhuma fonte documentada para esta faixa.",
+      musicalInterpretation = "",
+      sources = emptyList(),
+      status = VerificationStatus.UNVERIFIED,
+      verifiedDate = "",
+      deepDive = ""
     )
   }
 

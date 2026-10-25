@@ -4,27 +4,29 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Outer ring glow -->
-    <path
-        android:strokeColor="#38BDF8"
-        android:strokeWidth="2"
-        android:fillColor="#00000000"
-        android:pathData="M 54, 26 A 28,28 0 1,0 54,82 A 28,28 0 1,0 54,26 Z" />
-    <!-- Center disc accent -->
-    <path
-        android:fillColor="#F59E0B"
-        android:pathData="M 54, 51 A 3,3 0 1,0 54,57 A 3,3 0 1,0 54,51 Z" />
-    <!-- Audio Waveform Bars (symmetric) -->
-    <path
-        android:fillColor="#38BDF8"
-        android:pathData="M38,48 L42,48 L42,60 L38,60 Z" />
-    <path
-        android:fillColor="#06B6D4"
-        android:pathData="M45,40 L49,40 L49,68 L45,68 Z" />
-    <path
-        android:fillColor="#38BDF8"
-        android:pathData="M59,40 L63,40 L63,68 L59,68 Z" />
-    <path
-        android:fillColor="#06B6D4"
-        android:pathData="M66,48 L70,48 L70,60 L66,60 Z" />
+    <!-- T.A.R.K.A.S. mark: bar + diamond + forked tail, centred inside the 66dp safe zone -->
+    <group
+        android:pivotX="0"
+        android:pivotY="0"
+        android:scaleX="0.47"
+        android:scaleY="0.47"
+        android:translateX="23"
+        android:translateY="35.2">
+        <path
+            android:fillColor="#7EE3EA"
+            android:pathData="M0,34h29v12h-29z" />
+        <path
+            android:fillColor="#EAF7F8"
+            android:pathData="M103,34h29v12h-29z" />
+        <path
+            android:pathData="M66,6L102,40L66,74L30,40Z"
+            android:strokeWidth="12"
+            android:strokeColor="#EAF7F8"
+            android:strokeLineJoin="miter"
+            android:strokeMiterLimit="4" />
+        <path
+            android:pathData="M100,40L126,8M100,40L126,72"
+            android:strokeWidth="12"
+            android:strokeColor="#EAF7F8" />
+    </group>
 </vector>

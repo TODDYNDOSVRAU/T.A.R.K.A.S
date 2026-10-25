@@ -8,6 +8,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,16 +19,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.PlayCircleFilled
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -68,106 +76,118 @@ import com.example.ui.theme.TarkasCyanPrimary
 import com.example.ui.theme.TarkasSkySecondary
 import com.example.ui.viewmodel.TarkasNavTab
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** Large bold page title with the profile-style round button (the T.A.R.K.A.S. mark) opening Ajustes. */
 @Composable
-fun TarkasTopBar(
-  currentTab: TarkasNavTab,
-  activeRouteName: String,
+fun TarkasLargeTitle(
+  title: String,
   onOpenSettings: () -> Unit,
   modifier: Modifier = Modifier
 ) {
-  TopAppBar(
-    modifier = modifier,
-    colors = TopAppBarDefaults.topAppBarColors(
-      containerColor = MaterialTheme.colorScheme.background,
-      titleContentColor = MaterialTheme.colorScheme.onBackground
-    ),
-    title = {
-      Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+  Row(
+    modifier = modifier
+      .background(MaterialTheme.colorScheme.background)
+      .statusBarsPadding()
+      .fillMaxWidth()
+      .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    Text(
+      text = title,
+      modifier = Modifier.weight(1f),
+      fontWeight = FontWeight.Bold,
+      fontSize = 34.sp,
+      letterSpacing = (-0.5).sp,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+      color = MaterialTheme.colorScheme.onBackground
+    )
+    Box(
+      modifier = Modifier
+        .size(48.dp)
+        .clip(CircleShape)
+        .clickable(onClickLabel = "Abrir ajustes", onClick = onOpenSettings)
+        .testTag("topbar_settings_button"),
+      contentAlignment = Alignment.Center
+    ) {
+      Box(
+        modifier = Modifier
+          .size(38.dp)
+          .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
+        contentAlignment = Alignment.Center
       ) {
-        Box(
-          modifier = Modifier
-            .size(32.dp)
-            .clip(CircleShape)
-            .background(
-              Brush.linearGradient(
-                listOf(TarkasCyanPrimary, TarkasSkySecondary)
-              )
-            ),
-          contentAlignment = Alignment.Center
-        ) {
-          Icon(
-            imageVector = Icons.Default.Equalizer,
-            contentDescription = null,
-            tint = Color(0xFF0F172A),
-            modifier = Modifier.size(18.dp)
-          )
-        }
-        Column {
-          Text(
-            text = "T.A.R.K.A.S.",
-            fontFamily = SpaceGrotesk,
-            fontWeight = FontWeight.Bold,
-            fontSize = 17.sp,
-            color = MaterialTheme.colorScheme.primary,
-            letterSpacing = 1.sp
-          )
-          Text(
-            text = currentTab.label.uppercase(),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-          )
-        }
-      }
-    },
-    actions = {
-      // Audio route status pill
-      Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.padding(end = 4.dp)
-      ) {
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-        ) {
-          val icon = when {
-            activeRouteName.contains("Fone", ignoreCase = true) || activeRouteName.contains("Headset", ignoreCase = true) -> Icons.Default.Headphones
-            activeRouteName.contains("Bluetooth", ignoreCase = true) -> Icons.AutoMirrored.Filled.VolumeUp
-            else -> Icons.Default.Speaker
-          }
-          Icon(
-            imageVector = icon,
-            contentDescription = "Rota de Áudio",
-            modifier = Modifier.size(14.dp),
-            tint = MaterialTheme.colorScheme.primary
-          )
-          Spacer(modifier = Modifier.width(4.dp))
-          Text(
-            text = activeRouteName.take(14),
-            fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-          )
-        }
-      }
-
-      IconButton(
-        onClick = onOpenSettings,
-        modifier = Modifier.testTag("topbar_settings_button")
-      ) {
-        Icon(
-          imageVector = Icons.Default.Settings,
-          contentDescription = "Configurações do Tarkas",
-          tint = MaterialTheme.colorScheme.onSurfaceVariant
+        TarkasMark(
+          modifier = Modifier.size(width = 22.dp, height = 14.dp),
+          symbolColor = MaterialTheme.colorScheme.primary
         )
       }
     }
-  )
+  }
+}
+
+/** Page section title, optionally with the "›" that Apple Music uses for titles that open a list. */
+@Composable
+fun TarkasSectionTitle(
+  text: String,
+  modifier: Modifier = Modifier,
+  onClick: (() -> Unit)? = null
+) {
+  Row(
+    modifier = modifier
+      .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    Text(
+      text = text,
+      fontWeight = FontWeight.Bold,
+      fontSize = 22.sp,
+      letterSpacing = (-0.3).sp,
+      color = MaterialTheme.colorScheme.onBackground
+    )
+    if (onClick != null) {
+      Icon(
+        imageVector = Icons.Default.ChevronRight,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.size(24.dp)
+      )
+    }
+  }
+}
+
+/** The T.A.R.K.A.S. symbol: bar, diamond and forked tail, drawn on a 132x80 grid. */
+@Composable
+fun TarkasMark(
+  modifier: Modifier = Modifier,
+  symbolColor: Color = MaterialTheme.colorScheme.onBackground,
+  accentColor: Color = MaterialTheme.colorScheme.primary
+) {
+  Canvas(modifier = modifier) {
+    val k = size.width / 132f
+    val stroke = 12f * k
+    fun p(x: Float, y: Float) = Offset(x * k, y * k)
+
+    // accent bar
+    drawRect(accentColor, topLeft = p(0f, 34f), size = Size(29f * k, 12f * k))
+
+    // diamond outline
+    val diamond = androidx.compose.ui.graphics.Path().apply {
+      moveTo(66f * k, 6f * k)
+      lineTo(102f * k, 40f * k)
+      lineTo(66f * k, 74f * k)
+      lineTo(30f * k, 40f * k)
+      close()
+    }
+    drawPath(
+      diamond,
+      symbolColor,
+      style = androidx.compose.ui.graphics.drawscope.Stroke(width = stroke, join = androidx.compose.ui.graphics.StrokeJoin.Miter)
+    )
+
+    // tail: horizontal bar and two diagonals
+    drawRect(symbolColor, topLeft = p(103f, 34f), size = Size(29f * k, 12f * k))
+    drawLine(symbolColor, p(100f, 40f), p(126f, 8f), strokeWidth = stroke)
+    drawLine(symbolColor, p(100f, 40f), p(126f, 72f), strokeWidth = stroke)
+  }
 }
 
 @Composable
@@ -176,14 +196,16 @@ fun TarkasBottomNav(
   onTabSelected: (TarkasNavTab) -> Unit,
   modifier: Modifier = Modifier
 ) {
+  Column(modifier = modifier) {
+  androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
   NavigationBar(
-    modifier = modifier,
-    containerColor = MaterialTheme.colorScheme.surface,
-    tonalElevation = 6.dp
+    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+    tonalElevation = 0.dp
   ) {
     val items = listOf(
-      Triple(TarkasNavTab.HOME, "Início", Icons.Default.Home),
+      Triple(TarkasNavTab.HOME, "Início", Icons.Default.PlayCircleFilled),
       Triple(TarkasNavTab.MUSIC, "Música", Icons.Default.MusicNote),
+      Triple(TarkasNavTab.LIBRARY, "Biblioteca", Icons.Default.LibraryMusic),
       Triple(TarkasNavTab.AUDIO, "Áudio", Icons.Default.Equalizer),
       Triple(TarkasNavTab.ASSISTANT, "Assistente", Icons.Default.Psychology)
     )
@@ -205,18 +227,21 @@ fun TarkasBottomNav(
           Text(
             text = label,
             fontSize = 11.sp,
+            maxLines = 1,
+            softWrap = false,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
           )
         },
         colors = NavigationBarItemDefaults.colors(
           selectedIconColor = MaterialTheme.colorScheme.primary,
           selectedTextColor = MaterialTheme.colorScheme.primary,
-          indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+          indicatorColor = Color.Transparent,
           unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
           unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
         )
       )
     }
+  }
   }
 }
 
@@ -235,89 +260,75 @@ fun MiniPlayerBar(
   Surface(
     modifier = modifier
       .fillMaxWidth()
-      .padding(horizontal = 12.dp, vertical = 6.dp)
-      .clip(RoundedCornerShape(16.dp))
       .clickable { onClick() }
       .testTag("mini_player_bar"),
-    color = MaterialTheme.colorScheme.surfaceVariant,
-    tonalElevation = 4.dp
+    color = MaterialTheme.colorScheme.surface
   ) {
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(horizontal = 12.dp, vertical = 8.dp),
+        .padding(horizontal = 16.dp, vertical = 8.dp),
       verticalAlignment = Alignment.CenterVertically
     ) {
-      // Album art disc badge
       Box(
         modifier = Modifier
-          .size(42.dp)
-          .clip(RoundedCornerShape(8.dp))
-          .background(Color(track.colorHex)),
+          .size(48.dp)
+          .clip(RoundedCornerShape(6.dp))
+          .background(Brush.verticalGradient(listOf(Color(track.colorHex), Color(track.colorHex).copy(alpha = 0.6f)))),
         contentAlignment = Alignment.Center
       ) {
         Icon(
           imageVector = Icons.Default.MusicNote,
           contentDescription = null,
-          tint = Color(0xFF0F172A),
+          tint = Color.White,
           modifier = Modifier.size(24.dp)
         )
       }
 
-      Spacer(modifier = Modifier.width(12.dp))
+      Spacer(modifier = Modifier.width(14.dp))
 
       Column(modifier = Modifier.weight(1f)) {
         Text(
           text = track.title,
-          style = MaterialTheme.typography.titleSmall,
+          fontSize = 17.sp,
           color = MaterialTheme.colorScheme.onSurface,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis
         )
         Text(
-          text = "${track.artist} • ${track.era}",
-          style = MaterialTheme.typography.bodySmall,
+          text = track.artist,
+          fontSize = 13.sp,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis
         )
       }
 
-      // Compact animated waveform
-      WaveformVisualizer(
-        energy = if (isPlaying) waveformEnergy else 0.1f,
-        barCount = 7,
-        modifier = Modifier
-          .width(40.dp)
-          .height(26.dp)
-          .padding(horizontal = 4.dp)
-      )
-
       IconButton(
         onClick = onTogglePlayPause,
         modifier = Modifier
-          .size(44.dp)
+          .size(48.dp)
           .testTag("mini_player_play_pause")
       ) {
         Icon(
           imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
           contentDescription = if (isPlaying) "Pausar" else "Reproduzir",
-          tint = MaterialTheme.colorScheme.primary,
-          modifier = Modifier.size(28.dp)
+          tint = MaterialTheme.colorScheme.onSurface,
+          modifier = Modifier.size(34.dp)
         )
       }
 
       IconButton(
         onClick = onNext,
         modifier = Modifier
-          .size(40.dp)
+          .size(48.dp)
           .testTag("mini_player_next")
       ) {
         Icon(
-          imageVector = Icons.Default.SkipNext,
+          imageVector = Icons.Default.FastForward,
           contentDescription = "Próxima Faixa",
-          tint = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.size(24.dp)
+          tint = MaterialTheme.colorScheme.onSurface,
+          modifier = Modifier.size(34.dp)
         )
       }
     }
@@ -384,7 +395,7 @@ fun ToolReportCard(
       verticalAlignment = Alignment.CenterVertically
     ) {
       Icon(
-        imageVector = if (report.success) Icons.Default.Info else Icons.Default.Info,
+        imageVector = if (report.success) Icons.Default.CheckCircle else Icons.Default.ErrorOutline,
         contentDescription = null,
         tint = if (report.success) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
         modifier = Modifier.size(14.dp)

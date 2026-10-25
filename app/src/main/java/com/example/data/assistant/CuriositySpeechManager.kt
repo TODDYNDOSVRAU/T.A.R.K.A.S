@@ -124,7 +124,7 @@ class CuriositySpeechManager(
         else -> rawTrivia
       }
     } else {
-      "Esta faixa traz elementos sonoros marcantes e ritmo envolvente em sua produção musical."
+      "Não encontrei uma curiosidade verificada sobre esta faixa."
     }
 
     return if (isIntro) {

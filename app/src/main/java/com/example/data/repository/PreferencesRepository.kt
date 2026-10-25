@@ -21,6 +21,27 @@ class PreferencesRepository(context: Context) {
     private const val KEY_CURIOSITY_RATE = "curiosity_rate"
     private const val KEY_CURIOSITY_DUCK = "curiosity_duck"
     private const val KEY_CURIOSITY_SHORT = "curiosity_short"
+    private const val KEY_SHUFFLE = "shuffle"
+    private const val KEY_REPEAT = "repeat_mode"
+  }
+
+  fun getShuffle(): Boolean = prefs.getBoolean(KEY_SHUFFLE, false)
+
+  fun saveShuffle(enabled: Boolean) {
+    prefs.edit().putBoolean(KEY_SHUFFLE, enabled).apply()
+  }
+
+  fun getRepeatMode(): com.example.data.model.RepeatMode {
+    val name = prefs.getString(KEY_REPEAT, com.example.data.model.RepeatMode.OFF.name)
+    return try {
+      com.example.data.model.RepeatMode.valueOf(name ?: com.example.data.model.RepeatMode.OFF.name)
+    } catch (_: Exception) {
+      com.example.data.model.RepeatMode.OFF
+    }
+  }
+
+  fun saveRepeatMode(mode: com.example.data.model.RepeatMode) {
+    prefs.edit().putString(KEY_REPEAT, mode.name).apply()
   }
 
   fun getSavedProfileId(): String {

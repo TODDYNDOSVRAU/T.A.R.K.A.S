@@ -2,52 +2,74 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Apple Music Inspired & AMOLED Colors
+// Identity palette (from the T.A.R.K.A.S. symbol): near-black ink, ice cyan, teal.
+val TarkasInk = Color(0xFF07090B)
+val TarkasInkRaised = Color(0xFF0E1114)
+val TarkasInkHigh = Color(0xFF161A1E)
+val TarkasInkLine = Color(0xFF232930)
+
+val TarkasIce = Color(0xFF7EE3EA)
+val TarkasIceContainer = Color(0xFF0C2B2F)
+val TarkasIceText = Color(0xFFBDF4F7)
+
+val TarkasTeal = Color(0xFF0E7C86)
+val TarkasTealContainer = Color(0xFFD3EDEF)
+
+val TarkasPaper = Color(0xFFF3F4F6)
+val TarkasPaperRaised = Color(0xFFFFFFFF)
+val TarkasPaperHigh = Color(0xFFE8EAED)
+val TarkasPaperLine = Color(0xFFD5D9DE)
+
+val TarkasSymbolLight = Color(0xFFE9EBED)
+val TarkasSymbolDark = Color(0xFF0D1114)
+
+// Amoled variants (pure black)
 val AmoledBlack = Color(0xFF000000)
-val AmoledSurface = Color(0xFF0D0D0E)
-val AmoledSurfaceVariant = Color(0xFF161618)
-val AmoledCardBorder = Color(0xFF222226)
+val AmoledSurface = TarkasInk
+val AmoledSurfaceVariant = TarkasInkRaised
+val AmoledCardBorder = TarkasInkLine
 
-val AppleMusicPink = Color(0xFFFA243C)
-val AppleMusicPinkContainer = Color(0xFF38080E)
-val AppleMusicCyan = Color(0xFF00E5FF)
-val AppleMusicCyanContainer = Color(0xFF042B36)
-val AppleMusicPurple = Color(0xFFA855F7)
+// Legacy accent names kept so existing screens keep compiling. Mid cyan reads on dark and light.
+val AppleMusicPink = Color(0xFF46C9D3)
+val AppleMusicPinkContainer = TarkasIceContainer
+val AppleMusicCyan = TarkasIce
+val AppleMusicCyanContainer = TarkasIceContainer
+val AppleMusicPurple = TarkasTeal
 
-// Standard Dark Palette
-val TarkasBackgroundDark = Color(0xFF0B0F17)
-val TarkasSurfaceDark = Color(0xFF131B2A)
-val TarkasSurfaceVariantDark = Color(0xFF1C263A)
-val TarkasOutlineDark = Color(0xFF2B3A52)
+// Standard dark palette
+val TarkasBackgroundDark = TarkasInk
+val TarkasSurfaceDark = TarkasInkRaised
+val TarkasSurfaceVariantDark = TarkasInkHigh
+val TarkasOutlineDark = TarkasInkLine
 
-val TarkasCyanPrimary = Color(0xFF00E5FF)
-val TarkasCyanContainer = Color(0xFF04384A)
-val TarkasCyanText = Color(0xFF80F0FF)
+val TarkasCyanPrimary = TarkasIce
+val TarkasCyanContainer = TarkasIceContainer
+val TarkasCyanText = TarkasIceText
 
-val TarkasSkySecondary = Color(0xFF38BDF8)
-val TarkasSecondaryContainer = Color(0xFF133652)
+val TarkasSkySecondary = Color(0xFF5BC0DE)
+val TarkasSecondaryContainer = Color(0xFF10303B)
 
-val TarkasAmberTertiary = Color(0xFFF59E0B)
-val TarkasAmberContainer = Color(0xFF452B04)
+val TarkasAmberTertiary = Color(0xFFF2B84B)
+val TarkasAmberContainer = Color(0xFF3F2C07)
 
-val TarkasTextPrimaryDark = Color(0xFFF8FAFC)
-val TarkasTextSecondaryDark = Color(0xFFA0ABBA)
-val TarkasTextMutedDark = Color(0xFF64748B)
+val TarkasTextPrimaryDark = TarkasSymbolLight
+val TarkasTextSecondaryDark = Color(0xFF9AA3AB)
+val TarkasTextMutedDark = Color(0xFF626B73)
 
-val TarkasSuccess = Color(0xFF10B981)
+val TarkasSuccess = Color(0xFF34C48B)
 val TarkasWarning = Color(0xFFFBBF24)
-val TarkasError = Color(0xFFEF4444)
+val TarkasError = Color(0xFFFF6B6B)
 
-// Light Theme Palette
-val TarkasBackgroundLight = Color(0xFFF8FAFC)
-val TarkasSurfaceLight = Color(0xFFFFFFFF)
-val TarkasSurfaceVariantLight = Color(0xFFF1F5F9)
-val TarkasOutlineLight = Color(0xFFE2E8F0)
+// Light palette
+val TarkasBackgroundLight = TarkasPaper
+val TarkasSurfaceLight = TarkasPaperRaised
+val TarkasSurfaceVariantLight = TarkasPaperHigh
+val TarkasOutlineLight = TarkasPaperLine
 
-val TarkasCyanPrimaryLight = Color(0xFFFA243C)
-val TarkasCyanContainerLight = Color(0xFFFFE5E8)
-val TarkasSkySecondaryLight = Color(0xFF0284C7)
-val TarkasAmberTertiaryLight = Color(0xFFD97706)
+val TarkasCyanPrimaryLight = TarkasTeal
+val TarkasCyanContainerLight = TarkasTealContainer
+val TarkasSkySecondaryLight = Color(0xFF1B6F8F)
+val TarkasAmberTertiaryLight = Color(0xFFB7791F)
 
-val TarkasTextPrimaryLight = Color(0xFF0F172A)
-val TarkasTextSecondaryLight = Color(0xFF475569)
+val TarkasTextPrimaryLight = TarkasSymbolDark
+val TarkasTextSecondaryLight = Color(0xFF515A63)

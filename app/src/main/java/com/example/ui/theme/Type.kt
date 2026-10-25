@@ -8,18 +8,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.example.R
 
-val SpaceGrotesk = FontFamily(
-  Font(R.font.space_grotesk, FontWeight.Normal),
-  Font(R.font.space_grotesk, FontWeight.Medium),
-  Font(R.font.space_grotesk, FontWeight.Bold)
-)
+// The Apple Music layout uses one system sans family with real bold weights. The bundled
+// Space Grotesk / Inter files are single-weight, so bold never rendered; both names now map to
+// the system sans so existing references keep working.
+val SpaceGrotesk: FontFamily = FontFamily.SansSerif
 
-val Inter = FontFamily(
-  Font(R.font.inter, FontWeight.Normal),
-  Font(R.font.inter, FontWeight.Medium),
-  Font(R.font.inter, FontWeight.SemiBold),
-  Font(R.font.inter, FontWeight.Bold)
-)
+val Inter: FontFamily = FontFamily.SansSerif
 
 val TarkasTypography = Typography(
   displayLarge = TextStyle(
