@@ -275,12 +275,43 @@ fun TarkasBottomNav(
     Triple(TarkasNavTab.ASSISTANT, "Assistente", Icons.Default.Psychology)
   )
 
-  // A floating capsule of glass; the selected tab gets its own lighter capsule inside it.
+  // One lighter capsule marks the selected tab and glides between tabs on a spring, stretching a
+  // little while it travels (its width follows its speed), like a drop of glass sliding along.
+  val selectedIndex = items.indexOfFirst { it.first == currentTab }
+  val reduced = com.example.ui.theme.rememberReducedMotion()
+  val indicator = remember { androidx.compose.animation.core.Animatable(selectedIndex.coerceAtLeast(0).toFloat()) }
+  val indicatorAlpha by androidx.compose.animation.core.animateFloatAsState(
+    targetValue = if (selectedIndex >= 0) 1f else 0f,
+    animationSpec = tween(200),
+    label = "navPillAlpha"
+  )
+  androidx.compose.runtime.LaunchedEffect(selectedIndex, reduced) {
+    if (selectedIndex < 0) return@LaunchedEffect
+    if (reduced) indicator.snapTo(selectedIndex.toFloat())
+    else indicator.animateTo(
+      selectedIndex.toFloat(),
+      androidx.compose.animation.core.spring(dampingRatio = 0.74f, stiffness = 420f)
+    )
+  }
+  val pillColor = MaterialTheme.colorScheme.onSurface
+
   Row(
     modifier = modifier
       .fillMaxWidth()
       .glassPill(cornerRadius = 32.dp)
-      .padding(horizontal = 6.dp, vertical = 6.dp),
+      .padding(horizontal = 6.dp, vertical = 6.dp)
+      .drawBehind {
+        val slot = size.width / items.size
+        val stretch = (kotlin.math.abs(indicator.velocity) / 14f).coerceAtMost(0.3f)
+        val w = slot * (1f + stretch)
+        val x = indicator.value * slot + slot / 2f - w / 2f
+        drawRoundRect(
+          pillColor.copy(alpha = 0.10f * indicatorAlpha),
+          topLeft = androidx.compose.ui.geometry.Offset(x, 0f),
+          size = androidx.compose.ui.geometry.Size(w, size.height),
+          cornerRadius = CornerRadius(26.dp.toPx())
+        )
+      },
     horizontalArrangement = Arrangement.SpaceBetween
   ) {
     items.forEach { (tab, label, icon) ->
@@ -289,11 +320,6 @@ fun TarkasBottomNav(
         targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         animationSpec = tween(220),
         label = "navTint"
-      )
-      val pill by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (selected) 1f else 0f,
-        animationSpec = tween(260, easing = com.example.ui.theme.Motion.Settle),
-        label = "navPill"
       )
       // The selected tab's icon pops up a little with a spring (scale only, no relayout).
       val pop by androidx.compose.animation.core.animateFloatAsState(
@@ -304,15 +330,11 @@ fun TarkasBottomNav(
         ),
         label = "navPop"
       )
-      val pillColor = MaterialTheme.colorScheme.onSurface
       Column(
         modifier = Modifier
           .weight(1f)
           .testTag("nav_tab_${tab.name.lowercase()}")
           .clip(RoundedCornerShape(26.dp))
-          .drawBehind {
-            if (pill > 0f) drawRoundRect(pillColor.copy(alpha = 0.10f * pill), cornerRadius = CornerRadius(26.dp.toPx()))
-          }
           .selectable(
             selected = selected,
             role = androidx.compose.ui.semantics.Role.Tab,

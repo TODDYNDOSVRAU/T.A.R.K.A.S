@@ -136,8 +136,10 @@ class EqDsp {
     /** The filters that actually change the sound; flat peaks and shelves are skipped to save CPU. */
     fun activeFilters(s: EqSettings, sampleRate: Int): List<BiquadCoefficients> {
       val rate = sampleRate.toDouble()
-      val out = ArrayList<BiquadCoefficients>(s.bands.size + 2)
-      s.bands.forEach { b ->
+      val device = s.device?.bands.orEmpty()
+      val out = ArrayList<BiquadCoefficients>(device.size + s.bands.size + 2)
+      // The fone correction first, then the user's own curve on top of it.
+      (device + s.bands).forEach { b ->
         if (!b.enabled) return@forEach
         if (b.type.usesGain && abs(b.gainDb) < 0.05f) return@forEach
         out += BiquadCoefficients.design(b.type, b.freqHz.toDouble(), b.gainDb.toDouble(), b.q.toDouble(), rate)
@@ -154,7 +156,7 @@ class EqDsp {
     private fun buildPlan(s: EqSettings, sampleRate: Int): Plan = Plan(
       enabled = s.enabled,
       filters = activeFilters(s, sampleRate).toTypedArray(),
-      preampGain = dbToGain(s.preampDb),
+      preampGain = dbToGain(totalPreampDb(s)),
       leftGain = min(1f, 1f - s.balance),
       rightGain = min(1f, 1f + s.balance),
       width = s.stereoWidth,
@@ -168,9 +170,12 @@ class EqDsp {
      */
     fun responseDb(s: EqSettings, freqHz: Double, sampleRate: Int = DEFAULT_RATE): Double {
       val rate = sampleRate.toDouble()
-      var db = s.preampDb.toDouble()
+      var db = totalPreampDb(s).toDouble()
       activeFilters(s, sampleRate).forEach { db += it.magnitudeDb(freqHz, rate) }
       return db
     }
+
+    /** The user's preamp plus the headroom the fone correction asks for. */
+    fun totalPreampDb(s: EqSettings): Float = s.preampDb + (s.device?.preampDb ?: 0f)
   }
 }

@@ -39,6 +39,21 @@ data class EqBand(
   }
 }
 
+/**
+ * Correction curve for a specific headphone or earphone, measured by a reviewer (oratory1990,
+ * crinacle, Rtings…) and fitted by the AutoEq project. It is its own stage, applied before the
+ * user's curve, so presets and faders keep working on top of a corrected fone.
+ */
+data class DeviceCorrection(
+  val name: String,
+  /** Who measured it, e.g. "oratory1990". */
+  val source: String,
+  /** Measurement rig or form factor, e.g. "over-ear" or "711 in-ear". */
+  val rig: String = "",
+  val bands: List<EqBand>,
+  val preampDb: Float = 0f
+)
+
 /** The whole state of the audio processing chain. Everything here is applied by our own DSP. */
 data class EqSettings(
   val enabled: Boolean = true,
@@ -56,8 +71,13 @@ data class EqSettings(
   val limiterEnabled: Boolean = true,
   val limiterCeilingDb: Float = -0.5f,
   /** Android's hardware virtualizer, 0..1000. Only works where the device offers it. */
-  val virtualizerStrength: Int = 0
+  val virtualizerStrength: Int = 0,
+  /** Correction for the fone in use, applied before everything else. Null = none chosen. */
+  val device: DeviceCorrection? = null
 ) {
+  /** The user's own curve, without the fone correction: what presets store and compare. */
+  val userCurve: EqSettings get() = copy(enabled = true, device = null)
+
   companion object {
     val DEFAULT_FREQUENCIES = listOf(
       25f, 40f, 63f, 100f, 160f, 250f, 400f, 630f,
@@ -170,6 +190,26 @@ object EqPresets {
     .put("limiter", s.limiterEnabled)
     .put("ceiling", s.limiterCeilingDb.toDouble())
     .put("virt", s.virtualizerStrength)
+    .apply { s.device?.let { put("device", deviceToJson(it)) } }
+
+  fun deviceToJson(d: DeviceCorrection): JSONObject = JSONObject()
+    .put("name", d.name)
+    .put("source", d.source)
+    .put("rig", d.rig)
+    .put("preamp", d.preampDb.toDouble())
+    .put("bands", JSONArray().apply { d.bands.forEach { put(bandToJson(it)) } })
+
+  fun deviceFromJson(o: JSONObject?): DeviceCorrection? {
+    if (o == null) return null
+    val arr = o.optJSONArray("bands") ?: return null
+    return DeviceCorrection(
+      name = o.optString("name"),
+      source = o.optString("source"),
+      rig = o.optString("rig"),
+      preampDb = o.optDouble("preamp", 0.0).toFloat().coerceIn(-30f, 10f),
+      bands = (0 until arr.length()).map { bandFromJson(arr.getJSONObject(it)) }
+    )
+  }
 
   fun settingsFromJson(o: JSONObject): EqSettings {
     val d = EqSettings()
@@ -189,7 +229,8 @@ object EqPresets {
       stereoWidth = o.optDouble("width", 1.0).toFloat().coerceIn(0f, 2f),
       limiterEnabled = o.optBoolean("limiter", true),
       limiterCeilingDb = o.optDouble("ceiling", -0.5).toFloat().coerceIn(-12f, 0f),
-      virtualizerStrength = o.optInt("virt", 0).coerceIn(0, 1000)
+      virtualizerStrength = o.optInt("virt", 0).coerceIn(0, 1000),
+      device = deviceFromJson(o.optJSONObject("device"))
     )
   }
 

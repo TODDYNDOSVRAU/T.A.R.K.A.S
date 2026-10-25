@@ -55,6 +55,20 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.UUID
 
+/** State of the fone picker: the downloaded list, the current search and what is being applied. */
+data class DeviceSearchState(
+  val loading: Boolean = false,
+  val error: String? = null,
+  val query: String = "",
+  /** Null = every source. */
+  val source: String? = null,
+  val sources: List<String> = emptyList(),
+  val total: Int = 0,
+  val results: List<com.example.data.autoeq.AutoEqEntry> = emptyList(),
+  /** Path of the entry whose curve is downloading, to show a spinner on its row. */
+  val applyingPath: String? = null
+)
+
 enum class TarkasNavTab(val label: String) {
   HOME("Início"),
   MUSIC("Música"),
@@ -240,7 +254,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
       val preset = _eqPresets.value.find { it.id == savedId } ?: EqPresets.FLAT
       val settings = preferencesRepository.getEqSettings() ?: preset.settings
       _activePresetId.value = preset.id
-      _eqModified.value = settings.copy(enabled = true) != preset.settings.copy(enabled = true)
+      _eqModified.value = settings.userCurve != preset.settings.userCurve
       audioEngineManager.applyEqSettings(settings)
 
       // Initial track curiosity
@@ -290,8 +304,18 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     MusicNotificationManager.updatePlaybackNotification(context, track, isPlaying, cur, pos)
   }
 
+  /** The tab the player was opened from, so back returns there instead of to Início. */
+  private var tabBeforePlayer = TarkasNavTab.HOME
+
   fun setTab(tab: TarkasNavTab) {
+    val from = _currentTab.value
+    if (tab == TarkasNavTab.MUSIC && from != TarkasNavTab.MUSIC) tabBeforePlayer = from
     _currentTab.value = tab
+  }
+
+  /** Back: the player returns to the tab it was opened from; any other tab returns to Início. */
+  fun goBack() {
+    setTab(if (_currentTab.value == TarkasNavTab.MUSIC) tabBeforePlayer else TarkasNavTab.HOME)
   }
 
   /** Plays a track from the whole library. */
@@ -532,7 +556,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     val next = transform(audioEngineManager.eqSettings.value)
     audioEngineManager.applyEqSettings(next)
     val preset = _eqPresets.value.find { it.id == _activePresetId.value }
-    _eqModified.value = preset == null || next.copy(enabled = true) != preset.settings.copy(enabled = true)
+    _eqModified.value = preset == null || next.userCurve != preset.settings.userCurve
     eqSaveJob?.cancel()
     eqSaveJob = viewModelScope.launch {
       kotlinx.coroutines.delay(400)
@@ -549,10 +573,11 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
 
   /** Loads a preset. The on/off switch stays as it is. */
   fun selectEqPreset(preset: EqPreset) {
-    val enabled = audioEngineManager.eqSettings.value.enabled
+    val current = audioEngineManager.eqSettings.value
     _activePresetId.value = preset.id
     preferencesRepository.saveActiveProfileId(preset.id)
-    updateEq { preset.settings.copy(enabled = enabled) }
+    // The fone correction is its own stage: changing the preset keeps it.
+    updateEq { preset.settings.copy(enabled = current.enabled, device = current.device) }
   }
 
   fun resetEq() = selectEqPreset(EqPresets.FLAT)
@@ -561,7 +586,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     val preset = EqPreset(
       id = "custom_${System.currentTimeMillis()}",
       name = name.trim().ifBlank { "Meu preset" },
-      settings = audioEngineManager.eqSettings.value.copy(enabled = true),
+      settings = audioEngineManager.eqSettings.value.userCurve,
       isCustom = true
     )
     storeUserPresets(userPresets() + preset)
@@ -571,7 +596,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   /** Writes the current curve into the active user preset. */
   fun overwriteActiveEqPreset() {
     val id = _activePresetId.value
-    val current = audioEngineManager.eqSettings.value.copy(enabled = true)
+    val current = audioEngineManager.eqSettings.value.userCurve
     if (userPresets().none { it.id == id }) return
     storeUserPresets(userPresets().map { if (it.id == id) it.copy(settings = current) else it })
     _eqModified.value = false
@@ -620,6 +645,62 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     _surfaceStyle.value = style
     preferencesRepository.saveSurfaceStyle(style.key)
   }
+
+  // ---- Fone correction (AutoEq: oratory1990, crinacle, Rtings…) ----
+
+  private val autoEq = com.example.data.autoeq.AutoEqRepository(context)
+  private var deviceIndex: List<com.example.data.autoeq.AutoEqEntry> = emptyList()
+
+  private val _deviceSearch = MutableStateFlow(DeviceSearchState())
+  val deviceSearch: StateFlow<DeviceSearchState> = _deviceSearch.asStateFlow()
+  private var deviceSearchJob: Job? = null
+
+  /** Loads the list of fones (downloaded once, then cached) and shows the first matches. */
+  fun openDevicePicker() {
+    if (deviceIndex.isNotEmpty()) return searchDevices(_deviceSearch.value.query, _deviceSearch.value.source)
+    _deviceSearch.value = _deviceSearch.value.copy(loading = true, error = null)
+    viewModelScope.launch {
+      try {
+        deviceIndex = autoEq.index()
+        // The best-known reviewers first, then the rest by how many fones they measured.
+        val preferred = listOf("oratory1990", "crinacle", "Rtings", "Innerfidelity")
+        val sources = deviceIndex.groupingBy { it.source }.eachCount().entries
+          .sortedWith(compareBy({ preferred.indexOf(it.key).let { i -> if (i < 0) Int.MAX_VALUE else i } }, { -it.value }))
+          .map { it.key }
+        _deviceSearch.value = _deviceSearch.value.copy(loading = false, sources = sources, total = deviceIndex.size)
+        searchDevices(_deviceSearch.value.query, _deviceSearch.value.source)
+      } catch (e: Exception) {
+        _deviceSearch.value = _deviceSearch.value.copy(loading = false, error = "Sem conexão para baixar a lista de fones.")
+      }
+    }
+  }
+
+  fun searchDevices(query: String, source: String?) {
+    _deviceSearch.value = _deviceSearch.value.copy(query = query, source = source)
+    deviceSearchJob?.cancel()
+    deviceSearchJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+      kotlinx.coroutines.delay(120)
+      val results = com.example.data.autoeq.AutoEqParser.search(deviceIndex, query, source)
+      _deviceSearch.value = _deviceSearch.value.copy(results = results)
+    }
+  }
+
+  /** Downloads the fone's curve and applies it as the correction stage. */
+  fun applyDevice(entry: com.example.data.autoeq.AutoEqEntry, onDone: () -> Unit) {
+    _deviceSearch.value = _deviceSearch.value.copy(applyingPath = entry.path, error = null)
+    viewModelScope.launch {
+      try {
+        val correction = autoEq.correction(entry) ?: throw IllegalStateException("curva vazia")
+        updateEq { it.copy(device = correction) }
+        _deviceSearch.value = _deviceSearch.value.copy(applyingPath = null)
+        onDone()
+      } catch (e: Exception) {
+        _deviceSearch.value = _deviceSearch.value.copy(applyingPath = null, error = "Não foi possível baixar a curva de ${entry.name}.")
+      }
+    }
+  }
+
+  fun clearDevice() = updateEq { it.copy(device = null) }
 
   private val _reduceMotion = MutableStateFlow(preferencesRepository.getReduceMotion().also { AppMotion.userReduced = it })
   val reduceMotion: StateFlow<Boolean> = _reduceMotion.asStateFlow()

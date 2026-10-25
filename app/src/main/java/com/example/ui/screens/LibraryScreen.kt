@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.example.ui.theme.opensPlayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -101,8 +102,8 @@ fun LibraryScreen(
   onClearQueue: () -> Unit,
   modifier: Modifier = Modifier
 ) {
-  var section by remember { mutableStateOf(LibrarySection.PLAYLISTS) }
-  var openPlaylistId by remember { mutableStateOf<String?>(null) }
+  var section by rememberSaveable { mutableStateOf(LibrarySection.PLAYLISTS) }
+  var openPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
   var showNewPlaylist by remember { mutableStateOf(false) }
   var renamingPlaylist by remember { mutableStateOf<Playlist?>(null) }
 
@@ -137,8 +138,21 @@ fun LibraryScreen(
   val byId = savedTracks + allTracks.associateBy { it.id }
   val openPlaylist = playlists.firstOrNull { it.id == openPlaylistId }
 
-  Column(modifier = modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-    if (openPlaylist != null) {
+  val reduced = com.example.ui.theme.rememberReducedMotion()
+  // Back closes an open playlist before it leaves the tab.
+  androidx.activity.compose.BackHandler(enabled = openPlaylist != null) { openPlaylistId = null }
+
+  // An open playlist pushes in over the sections like a sub-page; the sections slide between them.
+  androidx.compose.animation.AnimatedContent(
+    targetState = openPlaylist,
+    contentKey = { it?.id },
+    transitionSpec = { com.example.ui.theme.subPageTransition(forward = targetState != null, reduced = reduced) },
+    label = "playlistOpen",
+    modifier = modifier.fillMaxSize().padding(horizontal = 20.dp)
+  ) { shownPlaylist ->
+  Column(modifier = Modifier.fillMaxSize()) {
+    if (shownPlaylist != null) {
+      val openPlaylist = shownPlaylist
       val tracks = openPlaylist.trackIds.mapNotNull { byId[it] }
       PlaylistDetail(
         playlist = openPlaylist,
@@ -167,7 +181,12 @@ fun LibraryScreen(
         }
       }
 
-      when (section) {
+      androidx.compose.animation.AnimatedContent(
+        targetState = section,
+        transitionSpec = { com.example.ui.theme.sectionTransition(initialState.ordinal, targetState.ordinal, reduced) },
+        label = "librarySection"
+      ) { shownSection ->
+      when (shownSection) {
         LibrarySection.PLAYLISTS -> PlaylistsList(
           playlists = playlists,
           byId = byId,
@@ -196,7 +215,9 @@ fun LibraryScreen(
           onClear = onClearQueue
         )
       }
+      }
     }
+  }
   }
 
   if (showNewPlaylist) {
@@ -259,7 +280,7 @@ private fun PlaylistsList(
   onNew: () -> Unit,
   onImportAudio: () -> Unit
 ) {
-  var query by remember { mutableStateOf("") }
+  var query by rememberSaveable { mutableStateOf("") }
   val shown = playlists.filter { query.isBlank() || it.name.contains(query, ignoreCase = true) }
   LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + LocalBarInset.current)) {
     item {

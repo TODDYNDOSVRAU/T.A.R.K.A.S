@@ -227,6 +227,7 @@ fun TarkasAppContent(
   val themeMode by viewModel.themeMode.collectAsState()
   val surfaceStyle by viewModel.surfaceStyle.collectAsState()
   val reduceMotion by viewModel.reduceMotion.collectAsState()
+  val deviceSearch by viewModel.deviceSearch.collectAsState()
   // One drifting light for every liquid glass surface (off for the other styles and with reduced motion).
   val glassLight = com.example.ui.theme.rememberGlassLight(
     active = surfaceStyle == com.example.ui.theme.SurfaceStyle.LIQUID && !com.example.ui.theme.rememberReducedMotion()
@@ -274,7 +275,7 @@ fun TarkasAppContent(
     if (isShowingCuriositySettings) {
       viewModel.closeCuriositySettings()
     } else {
-      viewModel.setTab(TarkasNavTab.HOME)
+      viewModel.goBack()
     }
   }
 
@@ -317,6 +318,9 @@ fun TarkasAppContent(
         else -> currentTab
       }
       val reducedMotion = com.example.ui.theme.rememberReducedMotion()
+      // Each page keeps its saved state (list scroll, open playlist, search) while another page
+      // is shown, so going back from the player lands exactly where the user left the list.
+      val pageStates = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
       AnimatedContent(
         targetState = screenKey,
         transitionSpec = { screenTransition(initialState, targetState, reducedMotion) },
@@ -350,6 +354,7 @@ fun TarkasAppContent(
         )
       }
       Box(modifier = Modifier.weight(1f)) {
+      pageStates.SaveableStateProvider(screen.toString()) {
       if (screen == "curiosity") {
         MusicalCuriositySettingsScreen(
           config = curiosityConfig,
@@ -474,6 +479,11 @@ fun TarkasAppContent(
             globalEqStatus = globalEqStatus,
             rootPresent = viewModel.rootPresent,
             onSetEqReach = { viewModel.setEqReach(it) },
+            deviceSearch = deviceSearch,
+            onOpenDevicePicker = { viewModel.openDevicePicker() },
+            onSearchDevices = { q, source -> viewModel.searchDevices(q, source) },
+            onApplyDevice = { entry, done -> viewModel.applyDevice(entry, done) },
+            onClearDevice = { viewModel.clearDevice() },
             onSetEnabled = { on -> viewModel.setEqEnabled(on) },
             onUpdateEq = { transform -> viewModel.updateEq(transform) },
             onUpdateBand = { index, transform -> viewModel.updateEqBand(index, transform) },
@@ -516,6 +526,7 @@ fun TarkasAppContent(
             onReduceMotionChange = { viewModel.setReduceMotion(it) }
           )
         }
+      }
       }
       }
       }
@@ -614,9 +625,19 @@ fun TarkasAppContent(
         }
 
         // Frosted Mini player shown docked above bottom nav when not on full Music screen
-        if (currentTab != TarkasNavTab.MUSIC && currentTrack != null) {
+        // It fades in as the closing player lands on it, and steps aside at once when the player
+        // grows out of it. The last track is kept so the capsule does not empty while leaving.
+        var lastTrack by remember { mutableStateOf(currentTrack) }
+        if (currentTrack != null) lastTrack = currentTrack
+        AnimatedVisibility(
+          visible = currentTab != TarkasNavTab.MUSIC && currentTrack != null,
+          enter = if (com.example.ui.theme.rememberReducedMotion()) androidx.compose.animation.EnterTransition.None
+            else androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220, delayMillis = 140)) +
+              androidx.compose.animation.scaleIn(initialScale = 0.94f, animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = 500f)),
+          exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90))
+        ) {
           MiniPlayerBar(
-            track = currentTrack,
+            track = lastTrack,
             isPlaying = isPlaying,
             onTogglePlayPause = { viewModel.togglePlayPause() },
             onNext = { viewModel.playNextTrack() },

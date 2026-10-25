@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.example.ui.theme.opensPlayer
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -101,8 +102,8 @@ fun HomeScreen(
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
-  var searchQuery by remember { mutableStateOf("") }
-  var selectedCategory by remember { mutableStateOf("Todas") }
+  var searchQuery by rememberSaveable { mutableStateOf("") }
+  var selectedCategory by rememberSaveable { mutableStateOf("Todas") }
 
   // The same search bar also searches Audius (the ViewModel waits for a pause in typing).
   LaunchedEffect(searchQuery) { onSearchAudiusOnline(searchQuery) }

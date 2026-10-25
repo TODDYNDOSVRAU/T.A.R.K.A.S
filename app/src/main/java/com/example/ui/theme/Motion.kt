@@ -154,6 +154,30 @@ fun screenTransition(from: Any, to: Any, reduced: Boolean = false): ContentTrans
 }
 
 /**
+ * A page opened inside a tab (an open playlist, the equalizer's advanced page, the fone list): it
+ * pushes in from the right and settles on a spring; going back slides it away to the right.
+ */
+fun subPageTransition(forward: Boolean, reduced: Boolean): ContentTransform {
+  if (reduced) return EnterTransition.None togetherWith ExitTransition.None
+  val slide = spring<IntOffset>(dampingRatio = 0.86f, stiffness = 420f)
+  val dir = if (forward) 1 else -1
+  return (slideInHorizontally(slide) { w -> dir * w / 3 } + fadeIn(tween(220, delayMillis = 40))) togetherWith
+    (slideOutHorizontally(slide) { w -> -dir * w / 6 } + fadeOut(tween(120)))
+}
+
+/**
+ * Switching between sections of one page (chips like Playlists / Favoritos / Fila): a short slide in
+ * the direction of the chip that was picked, with a quick crossfade.
+ */
+fun sectionTransition(fromIndex: Int, toIndex: Int, reduced: Boolean): ContentTransform {
+  if (reduced) return EnterTransition.None togetherWith ExitTransition.None
+  val dir = if (toIndex >= fromIndex) 1 else -1
+  val slide = spring<IntOffset>(dampingRatio = 0.9f, stiffness = 500f)
+  return (slideInHorizontally(slide) { w -> dir * w / 8 } + fadeIn(tween(200, delayMillis = 50))) togetherWith
+    (slideOutHorizontally(slide) { w -> -dir * w / 12 } + fadeOut(tween(90)))
+}
+
+/**
  * Click with a small springy zoom-out while pressed, like tapping a card in Apple Music.
  * The scale is read inside graphicsLayer, so the press animation does not recompose anything.
  */
