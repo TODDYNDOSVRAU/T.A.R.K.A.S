@@ -149,9 +149,7 @@ fun GlassChip(
 fun TarkasLargeTitle(
   title: String,
   onOpenSettings: () -> Unit,
-  modifier: Modifier = Modifier,
-  /** Position of this screen in the bar, so the title slides the same way as the page. */
-  order: Int = 0
+  modifier: Modifier = Modifier
 ) {
   Row(
     modifier = modifier
@@ -161,27 +159,16 @@ fun TarkasLargeTitle(
       .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
     verticalAlignment = Alignment.CenterVertically
   ) {
-    // The title lives outside the screen transition, so it fades through on the same timing as the
-    // page below; otherwise the new title shows over the old page while that one is still leaving.
-    val reduced = com.example.ui.theme.rememberReducedMotion()
-    androidx.compose.animation.AnimatedContent(
-      targetState = order to title,
+    Text(
+      text = title,
       modifier = Modifier.weight(1f),
-      transitionSpec = {
-        com.example.ui.theme.titleTransition(initialState.first, targetState.first, reduced)
-      },
-      label = "title"
-    ) { shown ->
-      Text(
-        text = shown.second,
-        fontWeight = FontWeight.Bold,
-        fontSize = 34.sp,
-        letterSpacing = (-0.5).sp,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        color = MaterialTheme.colorScheme.onBackground
-      )
-    }
+      fontWeight = FontWeight.Bold,
+      fontSize = 34.sp,
+      letterSpacing = (-0.5).sp,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+      color = MaterialTheme.colorScheme.onBackground
+    )
     Box(
       modifier = Modifier
         .size(48.dp)

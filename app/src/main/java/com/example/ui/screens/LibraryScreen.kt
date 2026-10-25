@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import com.example.ui.theme.opensPlayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -522,6 +523,7 @@ private fun TrackRow(
   Row(
     modifier = Modifier
       .fillMaxWidth()
+      .opensPlayer()
       .clickable(onClick = onClick)
       .padding(vertical = 6.dp),
     verticalAlignment = Alignment.CenterVertically

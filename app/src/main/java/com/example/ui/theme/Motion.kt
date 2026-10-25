@@ -126,14 +126,19 @@ private val TabScale = spring<Float>(dampingRatio = 0.78f, stiffness = 380f)
 fun screenTransition(from: Any, to: Any, reduced: Boolean = false): ContentTransform {
   if (reduced) return EnterTransition.None togetherWith ExitTransition.None
 
-  if (to == TarkasNavTab.MUSIC || from == TarkasNavTab.MUSIC) {
-    val enterScale = if (to == TarkasNavTab.MUSIC) 0.88f else 0.97f
-    val exitScale = if (from == TarkasNavTab.MUSIC) 1.06f else 0.98f
-    val enter = fadeIn(tween(Motion.ScreenEnterMs - Motion.ScreenExitMs, delayMillis = Motion.ScreenExitMs, easing = Motion.Settle)) +
-      scaleIn(initialScale = enterScale, animationSpec = spring(dampingRatio = 1f, stiffness = Motion.ScreenStiffness))
-    val exit = fadeOut(tween(Motion.ScreenExitMs, easing = FastOutLinearInEasing)) +
-      scaleOut(targetScale = exitScale, animationSpec = tween(Motion.ScreenExitMs, easing = FastOutLinearInEasing))
-    return (enter togetherWith exit).apply { targetContentZIndex = 1f }
+  // The full player grows out of what was tapped and shrinks back into the mini player
+  // (expandFromOrigin draws that shape). The page underneath stays in place meanwhile: it fades
+  // only once the player covers it, and is back before the player lands when closing.
+  if (to == TarkasNavTab.MUSIC) {
+    return (EnterTransition.None togetherWith fadeOut(tween(200, delayMillis = 260))).apply {
+      targetContentZIndex = 1f
+    }
+  }
+  if (from == TarkasNavTab.MUSIC) {
+    return (fadeIn(tween(160)) togetherWith ExitTransition.None).apply {
+      // The closing player stays on top of the page it returns to.
+      targetContentZIndex = -1f
+    }
   }
 
   val dir = if (screenOrder(to) >= screenOrder(from)) 1 else -1
@@ -147,18 +152,6 @@ fun screenTransition(from: Any, to: Any, reduced: Boolean = false): ContentTrans
     targetContentZIndex = 1f
   }
 }
-
-/** Same motion for the large title, which sits outside the screen transition. */
-fun titleTransition(fromOrder: Int, toOrder: Int, reduced: Boolean): ContentTransform {
-  if (reduced) return EnterTransition.None togetherWith ExitTransition.None
-  val dir = if (toOrder >= fromOrder) 1 else -1
-  return (slideInHorizontally(TabSlide) { w -> dir * w / 6 } +
-    fadeIn(tween(Motion.ScreenEnterMs - Motion.ScreenExitMs, delayMillis = Motion.ScreenExitMs / 2, easing = Motion.Settle))) togetherWith
-    (slideOutHorizontally(TabSlide) { w -> -dir * w / 10 } + fadeOut(tween(Motion.ScreenExitMs)))
-}
-
-/** Position of a tab's title in the bar order, for [titleTransition]. */
-fun titleOrder(tab: TarkasNavTab): Int = screenOrder(tab)
 
 /**
  * Click with a small springy zoom-out while pressed, like tapping a card in Apple Music.

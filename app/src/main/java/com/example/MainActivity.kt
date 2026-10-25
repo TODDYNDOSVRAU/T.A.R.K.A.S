@@ -97,6 +97,11 @@ import com.example.ui.theme.TarkasTheme
 import com.example.ui.viewmodel.TarkasNavTab
 import com.example.ui.viewmodel.TarkasViewModel
 import com.example.ui.theme.AppMotion
+import com.example.ui.theme.expandFromOrigin
+import com.example.ui.theme.opensPlayer
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 
 class MainActivity : ComponentActivity() {
   override fun onResume() {
@@ -275,32 +280,16 @@ fun TarkasAppContent(
 
   Scaffold(
     modifier = Modifier.fillMaxSize(),
-    contentWindowInsets = WindowInsets.safeDrawing,
-    topBar = {
-      // The full player has its own chrome (grabber + artwork), like the Apple Music Now Playing sheet
-      if (currentTab != TarkasNavTab.MUSIC && !overlayOpen) {
-        // The title's gear button is a glass control, so it needs the chosen surface style too.
-        CompositionLocalProvider(
-          LocalSurfaceStyle provides surfaceStyle,
-          com.example.ui.theme.LocalGlassLight provides glassLight
-        ) {
-          TarkasLargeTitle(
-            title = currentTab.label,
-            order = com.example.ui.theme.titleOrder(currentTab),
-            onOpenSettings = { viewModel.setTab(TarkasNavTab.SETTINGS) }
-          )
-        }
-      }
-    }
+    contentWindowInsets = WindowInsets.safeDrawing
   ) { innerPadding ->
     // The bottom bar floats over the content (so glass styles have something to blur). The content
-    // keeps its own bottom space through LocalBarInset, and the player page draws under the status bar.
+    // keeps its own bottom space through LocalBarInset. Every page draws under the status bar: tab
+    // pages pad their title below it, and the player page uses the space for its artwork.
     val layoutDirection = LocalLayoutDirection.current
-    val playerPage = currentTab == TarkasNavTab.MUSIC && !overlayOpen
     val contentPadding = PaddingValues(
       start = innerPadding.calculateStartPadding(layoutDirection),
       end = innerPadding.calculateEndPadding(layoutDirection),
-      top = if (playerPage) 0.dp else innerPadding.calculateTopPadding(),
+      top = 0.dp,
       bottom = 0.dp
     )
     val hazeState = remember { HazeState() }
@@ -333,6 +322,34 @@ fun TarkasAppContent(
         transitionSpec = { screenTransition(initialState, targetState, reducedMotion) },
         label = "screen"
       ) { screen ->
+      // The large title belongs to each tab page, so it moves with the page in every transition
+      // (and stays put under the player while that grows over it).
+      val tabPage = screen is TarkasNavTab && screen != TarkasNavTab.MUSIC
+      Column(
+        modifier = Modifier
+          .fillMaxSize()
+          .then(
+            when (screen) {
+              // The growing shape is filled with the track's colour, darkened like the player's
+              // background, so the page appears to grow out of the card instead of a black hole.
+              TarkasNavTab.MUSIC -> Modifier.expandFromOrigin(
+                this@AnimatedContent,
+                currentTrack?.let { androidx.compose.ui.graphics.lerp(Color(it.colorHex), Color.Black, 0.62f) } ?: Color.Black,
+                reducedMotion
+              )
+              "curiosity" -> Modifier.statusBarsPadding()
+              else -> Modifier
+            }
+          )
+      ) {
+      if (tabPage) {
+        // The title's gear button is a glass control, so it needs the chosen surface style too.
+        TarkasLargeTitle(
+          title = (screen as TarkasNavTab).label,
+          onOpenSettings = { viewModel.setTab(TarkasNavTab.SETTINGS) }
+        )
+      }
+      Box(modifier = Modifier.weight(1f)) {
       if (screen == "curiosity") {
         MusicalCuriositySettingsScreen(
           config = curiosityConfig,
@@ -360,8 +377,15 @@ fun TarkasAppContent(
             audiusResults = audiusResults,
             audiusSearching = audiusSearching,
             onSearchAudiusOnline = { q -> viewModel.searchAudiusOnline(q) },
-            onPlayAudiusResult = { track -> viewModel.playAudiusResult(track) },
-            onPlayTrack = { track -> viewModel.playTrack(track) },
+            // Opening a song plays it and grows the player out of the card that was tapped.
+            onPlayAudiusResult = { track ->
+              viewModel.playAudiusResult(track)
+              viewModel.setTab(TarkasNavTab.MUSIC)
+            },
+            onPlayTrack = { track ->
+              viewModel.playTrack(track)
+              viewModel.setTab(TarkasNavTab.MUSIC)
+            },
             onTogglePlayPause = { viewModel.togglePlayPause() },
             onNextTrack = { viewModel.playNextTrack() },
             onPreviousTrack = { viewModel.playPreviousTrack() },
@@ -412,7 +436,10 @@ fun TarkasAppContent(
             queue = queue,
             currentTrack = currentTrack,
             isPlaying = isPlaying,
-            onPlayFromList = { track, list -> viewModel.playFromList(track, list) },
+            onPlayFromList = { track, list ->
+              viewModel.playFromList(track, list)
+              viewModel.setTab(TarkasNavTab.MUSIC)
+            },
             onShuffleList = { list -> viewModel.shuffleFrom(list) },
             onCreatePlaylist = { name -> viewModel.createPlaylist(name) },
             onAddLocalTrack = { title, artist, uri, dur ->
@@ -422,7 +449,10 @@ fun TarkasAppContent(
             onDeletePlaylist = { id -> viewModel.deletePlaylist(id) },
             onRemoveFromPlaylist = { id, trackId -> viewModel.removeFromPlaylist(id, trackId) },
             onToggleFavorite = { track -> viewModel.toggleFavorite(track) },
-            onPlayQueueItem = { index -> viewModel.playFromQueue(index) },
+            onPlayQueueItem = { index ->
+              viewModel.playFromQueue(index)
+              viewModel.setTab(TarkasNavTab.MUSIC)
+            },
             onRemoveQueueItem = { index -> viewModel.removeFromQueue(index) },
             onClearQueue = { viewModel.clearQueue() }
           )
@@ -486,6 +516,8 @@ fun TarkasAppContent(
             onReduceMotionChange = { viewModel.setReduceMotion(it) }
           )
         }
+      }
+      }
       }
       }
       }
@@ -588,7 +620,10 @@ fun TarkasAppContent(
             isPlaying = isPlaying,
             onTogglePlayPause = { viewModel.togglePlayPause() },
             onNext = { viewModel.playNextTrack() },
-            onClick = { viewModel.setTab(TarkasNavTab.MUSIC) }
+            onClick = { viewModel.setTab(TarkasNavTab.MUSIC) },
+            modifier = Modifier
+              .onGloballyPositioned { com.example.ui.theme.PlayerOrigin.mini = it.boundsInWindow() }
+              .opensPlayer()
           )
         }
 

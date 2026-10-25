@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import com.example.ui.theme.opensPlayer
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -283,6 +284,7 @@ fun HomeScreen(
               Column(
                 modifier = Modifier
                   .width(220.dp)
+                  .opensPlayer()
                   .pressClickable(pressedScale = 0.97f) { onPlayTrack(track) }
                   .testTag("featured_track_${track.id}")
               ) {
@@ -465,6 +467,7 @@ private fun TrackRow(
     Row(
       modifier = Modifier
         .fillMaxWidth()
+        .opensPlayer()
         .pressClickable(pressedScale = 0.97f, onClick = onClick)
         .padding(vertical = 4.dp),
       verticalAlignment = Alignment.CenterVertically
