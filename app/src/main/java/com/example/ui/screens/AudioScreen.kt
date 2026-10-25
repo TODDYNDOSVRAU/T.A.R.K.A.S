@@ -135,6 +135,14 @@ import androidx.compose.ui.unit.IntOffset
 import com.example.data.autoeq.AutoEqEntry
 import com.example.data.model.DeviceCorrection
 import com.example.ui.theme.pressClickable
+import com.example.ui.components.EqKnob
+import com.example.ui.components.EqRailFader
+import com.example.ui.components.FilterShapeIcon
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.ui.graphics.compositeOver
 import com.example.ui.theme.rememberReducedMotion
 import com.example.ui.theme.subPageTransition
 import com.example.ui.viewmodel.DeviceSearchState
@@ -404,24 +412,24 @@ private fun EqMainPage(
 
     // Quick tone
     item {
+      // Two knobs, centred at 0 dB: turn up or right to boost, double-tap to reset.
       GlassPanel {
-        PanelTitle("Graves e agudos")
-        LabeledSlider(
-          label = "Graves",
-          valueText = formatDb(eqSettings.bassDb) + " dB",
-          value = eqSettings.bassDb,
-          range = -EqSettings.TONE_RANGE_DB..EqSettings.TONE_RANGE_DB,
-          testTag = "slider_bass",
-          onChange = { v -> onUpdateEq { it.copy(bassDb = snap(v)) } }
-        )
-        LabeledSlider(
-          label = "Agudos",
-          valueText = formatDb(eqSettings.trebleDb) + " dB",
-          value = eqSettings.trebleDb,
-          range = -EqSettings.TONE_RANGE_DB..EqSettings.TONE_RANGE_DB,
-          testTag = "slider_treble",
-          onChange = { v -> onUpdateEq { it.copy(trebleDb = snap(v)) } }
-        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+          ToneKnob(
+            label = "Graves",
+            db = eqSettings.bassDb,
+            enabled = enabled,
+            testTag = "knob_bass",
+            onChange = { db -> onUpdateEq { it.copy(bassDb = db) } }
+          )
+          ToneKnob(
+            label = "Agudos",
+            db = eqSettings.trebleDb,
+            enabled = enabled,
+            testTag = "knob_treble",
+            onChange = { db -> onUpdateEq { it.copy(trebleDb = db) } }
+          )
+        }
       }
     }
 
@@ -572,10 +580,19 @@ private fun EqAdvancedPage(
     // Reach: only the app, every app with ADB, every app with root
     item { ReachPanel(reach = eqReach, status = globalEqStatus, rootPresent = rootPresent, onSetReach = onSetEqReach) }
 
-    // Parametric editor
+    // Parametric editor: a strip of band cards (gain fader, filter shape, Q and frequency knobs),
+    // the preamp fixed on the left, and the curve underneath showing the selected band.
     item {
-      GlassPanel {
+      Column {
         PanelTitle("Paramétrico")
+        ParametricStrip(
+          settings = eqSettings,
+          selected = bandIndex,
+          onSelect = { selectedBand = it },
+          onUpdateBand = onUpdateBand,
+          onUpdateEq = onUpdateEq
+        )
+        Spacer(Modifier.height(12.dp))
         EqGraph(
           settings = eqSettings,
           selectedBand = bandIndex,
@@ -586,14 +603,8 @@ private fun EqAdvancedPage(
             selectedBand = i
             onUpdateBand(i) { b -> b.copy(freqHz = freq, gainDb = if (b.type.usesGain) gain else b.gainDb) }
           },
-          modifier = Modifier.fillMaxWidth().height(180.dp)
+          modifier = Modifier.fillMaxWidth().height(140.dp)
         )
-        Spacer(Modifier.height(14.dp))
-        BandSelector(bands = eqSettings.bands, selected = bandIndex, onSelect = { selectedBand = it })
-        Spacer(Modifier.height(14.dp))
-        eqSettings.bands.getOrNull(bandIndex)?.let { band ->
-          BandEditor(index = bandIndex, band = band, onChange = { t -> onUpdateBand(bandIndex, t) })
-        }
       }
     }
 
@@ -760,6 +771,230 @@ private fun EqAdvancedPage(
     }
   }
 }
+
+// ---------------- parametric strip ----------------
+
+/** One colour per band, so a card, its node on the curve and its place in the strip read as one. */
+private val BandColors = listOf(
+  Color(0xFF1E4FD0), Color(0xFF0E7C86), Color(0xFF6A3FD1), Color(0xFFB0368F),
+  Color(0xFFC8641C), Color(0xFF2E8B57), Color(0xFF2F7FA8), Color(0xFFAD3A34)
+)
+
+private fun bandColor(i: Int): Color = BandColors[i % BandColors.size]
+
+@Composable
+private fun ParametricStrip(
+  settings: EqSettings,
+  selected: Int,
+  onSelect: (Int) -> Unit,
+  onUpdateBand: (Int, (EqBand) -> EqBand) -> Unit,
+  onUpdateEq: ((EqSettings) -> EqSettings) -> Unit
+) {
+  val listState = rememberLazyListState()
+  // Selecting a band on the curve brings its card into view.
+  LaunchedEffect(selected) {
+    if (selected in settings.bands.indices) listState.animateScrollToItem(selected)
+  }
+  Row(modifier = Modifier.fillMaxWidth().height(440.dp)) {
+    // Preamp, fixed while the bands scroll
+    Column(
+      modifier = Modifier.width(64.dp).fillMaxHeight().glassControl(RoundedCornerShape(32.dp)).padding(vertical = 14.dp),
+      horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+      EqRailFader(
+        value = settings.preampDb / EqSettings.PREAMP_RANGE_DB,
+        onChange = { v -> onUpdateEq { it.copy(preampDb = snap(v * EqSettings.PREAMP_RANGE_DB)) } },
+        enabled = settings.enabled,
+        description = "Pré-amplificação",
+        modifier = Modifier.weight(1f).fillMaxWidth().testTag("fader_preamp_strip")
+      )
+      Spacer(Modifier.height(8.dp))
+      Text("Pré", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+      Text(formatDb(settings.preampDb), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    Spacer(Modifier.width(8.dp))
+    LazyRow(
+      state = listState,
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      modifier = Modifier.weight(1f).fillMaxHeight()
+    ) {
+      itemsIndexed(settings.bands) { i, band ->
+        BandCard(
+          index = i,
+          band = band,
+          selected = i == selected,
+          color = bandColor(i),
+          eqEnabled = settings.enabled,
+          onSelect = { onSelect(i) },
+          onChange = { t -> onSelect(i); onUpdateBand(i, t) },
+          onDelete = {
+            onUpdateEq { s -> s.copy(bands = s.bands.filterIndexed { j, _ -> j != i }) }
+            onSelect((i - 1).coerceAtLeast(0))
+          }
+        )
+      }
+      item {
+        Column(
+          modifier = Modifier.fillMaxHeight().padding(horizontal = 4.dp),
+          verticalArrangement = Arrangement.Center,
+          horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+          GlassChip(
+            label = "Adicionar banda",
+            icon = Icons.Default.Add,
+            onClick = {
+              onUpdateEq { s -> s.copy(bands = s.bands + EqBand(freqHz = 1000f, q = 1.4f)) }
+              onSelect(settings.bands.size)
+            },
+            modifier = Modifier.testTag("eq_add_band")
+          )
+        }
+      }
+    }
+  }
+}
+
+/** A band as a coloured card: gain fader on the left, filter shape, Q knob and frequency knob. */
+@Composable
+private fun BandCard(
+  index: Int,
+  band: EqBand,
+  selected: Boolean,
+  color: Color,
+  eqEnabled: Boolean,
+  onSelect: () -> Unit,
+  onChange: ((EqBand) -> EqBand) -> Unit,
+  onDelete: () -> Unit
+) {
+  val surface = MaterialTheme.colorScheme.surface
+  val fill by androidx.compose.animation.animateColorAsState(
+    targetValue = if (selected) color else color.copy(alpha = 0.32f).compositeOver(surface),
+    animationSpec = tween(260),
+    label = "bandFill"
+  )
+  val lift by animateFloatAsState(if (selected) 1f else 0.97f, spring(dampingRatio = 0.7f, stiffness = 500f), label = "bandLift")
+  val live = eqEnabled && band.enabled
+  val accent = Color(0xFF7EE3EA)
+  val onCard = Color.White
+
+  Column(
+    modifier = Modifier
+      .width(212.dp)
+      .fillMaxHeight()
+      .graphicsLayer { scaleX = lift; scaleY = lift }
+      .clip(RoundedCornerShape(32.dp))
+      .background(fill)
+      .pointerInput(Unit) { detectTapGestures { onSelect() } }
+      .padding(12.dp)
+      .testTag("band_card_$index")
+  ) {
+    // Band number and its switches
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+      Text("Banda ${index + 1}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = onCard, modifier = Modifier.weight(1f).padding(start = 6.dp))
+      IconButton(onClick = { onChange { it.copy(enabled = !it.enabled) } }, modifier = Modifier.size(34.dp)) {
+        Icon(
+          Icons.Default.PowerSettingsNew,
+          contentDescription = if (band.enabled) "Desligar banda" else "Ligar banda",
+          tint = if (band.enabled) accent else onCard.copy(alpha = 0.45f),
+          modifier = Modifier.size(20.dp)
+        )
+      }
+      IconButton(onClick = onDelete, modifier = Modifier.size(34.dp)) {
+        Icon(Icons.Default.Delete, contentDescription = "Excluir banda", tint = onCard.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+      }
+    }
+    Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+      // Gain
+      Column(modifier = Modifier.width(64.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
+        EqRailFader(
+          value = band.gainDb / EqBand.MAX_GAIN,
+          onChange = { v -> onChange { it.copy(gainDb = snap(v * EqBand.MAX_GAIN)) } },
+          enabled = live && band.type.usesGain,
+          accent = accent,
+          description = "Ganho da banda ${index + 1}",
+          modifier = Modifier.weight(1f).fillMaxWidth()
+        )
+        ValuePill("Ganho", if (band.type.usesGain) formatDb(band.gainDb) else "—")
+      }
+      // Shape, Q, frequency
+      Column(
+        modifier = Modifier.weight(1f).fillMaxHeight(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
+      ) {
+        // Tapping the shape steps through the filter types.
+        Box(
+          modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.Black.copy(alpha = 0.55f))
+            .pressClickable(pressedScale = 0.92f) {
+              onChange { b -> b.copy(type = FilterType.entries[(b.type.ordinal + 1) % FilterType.entries.size]) }
+            }
+            .padding(horizontal = 16.dp, vertical = 9.dp)
+            .testTag("band_type_$index"),
+          contentAlignment = Alignment.Center
+        ) {
+          AnimatedContent(targetState = band.type, label = "filterShape") { t -> FilterShapeIcon(t, color = onCard) }
+        }
+        Text(band.type.label, fontSize = 11.sp, color = onCard.copy(alpha = 0.8f), maxLines = 1)
+        EqKnob(
+          value = qToKnob(band.q),
+          onChange = { v -> onChange { it.copy(q = knobToQ(v)) } },
+          size = 84.dp,
+          accent = accent,
+          defaultValue = qToKnob(EqBand.DEFAULT_Q),
+          enabled = live,
+          description = "Q da banda ${index + 1}"
+        )
+        ValuePill("Q", "%.2f".format(band.q))
+        EqKnob(
+          value = freqToX(band.freqHz),
+          onChange = { v -> onChange { it.copy(freqHz = xToFreq(v)) } },
+          size = 84.dp,
+          accent = accent,
+          defaultValue = freqToX(1000f),
+          enabled = live,
+          description = "Frequência da banda ${index + 1}"
+        )
+        ValuePill("Freq", formatHz(band.freqHz))
+      }
+    }
+  }
+}
+
+@Composable
+private fun ToneKnob(label: String, db: Float, enabled: Boolean, testTag: String, onChange: (Float) -> Unit) {
+  val range = EqSettings.TONE_RANGE_DB
+  Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    EqKnob(
+      value = (db + range) / (2f * range),
+      onChange = { v -> onChange(snap(v * 2f * range - range)) },
+      size = 104.dp,
+      bipolar = true,
+      enabled = enabled,
+      description = "$label ${formatDb(db)} dB",
+      modifier = Modifier.testTag(testTag)
+    )
+    Spacer(Modifier.height(6.dp))
+    Text(label, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+    Text(formatDb(db) + " dB", fontSize = 13.sp, color = if (db == 0f) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary)
+  }
+}
+
+/** A small dark label under a control: name and value, like the readouts of the reference design. */
+@Composable
+private fun ValuePill(name: String, value: String) {
+  Column(
+    modifier = Modifier.clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 8.dp, vertical = 3.dp),
+    horizontalAlignment = Alignment.CenterHorizontally
+  ) {
+    Text(name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1)
+    Text(value, fontSize = 12.sp, color = Color.White.copy(alpha = 0.8f), maxLines = 1)
+  }
+}
+
+private fun qToKnob(q: Float): Float = (log10(q.coerceIn(EqBand.MIN_Q, EqBand.MAX_Q) / EqBand.MIN_Q) / log10(EqBand.MAX_Q / EqBand.MIN_Q))
+private fun knobToQ(v: Float): Float = EqBand.MIN_Q * (EqBand.MAX_Q / EqBand.MIN_Q).pow(v.coerceIn(0f, 1f))
 
 // ---------------- fone list (AutoEq) ----------------
 
@@ -963,90 +1198,6 @@ private fun LogSlider(
     range = 0f..1f,
     onChange = { t -> onChange(min * 10f.pow(t * span)) }
   )
-}
-
-@Composable
-private fun BandSelector(bands: List<EqBand>, selected: Int, onSelect: (Int) -> Unit) {
-  LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-    itemsIndexed(bands) { i, band ->
-      GlassChip(
-        label = formatHz(band.freqHz),
-        selected = i == selected,
-        onClick = { onSelect(i) },
-        modifier = Modifier.testTag("band_chip_$i")
-      )
-    }
-  }
-}
-
-@Composable
-private fun BandEditor(index: Int, band: EqBand, onChange: ((EqBand) -> EqBand) -> Unit) {
-  val colors = MaterialTheme.colorScheme
-  Column {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-      Text(
-        "Banda ${index + 1}",
-        fontSize = 17.sp,
-        fontWeight = FontWeight.Bold,
-        color = colors.onSurface,
-        modifier = Modifier.weight(1f)
-      )
-      Text("Ativa", fontSize = 15.sp, color = colors.onSurfaceVariant)
-      Spacer(Modifier.width(8.dp))
-      Switch(
-        checked = band.enabled,
-        onCheckedChange = { on -> onChange { it.copy(enabled = on) } },
-        colors = SwitchDefaults.colors(checkedTrackColor = colors.primary, checkedThumbColor = colors.onPrimary)
-      )
-    }
-    Spacer(Modifier.height(8.dp))
-    Row(
-      modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-      horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-      FilterType.entries.forEach { type ->
-        GlassChip(
-          label = type.label,
-          selected = band.type == type,
-          onClick = { onChange { it.copy(type = type) } },
-          modifier = Modifier.testTag("filter_type_${type.key}")
-        )
-      }
-    }
-    Spacer(Modifier.height(10.dp))
-    LogSlider(
-      label = "Frequência",
-      valueText = formatHz(band.freqHz) + "Hz",
-      value = band.freqHz,
-      min = EqBand.MIN_FREQ,
-      max = EqBand.MAX_FREQ,
-      onChange = { v -> onChange { it.copy(freqHz = v) } }
-    )
-    if (band.type.usesGain) {
-      LabeledSlider(
-        label = "Ganho",
-        valueText = formatDb(band.gainDb) + " dB",
-        value = band.gainDb,
-        range = EqBand.MIN_GAIN..EqBand.MAX_GAIN,
-        testTag = "slider_band_gain",
-        onChange = { v -> onChange { it.copy(gainDb = snap(v)) } }
-      )
-    }
-    LogSlider(
-      label = if (band.type.usesGain) "Fator Q (largura)" else "Fator Q (ressonância)",
-      valueText = "%.2f".format(band.q),
-      value = band.q,
-      min = EqBand.MIN_Q,
-      max = EqBand.MAX_Q,
-      onChange = { v -> onChange { it.copy(q = v) } }
-    )
-    Text(
-      text = if (band.type.usesGain) "Q alto: ajuste estreito, cirúrgico. Q baixo: ajuste largo e suave."
-      else "Corta tudo além da frequência. Q perto de 0,7 é o corte mais neutro.",
-      fontSize = 13.sp,
-      color = colors.onSurfaceVariant
-    )
-  }
 }
 
 /** The graphic mode: one vertical fader per band (gain only), plus the preamp. */
