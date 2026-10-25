@@ -29,6 +29,7 @@ import com.example.data.notification.NotificationActionReceiver
 import com.example.data.repository.CuriosityRepository
 import com.example.data.repository.MusicRepository
 import com.example.data.repository.PreferencesRepository
+import com.example.ui.theme.AppMotion
 import com.example.ui.theme.SurfaceStyle
 import com.example.data.systemaudio.ActiveAppsReader
 import com.example.data.systemaudio.ActiveAppsState
@@ -618,6 +619,15 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   fun setSurfaceStyle(style: SurfaceStyle) {
     _surfaceStyle.value = style
     preferencesRepository.saveSurfaceStyle(style.key)
+  }
+
+  private val _reduceMotion = MutableStateFlow(preferencesRepository.getReduceMotion().also { AppMotion.userReduced = it })
+  val reduceMotion: StateFlow<Boolean> = _reduceMotion.asStateFlow()
+
+  fun setReduceMotion(reduce: Boolean) {
+    _reduceMotion.value = reduce
+    AppMotion.userReduced = reduce
+    preferencesRepository.saveReduceMotion(reduce)
   }
 
   fun setThemeMode(mode: String) {

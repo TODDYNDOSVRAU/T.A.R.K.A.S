@@ -15,7 +15,17 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.sin
+import kotlin.math.sqrt
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -23,7 +33,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
 import com.example.ui.viewmodel.TarkasNavTab
 
 /**
@@ -39,45 +48,117 @@ object Motion {
   const val ScreenStiffness = 700f
 }
 
-/** True when the user turned system animations off (or to zero). Motion is then skipped. */
-@Composable
-fun rememberReducedMotion(): Boolean {
-  val context = LocalContext.current
-  return remember { isReducedMotion(context) }
+/**
+ * What the system and the user ask of motion and blur. The app follows the system: with animations
+ * removed (animation scale zero, Samsung's "Remove animations") there is no boot sequence and screens
+ * switch without movement; with blur and transparency reduced, the floating bars are solid.
+ * "Reduzir animações" in Ajustes turns motion off in the app alone. Read again on every resume,
+ * so a change in the system settings applies when the user comes back.
+ */
+object AppMotion {
+  /** "Reduzir animações" in Ajustes. */
+  var userReduced by mutableStateOf(false)
+  /** The system animation scale is zero. */
+  var systemReduced by mutableStateOf(false)
+  /** The system asks for no blur (Samsung's "Reduce transparency and blur", or window blurs off). */
+  var systemBlurOff by mutableStateOf(false)
+
+  val reduced: Boolean get() = userReduced || systemReduced
+
+  fun readSystem(context: Context) {
+    val resolver = context.contentResolver
+    systemReduced = try {
+      Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    } catch (_: Exception) {
+      false
+    }
+    systemBlurOff = settingIsOn { Settings.System.getInt(resolver, "accessibility_reduce_transparency", 0) } ||
+      settingIsOn { Settings.Global.getInt(resolver, "disable_window_blurs", 0) }
+  }
+
+  private inline fun settingIsOn(read: () -> Int): Boolean = try {
+    read() == 1
+  } catch (_: Exception) {
+    false
+  }
 }
 
-private fun isReducedMotion(context: Context): Boolean = try {
-  Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
-} catch (_: Exception) {
-  false
-}
+/** True when motion should be skipped: the system removed animations, or the user asked for less. */
+@Composable
+fun rememberReducedMotion(): Boolean = AppMotion.reduced
 
 /**
- * Transition between screens: the new screen zooms in from slightly smaller while it fades in; the
- * old one fades out. Opening the full player zooms in more; leaving it grows and fades away.
+ * Remotion's spring(): where a spring pulled from 0 to 1 is after [seconds]. The defaults are
+ * Remotion's (damping 10, mass 1, stiffness 100), which overshoot; raise damping for calmer motion.
+ * A pure function of time, so a single timeline value can drive many staggered springs.
+ */
+fun springAt(seconds: Float, damping: Float = 10f, mass: Float = 1f, stiffness: Float = 100f): Float {
+  if (seconds <= 0f) return 0f
+  val w0 = sqrt(stiffness / mass)
+  val zeta = damping / (2f * sqrt(stiffness * mass))
+  return if (zeta < 1f) {
+    val wd = w0 * sqrt(1f - zeta * zeta)
+    1f - exp(-zeta * w0 * seconds) * (cos(wd * seconds) + (zeta * w0 / wd) * sin(wd * seconds))
+  } else {
+    1f - exp(-w0 * seconds) * (1f + w0 * seconds)
+  }
+}
+
+/** Order of the screens left to right, so a tab switch slides the way the bar reads. */
+private fun screenOrder(screen: Any): Int = when (screen) {
+  TarkasNavTab.HOME -> 0
+  TarkasNavTab.LIBRARY -> 1
+  TarkasNavTab.AUDIO -> 2
+  TarkasNavTab.ASSISTANT -> 3
+  TarkasNavTab.SETTINGS -> 4
+  else -> 5
+}
+
+/** Slides between tabs: an underdamped spring that lands with a small, soft overshoot. */
+private val TabSlide = spring<IntOffset>(dampingRatio = 0.78f, stiffness = 380f)
+private val TabScale = spring<Float>(dampingRatio = 0.78f, stiffness = 380f)
+
+/**
+ * Transition between screens. Tabs slide in the direction of the bar (right when moving right),
+ * with the new screen settling on a soft spring while the old one drifts away and fades quickly.
+ * Opening the full player zooms in; leaving it grows and fades away.
  */
 fun screenTransition(from: Any, to: Any, reduced: Boolean = false): ContentTransform {
   if (reduced) return EnterTransition.None togetherWith ExitTransition.None
 
-  val enterScale = when {
-    to == TarkasNavTab.MUSIC -> 0.88f
-    to == "curiosity" -> 0.94f
-    else -> 0.97f
+  if (to == TarkasNavTab.MUSIC || from == TarkasNavTab.MUSIC) {
+    val enterScale = if (to == TarkasNavTab.MUSIC) 0.88f else 0.97f
+    val exitScale = if (from == TarkasNavTab.MUSIC) 1.06f else 0.98f
+    val enter = fadeIn(tween(Motion.ScreenEnterMs - Motion.ScreenExitMs, delayMillis = Motion.ScreenExitMs, easing = Motion.Settle)) +
+      scaleIn(initialScale = enterScale, animationSpec = spring(dampingRatio = 1f, stiffness = Motion.ScreenStiffness))
+    val exit = fadeOut(tween(Motion.ScreenExitMs, easing = FastOutLinearInEasing)) +
+      scaleOut(targetScale = exitScale, animationSpec = tween(Motion.ScreenExitMs, easing = FastOutLinearInEasing))
+    return (enter togetherWith exit).apply { targetContentZIndex = 1f }
   }
-  val exitScale = if (from == TarkasNavTab.MUSIC) 1.06f else 0.98f
 
-  // Fade through: the old screen is gone before the new one starts to show, so the two never
-  // appear mixed, even when a slow phone drops frames during the switch. Scale rides a critically
-  // damped spring, so a tap that interrupts the transition never jumps.
-  val enter = fadeIn(tween(Motion.ScreenEnterMs - Motion.ScreenExitMs, delayMillis = Motion.ScreenExitMs, easing = Motion.Settle)) +
-    scaleIn(initialScale = enterScale, animationSpec = spring(dampingRatio = 1f, stiffness = Motion.ScreenStiffness))
-  val exit = fadeOut(tween(Motion.ScreenExitMs, easing = FastOutLinearInEasing)) +
-    scaleOut(targetScale = exitScale, animationSpec = tween(Motion.ScreenExitMs, easing = FastOutLinearInEasing))
+  val dir = if (screenOrder(to) >= screenOrder(from)) 1 else -1
+  val enter = slideInHorizontally(TabSlide) { w -> dir * w / 5 } +
+    fadeIn(tween(Motion.ScreenEnterMs - Motion.ScreenExitMs, delayMillis = Motion.ScreenExitMs / 2, easing = Motion.Settle)) +
+    scaleIn(initialScale = 0.96f, animationSpec = TabScale)
+  val exit = slideOutHorizontally(TabSlide) { w -> -dir * w / 8 } +
+    fadeOut(tween(Motion.ScreenExitMs, easing = FastOutLinearInEasing))
   return (enter togetherWith exit).apply {
-    // The new screen draws over the old one, so the zoom-in never slips behind the fading page.
+    // The new screen draws over the old one, so it never slips behind the page that is leaving.
     targetContentZIndex = 1f
   }
 }
+
+/** Same motion for the large title, which sits outside the screen transition. */
+fun titleTransition(fromOrder: Int, toOrder: Int, reduced: Boolean): ContentTransform {
+  if (reduced) return EnterTransition.None togetherWith ExitTransition.None
+  val dir = if (toOrder >= fromOrder) 1 else -1
+  return (slideInHorizontally(TabSlide) { w -> dir * w / 6 } +
+    fadeIn(tween(Motion.ScreenEnterMs - Motion.ScreenExitMs, delayMillis = Motion.ScreenExitMs / 2, easing = Motion.Settle))) togetherWith
+    (slideOutHorizontally(TabSlide) { w -> -dir * w / 10 } + fadeOut(tween(Motion.ScreenExitMs)))
+}
+
+/** Position of a tab's title in the bar order, for [titleTransition]. */
+fun titleOrder(tab: TarkasNavTab): Int = screenOrder(tab)
 
 /**
  * Click with a small springy zoom-out while pressed, like tapping a card in Apple Music.

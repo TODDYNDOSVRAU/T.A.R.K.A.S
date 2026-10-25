@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.Motion
 import com.example.ui.theme.rememberReducedMotion
+import com.example.ui.theme.springAt
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -55,8 +56,10 @@ private val Collapse = CubicBezierEasing(0.7f, 0f, 0.84f, 0f)
 private val Burst = CubicBezierEasing(0.1f, 0.9f, 0.2f, 1f)
 
 private const val NAME = "T.A.R.K.A.S."
-private const val LETTER_MS = 380
-private const val STAGGER_MS = 36
+/** Time each letter's spring needs to settle. */
+private const val LETTER_MS = 620
+private const val STAGGER_MS = 45
+private const val MARK_MS = 760
 private const val BOOT_WARMUP_FRAMES = 3
 private val LETTERS_MS = LETTER_MS + STAGGER_MS * (NAME.length - 1)
 
@@ -92,7 +95,7 @@ fun BootScreen(onFinished: () -> Unit) {
           squash.animateTo(1f, tween(520, easing = Collapse))
           coroutineScope {
             launch { ring.animateTo(1f, tween(760, easing = Burst)) }
-            mark.animateTo(1f, tween(680, easing = Motion.Settle))
+            mark.animateTo(1f, tween(MARK_MS, easing = Motion.Settle))
           }
           glint.animateTo(1f, tween(420, easing = Motion.Settle))
           delay(120)
@@ -174,11 +177,14 @@ fun BootScreen(onFinished: () -> Unit) {
           maxLines = 1,
           softWrap = false,
           modifier = Modifier.graphicsLayer {
-            val t = ((letters.value * LETTERS_MS - i * STAGGER_MS) / LETTER_MS).coerceIn(0f, 1f)
-            val e = Motion.Settle.transform(t)
-            alpha = e
-            translationY = (1f - e) * 14.dp.toPx()
-            val s = 0.9f + 0.1f * e
+            // Each letter rides its own Remotion-style spring, started STAGGER_MS after the last:
+            // it overshoots a little above its line and settles, instead of easing in flat.
+            val ms = letters.value * LETTERS_MS - i * STAGGER_MS
+            val e = springAt(ms / 1000f, damping = 12f, stiffness = 170f)
+            alpha = (ms / 160f).coerceIn(0f, 1f)
+            translationY = (1f - e) * 22.dp.toPx()
+            rotationX = (1f - e) * 50f
+            val s = 0.8f + 0.2f * e
             scaleX = s
             scaleY = s
           }
@@ -195,7 +201,8 @@ fun BootScreen(onFinished: () -> Unit) {
       modifier = Modifier
         .size(width = 168.dp, height = 102.dp)
         .graphicsLayer {
-          val pop = 0.82f + 0.18f * mark.value
+          // The mark lands on a spring too, so it swells slightly past its size and settles.
+          val pop = 0.7f + 0.3f * springAt(mark.value * MARK_MS / 1000f, damping = 11f, stiffness = 150f)
           scaleX = pop
           scaleY = pop
         }

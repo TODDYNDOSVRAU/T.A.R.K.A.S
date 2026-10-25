@@ -25,6 +25,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -58,6 +59,8 @@ fun SettingsScreen(
   hasGeminiKey: Boolean = false,
   surfaceStyle: SurfaceStyle = SurfaceStyle.SOLID,
   onSurfaceStyleChange: (SurfaceStyle) -> Unit = {},
+  reduceMotion: Boolean = false,
+  onReduceMotionChange: (Boolean) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val colors = MaterialTheme.colorScheme
@@ -157,9 +160,35 @@ fun SettingsScreen(
               }
             }
           }
-          if (index < SurfaceStyle.entries.size - 1) {
-            HorizontalDivider(color = colors.outline.copy(alpha = 0.4f))
+          HorizontalDivider(color = colors.outline.copy(alpha = 0.4f))
+        }
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = !com.example.ui.theme.AppMotion.systemReduced) { onReduceMotionChange(!reduceMotion) }
+            .padding(vertical = 14.dp)
+            .testTag("settings_reduce_motion"),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Column(modifier = Modifier.weight(1f)) {
+            Text(text = "Reduzir animações", fontSize = 17.sp, color = colors.onSurface)
+            Text(
+              text = if (com.example.ui.theme.AppMotion.systemReduced) {
+                "As animações estão removidas no sistema, e o app segue essa configuração."
+              } else {
+                "Pula a abertura e troca de tela sem movimento, só no app."
+              },
+              fontSize = 15.sp,
+              lineHeight = 20.sp,
+              color = colors.onSurfaceVariant
+            )
           }
+          Spacer(modifier = Modifier.width(12.dp))
+          Switch(
+            checked = reduceMotion || com.example.ui.theme.AppMotion.systemReduced,
+            onCheckedChange = onReduceMotionChange,
+            enabled = !com.example.ui.theme.AppMotion.systemReduced
+          )
         }
       }
     }

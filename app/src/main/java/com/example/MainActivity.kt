@@ -96,9 +96,17 @@ import com.example.ui.theme.AppleMusicPurple
 import com.example.ui.theme.TarkasTheme
 import com.example.ui.viewmodel.TarkasNavTab
 import com.example.ui.viewmodel.TarkasViewModel
+import com.example.ui.theme.AppMotion
 
 class MainActivity : ComponentActivity() {
+  override fun onResume() {
+    super.onResume()
+    // Animation and blur follow the system settings, read again whenever the user comes back.
+    AppMotion.readSystem(this)
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
+    AppMotion.readSystem(this)
     // Must run before super.onCreate: swaps the splash theme for the normal one after the first frame.
     installSplashScreen()
     super.onCreate(savedInstanceState)
@@ -213,6 +221,7 @@ fun TarkasAppContent(
   val reminders by viewModel.reminders.collectAsState()
   val themeMode by viewModel.themeMode.collectAsState()
   val surfaceStyle by viewModel.surfaceStyle.collectAsState()
+  val reduceMotion by viewModel.reduceMotion.collectAsState()
   // One drifting light for every liquid glass surface (off for the other styles and with reduced motion).
   val glassLight = com.example.ui.theme.rememberGlassLight(
     active = surfaceStyle == com.example.ui.theme.SurfaceStyle.LIQUID && !com.example.ui.theme.rememberReducedMotion()
@@ -277,6 +286,7 @@ fun TarkasAppContent(
         ) {
           TarkasLargeTitle(
             title = currentTab.label,
+            order = com.example.ui.theme.titleOrder(currentTab),
             onOpenSettings = { viewModel.setTab(TarkasNavTab.SETTINGS) }
           )
         }
@@ -294,13 +304,16 @@ fun TarkasAppContent(
       bottom = 0.dp
     )
     val hazeState = remember { HazeState() }
+    // With blur and transparency reduced in the system, there is no blur source, so the floating
+    // bars fall back to solid surfaces.
+    val blurAllowed = !AppMotion.systemBlurOff
     var barHeightPx by remember { mutableIntStateOf(0) }
     val barInset = with(LocalDensity.current) { barHeightPx.toDp() }
 
     CompositionLocalProvider(
       LocalSurfaceStyle provides surfaceStyle,
       com.example.ui.theme.LocalGlassLight provides glassLight,
-      LocalHazeState provides hazeState,
+      LocalHazeState provides if (blurAllowed) hazeState else null,
       LocalBarInset provides barInset
     ) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -308,7 +321,7 @@ fun TarkasAppContent(
       modifier = Modifier
         .fillMaxSize()
         .padding(contentPadding)
-        .hazeSource(hazeState)
+        .then(if (blurAllowed) Modifier.hazeSource(hazeState) else Modifier)
     ) {
       val screenKey: Any = when {
         isShowingCuriositySettings -> "curiosity"
@@ -468,7 +481,9 @@ fun TarkasAppContent(
             onOpenCuriositySettings = { viewModel.openCuriositySettings() },
             hasGeminiKey = viewModel.assistantEngine.hasGeminiKey,
             surfaceStyle = surfaceStyle,
-            onSurfaceStyleChange = { style -> viewModel.setSurfaceStyle(style) }
+            onSurfaceStyleChange = { style -> viewModel.setSurfaceStyle(style) },
+            reduceMotion = reduceMotion,
+            onReduceMotionChange = { viewModel.setReduceMotion(it) }
           )
         }
       }

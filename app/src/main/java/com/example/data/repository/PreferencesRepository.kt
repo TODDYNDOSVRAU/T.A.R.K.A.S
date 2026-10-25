@@ -74,6 +74,13 @@ class PreferencesRepository(context: Context) {
     prefs.edit().putString("surface_style", key).apply()
   }
 
+  /** "Reduzir animações": off by default, so the app animates even when the system scale is zero. */
+  fun getReduceMotion(): Boolean = prefs.getBoolean("reduce_motion", false)
+
+  fun saveReduceMotion(reduce: Boolean) {
+    prefs.edit().putBoolean("reduce_motion", reduce).apply()
+  }
+
   /** "app", "adb" or "root": how far the equalizer reaches. */
   fun getEqReach(): String = prefs.getString("eq_reach", "app") ?: "app"
 
