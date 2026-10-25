@@ -6,6 +6,7 @@ import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -32,8 +33,8 @@ import com.example.ui.viewmodel.TarkasNavTab
 object Motion {
   /** Fast start, long soft landing: feels like the surface settles into place. */
   val Settle = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
-  const val ScreenEnterMs = 340
-  const val ScreenExitMs = 180
+  const val ScreenEnterMs = 330
+  const val ScreenExitMs = 100
   /** Between Spring.StiffnessMediumLow and StiffnessMedium: settles in about a third of a second. */
   const val ScreenStiffness = 700f
 }
@@ -65,12 +66,13 @@ fun screenTransition(from: Any, to: Any, reduced: Boolean = false): ContentTrans
   }
   val exitScale = if (from == TarkasNavTab.MUSIC) 1.06f else 0.98f
 
-  // Scale rides a critically damped spring: it keeps its speed when a tap interrupts the transition,
-  // so switching tabs quickly never jumps. Fades stay on a short curve.
-  val enter = fadeIn(tween(Motion.ScreenEnterMs - 100, delayMillis = 40, easing = Motion.Settle)) +
+  // Fade through: the old screen is gone before the new one starts to show, so the two never
+  // appear mixed, even when a slow phone drops frames during the switch. Scale rides a critically
+  // damped spring, so a tap that interrupts the transition never jumps.
+  val enter = fadeIn(tween(Motion.ScreenEnterMs - Motion.ScreenExitMs, delayMillis = Motion.ScreenExitMs, easing = Motion.Settle)) +
     scaleIn(initialScale = enterScale, animationSpec = spring(dampingRatio = 1f, stiffness = Motion.ScreenStiffness))
-  val exit = fadeOut(tween(Motion.ScreenExitMs, easing = Motion.Settle)) +
-    scaleOut(targetScale = exitScale, animationSpec = spring(dampingRatio = 1f, stiffness = Motion.ScreenStiffness))
+  val exit = fadeOut(tween(Motion.ScreenExitMs, easing = FastOutLinearInEasing)) +
+    scaleOut(targetScale = exitScale, animationSpec = tween(Motion.ScreenExitMs, easing = FastOutLinearInEasing))
   return (enter togetherWith exit).apply {
     // The new screen draws over the old one, so the zoom-in never slips behind the fading page.
     targetContentZIndex = 1f

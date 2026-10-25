@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -159,16 +160,29 @@ fun TarkasLargeTitle(
       .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
     verticalAlignment = Alignment.CenterVertically
   ) {
-    Text(
-      text = title,
+    // The title lives outside the screen transition, so it fades through on the same timing as the
+    // page below; otherwise the new title shows over the old page while that one is still leaving.
+    androidx.compose.animation.AnimatedContent(
+      targetState = title,
       modifier = Modifier.weight(1f),
-      fontWeight = FontWeight.Bold,
-      fontSize = 34.sp,
-      letterSpacing = (-0.5).sp,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-      color = MaterialTheme.colorScheme.onBackground
-    )
+      transitionSpec = {
+        androidx.compose.animation.fadeIn(
+          tween(com.example.ui.theme.Motion.ScreenEnterMs - com.example.ui.theme.Motion.ScreenExitMs,
+            delayMillis = com.example.ui.theme.Motion.ScreenExitMs, easing = com.example.ui.theme.Motion.Settle)
+        ) togetherWith androidx.compose.animation.fadeOut(tween(com.example.ui.theme.Motion.ScreenExitMs))
+      },
+      label = "title"
+    ) { shown ->
+      Text(
+        text = shown,
+        fontWeight = FontWeight.Bold,
+        fontSize = 34.sp,
+        letterSpacing = (-0.5).sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        color = MaterialTheme.colorScheme.onBackground
+      )
+    }
     Box(
       modifier = Modifier
         .size(48.dp)

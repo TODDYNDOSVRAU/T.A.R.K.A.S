@@ -16,3 +16,7 @@
 local.properties
 .env
 debug.keystore
+
+# Release signing key and its passwords: keep a backup, never commit
+*.jks
+release-signing.local

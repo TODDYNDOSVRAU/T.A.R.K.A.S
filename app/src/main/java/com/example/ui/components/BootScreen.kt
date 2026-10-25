@@ -18,6 +18,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
@@ -56,6 +57,7 @@ private val Burst = CubicBezierEasing(0.1f, 0.9f, 0.2f, 1f)
 private const val NAME = "T.A.R.K.A.S."
 private const val LETTER_MS = 380
 private const val STAGGER_MS = 36
+private const val BOOT_WARMUP_FRAMES = 3
 private val LETTERS_MS = LETTER_MS + STAGGER_MS * (NAME.length - 1)
 
 /**
@@ -79,6 +81,9 @@ fun BootScreen(onFinished: () -> Unit) {
   val skipped = remember { mutableStateOf(false) }
 
   LaunchedEffect(Unit) {
+    // On a cold start the first frames are slow while the app behind is built; starting the clock
+    // only once frames flow keeps those stalls from eating the sequence.
+    repeat(BOOT_WARMUP_FRAMES) { withFrameNanos { } }
     coroutineScope {
       if (!reduced) {
         val timeline = launch {

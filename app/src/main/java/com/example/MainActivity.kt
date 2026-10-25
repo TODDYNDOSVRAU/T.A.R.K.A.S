@@ -112,7 +112,12 @@ class MainActivity : ComponentActivity() {
         contract = ActivityResultContracts.RequestMultiplePermissions()
       ) { /* Handled gracefully */ }
 
-      LaunchedEffect(Unit) {
+      // The opening animation plays once per launch (it survives rotation).
+      var showBoot by rememberSaveable { mutableStateOf(true) }
+
+      // Asked only after the opening animation, so the system dialogs never cover it.
+      LaunchedEffect(showBoot) {
+        if (showBoot) return@LaunchedEffect
         val permissionsToRequest = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
           if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -160,9 +165,6 @@ class MainActivity : ComponentActivity() {
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         controller.isAppearanceLightNavigationBars = !isDarkApp
       }
-
-      // The opening animation plays once per launch (it survives rotation).
-      var showBoot by rememberSaveable { mutableStateOf(true) }
 
       TarkasTheme(themeMode = themeMode) {
         Box(modifier = Modifier.fillMaxSize()) {
