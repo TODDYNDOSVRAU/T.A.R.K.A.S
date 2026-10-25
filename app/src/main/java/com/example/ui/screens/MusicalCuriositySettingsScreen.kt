@@ -45,10 +45,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.CuriosityConfig
+import com.example.ui.theme.LocalBarInset
 import com.example.data.model.CuriosityDisplayMode
 import com.example.data.model.CuriosityTiming
 import com.example.data.model.VoicePreset
 import com.example.ui.components.TarkasSectionTitle
+import com.example.ui.components.GlassChip
+import com.example.ui.theme.glassControl
+import com.example.ui.theme.glassContentColor
 
 private data class TimingChoice(val timing: CuriosityTiming, val title: String, val description: String)
 
@@ -122,7 +126,7 @@ fun MusicalCuriositySettingsScreen(
     modifier = modifier
       .fillMaxSize()
       .padding(horizontal = 20.dp),
-    contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp),
+    contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp + LocalBarInset.current),
     verticalArrangement = Arrangement.spacedBy(6.dp)
   ) {
 
@@ -201,8 +205,7 @@ fun MusicalCuriositySettingsScreen(
         Row(
           modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(colors.surfaceVariant)
+            .glassControl(RoundedCornerShape(20.dp))
             .padding(14.dp),
           verticalAlignment = Alignment.CenterVertically
         ) {
@@ -283,8 +286,7 @@ fun MusicalCuriositySettingsScreen(
               modifier = Modifier
                 .weight(1f)
                 .heightIn(min = 44.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(if (selected) colors.primary else colors.surfaceVariant)
+                .glassControl(RoundedCornerShape(22.dp), selected = selected)
                 .clickable {
                   onConfigChange(
                     config.copy(
@@ -301,7 +303,7 @@ fun MusicalCuriositySettingsScreen(
                 text = preset.label.split("/").first().trim(),
                 fontSize = 13.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                color = if (selected) colors.onPrimary else colors.onSurface,
+                color = glassContentColor(selected),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
               )
@@ -347,30 +349,16 @@ fun MusicalCuriositySettingsScreen(
 
         Spacer(modifier = Modifier.size(8.dp))
 
-        Button(
+        GlassChip(
+          label = if (isSpeaking) "Parar demonstração" else "Ouvir demonstração da voz",
+          icon = if (isSpeaking) Icons.Default.Stop else Icons.Default.PlayArrow,
+          selected = true,
           onClick = { if (isSpeaking) onStopVoice() else onTestVoice() },
-          colors = ButtonDefaults.buttonColors(
-            containerColor = if (isSpeaking) colors.error else colors.primary,
-            contentColor = if (isSpeaking) colors.onError else colors.onPrimary
-          ),
-          shape = RoundedCornerShape(12.dp),
           modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 52.dp)
             .testTag("btn_test_curiosity_voice")
-        ) {
-          Icon(
-            imageVector = if (isSpeaking) Icons.Default.Stop else Icons.Default.PlayArrow,
-            contentDescription = null,
-            modifier = Modifier.size(20.dp)
-          )
-          Spacer(modifier = Modifier.width(8.dp))
-          Text(
-            text = if (isSpeaking) "Parar demonstração" else "Ouvir demonstração da voz",
-            fontWeight = FontWeight.Bold,
-            fontSize = 17.sp
-          )
-        }
+        )
       }
     }
 

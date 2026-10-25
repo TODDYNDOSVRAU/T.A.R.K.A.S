@@ -8,20 +8,28 @@ import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
 import android.media.AudioFocusRequest
 import android.media.AudioManager
-import android.media.MediaPlayer
-import android.os.PowerManager
+import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
 import android.media.audiofx.AudioEffect
-import android.media.audiofx.BassBoost
-import android.media.audiofx.LoudnessEnhancer
-import android.media.audiofx.Equalizer
 import android.media.audiofx.Virtualizer
 import android.media.audiofx.Visualizer
 import android.net.Uri
 import android.os.Build
 import android.util.Log
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Util
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import com.example.data.audio.dsp.EqDsp
+import com.example.data.audio.dsp.ParametricEqAudioProcessor
 import com.example.data.model.AudioCapabilities
-import com.example.data.model.AudioProfile
+import com.example.data.model.EqSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,6 +41,12 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
 
+/**
+ * Plays tracks with ExoPlayer and runs every sample through our own processing chain ([EqDsp]):
+ * parametric bands with adjustable Q, bass/treble shelves, preamp, stereo width, balance and a
+ * limiter. Android's built-in Equalizer effect has fixed bands and no Q, so it is no longer used.
+ */
+@OptIn(UnstableApi::class)
 class AudioEngineManager(private val context: Context) {
   private val TAG = "AudioEngineManager"
 
@@ -42,13 +56,18 @@ class AudioEngineManager(private val context: Context) {
   }
   private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
-  private var mediaPlayer: MediaPlayer? = null
-  private var equalizer: Equalizer? = null
-  private var bassBoost: BassBoost? = null
+  private val eqDsp = EqDsp()
+  private val eqProcessor = ParametricEqAudioProcessor(eqDsp)
+
+  private var player: ExoPlayer? = null
+  private var audioSessionId = 0
   private var virtualizer: Virtualizer? = null
-  private var loudness: LoudnessEnhancer? = null
   private var visualizer: Visualizer? = null
   private var isRealFftActive = false
+
+  // Set by playTrack; consumed when the new item is ready, so focus is asked only once per track.
+  private var pendingStart = false
+  private var completionCallback: () -> Unit = {}
 
   private val coroutineScope = CoroutineScope(Dispatchers.Main + Job())
   private var progressJob: Job? = null
@@ -62,15 +81,11 @@ class AudioEngineManager(private val context: Context) {
   private val _durationMs = MutableStateFlow(0L)
   val durationMs: StateFlow<Long> = _durationMs.asStateFlow()
 
-  private val _activeProfile = MutableStateFlow(AudioProfile.FLAT)
-  val activeProfile: StateFlow<AudioProfile> = _activeProfile.asStateFlow()
+  private val _eqSettings = MutableStateFlow(EqSettings())
+  val eqSettings: StateFlow<EqSettings> = _eqSettings.asStateFlow()
 
   private val _isEffectEnabled = MutableStateFlow(true)
   val isEffectEnabled: StateFlow<Boolean> = _isEffectEnabled.asStateFlow()
-
-  // Preamp in dB: above 0 uses the loudness enhancer, below 0 lowers the player volume.
-  private val _preampDb = MutableStateFlow(0f)
-  val preampDb: StateFlow<Float> = _preampDb.asStateFlow()
 
   private val _capabilities = MutableStateFlow(detectCapabilities(0))
   val capabilities: StateFlow<AudioCapabilities> = _capabilities.asStateFlow()
@@ -159,29 +174,26 @@ class AudioEngineManager(private val context: Context) {
   }
 
   private fun handleFocusChange(change: Int) {
-    val mp = mediaPlayer ?: return
+    val p = player ?: return
     try {
       when (focusPolicy.onChange(change, _isPlaying.value)) {
         AudioFocusPolicy.Action.PAUSE_AND_ABANDON -> {
-          if (mp.isPlaying) mp.pause()
+          p.pause()
           _isPlaying.value = false
           abandonFocus()
           unregisterNoisyReceiver()
         }
         AudioFocusPolicy.Action.PAUSE -> {
-          if (mp.isPlaying) mp.pause()
+          p.pause()
           _isPlaying.value = false
         }
-        AudioFocusPolicy.Action.DUCK -> {
-          val v = preampVolume() * DUCK_VOLUME
-          mp.setVolume(v, v)
-        }
+        AudioFocusPolicy.Action.DUCK -> p.volume = DUCK_VOLUME
         AudioFocusPolicy.Action.RESUME -> {
-          applyPreampVolume()
-          mp.start()
+          p.volume = 1f
+          p.play()
           _isPlaying.value = true
         }
-        AudioFocusPolicy.Action.UNDUCK -> applyPreampVolume()
+        AudioFocusPolicy.Action.UNDUCK -> p.volume = 1f
         AudioFocusPolicy.Action.NONE -> Unit
       }
     } catch (e: Exception) {
@@ -191,9 +203,9 @@ class AudioEngineManager(private val context: Context) {
 
   /** Pause that the user (or a noisy-output event) asked for: give the focus back too. */
   private fun pauseByUser() {
-    val mp = mediaPlayer ?: return
+    val p = player ?: return
     try {
-      if (mp.isPlaying) mp.pause()
+      p.pause()
     } catch (e: Exception) {
       Log.e(TAG, "Error pausing", e)
     }
@@ -202,48 +214,32 @@ class AudioEngineManager(private val context: Context) {
     unregisterNoisyReceiver()
   }
 
-  fun playTrack(filePathOrUri: String, onCompletion: () -> Unit = {}) {
-    try {
-      stopPlayback()
+  // --- player ---
 
-      val isRemoteOrContent = filePathOrUri.startsWith("content://") || filePathOrUri.startsWith("file://") ||
-        filePathOrUri.startsWith("http://") || filePathOrUri.startsWith("https://")
-      // Validate before creating the player so a missing file never leaves a half-built MediaPlayer behind.
-      if (!isRemoteOrContent && !File(filePathOrUri).exists()) {
-        Log.e(TAG, "Audio file does not exist: $filePathOrUri")
-        return
-      }
-
-      mediaPlayer = MediaPlayer().apply {
-        setAudioAttributes(playbackAttributes)
-        // Keeps the CPU awake while a track plays with the screen off.
-        setWakeMode(context, PowerManager.PARTIAL_WAKE_LOCK)
-        if (filePathOrUri.startsWith("content://") || filePathOrUri.startsWith("file://")) {
-          setDataSource(context, Uri.parse(filePathOrUri))
-        } else if (filePathOrUri.startsWith("http://") || filePathOrUri.startsWith("https://")) {
-          setDataSource(filePathOrUri)
-        } else {
-          setDataSource(File(filePathOrUri).absolutePath)
-        }
-
-        setOnPreparedListener { mp ->
-          // No focus (for example during a phone call): do not start talking over it.
-          if (!requestFocus()) {
-            Log.w(TAG, "Audio focus denied; not starting playback")
-            stopPlayback()
-            return@setOnPreparedListener
+  private val playerListener = object : Player.Listener {
+    override fun onPlaybackStateChanged(state: Int) {
+      val p = player ?: return
+      when (state) {
+        Player.STATE_READY -> {
+          if (p.duration != C.TIME_UNSET) _durationMs.value = p.duration.coerceAtLeast(1L)
+          if (pendingStart) {
+            pendingStart = false
+            // No focus (for example during a phone call): do not start talking over it.
+            if (!requestFocus()) {
+              Log.w(TAG, "Audio focus denied; not starting playback")
+              stopPlayback()
+              return
+            }
+            p.volume = 1f
+            p.play()
+            registerNoisyReceiver()
+            _isPlaying.value = true
+            attachAudioEffects()
+            startProgressTracking()
+            updateCapabilities()
           }
-          mp.start()
-          registerNoisyReceiver()
-          _isPlaying.value = true
-          _durationMs.value = mp.duration.toLong().coerceAtLeast(1L)
-          attachAudioEffects(mp.audioSessionId)
-          applyPreampVolume()
-          startProgressTracking(onCompletion)
-          updateCapabilities()
         }
-
-        setOnCompletionListener {
+        Player.STATE_ENDED -> {
           // Give the focus back between tracks; the next track asks for it again.
           abandonFocus()
           unregisterNoisyReceiver()
@@ -251,18 +247,67 @@ class AudioEngineManager(private val context: Context) {
           _currentPositionMs.value = 0L
           _waveformEnergy.value = 0.05f
           _spectrumBars.value = List(15) { 0.05f }
-          onCompletion()
+          completionCallback()
         }
-
-        setOnErrorListener { _, what, extra ->
-          Log.e(TAG, "MediaPlayer error: what=$what, extra=$extra")
-          // Release the broken player and reset state; returning true means the error is handled.
-          stopPlayback()
-          true
-        }
-
-        prepareAsync()
+        else -> Unit
       }
+    }
+
+    override fun onPlayerError(error: PlaybackException) {
+      Log.e(TAG, "Player error: ${error.errorCodeName}", error)
+      stopPlayback()
+    }
+  }
+
+  /** One player for the whole session; its audio sink runs our processing chain. */
+  private fun ensurePlayer(): ExoPlayer {
+    player?.let { return it }
+    val renderers = object : DefaultRenderersFactory(context) {
+      override fun buildAudioSink(
+        context: Context,
+        enableFloatOutput: Boolean,
+        enableAudioTrackPlaybackParams: Boolean
+      ): AudioSink = DefaultAudioSink.Builder(context)
+        .setAudioProcessors(arrayOf(eqProcessor))
+        .build()
+    }
+    val media3Attributes = androidx.media3.common.AudioAttributes.Builder()
+      .setUsage(C.USAGE_MEDIA)
+      .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+      .build()
+    // A fixed session id, so the visualizer and virtualizer can attach before the first sample plays.
+    audioSessionId = Util.generateAudioSessionIdV21(context)
+    return ExoPlayer.Builder(context, renderers)
+      // Focus is handled here (AudioFocusPolicy), as before, so ExoPlayer must not also handle it.
+      .setAudioAttributes(media3Attributes, false)
+      .setWakeMode(C.WAKE_MODE_NETWORK)
+      .build()
+      .also {
+        it.setAudioSessionId(audioSessionId)
+        it.addListener(playerListener)
+        player = it
+      }
+  }
+
+  fun playTrack(filePathOrUri: String, onCompletion: () -> Unit = {}) {
+    try {
+      stopPlayback()
+
+      val isRemoteOrContent = filePathOrUri.startsWith("content://") || filePathOrUri.startsWith("file://") ||
+        filePathOrUri.startsWith("http://") || filePathOrUri.startsWith("https://")
+      // Validate before handing it to the player, so a missing file never starts a broken load.
+      if (!isRemoteOrContent && !File(filePathOrUri).exists()) {
+        Log.e(TAG, "Audio file does not exist: $filePathOrUri")
+        return
+      }
+      val uri = if (isRemoteOrContent) Uri.parse(filePathOrUri) else Uri.fromFile(File(filePathOrUri))
+
+      val p = ensurePlayer()
+      completionCallback = onCompletion
+      pendingStart = true
+      eqDsp.update(_eqSettings.value)
+      p.setMediaItem(MediaItem.fromUri(uri))
+      p.prepare()
     } catch (e: Exception) {
       Log.e(TAG, "Error playing audio file", e)
       _isPlaying.value = false
@@ -270,27 +315,28 @@ class AudioEngineManager(private val context: Context) {
   }
 
   fun togglePlayPause() {
-    mediaPlayer?.let { mp ->
-      try {
-        if (mp.isPlaying) {
-          pauseByUser()
-        } else if (requestFocus()) {
-          applyPreampVolume()
-          mp.start()
-          registerNoisyReceiver()
-          _isPlaying.value = true
-        } else {
-          Log.w(TAG, "Audio focus denied; staying paused")
-        }
-      } catch (e: Exception) {
-        Log.e(TAG, "Error in togglePlayPause", e)
+    val p = player ?: return
+    try {
+      if (_isPlaying.value) {
+        pauseByUser()
+      } else if (p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED) {
+        Log.w(TAG, "Nothing loaded to resume")
+      } else if (requestFocus()) {
+        p.volume = 1f
+        p.play()
+        registerNoisyReceiver()
+        _isPlaying.value = true
+      } else {
+        Log.w(TAG, "Audio focus denied; staying paused")
       }
+    } catch (e: Exception) {
+      Log.e(TAG, "Error in togglePlayPause", e)
     }
   }
 
   fun seekTo(positionMs: Long) {
     try {
-      mediaPlayer?.seekTo(positionMs.toInt())
+      player?.seekTo(positionMs)
       _currentPositionMs.value = positionMs
     } catch (e: Exception) {
       Log.e(TAG, "Error seeking", e)
@@ -300,35 +346,35 @@ class AudioEngineManager(private val context: Context) {
   fun stopPlayback() {
     try {
       progressJob?.cancel()
-      mediaPlayer?.let { mp ->
-        if (mp.isPlaying) {
-          mp.stop()
-        }
-        mp.release()
+      pendingStart = false
+      player?.let {
+        it.stop()
+        it.clearMediaItems()
       }
     } catch (e: Exception) {
       Log.e(TAG, "Error stopping player", e)
     } finally {
-      mediaPlayer = null
       _isPlaying.value = false
       abandonFocus()
       unregisterNoisyReceiver()
       _currentPositionMs.value = 0L
+      _durationMs.value = 0L
       _spectrumBars.value = List(15) { 0.05f }
       releaseAudioEffects()
       updateCapabilities()
     }
   }
 
-  private fun startProgressTracking(onCompletion: () -> Unit) {
+  private fun startProgressTracking() {
     progressJob?.cancel()
     progressJob = coroutineScope.launch {
-      while (isActive && mediaPlayer != null) {
+      while (isActive && player != null) {
         try {
-          mediaPlayer?.let { mp ->
-            if (mp.isPlaying) {
-              val pos = mp.currentPosition.toLong()
+          player?.let { p ->
+            if (p.isPlaying) {
+              val pos = p.currentPosition
               _currentPositionMs.value = pos
+              if (p.duration != C.TIME_UNSET) _durationMs.value = p.duration.coerceAtLeast(1L)
               // Compute dynamic waveform oscillation from progress and beat
               val beat = (pos % 600).toFloat() / 600f
               val pulse = 0.25f + 0.5f * kotlin.math.sin(beat * Math.PI.toFloat())
@@ -347,48 +393,21 @@ class AudioEngineManager(private val context: Context) {
     }
   }
 
-  private fun attachAudioEffects(audioSessionId: Int) {
+  private fun attachAudioEffects() {
     releaseAudioEffects()
-    if (audioSessionId == 0) return
+    val sessionId = audioSessionId
+    if (sessionId == 0) return
 
     try {
-      equalizer = Equalizer(0, audioSessionId).apply {
-        enabled = _isEffectEnabled.value
-      }
-    } catch (e: Exception) {
-      Log.w(TAG, "Equalizer not supported on this session", e)
-      equalizer = null
-    }
-
-    try {
-      bassBoost = BassBoost(0, audioSessionId).apply {
-        enabled = _isEffectEnabled.value
-      }
-    } catch (e: Exception) {
-      Log.w(TAG, "BassBoost not supported on this session", e)
-      bassBoost = null
-    }
-
-    try {
-      virtualizer = Virtualizer(0, audioSessionId).apply {
-        enabled = _isEffectEnabled.value
-      }
+      virtualizer = Virtualizer(0, sessionId).apply { enabled = _eqSettings.value.enabled }
     } catch (e: Exception) {
       Log.w(TAG, "Virtualizer not supported on this session", e)
       virtualizer = null
     }
+    applyVirtualizer()
 
     try {
-      loudness = LoudnessEnhancer(audioSessionId).apply {
-        enabled = _isEffectEnabled.value
-      }
-    } catch (e: Exception) {
-      Log.w(TAG, "LoudnessEnhancer not supported on this session", e)
-      loudness = null
-    }
-
-    try {
-      val viz = Visualizer(audioSessionId).apply {
+      val viz = Visualizer(sessionId).apply {
         val range = Visualizer.getCaptureSizeRange()
         captureSize = range.getOrNull(1)?.coerceAtMost(1024) ?: 512
         setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
@@ -409,24 +428,12 @@ class AudioEngineManager(private val context: Context) {
               val binCount = bytes.size / 2
               // Map to 15 logarithmic frequency ranges for 25Hz to 16kHz
               val ranges = listOf(
-                1..1,    // 25 Hz
-                1..2,    // 40 Hz
-                2..3,    // 63 Hz
-                3..5,    // 100 Hz
-                5..7,    // 160 Hz
-                7..11,   // 250 Hz
-                11..18,  // 400 Hz
-                18..28,  // 630 Hz
-                28..45,  // 1 kHz
-                45..72,  // 1.6 kHz
-                72..115, // 2.5 kHz
-                115..180,// 4 kHz
-                180..270,// 6.3 kHz
-                270..380,// 10 kHz
-                380..binCount.coerceAtMost(500) // 16 kHz
+                1..1, 1..2, 2..3, 3..5, 5..7, 7..11, 11..18, 18..28,
+                28..45, 45..72, 72..115, 115..180, 180..270, 270..380,
+                380..binCount.coerceAtMost(500)
               )
-
               val oldBars = _spectrumBars.value
+              // The visualizer sees the processed output, so the bars already include the EQ.
               val newBars = ranges.mapIndexed { idx, range ->
                 var sumMag = 0f
                 var count = 0
@@ -439,8 +446,7 @@ class AudioEngineManager(private val context: Context) {
                   }
                 }
                 val avgMag = if (count > 0) sumMag / count else 0f
-                val eqGain = _activeProfile.value.bandLevelsMb.getOrElse(idx) { 0.toShort() }.toFloat() / 1500f
-                val targetNorm = ((avgMag / 48f) * (1f + eqGain * 0.35f)).coerceIn(0.04f, 1f)
+                val targetNorm = (avgMag / 48f).coerceIn(0.04f, 1f)
                 val prev = oldBars.getOrElse(idx) { 0.05f }
                 (prev * 0.35f + targetNorm * 0.65f)
               }
@@ -456,8 +462,6 @@ class AudioEngineManager(private val context: Context) {
       visualizer = null
       isRealFftActive = false
     }
-
-    applyProfile(_activeProfile.value)
   }
 
   private fun releaseAudioEffects() {
@@ -468,143 +472,49 @@ class AudioEngineManager(private val context: Context) {
       }
     } catch (_: Exception) {}
     try {
-      equalizer?.release()
-    } catch (_: Exception) {}
-    try {
-      bassBoost?.release()
-    } catch (_: Exception) {}
-    try {
       virtualizer?.release()
     } catch (_: Exception) {}
-    try {
-      loudness?.release()
-    } catch (_: Exception) {}
     visualizer = null
-    equalizer = null
-    bassBoost = null
     virtualizer = null
-    loudness = null
     isRealFftActive = false
   }
 
+  // --- processing chain ---
+
+  /** Applies the whole equalizer state. Takes effect on the next audio buffer (a few ms). */
+  fun applyEqSettings(settings: EqSettings) {
+    _eqSettings.value = settings
+    _isEffectEnabled.value = settings.enabled
+    eqDsp.update(settings)
+    applyVirtualizer()
+  }
+
   fun setEffectsEnabled(enabled: Boolean) {
-    _isEffectEnabled.value = enabled
-    equalizer?.enabled = enabled
-    bassBoost?.enabled = enabled
-    virtualizer?.enabled = enabled
-    loudness?.enabled = enabled
-    applyPreampVolume()
+    applyEqSettings(_eqSettings.value.copy(enabled = enabled))
   }
 
-  /** Sets the preamp, from -12 dB to +12 dB. */
-  fun setPreampDb(db: Float) {
-    _preampDb.value = db.coerceIn(-12f, 12f)
-    applyPreampVolume()
-  }
-
-  /** Linear player volume for the preamp: only cuts here; boosts go through the loudness enhancer. */
-  private fun preampVolume(): Float {
-    val db = if (_isEffectEnabled.value) _preampDb.value else 0f
-    return if (db < 0f) Math.pow(10.0, db / 20.0).toFloat() else 1f
-  }
-
-  private fun applyPreampVolume() {
-    val db = if (_isEffectEnabled.value) _preampDb.value else 0f
-    try {
-      loudness?.setTargetGain((db.coerceAtLeast(0f) * 100f).toInt())
-    } catch (e: Exception) {
-      Log.w(TAG, "Could not set the loudness gain", e)
-    }
-    try {
-      val v = preampVolume()
-      mediaPlayer?.setVolume(v, v)
-    } catch (e: Exception) {
-      Log.w(TAG, "Could not set the player volume", e)
-    }
-  }
-
-  fun applyProfile(profile: AudioProfile) {
-    _activeProfile.value = profile
-
-    equalizer?.let { eq ->
-      try {
-        val numBands = eq.numberOfBands.toInt()
-        val minLevel = eq.bandLevelRange?.getOrNull(0)?.toInt() ?: -1500
-        val maxLevel = eq.bandLevelRange?.getOrNull(1)?.toInt() ?: 1500
-
-        // The device has few bands (usually 5): sample the 15-band curve at each one's centre
-        // frequency instead of copying the first few bands onto the wrong frequencies.
-        val centers = (0 until numBands).map { eq.getCenterFreq(it.toShort()) }
-        val levels = EqBandMapper.toHardware(profile.bandLevelsMb, centers, minLevel, maxLevel)
-        for (i in 0 until numBands) {
-          eq.setBandLevel(i.toShort(), levels[i])
-        }
-      } catch (e: Exception) {
-        Log.e(TAG, "Error applying band levels to equalizer", e)
-      }
-    }
-
-    bassBoost?.let { bb ->
-      try {
-        if (bb.strengthSupported) {
-          bb.setStrength(profile.bassBoostStrength.coerceIn(0, 1000))
-        }
-      } catch (e: Exception) {
-        Log.e(TAG, "Error setting bass boost strength", e)
-      }
-    }
-
+  private fun applyVirtualizer() {
+    val s = _eqSettings.value
     virtualizer?.let { virt ->
       try {
-        if (virt.strengthSupported) {
-          virt.setStrength(profile.virtualizerStrength.coerceIn(0, 1000))
-        }
+        virt.enabled = s.enabled && s.virtualizerStrength > 0
+        if (virt.strengthSupported) virt.setStrength(s.virtualizerStrength.coerceIn(0, 1000).toShort())
       } catch (e: Exception) {
         Log.e(TAG, "Error setting virtualizer strength", e)
       }
     }
   }
 
-  fun updateCustomBand(bandIndex: Int, levelMb: Short) {
-    val current = _activeProfile.value
-    val newBands = current.bandLevelsMb.toMutableList()
-    if (bandIndex in newBands.indices) {
-      newBands[bandIndex] = levelMb
-    }
-    val updated = current.copy(
-      id = "custom_edited",
-      name = if (current.isCustom) current.name else "Personalizado",
-      isCustom = true,
-      bandLevelsMb = newBands
-    )
-    applyProfile(updated)
-  }
-
-  fun updateCustomBassBoost(strength: Short) {
-    val current = _activeProfile.value
-    val updated = current.copy(
-      id = "custom_edited",
-      name = if (current.isCustom) current.name else "Personalizado",
-      isCustom = true,
-      bassBoostStrength = strength
-    )
-    applyProfile(updated)
-  }
-
-  fun updateCustomVirtualizer(strength: Short) {
-    val current = _activeProfile.value
-    val updated = current.copy(
-      id = "custom_edited",
-      name = if (current.isCustom) current.name else "Personalizado",
-      isCustom = true,
-      virtualizerStrength = strength
-    )
-    applyProfile(updated)
-  }
-
   fun updateCapabilities() {
-    val sessionId = mediaPlayer?.audioSessionId ?: 0
-    _capabilities.value = detectCapabilities(sessionId)
+    _capabilities.value = detectCapabilities(if (player != null) audioSessionId else 0)
+  }
+
+  private fun friendlyRouteName(type: Int): String = when (type) {
+    AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Fone com fio"
+    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "Fone Bluetooth"
+    AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> "Áudio USB"
+    AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "Auricular do aparelho"
+    else -> "Alto-falante do aparelho"
   }
 
   private fun detectCapabilities(sessionId: Int): AudioCapabilities {
@@ -630,7 +540,15 @@ class AudioEngineManager(private val context: Context) {
             AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "ALTO-FALANTE INTEGRADO"
             else -> "SAÍDA PADRÃO"
           }
-          routeName = dev.productName?.toString()?.ifBlank { routeType } ?: routeType
+          // Built-in outputs report the phone's model code as their product name (e.g. "sdk_gphone64_x86_64"),
+          // which means nothing to a listener; only external devices get their own name.
+          val external = dev.type != AudioDeviceInfo.TYPE_BUILTIN_SPEAKER &&
+            dev.type != AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+          routeName = if (external) {
+            dev.productName?.toString()?.ifBlank { null } ?: friendlyRouteName(dev.type)
+          } else {
+            friendlyRouteName(dev.type)
+          }
         }
       } catch (e: Exception) {
         Log.w(TAG, "Error detecting audio devices", e)

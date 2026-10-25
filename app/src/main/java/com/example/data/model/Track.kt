@@ -11,7 +11,9 @@ data class Track(
   val isLocalFile: Boolean = false,
   val filePath: String? = null,
   val synthesisPreset: String? = null,
-  val colorHex: Long = 0xFF00E5FF
+  val colorHex: Long = 0xFF00E5FF,
+  /** Cover art or thumbnail; the color gradient shows when it is missing. */
+  val artworkUrl: String? = null
 ) {
   fun formattedDuration(): String {
     val totalSeconds = durationMs / 1000

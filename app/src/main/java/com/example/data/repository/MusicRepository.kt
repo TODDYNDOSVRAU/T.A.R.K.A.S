@@ -80,10 +80,9 @@ class MusicRepository(private val context: Context) {
       )
     )
 
+    // No track is picked by itself: the mini player (the way into the player) appears only once
+    // the user chooses something to play.
     _tracks.value = demoTracks
-    if (_currentTrack.value == null) {
-      _currentTrack.value = demoTracks.first()
-    }
   }
 
   suspend fun searchAudius(query: String): List<Track> {

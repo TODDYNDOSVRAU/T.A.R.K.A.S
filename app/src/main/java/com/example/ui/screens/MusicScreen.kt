@@ -7,6 +7,13 @@ import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
+import com.example.ui.theme.Motion
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -82,22 +89,30 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Curiosity
+import com.example.ui.theme.LocalBarInset
+import com.example.ui.theme.pressClickable
 import com.example.data.model.Playlist
 import com.example.data.model.RepeatMode
 import com.example.data.model.Track
 import com.example.ui.components.CuriosityDetailDialog
 import com.example.ui.components.TarkasSectionTitle
 import com.example.ui.components.TrackActionsMenu
+import com.example.ui.components.GlassChip
+import com.example.ui.theme.TarkasDarkOverride
+import com.example.ui.theme.glassControl
+import com.example.ui.theme.glassContentColor
 import kotlin.math.roundToInt
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import com.example.ui.components.TrackArtwork
 
 @Composable
 fun MusicScreen(
   currentTrack: Track?,
   tracks: List<Track>,
   isPlaying: Boolean,
-  currentPositionMs: Long,
-  durationMs: Long,
-  waveformEnergy: Float,
+  currentPositionMs: () -> Long,
+  durationMs: () -> Long,
   activeCuriosity: Curiosity?,
   isSearchingAudius: Boolean,
   onPlayTrack: (Track) -> Unit,
@@ -153,7 +168,18 @@ fun MusicScreen(
   }
 
   // The Now Playing page takes its tint from the artwork, like the Apple Music player sheet.
-  val trackColor = Color(currentTrack?.colorHex ?: 0xFF46C9D3)
+  // The tint glides to the next track's colour instead of jumping.
+  val trackColor by animateColorAsState(
+    targetValue = Color(currentTrack?.colorHex ?: 0xFF46C9D3),
+    animationSpec = tween(durationMillis = 700, easing = Motion.Settle),
+    label = "trackColor"
+  )
+  // The artwork shrinks a little when paused and swells back when playing, like Apple Music.
+  val artScale = animateFloatAsState(
+    targetValue = if (isPlaying) 1f else 0.86f,
+    animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessLow),
+    label = "artScale"
+  )
   val pageTop = lerp(trackColor, Color.Black, 0.5f)
   val pageBottom = lerp(trackColor, Color.Black, 0.82f)
   val onPage = Color.White
@@ -169,11 +195,13 @@ fun MusicScreen(
 
     LazyColumn(
       modifier = Modifier.fillMaxSize(),
-      contentPadding = PaddingValues(bottom = 40.dp)
+      contentPadding = PaddingValues(bottom = 40.dp + LocalBarInset.current)
     ) {
 
       // 1. Now Playing page (fills the screen; everything else is reached by scrolling down)
       item {
+       // The now-playing page is always dark, so its glass controls use the dark scheme in any theme.
+       TarkasDarkOverride(enabled = true) {
         Column(
           modifier = Modifier
             .fillMaxWidth()
@@ -181,6 +209,7 @@ fun MusicScreen(
             .background(Brush.verticalGradient(listOf(pageTop, pageBottom)))
             .statusBarsPadding()
             .padding(horizontal = 24.dp)
+            .padding(bottom = LocalBarInset.current)
             .testTag("music_full_player_card"),
           horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -197,6 +226,10 @@ fun MusicScreen(
 
           Box(
             modifier = Modifier
+              .graphicsLayer {
+                scaleX = artScale.value
+                scaleY = artScale.value
+              }
               .fillMaxWidth(0.8f)
               .aspectRatio(1f)
               .shadow(24.dp, RoundedCornerShape(10.dp))
@@ -214,6 +247,14 @@ fun MusicScreen(
               tint = Color.White,
               modifier = Modifier.size(72.dp)
             )
+            currentTrack?.artworkUrl?.let { url ->
+              AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize()
+              )
+            }
           }
 
           Spacer(modifier = Modifier.weight(1f))
@@ -243,9 +284,8 @@ fun MusicScreen(
               val isFav = currentTrack.id in favoriteIds
               Box(
                 modifier = Modifier
-                  .size(40.dp)
-                  .clip(CircleShape)
-                  .background(Color.White.copy(alpha = 0.22f)),
+                  .size(44.dp)
+                  .glassControl(CircleShape),
                 contentAlignment = Alignment.Center
               ) {
                 TrackActionsMenu(
@@ -266,22 +306,15 @@ fun MusicScreen(
 
           Spacer(modifier = Modifier.height(18.dp))
 
-          val progress = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
-          ScrubBar(
-            fraction = progress,
-            description = "Progresso da faixa",
+          // Only this block reads the position, so the rest of the page is not redrawn as it ticks.
+          PlayerProgress(
+            positionMs = currentPositionMs,
+            durationMs = durationMs,
             filled = onPage.copy(alpha = 0.85f),
             track = trackFill,
-            onChange = { frac -> if (durationMs > 0) onSeekTo((frac * durationMs).toLong()) },
-            modifier = Modifier.testTag("music_progress_slider")
+            labelColor = onPageMuted,
+            onSeekTo = onSeekTo
           )
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-          ) {
-            Text(text = formatClock(currentPositionMs), fontSize = 13.sp, color = onPageMuted)
-            Text(text = "-" + formatClock((durationMs - currentPositionMs).coerceAtLeast(0L)), fontSize = 13.sp, color = onPageMuted)
-          }
 
           Spacer(modifier = Modifier.height(10.dp))
 
@@ -349,14 +382,22 @@ fun MusicScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
           ) {
-            IconButton(onClick = onToggleShuffle, modifier = Modifier.size(52.dp).testTag("music_btn_shuffle")) {
+            // Round glass buttons; shuffle and repeat take the "selected" glass while they are on.
+            IconButton(
+              onClick = onToggleShuffle,
+              modifier = Modifier.size(52.dp).glassControl(CircleShape, selected = isShuffle).testTag("music_btn_shuffle")
+            ) {
               Icon(
                 imageVector = Icons.Default.Shuffle,
                 contentDescription = if (isShuffle) "Aleatório ligado" else "Aleatório desligado",
-                tint = if (isShuffle) onPage else onPageMuted.copy(alpha = 0.6f)
+                tint = if (isShuffle) glassContentColor(true) else onPageMuted
               )
             }
-            IconButton(onClick = onCycleRepeat, modifier = Modifier.size(52.dp).testTag("music_btn_repeat")) {
+            val repeatOn = repeatMode != RepeatMode.OFF
+            IconButton(
+              onClick = onCycleRepeat,
+              modifier = Modifier.size(52.dp).glassControl(CircleShape, selected = repeatOn).testTag("music_btn_repeat")
+            ) {
               Icon(
                 imageVector = if (repeatMode == RepeatMode.ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
                 contentDescription = when (repeatMode) {
@@ -364,13 +405,13 @@ fun MusicScreen(
                   RepeatMode.ALL -> "Repetir tudo"
                   RepeatMode.ONE -> "Repetir uma faixa"
                 },
-                tint = if (repeatMode != RepeatMode.OFF) onPage else onPageMuted.copy(alpha = 0.6f)
+                tint = if (repeatOn) glassContentColor(true) else onPageMuted
               )
             }
             IconButton(
               onClick = { showCuriosityDialog = true },
               enabled = activeCuriosity != null,
-              modifier = Modifier.size(52.dp).testTag("music_btn_curiosity")
+              modifier = Modifier.size(52.dp).glassControl(CircleShape).testTag("music_btn_curiosity")
             ) {
               Icon(
                 imageVector = Icons.Default.Lightbulb,
@@ -378,12 +419,16 @@ fun MusicScreen(
                 tint = if (activeCuriosity != null) onPage else onPageMuted.copy(alpha = 0.3f)
               )
             }
-            IconButton(onClick = onOpenQueue, modifier = Modifier.size(52.dp).testTag("music_btn_queue")) {
-              Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Fila de reprodução", tint = onPageMuted)
+            IconButton(
+              onClick = onOpenQueue,
+              modifier = Modifier.size(52.dp).glassControl(CircleShape).testTag("music_btn_queue")
+            ) {
+              Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Fila de reprodução", tint = onPage)
             }
           }
           Spacer(modifier = Modifier.height(8.dp))
         }
+       }
       }
 
       // 2. Audius search (streaming)
@@ -417,31 +462,30 @@ fun MusicScreen(
               }
             },
             singleLine = true,
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(28.dp),
             colors = TextFieldDefaults.colors(
-              unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-              focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+              unfocusedContainerColor = Color.Transparent,
+              focusedContainerColor = Color.Transparent,
               unfocusedIndicatorColor = Color.Transparent,
               focusedIndicatorColor = Color.Transparent
             ),
             modifier = Modifier
               .fillMaxWidth()
+              .glassControl(RoundedCornerShape(28.dp))
               .testTag("audius_search_input")
           )
 
           AnimatedVisibility(visible = searchQuery.isNotBlank()) {
-            Button(
+            GlassChip(
+              label = "Pesquisar no Audius",
+              icon = Icons.Default.Search,
+              selected = true,
               onClick = { onSearchAudius(searchQuery.trim()) },
-              shape = RoundedCornerShape(12.dp),
-              colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
               modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 8.dp)
-                .height(48.dp)
                 .testTag("btn_audius_search_submit")
-            ) {
-              Text("Pesquisar no Audius", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-            }
+            )
           }
         }
       }
@@ -456,18 +500,12 @@ fun MusicScreen(
           verticalAlignment = Alignment.CenterVertically
         ) {
           TarkasSectionTitle("Faixas (${tracks.size})")
-          Row(
-            modifier = Modifier
-              .clip(RoundedCornerShape(12.dp))
-              .clickable { audioPickerLauncher.launch("audio/*") }
-              .padding(horizontal = 10.dp, vertical = 12.dp)
-              .testTag("music_btn_open_local"),
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Icon(Icons.Default.FolderOpen, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Abrir do aparelho", fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
-          }
+          GlassChip(
+            label = "Abrir do aparelho",
+            icon = Icons.Default.FolderOpen,
+            onClick = { audioPickerLauncher.launch("audio/*") },
+            modifier = Modifier.testTag("music_btn_open_local")
+          )
         }
         Spacer(modifier = Modifier.height(6.dp))
       }
@@ -478,24 +516,17 @@ fun MusicScreen(
           Row(
             modifier = Modifier
               .fillMaxWidth()
-              .clickable { onPlayTrack(track) }
+              .pressClickable(pressedScale = 0.98f) { onPlayTrack(track) }
               .padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
           ) {
-            Box(
-              modifier = Modifier
-                .size(64.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(Brush.verticalGradient(listOf(Color(track.colorHex), Color(track.colorHex).copy(alpha = 0.6f)))),
-              contentAlignment = Alignment.Center
-            ) {
-              Icon(
-                imageVector = if (isSelected && isPlaying) Icons.Default.Equalizer else Icons.Default.MusicNote,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(26.dp)
-              )
-            }
+            TrackArtwork(
+              track = track,
+              shape = RoundedCornerShape(6.dp),
+              iconSize = 26.dp,
+              playing = isSelected && isPlaying,
+              modifier = Modifier.size(64.dp)
+            )
 
             Spacer(modifier = Modifier.width(14.dp))
 
@@ -552,26 +583,51 @@ fun MusicScreen(
   }
 }
 
+/** Progress bar and the two clocks. Takes providers so that only this composable follows the playback position. */
+@Composable
+private fun PlayerProgress(
+  positionMs: () -> Long,
+  durationMs: () -> Long,
+  filled: Color,
+  track: Color,
+  labelColor: Color,
+  onSeekTo: (Long) -> Unit
+) {
+  val position = positionMs()
+  val duration = durationMs()
+  val progress = if (duration > 0) (position.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f
+  ScrubBar(
+    fraction = progress,
+    description = "Progresso da faixa",
+    filled = filled,
+    track = track,
+    onChange = { frac -> if (duration > 0) onSeekTo((frac * duration).toLong()) },
+    modifier = Modifier.testTag("music_progress_slider")
+  )
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.SpaceBetween
+  ) {
+    // Tabular figures keep the clocks from jittering as digits change. Until the track reports its
+    // length, the remaining time is unknown, so it shows a dash instead of a misleading "-0:00".
+    val clockStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp, color = labelColor, fontFeatureSettings = "tnum")
+    Text(text = formatClock(position), style = clockStyle)
+    Text(
+      text = if (duration > 0) "-" + formatClock((duration - position).coerceAtLeast(0L)) else "—",
+      style = clockStyle
+    )
+  }
+}
+
 /** "Trending" link next to the Audius title. */
 @Composable
 private fun AudiusTrendingLink(onClick: () -> Unit) {
-  Row(
-    modifier = Modifier
-      .clip(RoundedCornerShape(12.dp))
-      .clickable(onClick = onClick)
-      .padding(horizontal = 10.dp, vertical = 12.dp)
-      .testTag("btn_audius_trending"),
-    verticalAlignment = Alignment.CenterVertically
-  ) {
-    Icon(
-      imageVector = Icons.AutoMirrored.Filled.TrendingUp,
-      contentDescription = null,
-      tint = MaterialTheme.colorScheme.primary,
-      modifier = Modifier.size(20.dp)
-    )
-    Spacer(modifier = Modifier.width(6.dp))
-    Text("Em alta", fontSize = 15.sp, color = MaterialTheme.colorScheme.primary)
-  }
+  GlassChip(
+    label = "Em alta",
+    icon = Icons.AutoMirrored.Filled.TrendingUp,
+    onClick = onClick,
+    modifier = Modifier.testTag("btn_audius_trending")
+  )
 }
 
 /** Thin rounded progress bar that can be tapped or dragged (track position and volume). */

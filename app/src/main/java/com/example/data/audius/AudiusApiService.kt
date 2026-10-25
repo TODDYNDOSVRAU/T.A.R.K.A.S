@@ -77,6 +77,8 @@ object AudiusApiService {
         val item = data.getJSONObject(i)
         val id = item.optString("id").ifBlank { item.optInt("track_id", 0).toString() }
         if (id.isBlank() || id == "0") continue
+        // Unstreamable tracks (gated or removed) answer 404 on /stream: leave them out.
+        if (!item.optBoolean("is_streamable", true)) continue
 
         val title = item.optString("title", "Sem título")
         val durationSec = item.optLong("duration", 180L)
@@ -108,7 +110,10 @@ object AudiusApiService {
             era = "Audius Streaming",
             isLocalFile = false,
             filePath = streamUrl,
-            colorHex = colorHex
+            colorHex = colorHex,
+            artworkUrl = item.optJSONObject("artwork")?.let { art ->
+              listOf("480x480", "1000x1000", "150x150").firstNotNullOfOrNull { size -> art.optString(size).ifBlank { null } }
+            }
           )
         )
       }

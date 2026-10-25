@@ -14,7 +14,9 @@ data class PlayingApp(
   val pid: Int,
   val playerType: String,
   val state: String,
-  val usage: String?
+  val usage: String?,
+  /** The player's audio session, where an effect can attach. 0 when the system does not say. */
+  val sessionId: Int = 0
 ) {
   val isStarted: Boolean get() = state.equals("started", ignoreCase = true)
 }
@@ -36,6 +38,7 @@ object DumpsysAudioParser {
   private val playerLine = Regex(
     """AudioPlaybackConfiguration piid:\d+.*?type:(\S+)\s+u/pid:(\d+)/(\d+)\s+state:(\w+)(?:.*?usage=(\w+))?"""
   )
+  private val sessionField = Regex("""sessionId:(\d+)""")
 
   /** Reads the `players:` entries of a `dumpsys audio` dump. Unknown lines are ignored. */
   fun parsePlayers(dump: String): List<PlayingApp> {
@@ -46,7 +49,8 @@ object DumpsysAudioParser {
           pid = m.groupValues[3].toInt(),
           playerType = m.groupValues[1],
           state = m.groupValues[4],
-          usage = m.groups[5]?.value
+          usage = m.groups[5]?.value,
+          sessionId = sessionField.find(line)?.groupValues?.get(1)?.toIntOrNull() ?: 0
         )
       }
     }.toList()

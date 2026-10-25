@@ -59,6 +59,8 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,10 +83,14 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.AssistantMessage
+import com.example.ui.theme.LocalBarInset
 import com.example.data.model.LocalReminder
 import com.example.data.model.LocalTimer
 import com.example.data.model.MessageSender
 import com.example.ui.components.ToolReportCard
+import com.example.ui.components.GlassChip
+import com.example.ui.theme.glassControl
+import com.example.ui.theme.glassContentColor
 import com.example.ui.theme.SpaceGrotesk
 import java.util.Locale
 
@@ -144,7 +150,7 @@ fun AssistantScreen(
     if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size)
   }
 
-  Column(modifier = modifier.fillMaxSize()) {
+  Column(modifier = modifier.fillMaxSize().padding(bottom = LocalBarInset.current)) {
     LazyColumn(
       state = listState,
       modifier = Modifier
@@ -161,21 +167,20 @@ fun AssistantScreen(
           modifier = Modifier.fillMaxWidth(),
           horizontalAlignment = Alignment.CenterHorizontally
         ) {
-          val infiniteTransition = rememberInfiniteTransition(label = "AssistantOrb")
-          val pulseScale by infiniteTransition.animateFloat(
-            initialValue = 0.95f,
-            targetValue = 1.06f,
-            animationSpec = infiniteRepeatable(
-              animation = tween(1200, easing = FastOutSlowInEasing),
-              repeatMode = RepeatMode.Reverse
-            ),
-            label = "pulse"
-          )
+          // The pulse only runs while the assistant is listening or thinking; an idle orb costs nothing.
+          val pulseScale: State<Float> = if (isListening || isProcessing) {
+            rememberOrbPulse()
+          } else {
+            remember { mutableStateOf(1f) }
+          }
 
           Box(
             modifier = Modifier
               .size(112.dp)
-              .scale(if (isListening || isProcessing) pulseScale else 1f)
+              .graphicsLayer {
+                scaleX = pulseScale.value
+                scaleY = pulseScale.value
+              }
               .clip(CircleShape)
               .background(
                 Brush.radialGradient(
@@ -194,7 +199,8 @@ fun AssistantScreen(
               modifier = Modifier
                 .size(62.dp)
                 .clip(CircleShape)
-                .background(colors.background),
+                .background(colors.background)
+                .glassControl(CircleShape),
               contentAlignment = Alignment.Center
             ) {
               Icon(
@@ -231,10 +237,8 @@ fun AssistantScreen(
 
           if (activeTimers.isNotEmpty()) {
             Spacer(modifier = Modifier.height(12.dp))
-            Surface(
-              shape = RoundedCornerShape(16.dp),
-              color = colors.surfaceVariant,
-              modifier = Modifier.fillMaxWidth()
+            Box(
+              modifier = Modifier.fillMaxWidth().glassControl(RoundedCornerShape(20.dp))
             ) {
               Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
                 activeTimers.forEach { timer ->
@@ -277,11 +281,10 @@ fun AssistantScreen(
           Spacer(modifier = Modifier.height(12.dp))
 
           // Curiosity narration settings, as a flat row
-          Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = colors.surfaceVariant,
+          Box(
             modifier = Modifier
               .fillMaxWidth()
+              .glassControl(RoundedCornerShape(20.dp))
               .clickable { onOpenCuriositySettings() }
               .testTag("btn_assistant_curiosidades_musicais")
           ) {
@@ -347,15 +350,16 @@ fun AssistantScreen(
         onValueChange = { textInput = it },
         placeholder = { Text("Peça algo ou digite \"ajuda\"", fontSize = 17.sp) },
         singleLine = true,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(28.dp),
         colors = TextFieldDefaults.colors(
-          focusedContainerColor = colors.surfaceVariant,
-          unfocusedContainerColor = colors.surfaceVariant,
+          focusedContainerColor = Color.Transparent,
+          unfocusedContainerColor = Color.Transparent,
           focusedIndicatorColor = Color.Transparent,
           unfocusedIndicatorColor = Color.Transparent
         ),
         modifier = Modifier
           .weight(1f)
+          .glassControl(RoundedCornerShape(28.dp))
           .testTag("siri_text_input")
       )
 
@@ -370,20 +374,33 @@ fun AssistantScreen(
           }
         },
         modifier = Modifier
-          .size(48.dp)
-          .clip(CircleShape)
-          .background(colors.primary)
+          .size(56.dp)
+          .glassControl(CircleShape, selected = true)
           .testTag("siri_send_button")
       ) {
         Icon(
           imageVector = Icons.AutoMirrored.Filled.Send,
           contentDescription = "Enviar",
-          tint = colors.onPrimary,
+          tint = glassContentColor(selected = true),
           modifier = Modifier.size(20.dp)
         )
       }
     }
   }
+}
+
+@Composable
+private fun rememberOrbPulse(): State<Float> {
+  val transition = rememberInfiniteTransition(label = "AssistantOrb")
+  return transition.animateFloat(
+    initialValue = 0.95f,
+    targetValue = 1.06f,
+    animationSpec = infiniteRepeatable(
+      animation = tween(1200, easing = FastOutSlowInEasing),
+      repeatMode = RepeatMode.Reverse
+    ),
+    label = "pulse"
+  )
 }
 
 @Composable
@@ -395,23 +412,24 @@ private fun MessageBubble(message: AssistantMessage) {
     modifier = Modifier.fillMaxWidth(),
     horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
   ) {
-    Surface(
-      shape = RoundedCornerShape(
-        topStart = 18.dp,
-        topEnd = 18.dp,
-        bottomStart = if (isUser) 18.dp else 4.dp,
-        bottomEnd = if (isUser) 4.dp else 18.dp
-      ),
-      color = if (isUser) colors.primary else colors.surfaceVariant,
+    val bubbleShape = RoundedCornerShape(
+      topStart = 20.dp,
+      topEnd = 20.dp,
+      bottomStart = if (isUser) 20.dp else 6.dp,
+      bottomEnd = if (isUser) 6.dp else 20.dp
+    )
+    // The user's bubbles are the "selected" glass (accent tint), the assistant's the plain glass.
+    Box(
       modifier = Modifier
         .widthIn(max = 320.dp)
+        .glassControl(bubbleShape, selected = isUser)
         .testTag(if (isUser) "message_user" else "message_assistant")
     ) {
       Text(
         text = lightMarkdown(message.text),
         fontSize = 17.sp,
         lineHeight = 24.sp,
-        color = if (isUser) colors.onPrimary else colors.onSurface,
+        color = if (isUser) glassContentColor(selected = true) else colors.onSurface,
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
       )
     }
@@ -444,22 +462,12 @@ private fun QuickActions(
     modifier = Modifier.fillMaxWidth()
   ) {
     items(actions) { (label, icon, command) ->
-      Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier
-          .clickable { onSendMessage(command) }
-          .testTag("assistant_action_${command.take(8)}")
-      ) {
-        Row(
-          modifier = Modifier.heightIn(min = 44.dp).padding(horizontal = 14.dp),
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-          Spacer(modifier = Modifier.width(8.dp))
-          Text(label, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
-        }
-      }
+      GlassChip(
+        label = label,
+        icon = icon,
+        onClick = { onSendMessage(command) },
+        modifier = Modifier.testTag("assistant_action_${command.take(8)}")
+      )
     }
   }
 }

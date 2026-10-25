@@ -3,6 +3,9 @@ package com.example.data.repository
 import android.content.Context
 import android.content.SharedPreferences
 import com.example.data.model.AudioProfile
+import com.example.data.model.EqPreset
+import com.example.data.model.EqPresets
+import com.example.data.model.EqSettings
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -23,6 +26,8 @@ class PreferencesRepository(context: Context) {
     private const val KEY_CURIOSITY_SHORT = "curiosity_short"
     private const val KEY_SHUFFLE = "shuffle"
     private const val KEY_REPEAT = "repeat_mode"
+    private const val KEY_EQ_SETTINGS = "eq_settings"
+    private const val KEY_EQ_USER_PRESETS = "eq_user_presets"
   }
 
   fun getShuffle(): Boolean = prefs.getBoolean(KEY_SHUFFLE, false)
@@ -58,6 +63,22 @@ class PreferencesRepository(context: Context) {
 
   fun saveThemeMode(mode: String) {
     prefs.edit().putString(KEY_THEME_MODE, mode).apply()
+  }
+
+  /** "solid", "frosted" or "liquid" */
+  fun getSurfaceStyle(): String {
+    return prefs.getString("surface_style", "solid") ?: "solid"
+  }
+
+  fun saveSurfaceStyle(key: String) {
+    prefs.edit().putString("surface_style", key).apply()
+  }
+
+  /** "app", "adb" or "root": how far the equalizer reaches. */
+  fun getEqReach(): String = prefs.getString("eq_reach", "app") ?: "app"
+
+  fun saveEqReach(key: String) {
+    prefs.edit().putString("eq_reach", key).apply()
   }
 
   fun getCuriosityConfig(): com.example.data.model.CuriosityConfig {
@@ -113,7 +134,37 @@ class PreferencesRepository(context: Context) {
       .apply()
   }
 
-  fun getCustomProfiles(): List<AudioProfile> {
+  // ---- Equalizer ----
+
+  /** The last equalizer state, or null on first launch. */
+  fun getEqSettings(): EqSettings? {
+    val raw = prefs.getString(KEY_EQ_SETTINGS, null) ?: return null
+    return try {
+      EqPresets.settingsFromJson(JSONObject(raw))
+    } catch (_: Exception) {
+      null
+    }
+  }
+
+  fun saveEqSettings(settings: EqSettings) {
+    prefs.edit().putString(KEY_EQ_SETTINGS, EqPresets.settingsToJson(settings).toString()).apply()
+  }
+
+  /** Presets the user saved. On the first run after the update, old 15-band profiles are converted. */
+  fun getUserPresets(): List<EqPreset> {
+    val raw = prefs.getString(KEY_EQ_USER_PRESETS, null)
+    if (raw != null) return EqPresets.presetsFromJson(raw)
+    val migrated = getLegacyCustomProfiles().map { EqPresets.fromLegacy(it).copy(isCustom = true) }
+    saveUserPresets(migrated)
+    return migrated
+  }
+
+  fun saveUserPresets(presets: List<EqPreset>) {
+    prefs.edit().putString(KEY_EQ_USER_PRESETS, EqPresets.presetsToJson(presets)).apply()
+  }
+
+  /** Profiles saved by the old hardware equalizer, read only to convert them. */
+  private fun getLegacyCustomProfiles(): List<AudioProfile> {
     val raw = prefs.getString(KEY_CUSTOM_PROFILES, null) ?: return emptyList()
     val result = mutableListOf<AudioProfile>()
     try {
@@ -139,27 +190,5 @@ class PreferencesRepository(context: Context) {
       }
     } catch (_: Exception) {}
     return result
-  }
-
-  fun saveCustomProfile(profile: AudioProfile) {
-    val current = getCustomProfiles().toMutableList()
-    current.removeAll { it.id == profile.id }
-    current.add(profile)
-
-    val array = JSONArray()
-    for (p in current) {
-      val obj = JSONObject().apply {
-        put("id", p.id)
-        put("name", p.name)
-        put("desc", p.description)
-        val bandsArr = JSONArray()
-        p.bandLevelsMb.forEach { bandsArr.put(it.toInt()) }
-        put("bands", bandsArr)
-        put("bass", p.bassBoostStrength.toInt())
-        put("virt", p.virtualizerStrength.toInt())
-      }
-      array.put(obj)
-    }
-    prefs.edit().putString(KEY_CUSTOM_PROFILES, array.toString()).apply()
   }
 }

@@ -15,5 +15,5 @@ data class AudioCapabilities(
   val isBassBoostAvailable: Boolean,
   val isVirtualizerAvailable: Boolean,
   val effectsCount: Int,
-  val systemDisclaimer: String = "O Android isola o áudio de cada aplicativo por segurança (sandbox). Os efeitos de equalização e processamento operam estritamente sobre a sessão de áudio do Tarkas. Nenhum app Android tem autorização para equalizar globalmente o som de outros apps como Spotify ou YouTube Music sem modificações de root no sistema."
+  val systemDisclaimer: String = "Sem root, o equalizador processa só o áudio do T.A.R.K.A.S. Nos modos ADB e root, ele também se liga à sessão de áudio de cada app que está tocando, como o Poweramp Equalizer."
 )

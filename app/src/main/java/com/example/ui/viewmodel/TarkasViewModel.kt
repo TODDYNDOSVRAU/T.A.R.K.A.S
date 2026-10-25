@@ -9,7 +9,11 @@ import com.example.data.assistant.AssistantEngine
 import com.example.data.assistant.PlayerCommand
 import com.example.data.audio.AudioEngineManager
 import com.example.data.model.AssistantMessage
-import com.example.data.model.AudioProfile
+import com.example.data.audius.AudiusApiService
+import com.example.data.model.EqBand
+import com.example.data.model.EqPreset
+import com.example.data.model.EqPresets
+import com.example.data.model.EqSettings
 import com.example.data.model.Curiosity
 import com.example.data.model.LocalReminder
 import com.example.data.model.LocalTimer
@@ -25,9 +29,15 @@ import com.example.data.notification.NotificationActionReceiver
 import com.example.data.repository.CuriosityRepository
 import com.example.data.repository.MusicRepository
 import com.example.data.repository.PreferencesRepository
+import com.example.ui.theme.SurfaceStyle
 import com.example.data.systemaudio.ActiveAppsReader
 import com.example.data.systemaudio.ActiveAppsState
 import com.example.data.systemaudio.SystemAudioCaptureManager
+import com.example.data.systemaudio.EqReach
+import com.example.data.systemaudio.GlobalEq
+import com.example.data.systemaudio.GlobalEqService
+import com.example.data.systemaudio.GlobalEqStatus
+import com.example.data.systemaudio.RootShell
 import com.example.data.systemaudio.SystemAudioStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -100,8 +110,19 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   private val _currentTab = MutableStateFlow(TarkasNavTab.HOME)
   val currentTab: StateFlow<TarkasNavTab> = _currentTab.asStateFlow()
 
-  private val _allProfiles = MutableStateFlow<List<AudioProfile>>(AudioProfile.DEFAULT_PROFILES)
-  val allProfiles: StateFlow<List<AudioProfile>> = _allProfiles.asStateFlow()
+  // Equalizer presets: the built-in ones followed by the user's own.
+  private val _eqPresets = MutableStateFlow(EqPresets.BUILT_IN)
+  val eqPresets: StateFlow<List<EqPreset>> = _eqPresets.asStateFlow()
+
+  /** The preset the curve came from; [eqModified] tells whether it was edited since. */
+  private val _activePresetId = MutableStateFlow(EqPresets.FLAT.id)
+  val activePresetId: StateFlow<String> = _activePresetId.asStateFlow()
+
+  private val _eqModified = MutableStateFlow(false)
+  val eqModified: StateFlow<Boolean> = _eqModified.asStateFlow()
+
+  val eqSettings: StateFlow<EqSettings> get() = audioEngineManager.eqSettings
+  private var eqSaveJob: Job? = null
 
   private val _activeCuriosity = MutableStateFlow<Curiosity?>(null)
   val activeCuriosity: StateFlow<Curiosity?> = _activeCuriosity.asStateFlow()
@@ -137,7 +158,8 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
       _activeCuriosity.value = cur
       updateSystemNotification()
     },
-    onPlayerCommand = { command -> runPlayerCommand(command) }
+    onPlayerCommand = { command -> runPlayerCommand(command) },
+    onEqPreset = { preset -> selectEqPreset(preset) }
   )
 
   // The assistant runs on a background dispatcher; the player must be driven from the main thread.
@@ -211,14 +233,14 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     viewModelScope.launch {
       musicRepository.initializeCatalog()
 
-      // Load saved profiles
-      val custom = preferencesRepository.getCustomProfiles()
-      _allProfiles.value = AudioProfile.DEFAULT_PROFILES + custom
-
-      // Apply saved profile (default is FLAT - 0 dB for all 15 bands!)
+      // Equalizer: presets, then the exact curve the user left (default is Flat, 0 dB everywhere)
+      _eqPresets.value = EqPresets.BUILT_IN + preferencesRepository.getUserPresets()
       val savedId = preferencesRepository.getSavedProfileId()
-      val profileToApply = _allProfiles.value.find { it.id == savedId } ?: AudioProfile.FLAT
-      audioEngineManager.applyProfile(profileToApply)
+      val preset = _eqPresets.value.find { it.id == savedId } ?: EqPresets.FLAT
+      val settings = preferencesRepository.getEqSettings() ?: preset.settings
+      _activePresetId.value = preset.id
+      _eqModified.value = settings.copy(enabled = true) != preset.settings.copy(enabled = true)
+      audioEngineManager.applyEqSettings(settings)
 
       // Initial track curiosity
       musicRepository.currentTrack.collect { track ->
@@ -442,6 +464,49 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     curiositySpeechManager.stopSpeech()
   }
 
+  // ---- Audius (searched from the Início search bar; full tracks played by the app's own player) ----
+
+  private val _audiusResults = MutableStateFlow<List<Track>>(emptyList())
+  val audiusResults: StateFlow<List<Track>> = _audiusResults.asStateFlow()
+
+  private val _audiusSearching = MutableStateFlow(false)
+  val audiusSearching: StateFlow<Boolean> = _audiusSearching.asStateFlow()
+
+  private var audiusSearchJob: Job? = null
+
+  init {
+    // The Spotify integration was removed: drop the encrypted store and key it may have left.
+    viewModelScope.launch(Dispatchers.IO) {
+      runCatching { context.deleteSharedPreferences("tarkas_secure") }
+      runCatching {
+        java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry("tarkas_spotify_tokens")
+      }
+    }
+  }
+
+  /** Searches Audius as the user types in Início, without adding the results to the library. */
+  fun searchAudiusOnline(query: String) {
+    audiusSearchJob?.cancel()
+    if (query.isBlank()) {
+      _audiusResults.value = emptyList()
+      _audiusSearching.value = false
+      return
+    }
+    audiusSearchJob = viewModelScope.launch {
+      // Wait for a pause in typing so each keystroke is not a request.
+      kotlinx.coroutines.delay(350)
+      _audiusSearching.value = true
+      try {
+        _audiusResults.value = withContext(Dispatchers.IO) { AudiusApiService.searchTracks(query.trim()) }
+      } finally {
+        _audiusSearching.value = false
+      }
+    }
+  }
+
+  /** Plays an Audius result; Next goes on through the rest of the results. */
+  fun playAudiusResult(track: Track) = playFromList(track, _audiusResults.value)
+
   fun openCuriositySettings() {
     _isShowingCuriositySettings.value = true
   }
@@ -459,28 +524,77 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     curiositySpeechManager.testVoiceSample(_curiosityConfig.value)
   }
 
-  fun selectProfile(profile: AudioProfile) {
-    audioEngineManager.applyProfile(profile)
-    preferencesRepository.saveActiveProfileId(profile.id)
+  // ---- Equalizer ----
+
+  /** Changes the curve. Saved shortly after the last change, so dragging does not write on every frame. */
+  fun updateEq(transform: (EqSettings) -> EqSettings) {
+    val next = transform(audioEngineManager.eqSettings.value)
+    audioEngineManager.applyEqSettings(next)
+    val preset = _eqPresets.value.find { it.id == _activePresetId.value }
+    _eqModified.value = preset == null || next.copy(enabled = true) != preset.settings.copy(enabled = true)
+    eqSaveJob?.cancel()
+    eqSaveJob = viewModelScope.launch {
+      kotlinx.coroutines.delay(400)
+      preferencesRepository.saveEqSettings(next)
+    }
   }
 
-  fun resetAllBandsToZero() {
-    selectProfile(AudioProfile.FLAT)
-    audioEngineManager.setPreampDb(0f)
+  fun setEqEnabled(enabled: Boolean) = updateEq { it.copy(enabled = enabled) }
+
+  fun updateEqBand(index: Int, transform: (EqBand) -> EqBand) = updateEq { s ->
+    if (index !in s.bands.indices) s
+    else s.copy(bands = s.bands.toMutableList().also { it[index] = transform(it[index]) })
   }
 
-  fun saveCustomProfile(name: String) {
-    val current = audioEngineManager.activeProfile.value
-    val newProfile = current.copy(
+  /** Loads a preset. The on/off switch stays as it is. */
+  fun selectEqPreset(preset: EqPreset) {
+    val enabled = audioEngineManager.eqSettings.value.enabled
+    _activePresetId.value = preset.id
+    preferencesRepository.saveActiveProfileId(preset.id)
+    updateEq { preset.settings.copy(enabled = enabled) }
+  }
+
+  fun resetEq() = selectEqPreset(EqPresets.FLAT)
+
+  fun saveEqPresetAs(name: String) {
+    val preset = EqPreset(
       id = "custom_${System.currentTimeMillis()}",
-      name = name.ifBlank { "Personalizado" },
-      description = "Perfil criado pelo usuário em ${java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())}",
+      name = name.trim().ifBlank { "Meu preset" },
+      settings = audioEngineManager.eqSettings.value.copy(enabled = true),
       isCustom = true
     )
-    preferencesRepository.saveCustomProfile(newProfile)
-    val customList = preferencesRepository.getCustomProfiles()
-    _allProfiles.value = AudioProfile.DEFAULT_PROFILES + customList
-    selectProfile(newProfile)
+    storeUserPresets(userPresets() + preset)
+    selectEqPreset(preset)
+  }
+
+  /** Writes the current curve into the active user preset. */
+  fun overwriteActiveEqPreset() {
+    val id = _activePresetId.value
+    val current = audioEngineManager.eqSettings.value.copy(enabled = true)
+    if (userPresets().none { it.id == id }) return
+    storeUserPresets(userPresets().map { if (it.id == id) it.copy(settings = current) else it })
+    _eqModified.value = false
+  }
+
+  fun renameEqPreset(id: String, name: String) {
+    if (name.isBlank()) return
+    storeUserPresets(userPresets().map { if (it.id == id) it.copy(name = name.trim()) else it })
+  }
+
+  fun deleteEqPreset(id: String) {
+    storeUserPresets(userPresets().filterNot { it.id == id })
+    if (_activePresetId.value == id) {
+      // Keep the sound as it is; it simply no longer belongs to a saved preset.
+      _activePresetId.value = EqPresets.FLAT.id
+      _eqModified.value = true
+    }
+  }
+
+  private fun userPresets(): List<EqPreset> = _eqPresets.value.filter { it.isCustom }
+
+  private fun storeUserPresets(list: List<EqPreset>) {
+    preferencesRepository.saveUserPresets(list)
+    _eqPresets.value = EqPresets.BUILT_IN + list
   }
 
   fun analyzeCurrentTrack() {
@@ -492,9 +606,18 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     val msg = AssistantMessage(
       id = UUID.randomUUID().toString(),
       sender = MessageSender.ASSISTANT,
-      text = "Analisei **${track.title}** (${track.artist}):\n\n${cur.shortTrivia}\n\n*Fontes: ${cur.sources.firstOrNull() ?: "nenhuma fonte encontrada"}*"
+      // Curiosities stay in the player and the notification; the chat only points there.
+      text = "Analisei **${track.title}** (${track.artist}). A curiosidade fica no player: toque no mini player acima da barra e depois na lâmpada."
     )
     _assistantMessages.value = _assistantMessages.value + msg
+  }
+
+  private val _surfaceStyle = MutableStateFlow(SurfaceStyle.fromKey(preferencesRepository.getSurfaceStyle()))
+  val surfaceStyle: StateFlow<SurfaceStyle> = _surfaceStyle.asStateFlow()
+
+  fun setSurfaceStyle(style: SurfaceStyle) {
+    _surfaceStyle.value = style
+    preferencesRepository.saveSurfaceStyle(style.key)
   }
 
   fun setThemeMode(mode: String) {
@@ -538,8 +661,36 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     viewModelScope.launch { _activeApps.value = activeAppsReader.read() }
   }
 
-  fun setPreampDb(db: Float) {
-    audioEngineManager.setPreampDb(db)
+  // ---- Equalizer reach: only the app (rootless), every app with ADB, or every app with root ----
+
+  private val _eqReach = MutableStateFlow(EqReach.fromKey(preferencesRepository.getEqReach()))
+  val eqReach: StateFlow<EqReach> = _eqReach.asStateFlow()
+  val globalEqStatus: StateFlow<GlobalEqStatus> = GlobalEq.status
+
+  /** Whether this device has `su` at all; root mode is offered either way, with a clear status. */
+  val rootPresent: Boolean = RootShell.suPresent()
+
+  init {
+    // The service applies the same curve the app uses.
+    viewModelScope.launch { audioEngineManager.eqSettings.collect { GlobalEq.settings.value = it } }
+    applyEqReach(_eqReach.value)
+  }
+
+  fun setEqReach(reach: EqReach) {
+    _eqReach.value = reach
+    preferencesRepository.saveEqReach(reach.key)
+    applyEqReach(reach)
+  }
+
+  private fun applyEqReach(reach: EqReach) {
+    GlobalEq.reach.value = reach
+    if (reach == EqReach.APP) {
+      GlobalEqService.stop(context)
+    } else {
+      // Restart so a change between ADB and root takes effect (root asks for su on start).
+      GlobalEqService.stop(context)
+      GlobalEqService.start(context)
+    }
   }
 
   private fun addTimer(timer: LocalTimer) {

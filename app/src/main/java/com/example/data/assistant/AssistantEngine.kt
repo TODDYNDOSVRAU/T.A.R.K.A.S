@@ -6,6 +6,8 @@ import com.example.data.audio.AudioEngineManager
 import com.example.data.model.AssistantMessage
 import com.example.data.model.AudioProfile
 import com.example.data.model.Curiosity
+import com.example.data.model.EqPreset
+import com.example.data.model.EqPresets
 import com.example.data.model.LocalReminder
 import com.example.data.model.LocalTimer
 import com.example.data.model.MessageSender
@@ -54,7 +56,9 @@ class AssistantEngine(
   private val onReminderCreated: (LocalReminder) -> Unit,
   private val onCuriosityUpdated: (Curiosity) -> Unit = {},
   // Returns a short description of the result, or null when the command could not run.
-  private val onPlayerCommand: suspend (PlayerCommand) -> String? = { null }
+  private val onPlayerCommand: suspend (PlayerCommand) -> String? = { null },
+  // Loads an equalizer preset through the app, so the choice is saved like a tap on the screen.
+  private val onEqPreset: (EqPreset) -> Unit = { audioEngineManager.applyEqSettings(it.settings) }
 ) {
   private val TAG = "AssistantEngine"
   private val okHttpClient = OkHttpClient.Builder()
@@ -110,7 +114,7 @@ class AssistantEngine(
         **Comandos Disponíveis:**
         • **"analisar música"**: pesquisa curiosidades e fatos da faixa em execução
         • **"diagnóstico"**: inspeciona rotas e hardware de áudio
-        • **"equalizador flat"** (ou rock, vocal, graves): aplica perfis de 15 bandas
+        • **"equalizador flat"** (ou rock, pop, jazz, vocal, graves, agudos…): aplica um preset
         • **"timer de [X] minutos"**: inicia temporizador local
         • **"que música toca?"**: exibe a faixa atual
         • **"próxima"**, **"anterior"**, **"pausar"**, **"tocar"**: controlam o player
@@ -153,7 +157,9 @@ class AssistantEngine(
           resultSummary = "Análise concluída: ${curiosity.status.label}"
         )
 
-        val siriStyleAnswer = "Analisei **${track.title}** (${track.artist}):\n\n${curiosity.shortTrivia}\n\n*Fontes: ${curiosity.sources.firstOrNull() ?: "nenhuma fonte encontrada"}*"
+        // Curiosities are shown only in the player and the notification, never in the chat, so the
+        // answer points there instead of repeating the text.
+        val siriStyleAnswer = "Analisei **${track.title}** (${track.artist}). A curiosidade fica no player: toque no mini player acima da barra e depois na lâmpada."
 
         return AssistantMessage(
           id = UUID.randomUUID().toString(),
@@ -212,21 +218,29 @@ class AssistantEngine(
 
     // Tool: apply_audio_profile
     if (lower.contains("perfil") || lower.contains("equalizador") || lower.contains("preset") || Regex("\\bsom\\b").containsMatchIn(lower)) {
+      fun preset(id: String) = EqPresets.BUILT_IN.firstOrNull { it.id == id }
       val target = when {
-        lower.contains("flat") || lower.contains("linear") || lower.contains("neutro") -> AudioProfile.FLAT
-        lower.contains("prog") || lower.contains("rock") -> AudioProfile.PROG_ROCK
-        lower.contains("acústic") || lower.contains("acustic") -> AudioProfile.ACOUSTIC_CLARITY
-        lower.contains("vocal") || lower.contains("voz") -> AudioProfile.VOCAL_PRESENCE
-        lower.contains("grave") || lower.contains("bass") -> AudioProfile.BASS_PUNCH
+        lower.contains("flat") || lower.contains("linear") || lower.contains("neutro") -> EqPresets.FLAT
+        lower.contains("prog") || lower.contains("rock") -> preset(AudioProfile.PROG_ROCK.id)
+        lower.contains("acústic") || lower.contains("acustic") -> preset(AudioProfile.ACOUSTIC_CLARITY.id)
+        lower.contains("podcast") -> preset("preset_speech")
+        lower.contains("vocal") || lower.contains("voz") -> preset(AudioProfile.VOCAL_PRESENCE.id)
+        lower.contains("grave") || lower.contains("bass") -> preset(AudioProfile.BASS_PUNCH.id)
+        lower.contains("pop") -> preset("preset_pop")
+        lower.contains("jazz") -> preset("preset_jazz")
+        lower.contains("clássic") || lower.contains("classic") -> preset("preset_classical")
+        lower.contains("eletr") || lower.contains("electr") -> preset("preset_electronic")
+        lower.contains("loudness") -> preset("preset_loudness")
+        lower.contains("agudo") -> preset("preset_treble")
         else -> null
       }
       if (target != null) {
-        audioEngineManager.applyProfile(target)
+        onEqPreset(target)
         val report = ToolExecutionReport(
           toolName = "apply_audio_profile",
           arguments = mapOf("profile" to target.name),
           success = true,
-          resultSummary = "Perfil ${target.name} ativado no equalizador de 15 bandas"
+          resultSummary = "Preset ${target.name} ativado no equalizador"
         )
         return AssistantMessage(
           id = UUID.randomUUID().toString(),

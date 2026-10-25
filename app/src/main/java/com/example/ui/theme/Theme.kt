@@ -6,6 +6,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 
 private val TarkasAmoledColorScheme = darkColorScheme(
   primary = TarkasIce,
@@ -102,4 +103,17 @@ fun TarkasTheme(
     typography = TarkasTypography,
     content = content
   )
+}
+
+/**
+ * Forces the dark scheme on [content] when [enabled]. The player page is always dark, so the floating
+ * bar over it must be dark too, even in the light theme; otherwise its grey labels sit on grey glass.
+ */
+@Composable
+fun TarkasDarkOverride(enabled: Boolean, content: @Composable () -> Unit) {
+  if (!enabled || MaterialTheme.colorScheme.background.luminance() < 0.5f) {
+    content()
+  } else {
+    MaterialTheme(colorScheme = TarkasDarkColorScheme, typography = TarkasTypography, content = content)
+  }
 }

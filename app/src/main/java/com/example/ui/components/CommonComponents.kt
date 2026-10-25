@@ -56,15 +56,25 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.runtime.getValue
+import com.example.ui.theme.glassPill
+import com.example.ui.theme.glassControl
+import com.example.ui.theme.glassContentColor
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,11 +82,69 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Track
 import com.example.ui.theme.SpaceGrotesk
+import com.example.ui.theme.pressClickable
 import com.example.ui.theme.TarkasCyanPrimary
 import com.example.ui.theme.TarkasSkySecondary
 import com.example.ui.viewmodel.TarkasNavTab
 
-/** Large bold page title with the profile-style round button (the T.A.R.K.A.S. mark) opening Ajustes. */
+/**
+ * The app's one chip/pill: a capsule that follows the chosen surface style (solid, frosted, liquid).
+ * Used for section tabs, quick actions and toggles so every balloon in the app looks the same.
+ */
+@Composable
+fun GlassChip(
+  label: String,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+  selected: Boolean = false,
+  icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+  enabled: Boolean = true
+) {
+  val content = glassContentColor(selected).copy(alpha = if (enabled) 1f else 0.4f)
+  // A soft springy squeeze while pressed, read in the draw phase so it never recomposes.
+  val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+  val pressed by interaction.collectIsPressedAsState()
+  val scale = androidx.compose.animation.core.animateFloatAsState(
+    targetValue = if (pressed) 0.95f else 1f,
+    animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.6f, stiffness = 600f),
+    label = "chipPress"
+  )
+  Row(
+    modifier = modifier
+      .graphicsLayer {
+        scaleX = scale.value
+        scaleY = scale.value
+      }
+      .heightIn(min = 44.dp)
+      .glassControl(RoundedCornerShape(22.dp), selected = selected)
+      .selectable(
+        selected = selected,
+        enabled = enabled,
+        role = androidx.compose.ui.semantics.Role.Button,
+        interactionSource = interaction,
+        indication = null,
+        onClick = onClick
+      )
+      .padding(horizontal = 16.dp, vertical = 10.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.Center
+  ) {
+    if (icon != null) {
+      Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
+      Spacer(modifier = Modifier.width(8.dp))
+    }
+    Text(
+      text = label,
+      color = content,
+      fontSize = 15.sp,
+      fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+      maxLines = 1,
+      softWrap = false
+    )
+  }
+}
+
+/** Large bold page title with a round gear button opening Ajustes. */
 @Composable
 fun TarkasLargeTitle(
   title: String,
@@ -109,15 +177,18 @@ fun TarkasLargeTitle(
         .testTag("topbar_settings_button"),
       contentAlignment = Alignment.Center
     ) {
+      // A gear on a round glass button, like the capsules; the brand mark here read as a logo.
       Box(
         modifier = Modifier
-          .size(38.dp)
-          .border(2.dp, MaterialTheme.colorScheme.primary, CircleShape),
+          .size(44.dp)
+          .glassControl(CircleShape),
         contentAlignment = Alignment.Center
       ) {
-        TarkasMark(
-          modifier = Modifier.size(width = 22.dp, height = 14.dp),
-          symbolColor = MaterialTheme.colorScheme.primary
+        Icon(
+          imageVector = Icons.Default.Settings,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.onSurface,
+          modifier = Modifier.size(22.dp)
         )
       }
     }
@@ -196,52 +267,82 @@ fun TarkasBottomNav(
   onTabSelected: (TarkasNavTab) -> Unit,
   modifier: Modifier = Modifier
 ) {
-  Column(modifier = modifier) {
-  androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-  NavigationBar(
-    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-    tonalElevation = 0.dp
-  ) {
-    val items = listOf(
-      Triple(TarkasNavTab.HOME, "Início", Icons.Default.PlayCircleFilled),
-      Triple(TarkasNavTab.MUSIC, "Música", Icons.Default.MusicNote),
-      Triple(TarkasNavTab.LIBRARY, "Biblioteca", Icons.Default.LibraryMusic),
-      Triple(TarkasNavTab.AUDIO, "Áudio", Icons.Default.Equalizer),
-      Triple(TarkasNavTab.ASSISTANT, "Assistente", Icons.Default.Psychology)
-    )
+  val items = listOf(
+    // No "Música" tab: the player opens from the mini player, the only way in.
+    Triple(TarkasNavTab.HOME, "Início", Icons.Default.PlayCircleFilled),
+    Triple(TarkasNavTab.LIBRARY, "Biblioteca", Icons.Default.LibraryMusic),
+    Triple(TarkasNavTab.AUDIO, "Áudio", Icons.Default.Equalizer),
+    Triple(TarkasNavTab.ASSISTANT, "Assistente", Icons.Default.Psychology)
+  )
 
+  // A floating capsule of glass; the selected tab gets its own lighter capsule inside it.
+  Row(
+    modifier = modifier
+      .fillMaxWidth()
+      .glassPill(cornerRadius = 32.dp)
+      .padding(horizontal = 6.dp, vertical = 6.dp),
+    horizontalArrangement = Arrangement.SpaceBetween
+  ) {
     items.forEach { (tab, label, icon) ->
       val selected = currentTab == tab
-      NavigationBarItem(
-        modifier = Modifier.testTag("nav_tab_${tab.name.lowercase()}"),
-        selected = selected,
-        onClick = { onTabSelected(tab) },
-        icon = {
-          Icon(
-            imageVector = icon,
-            contentDescription = label,
-            modifier = Modifier.size(22.dp)
-          )
-        },
-        label = {
-          Text(
-            text = label,
-            fontSize = 11.sp,
-            maxLines = 1,
-            softWrap = false,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
-          )
-        },
-        colors = NavigationBarItemDefaults.colors(
-          selectedIconColor = MaterialTheme.colorScheme.primary,
-          selectedTextColor = MaterialTheme.colorScheme.primary,
-          indicatorColor = Color.Transparent,
-          unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-          unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+      val tint by androidx.compose.animation.animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(220),
+        label = "navTint"
       )
+      val pill by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = tween(260, easing = com.example.ui.theme.Motion.Settle),
+        label = "navPill"
+      )
+      // The selected tab's icon pops up a little with a spring (scale only, no relayout).
+      val pop by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (selected) 1.12f else 1f,
+        animationSpec = androidx.compose.animation.core.spring(
+          dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+          stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+        ),
+        label = "navPop"
+      )
+      val pillColor = MaterialTheme.colorScheme.onSurface
+      Column(
+        modifier = Modifier
+          .weight(1f)
+          .testTag("nav_tab_${tab.name.lowercase()}")
+          .clip(RoundedCornerShape(26.dp))
+          .drawBehind {
+            if (pill > 0f) drawRoundRect(pillColor.copy(alpha = 0.10f * pill), cornerRadius = CornerRadius(26.dp.toPx()))
+          }
+          .selectable(
+            selected = selected,
+            role = androidx.compose.ui.semantics.Role.Tab,
+            onClick = { onTabSelected(tab) }
+          )
+          .padding(vertical = 7.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+      ) {
+        Icon(
+          imageVector = icon,
+          contentDescription = label,
+          tint = tint,
+          modifier = Modifier
+            .size(24.dp)
+            .graphicsLayer {
+              scaleX = pop
+              scaleY = pop
+            }
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+          text = label,
+          color = tint,
+          fontSize = 11.sp,
+          maxLines = 1,
+          softWrap = false,
+          fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+        )
+      }
     }
-  }
   }
 }
 
@@ -249,7 +350,6 @@ fun TarkasBottomNav(
 fun MiniPlayerBar(
   track: Track?,
   isPlaying: Boolean,
-  waveformEnergy: Float,
   onTogglePlayPause: () -> Unit,
   onNext: () -> Unit,
   onClick: () -> Unit,
@@ -257,33 +357,21 @@ fun MiniPlayerBar(
 ) {
   if (track == null) return
 
-  Surface(
+  // Its own floating capsule of glass, like the tab bar below it.
+  Box(
     modifier = modifier
       .fillMaxWidth()
-      .clickable { onClick() }
-      .testTag("mini_player_bar"),
-    color = MaterialTheme.colorScheme.surface
+      .glassPill(cornerRadius = 30.dp)
+      .pressClickable(pressedScale = 0.985f, onClick = onClick)
+      .testTag("mini_player_bar")
   ) {
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(horizontal = 16.dp, vertical = 8.dp),
+        .padding(start = 10.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
       verticalAlignment = Alignment.CenterVertically
     ) {
-      Box(
-        modifier = Modifier
-          .size(48.dp)
-          .clip(RoundedCornerShape(6.dp))
-          .background(Brush.verticalGradient(listOf(Color(track.colorHex), Color(track.colorHex).copy(alpha = 0.6f)))),
-        contentAlignment = Alignment.Center
-      ) {
-        Icon(
-          imageVector = Icons.Default.MusicNote,
-          contentDescription = null,
-          tint = Color.White,
-          modifier = Modifier.size(24.dp)
-        )
-      }
+      TrackArtwork(track = track, shape = RoundedCornerShape(16.dp), iconSize = 24.dp, modifier = Modifier.size(46.dp))
 
       Spacer(modifier = Modifier.width(14.dp))
 
@@ -331,49 +419,6 @@ fun MiniPlayerBar(
           modifier = Modifier.size(34.dp)
         )
       }
-    }
-  }
-}
-
-@Composable
-fun WaveformVisualizer(
-  energy: Float,
-  barCount: Int = 18,
-  modifier: Modifier = Modifier,
-  barColor: Color = MaterialTheme.colorScheme.primary
-) {
-  val infiniteTransition = rememberInfiniteTransition(label = "WaveformAnimation")
-  val pulse by infiniteTransition.animateFloat(
-    initialValue = 0.3f,
-    targetValue = 1.0f,
-    animationSpec = infiniteRepeatable(
-      animation = tween(400, easing = FastOutSlowInEasing),
-      repeatMode = RepeatMode.Reverse
-    ),
-    label = "pulse"
-  )
-
-  Canvas(modifier = modifier) {
-    val totalWidth = size.width
-    val totalHeight = size.height
-    val barWidth = (totalWidth / barCount) * 0.65f
-    val gap = (totalWidth / barCount) * 0.35f
-
-    for (i in 0 until barCount) {
-      val centerDist = kotlin.math.abs(i - barCount / 2f) / (barCount / 2f)
-      val waveFactor = kotlin.math.sin(i * 0.8 + pulse * Math.PI).toFloat()
-      val heightFraction = ((1f - centerDist * 0.5f) * energy * (0.4f + 0.6f * kotlin.math.abs(waveFactor))).coerceIn(0.12f, 1f)
-      val barHeight = totalHeight * heightFraction
-
-      val x = i * (barWidth + gap)
-      val y = (totalHeight - barHeight) / 2f
-
-      drawRoundRect(
-        color = barColor,
-        topLeft = Offset(x, y),
-        size = Size(barWidth, barHeight),
-        cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
-      )
     }
   }
 }

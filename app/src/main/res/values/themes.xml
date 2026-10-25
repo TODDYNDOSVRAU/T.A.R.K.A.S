@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.MyApplication" parent="android:Theme.DeviceDefault.NoActionBar" />
+    <style name="Theme.MyApplication" parent="android:Theme.DeviceDefault.NoActionBar">
+        <!-- Dark window while the first frame is prepared, so a light theme never flashes white -->
+        <item name="android:windowBackground">@color/tarkas_ink</item>
+    </style>
+
+    <!-- System splash: plain ink background. The animated mark is drawn by BootScreen right after. -->
+    <style name="Theme.Tarkas.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/tarkas_ink</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_empty</item>
+        <item name="postSplashScreenTheme">@style/Theme.MyApplication</item>
+    </style>
 </resources>

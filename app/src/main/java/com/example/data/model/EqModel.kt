@@ -1,0 +1,219 @@
+package com.example.data.model
+
+import org.json.JSONArray
+import org.json.JSONObject
+
+/** Shape of one equalizer filter. */
+enum class FilterType(val key: String, val label: String) {
+  PEAK("peak", "Pico"),
+  LOW_SHELF("low_shelf", "Prateleira grave"),
+  HIGH_SHELF("high_shelf", "Prateleira aguda"),
+  HIGH_PASS("high_pass", "Passa-alta"),
+  LOW_PASS("low_pass", "Passa-baixa");
+
+  /** Passes cut everything past their frequency, so their gain control does nothing. */
+  val usesGain: Boolean get() = this == PEAK || this == LOW_SHELF || this == HIGH_SHELF
+
+  companion object {
+    fun fromKey(key: String?): FilterType = entries.firstOrNull { it.key == key } ?: PEAK
+  }
+}
+
+/** One band of the parametric equalizer. */
+data class EqBand(
+  val freqHz: Float,
+  val gainDb: Float = 0f,
+  val q: Float = DEFAULT_Q,
+  val type: FilterType = FilterType.PEAK,
+  val enabled: Boolean = true
+) {
+  companion object {
+    /** About 2/3 of an octave wide: neighbouring graphic bands meet without gaps or big overlaps. */
+    const val DEFAULT_Q = 2.0f
+    const val MIN_FREQ = 20f
+    const val MAX_FREQ = 20000f
+    const val MIN_GAIN = -15f
+    const val MAX_GAIN = 15f
+    const val MIN_Q = 0.1f
+    const val MAX_Q = 12f
+  }
+}
+
+/** The whole state of the audio processing chain. Everything here is applied by our own DSP. */
+data class EqSettings(
+  val enabled: Boolean = true,
+  val bands: List<EqBand> = DEFAULT_BANDS,
+  val preampDb: Float = 0f,
+  // Tone controls: a low shelf and a high shelf with their own corner frequency
+  val bassDb: Float = 0f,
+  val bassFreqHz: Float = 100f,
+  val trebleDb: Float = 0f,
+  val trebleFreqHz: Float = 8000f,
+  /** -1 = only left, 0 = centre, +1 = only right */
+  val balance: Float = 0f,
+  /** 0 = mono, 1 = original, 2 = twice as wide (mid/side) */
+  val stereoWidth: Float = 1f,
+  val limiterEnabled: Boolean = true,
+  val limiterCeilingDb: Float = -0.5f,
+  /** Android's hardware virtualizer, 0..1000. Only works where the device offers it. */
+  val virtualizerStrength: Int = 0
+) {
+  companion object {
+    val DEFAULT_FREQUENCIES = listOf(
+      25f, 40f, 63f, 100f, 160f, 250f, 400f, 630f,
+      1000f, 1600f, 2500f, 4000f, 6300f, 10000f, 16000f
+    )
+    val DEFAULT_BANDS: List<EqBand> = DEFAULT_FREQUENCIES.map { EqBand(freqHz = it) }
+
+    const val PREAMP_RANGE_DB = 15f
+    const val TONE_RANGE_DB = 12f
+
+    fun withGains(gainsDb: List<Float>): EqSettings =
+      EqSettings(bands = DEFAULT_FREQUENCIES.mapIndexed { i, f -> EqBand(freqHz = f, gainDb = gainsDb.getOrElse(i) { 0f }) })
+  }
+}
+
+data class EqPreset(
+  val id: String,
+  val name: String,
+  val settings: EqSettings,
+  val isCustom: Boolean = false
+)
+
+/** Built-in presets and the JSON format used to store settings and user presets. */
+object EqPresets {
+
+  /** Converts a preset of the old 15-band hardware equalizer (millibels) into the new settings. */
+  fun fromLegacy(profile: AudioProfile): EqPreset = EqPreset(
+    id = profile.id,
+    name = profile.name,
+    isCustom = profile.isCustom,
+    settings = EqSettings.withGains(profile.bandLevelsMb.map { it / 100f }).copy(
+      // The old bass boost (0..1000) becomes the bass shelf, up to +9 dB.
+      bassDb = profile.bassBoostStrength / 1000f * 9f,
+      virtualizerStrength = profile.virtualizerStrength.toInt()
+    )
+  )
+
+  val FLAT: EqPreset = fromLegacy(AudioProfile.FLAT).copy(name = "Flat")
+
+  val BUILT_IN: List<EqPreset> = listOf(
+    FLAT,
+    fromLegacy(AudioProfile.PROG_ROCK),
+    fromLegacy(AudioProfile.ACOUSTIC_CLARITY),
+    fromLegacy(AudioProfile.VOCAL_PRESENCE),
+    fromLegacy(AudioProfile.BASS_PUNCH),
+    EqPreset(
+      "preset_pop", "Pop",
+      EqSettings.withGains(listOf(-1f, 0f, 1.5f, 2.5f, 2f, 0.5f, -0.5f, -1f, -0.5f, 0.5f, 1.5f, 2.5f, 3f, 3f, 2.5f))
+    ),
+    EqPreset(
+      "preset_jazz", "Jazz",
+      EqSettings.withGains(listOf(2f, 2.5f, 2f, 1f, 0f, -1f, -1f, 0f, 1f, 1.5f, 2f, 2f, 2.5f, 2.5f, 2f))
+    ),
+    EqPreset(
+      "preset_classical", "Clássica",
+      EqSettings.withGains(listOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, -1f, -2f, -2.5f, -3f, -4f))
+        .copy(trebleDb = 1f)
+    ),
+    EqPreset(
+      "preset_electronic", "Eletrônica",
+      EqSettings.withGains(listOf(4.5f, 4f, 3f, 1f, 0f, -1.5f, -1f, 0f, 0.5f, 1f, 2f, 3f, 3.5f, 4f, 4f))
+    ),
+    EqPreset(
+      "preset_loudness", "Loudness",
+      EqSettings(bassDb = 6f, bassFreqHz = 90f, trebleDb = 4f, trebleFreqHz = 9000f, preampDb = -3f)
+    ),
+    EqPreset(
+      "preset_treble", "Mais agudos",
+      EqSettings(trebleDb = 6f, trebleFreqHz = 6000f, preampDb = -2f)
+    ),
+    speechPreset()
+  )
+
+  /** Voice-forward curve whose first band becomes a high-pass at 80 Hz to remove rumble. */
+  private fun speechPreset(): EqPreset {
+    val base = EqSettings.withGains(listOf(0f, 0f, 0f, 0f, -1f, -1f, 0f, 1.5f, 3f, 3.5f, 3f, 2f, 0f, -1f, -2f))
+    val bands = base.bands.mapIndexed { i, b ->
+      if (i == 0) b.copy(type = FilterType.HIGH_PASS, freqHz = 80f, q = 0.7f) else b
+    }
+    return EqPreset("preset_speech", "Voz e podcast", base.copy(bands = bands))
+  }
+
+  // ---- JSON ----
+
+  fun bandToJson(b: EqBand): JSONObject = JSONObject()
+    .put("f", b.freqHz.toDouble())
+    .put("g", b.gainDb.toDouble())
+    .put("q", b.q.toDouble())
+    .put("t", b.type.key)
+    .put("on", b.enabled)
+
+  fun bandFromJson(o: JSONObject): EqBand = EqBand(
+    freqHz = o.optDouble("f", 1000.0).toFloat().coerceIn(EqBand.MIN_FREQ, EqBand.MAX_FREQ),
+    gainDb = o.optDouble("g", 0.0).toFloat().coerceIn(EqBand.MIN_GAIN, EqBand.MAX_GAIN),
+    q = o.optDouble("q", EqBand.DEFAULT_Q.toDouble()).toFloat().coerceIn(EqBand.MIN_Q, EqBand.MAX_Q),
+    type = FilterType.fromKey(o.optString("t")),
+    enabled = o.optBoolean("on", true)
+  )
+
+  fun settingsToJson(s: EqSettings): JSONObject = JSONObject()
+    .put("enabled", s.enabled)
+    .put("bands", JSONArray().apply { s.bands.forEach { put(bandToJson(it)) } })
+    .put("preamp", s.preampDb.toDouble())
+    .put("bass", s.bassDb.toDouble())
+    .put("bassF", s.bassFreqHz.toDouble())
+    .put("treble", s.trebleDb.toDouble())
+    .put("trebleF", s.trebleFreqHz.toDouble())
+    .put("balance", s.balance.toDouble())
+    .put("width", s.stereoWidth.toDouble())
+    .put("limiter", s.limiterEnabled)
+    .put("ceiling", s.limiterCeilingDb.toDouble())
+    .put("virt", s.virtualizerStrength)
+
+  fun settingsFromJson(o: JSONObject): EqSettings {
+    val d = EqSettings()
+    val bandsJson = o.optJSONArray("bands")
+    val bands = if (bandsJson != null && bandsJson.length() > 0) {
+      (0 until bandsJson.length()).map { bandFromJson(bandsJson.getJSONObject(it)) }
+    } else d.bands
+    return EqSettings(
+      enabled = o.optBoolean("enabled", true),
+      bands = bands,
+      preampDb = o.optDouble("preamp", 0.0).toFloat().coerceIn(-EqSettings.PREAMP_RANGE_DB, EqSettings.PREAMP_RANGE_DB),
+      bassDb = o.optDouble("bass", 0.0).toFloat().coerceIn(-EqSettings.TONE_RANGE_DB, EqSettings.TONE_RANGE_DB),
+      bassFreqHz = o.optDouble("bassF", d.bassFreqHz.toDouble()).toFloat(),
+      trebleDb = o.optDouble("treble", 0.0).toFloat().coerceIn(-EqSettings.TONE_RANGE_DB, EqSettings.TONE_RANGE_DB),
+      trebleFreqHz = o.optDouble("trebleF", d.trebleFreqHz.toDouble()).toFloat(),
+      balance = o.optDouble("balance", 0.0).toFloat().coerceIn(-1f, 1f),
+      stereoWidth = o.optDouble("width", 1.0).toFloat().coerceIn(0f, 2f),
+      limiterEnabled = o.optBoolean("limiter", true),
+      limiterCeilingDb = o.optDouble("ceiling", -0.5).toFloat().coerceIn(-12f, 0f),
+      virtualizerStrength = o.optInt("virt", 0).coerceIn(0, 1000)
+    )
+  }
+
+  fun presetsToJson(presets: List<EqPreset>): String = JSONArray().apply {
+    presets.forEach { p ->
+      put(JSONObject().put("id", p.id).put("name", p.name).put("settings", settingsToJson(p.settings)))
+    }
+  }.toString()
+
+  fun presetsFromJson(json: String?): List<EqPreset> {
+    if (json.isNullOrBlank()) return emptyList()
+    return try {
+      val arr = JSONArray(json)
+      (0 until arr.length()).map { i ->
+        val o = arr.getJSONObject(i)
+        EqPreset(
+          id = o.getString("id"),
+          name = o.getString("name"),
+          settings = settingsFromJson(o.getJSONObject("settings")),
+          isCustom = true
+        )
+      }
+    } catch (e: Exception) {
+      emptyList()
+    }
+  }
+}

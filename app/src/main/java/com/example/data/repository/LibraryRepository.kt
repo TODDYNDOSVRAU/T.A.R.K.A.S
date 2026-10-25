@@ -116,6 +116,7 @@ class LibraryRepository(context: Context) {
           .put("dur", t.durationMs).put("genre", t.genre).put("era", t.era)
           .put("local", t.isLocalFile).put("path", t.filePath ?: JSONObject.NULL)
           .put("color", t.colorHex)
+          .put("art", t.artworkUrl ?: JSONObject.NULL)
       )
     }
     prefs.edit().putString(KEY_TRACKS, array.toString()).apply()
@@ -141,8 +142,10 @@ class LibraryRepository(context: Context) {
 
   private fun loadSavedTracks(): Map<String, Track> = try {
     val array = JSONArray(prefs.getString(KEY_TRACKS, "[]"))
-    (0 until array.length()).map { i ->
+    (0 until array.length()).mapNotNull { i ->
       val o = array.getJSONObject(i)
+      // YouTube songs saved while that integration existed can no longer play: drop them.
+      if (o.has("yt") && !o.isNull("yt")) return@mapNotNull null
       Track(
         id = o.getString("id"),
         title = o.getString("title"),
@@ -153,7 +156,8 @@ class LibraryRepository(context: Context) {
         era = o.optString("era", ""),
         isLocalFile = o.optBoolean("local", false),
         filePath = if (o.isNull("path")) null else o.getString("path"),
-        colorHex = o.optLong("color", 0xFF46C9D3)
+        colorHex = o.optLong("color", 0xFF46C9D3),
+        artworkUrl = if (o.isNull("art")) null else o.optString("art").ifBlank { null }
       )
     }.associateBy { it.id }
   } catch (_: Exception) {

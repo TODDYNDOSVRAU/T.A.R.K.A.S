@@ -58,8 +58,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Playlist
+import com.example.ui.theme.LocalBarInset
+import com.example.ui.theme.pressClickable
+import com.example.ui.theme.glassControl
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.platform.LocalContext
 import com.example.data.model.Track
 import com.example.ui.components.NamePlaylistDialog
+import com.example.ui.components.GlassChip
 import com.example.ui.theme.SpaceGrotesk
 
 private enum class LibrarySection(val label: String) {
@@ -80,6 +90,7 @@ fun LibraryScreen(
   onPlayFromList: (Track, List<Track>) -> Unit,
   onShuffleList: (List<Track>) -> Unit,
   onCreatePlaylist: (String) -> Unit,
+  onAddLocalTrack: (String, String, String, Long) -> Unit,
   onRenamePlaylist: (String, String) -> Unit,
   onDeletePlaylist: (String) -> Unit,
   onRemoveFromPlaylist: (String, String) -> Unit,
@@ -93,6 +104,33 @@ fun LibraryScreen(
   var openPlaylistId by remember { mutableStateOf<String?>(null) }
   var showNewPlaylist by remember { mutableStateOf(false) }
   var renamingPlaylist by remember { mutableStateOf<Playlist?>(null) }
+
+  // Imports an audio file from the device into the local library (system file picker).
+  val context = LocalContext.current
+  val audioPickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.GetContent()
+  ) { uri: Uri? ->
+    uri?.let {
+      var displayName = "Áudio Local"
+      try {
+        context.contentResolver.query(it, null, null, null, null)?.use { cursor ->
+          val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+          if (nameIndex != -1 && cursor.moveToFirst()) {
+            displayName = cursor.getString(nameIndex)
+          }
+        }
+      } catch (_: Exception) {}
+      // Read the real duration; fall back to 3 min only if the file has no metadata.
+      var realDurationMs = 0L
+      try {
+        val retriever = android.media.MediaMetadataRetriever()
+        retriever.setDataSource(context, it)
+        realDurationMs = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+        retriever.release()
+      } catch (_: Exception) {}
+      onAddLocalTrack(displayName, "Biblioteca Local", it.toString(), if (realDurationMs > 0) realDurationMs else 180000L)
+    }
+  }
 
   // Tracks of the current catalog win over the saved snapshot (fresher data).
   val byId = savedTracks + allTracks.associateBy { it.id }
@@ -119,28 +157,11 @@ fun LibraryScreen(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
       ) {
         LibrarySection.values().forEach { s ->
-          FilterChip(
+          GlassChip(
+            label = if (s == LibrarySection.QUEUE && queue.isNotEmpty()) "${s.label} (${queue.size})" else s.label,
             selected = section == s,
             onClick = { section = s },
-            label = {
-              Text(
-                if (s == LibrarySection.QUEUE && queue.isNotEmpty()) "${s.label} (${queue.size})" else s.label,
-                fontSize = 15.sp
-              )
-            },
-            border = FilterChipDefaults.filterChipBorder(
-              enabled = true,
-              selected = section == s,
-              borderColor = Color.Transparent,
-              selectedBorderColor = Color.Transparent
-            ),
-            colors = FilterChipDefaults.filterChipColors(
-              containerColor = MaterialTheme.colorScheme.surfaceVariant,
-              labelColor = MaterialTheme.colorScheme.onSurface,
-              selectedContainerColor = MaterialTheme.colorScheme.primary,
-              selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-            ),
-            modifier = Modifier.heightIn(min = 40.dp).testTag("library_chip_${s.name.lowercase()}")
+            modifier = Modifier.testTag("library_chip_${s.name.lowercase()}")
           )
         }
       }
@@ -150,7 +171,8 @@ fun LibraryScreen(
           playlists = playlists,
           byId = byId,
           onOpen = { openPlaylistId = it.id },
-          onNew = { showNewPlaylist = true }
+          onNew = { showNewPlaylist = true },
+          onImportAudio = { audioPickerLauncher.launch("audio/*") }
         )
 
         LibrarySection.FAVORITES -> TrackList(
@@ -216,8 +238,7 @@ private fun ActionPill(
 ) {
   Row(
     modifier = modifier
-      .clip(RoundedCornerShape(12.dp))
-      .background(MaterialTheme.colorScheme.surfaceVariant)
+      .glassControl(RoundedCornerShape(22.dp))
       .clickable(onClick = onClick)
       .padding(vertical = 12.dp),
     horizontalArrangement = Arrangement.Center,
@@ -234,39 +255,64 @@ private fun PlaylistsList(
   playlists: List<Playlist>,
   byId: Map<String, Track>,
   onOpen: (Playlist) -> Unit,
-  onNew: () -> Unit
+  onNew: () -> Unit,
+  onImportAudio: () -> Unit
 ) {
   var query by remember { mutableStateOf("") }
   val shown = playlists.filter { query.isBlank() || it.name.contains(query, ignoreCase = true) }
-  LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+  LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + LocalBarInset.current)) {
     item {
-      TextField(
-        value = query,
-        onValueChange = { query = it },
-        placeholder = { Text("Buscar nas playlists", fontSize = 17.sp) },
-        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-        singleLine = true,
-        shape = RoundedCornerShape(12.dp),
-        colors = TextFieldDefaults.colors(
-          unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-          focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-          unfocusedIndicatorColor = Color.Transparent,
-          focusedIndicatorColor = Color.Transparent
-        ),
-        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp).testTag("library_search_input")
-      )
+      // Glass search capsule with the round "add music" button beside it (imports a device file).
+      Row(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+      ) {
+        TextField(
+          value = query,
+          onValueChange = { query = it },
+          placeholder = { Text("Buscar nas playlists", fontSize = 17.sp) },
+          leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+          singleLine = true,
+          shape = RoundedCornerShape(28.dp),
+          colors = TextFieldDefaults.colors(
+            unfocusedContainerColor = Color.Transparent,
+            focusedContainerColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            focusedIndicatorColor = Color.Transparent
+          ),
+          modifier = Modifier
+            .weight(1f)
+            .glassControl(RoundedCornerShape(28.dp))
+            .testTag("library_search_input")
+        )
+        IconButton(
+          onClick = onImportAudio,
+          modifier = Modifier
+            .size(56.dp)
+            .glassControl(CircleShape)
+            .testTag("library_add_local_audio")
+        ) {
+          Icon(
+            imageVector = Icons.Default.Add,
+            contentDescription = "Adicionar música do aparelho",
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(26.dp)
+          )
+        }
+      }
     }
     item {
       Row(
         modifier = Modifier
           .fillMaxWidth()
-          .clickable(onClick = onNew)
+          .pressClickable(pressedScale = 0.98f, onClick = onNew)
           .padding(vertical = 4.dp)
           .testTag("library_new_playlist"),
         verticalAlignment = Alignment.CenterVertically
       ) {
         Box(
-          modifier = Modifier.size(80.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+          modifier = Modifier.size(80.dp).glassControl(RoundedCornerShape(16.dp)),
           contentAlignment = Alignment.Center
         ) {
           Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
@@ -293,7 +339,7 @@ private fun PlaylistsList(
         Row(
           modifier = Modifier
             .fillMaxWidth()
-            .clickable { onOpen(playlist) }
+            .pressClickable(pressedScale = 0.98f) { onOpen(playlist) }
             .padding(vertical = 4.dp)
             .testTag("playlist_row_${playlist.id}"),
           verticalAlignment = Alignment.CenterVertically
@@ -306,6 +352,15 @@ private fun PlaylistsList(
             contentAlignment = Alignment.Center
           ) {
             Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp))
+            // The playlist shows the cover of its first track that has one.
+            playlist.trackIds.firstNotNullOfOrNull { byId[it]?.artworkUrl }?.let { url ->
+              coil.compose.AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.matchParentSize()
+              )
+            }
           }
           Spacer(Modifier.width(16.dp))
           Column(modifier = Modifier.weight(1f)) {
@@ -391,7 +446,7 @@ private fun TrackList(
     Text(emptyText, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(vertical = 16.dp))
     return
   }
-  LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+  LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + LocalBarInset.current)) {
     item { PlayShuffleRow(onPlay = onHeaderPlay, onShuffle = onHeaderShuffle) }
     itemsIndexed(tracks) { _, track ->
       val selected = currentTrack?.id == track.id
@@ -426,7 +481,7 @@ private fun QueueList(
     )
     return
   }
-  LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+  LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + LocalBarInset.current)) {
     item {
       Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -471,15 +526,12 @@ private fun TrackRow(
       .padding(vertical = 6.dp),
     verticalAlignment = Alignment.CenterVertically
   ) {
-    Box(
-      modifier = Modifier
-        .size(64.dp)
-        .clip(RoundedCornerShape(6.dp))
-        .background(Brush.verticalGradient(listOf(Color(track.colorHex), Color(track.colorHex).copy(alpha = 0.6f)))),
-      contentAlignment = Alignment.Center
-    ) {
-      Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
-    }
+    com.example.ui.components.TrackArtwork(
+      track = track,
+      shape = RoundedCornerShape(6.dp),
+      iconSize = 26.dp,
+      modifier = Modifier.size(64.dp)
+    )
     Spacer(Modifier.width(14.dp))
     Column(modifier = Modifier.weight(1f)) {
       Text(

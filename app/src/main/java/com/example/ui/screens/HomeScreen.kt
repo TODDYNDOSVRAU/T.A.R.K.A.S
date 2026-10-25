@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -62,26 +61,26 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.model.Curiosity
+import com.example.ui.theme.LocalBarInset
+import com.example.ui.theme.pressClickable
+import com.example.ui.theme.glassControl
 import com.example.data.model.Playlist
 import com.example.data.model.Track
-import com.example.data.model.VerificationStatus
-import com.example.ui.components.CuriosityDetailDialog
 import com.example.ui.components.TarkasMark
+import com.example.ui.components.TrackArtwork
 import com.example.ui.components.TarkasSectionTitle
 import com.example.ui.components.TrackActionsMenu
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import com.example.ui.viewmodel.TarkasNavTab
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.CircularProgressIndicator
 
 @Composable
 fun HomeScreen(
   currentTrack: Track?,
   tracks: List<Track>,
   isPlaying: Boolean,
-  waveformEnergy: Float,
-  activeCuriosity: Curiosity?,
-  allCuriosities: List<Curiosity>,
   favoriteIds: List<String>,
   playlists: List<Playlist>,
   onPlayTrack: (Track) -> Unit,
@@ -89,46 +88,23 @@ fun HomeScreen(
   onNextTrack: () -> Unit,
   onPreviousTrack: () -> Unit,
   onNavigateToTab: (TarkasNavTab) -> Unit,
-  onSearchAudius: (String) -> Unit,
   onToggleFavorite: (Track) -> Unit,
   onPlayNext: (Track) -> Unit,
   onAddToQueue: (Track) -> Unit,
   onAddToPlaylist: (String, Track) -> Unit,
   onCreatePlaylist: (String, Track) -> Unit,
-  onAddLocalTrack: (String, String, String, Long) -> Unit = { _, _, _, _ -> },
+  audiusResults: List<Track> = emptyList(),
+  audiusSearching: Boolean = false,
+  onSearchAudiusOnline: (String) -> Unit = {},
+  onPlayAudiusResult: (Track) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
   var searchQuery by remember { mutableStateOf("") }
   var selectedCategory by remember { mutableStateOf("Todas") }
-  var selectedCuriosityForDialog by remember { mutableStateOf<Curiosity?>(null) }
-  var showActiveCuriosityDialog by remember { mutableStateOf(false) }
 
-  // SAF File Picker for local audio files
-  val audioPickerLauncher = rememberLauncherForActivityResult(
-    contract = ActivityResultContracts.GetContent()
-  ) { uri: Uri? ->
-    uri?.let {
-      var displayName = "Áudio Local"
-      try {
-        context.contentResolver.query(it, null, null, null, null)?.use { cursor ->
-          val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-          if (nameIndex != -1 && cursor.moveToFirst()) {
-            displayName = cursor.getString(nameIndex)
-          }
-        }
-      } catch (_: Exception) {}
-      // Read the real duration; fall back to 3 min only if the file has no metadata.
-      var realDurationMs = 0L
-      try {
-        val retriever = android.media.MediaMetadataRetriever()
-        retriever.setDataSource(context, it)
-        realDurationMs = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-        retriever.release()
-      } catch (_: Exception) {}
-      onAddLocalTrack(displayName, "Biblioteca Local", it.toString(), if (realDurationMs > 0) realDurationMs else 180000L)
-    }
-  }
+  // The same search bar also searches Audius (the ViewModel waits for a pause in typing).
+  LaunchedEffect(searchQuery) { onSearchAudiusOnline(searchQuery) }
 
   // Filter tracks by category and search query
   val filteredTracks = tracks.filter { track ->
@@ -164,7 +140,7 @@ fun HomeScreen(
     modifier = modifier
       .fillMaxSize()
       .padding(horizontal = 20.dp),
-    contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp),
+    contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp + LocalBarInset.current),
     verticalArrangement = Arrangement.spacedBy(28.dp)
   ) {
 
@@ -200,32 +176,19 @@ fun HomeScreen(
               }
             },
             singleLine = true,
-            shape = RoundedCornerShape(12.dp),
+            // Same capsule of glass as the tab bar and mini player.
+            shape = RoundedCornerShape(28.dp),
             colors = TextFieldDefaults.colors(
-              unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-              focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+              unfocusedContainerColor = Color.Transparent,
+              focusedContainerColor = Color.Transparent,
               unfocusedIndicatorColor = Color.Transparent,
               focusedIndicatorColor = Color.Transparent
             ),
             modifier = Modifier
               .weight(1f)
+              .glassControl(RoundedCornerShape(28.dp))
               .testTag("home_search_input")
           )
-
-          IconButton(
-            onClick = { audioPickerLauncher.launch("audio/*") },
-            modifier = Modifier
-              .size(48.dp)
-              .clip(CircleShape)
-              .background(MaterialTheme.colorScheme.surfaceVariant)
-              .testTag("home_add_local_audio")
-          ) {
-            Icon(
-              imageVector = Icons.Default.Add,
-              contentDescription = "Importar áudio do aparelho",
-              tint = MaterialTheme.colorScheme.primary
-            )
-          }
         }
 
       }
@@ -243,7 +206,7 @@ fun HomeScreen(
               Column(
                 modifier = Modifier
                   .width(160.dp)
-                  .clickable { selectedCategory = station.name }
+                  .pressClickable(pressedScale = 0.95f) { selectedCategory = station.name }
                   .semantics { this.selected = selected }
                   .testTag("station_${station.name}")
               ) {
@@ -308,68 +271,11 @@ fun HomeScreen(
       }
     }
 
-    // 3. Curiosity of the current track (only when there is a real source)
-    if (activeCuriosity != null && activeCuriosity.status != VerificationStatus.UNVERIFIED) {
-      item {
-        Surface(
-          shape = RoundedCornerShape(16.dp),
-          color = MaterialTheme.colorScheme.surfaceVariant,
-          modifier = Modifier
-            .fillMaxWidth()
-            .clickable { showActiveCuriosityDialog = true }
-            .testTag("home_curiosity_pill")
-        ) {
-          Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Box(
-              modifier = Modifier
-                .size(34.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-              contentAlignment = Alignment.Center
-            ) {
-              Icon(
-                imageVector = Icons.Default.Lightbulb,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
-              )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-              Text(
-                text = "Curiosidade",
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.primary
-              )
-              Text(
-                text = activeCuriosity.shortTrivia,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-              )
-            }
-            Text(
-              text = "Ver",
-              fontSize = 12.sp,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.primary,
-              modifier = Modifier.padding(start = 8.dp)
-            )
-          }
-        }
-      }
-    }
-
-    // 4. Destaques: album cards without a container, art + two text lines
+    // 3. Destaques: album cards without a container, art + two text lines
     if (searchQuery.isBlank() && tracks.isNotEmpty()) {
       item {
         Column {
-          TarkasSectionTitle("Destaques", onClick = { onNavigateToTab(TarkasNavTab.MUSIC) })
+          TarkasSectionTitle("Destaques")
           Spacer(modifier = Modifier.height(14.dp))
           LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             items(tracks.take(8)) { track ->
@@ -377,15 +283,13 @@ fun HomeScreen(
               Column(
                 modifier = Modifier
                   .width(220.dp)
-                  .clickable { onPlayTrack(track) }
+                  .pressClickable(pressedScale = 0.97f) { onPlayTrack(track) }
                   .testTag("featured_track_${track.id}")
               ) {
                 Column(
                   modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                    .glassControl(RoundedCornerShape(20.dp))
                     .padding(12.dp)
                 ) {
                   Row(
@@ -414,21 +318,14 @@ fun HomeScreen(
                     color = MaterialTheme.colorScheme.onSurface
                   )
                   Spacer(modifier = Modifier.height(10.dp))
-                  Box(
-                    modifier = Modifier
-                      .fillMaxWidth()
-                      .aspectRatio(1.45f)
-                      .clip(RoundedCornerShape(6.dp))
-                      .background(Brush.verticalGradient(listOf(Color(track.colorHex), Color(track.colorHex).copy(alpha = 0.55f)))),
-                    contentAlignment = Alignment.Center
-                  ) {
-                    Icon(
-                      imageVector = if (isCurrent && isPlaying) Icons.Default.Equalizer else Icons.Default.MusicNote,
-                      contentDescription = null,
-                      tint = Color.White,
-                      modifier = Modifier.size(44.dp)
-                    )
-                  }
+                  TrackArtwork(
+                    track = track,
+                    shape = RoundedCornerShape(12.dp),
+                    iconSize = 44.dp,
+                    playing = isCurrent && isPlaying,
+                    gradientEndAlpha = 0.55f,
+                    modifier = Modifier.fillMaxWidth().aspectRatio(1.45f)
+                  )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -452,59 +349,7 @@ fun HomeScreen(
       }
     }
 
-    // 5. Curiosidades musicais (curated, with sources)
-    if (searchQuery.isBlank() && allCuriosities.isNotEmpty()) {
-      item {
-        Column {
-          TarkasSectionTitle("Curiosidades Musicais")
-          Spacer(modifier = Modifier.height(14.dp))
-          LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            items(allCuriosities) { cur ->
-              Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier
-                  .width(240.dp)
-                  .clickable { selectedCuriosityForDialog = cur }
-                  .testTag("curiosity_card_${cur.trackId}")
-              ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                  Text(
-                    text = cur.artist.uppercase(),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.8.sp,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                  )
-                  Spacer(modifier = Modifier.height(4.dp))
-                  Text(
-                    text = cur.trackTitle,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurface
-                  )
-                  Spacer(modifier = Modifier.height(6.dp))
-                  Text(
-                    text = cur.shortTrivia,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 16.sp
-                  )
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // 6. Músicas: flat rows with dividers, like the Apple Music library
+    // 4. Músicas: flat rows with dividers, like the Apple Music library
     item {
       Row(
         modifier = Modifier.fillMaxWidth(),
@@ -512,7 +357,7 @@ fun HomeScreen(
         verticalAlignment = Alignment.Bottom
       ) {
         TarkasSectionTitle(
-          if (searchQuery.isNotBlank()) "Resultados da busca"
+          if (searchQuery.isNotBlank()) "Na sua biblioteca"
           else if (selectedCategory == "Todas") "Músicas" else "Estação $selectedCategory"
         )
         Text(
@@ -523,7 +368,15 @@ fun HomeScreen(
       }
     }
 
-    if (filteredTracks.isEmpty()) {
+    if (filteredTracks.isEmpty() && searchQuery.isNotBlank()) {
+      item {
+        Text(
+          text = "Nada na sua biblioteca para \"$searchQuery\".",
+          fontSize = 15.sp,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+      }
+    } else if (filteredTracks.isEmpty()) {
       item {
         Column(
           modifier = Modifier
@@ -547,81 +400,116 @@ fun HomeScreen(
       }
     }
 
-    items(filteredTracks) { track ->
-      val isSelected = currentTrack?.id == track.id
-      Column(modifier = Modifier.testTag("lib_track_${track.id}")) {
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onPlayTrack(track) }
-            .padding(vertical = 4.dp),
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Box(
-            modifier = Modifier
-              .size(64.dp)
-              .clip(RoundedCornerShape(6.dp))
-              .background(Brush.verticalGradient(listOf(Color(track.colorHex), Color(track.colorHex).copy(alpha = 0.6f)))),
-            contentAlignment = Alignment.Center
-          ) {
-            Icon(
-              imageVector = if (isSelected && isPlaying) Icons.Default.Equalizer else Icons.Default.MusicNote,
-              contentDescription = null,
-              tint = Color.White,
-              modifier = Modifier.size(26.dp)
-            )
-          }
+    @Composable
+    fun SongRow(track: Track, testTag: String, onClick: () -> Unit, modifier: Modifier = Modifier) = TrackRow(
+      track = track,
+      isSelected = currentTrack?.id == track.id,
+      isPlaying = isPlaying,
+      isFavorite = track.id in favoriteIds,
+      playlists = playlists,
+      onClick = onClick,
+      onToggleFavorite = { onToggleFavorite(track) },
+      onPlayNext = { onPlayNext(track) },
+      onAddToQueue = { onAddToQueue(track) },
+      onAddToPlaylist = { id -> onAddToPlaylist(id, track) },
+      onCreatePlaylist = { name -> onCreatePlaylist(name, track) },
+      modifier = modifier.testTag(testTag)
+    )
 
-          Spacer(modifier = Modifier.width(14.dp))
+    // Rows glide to their new place when a station filters the list.
+    items(filteredTracks, key = { it.id }) { track ->
+      SongRow(track, "lib_track_${track.id}", onClick = { onPlayTrack(track) }, modifier = Modifier.animateItem())
+    }
 
-          Column(modifier = Modifier.weight(1f)) {
-            Text(
-              text = track.title,
-              fontSize = 17.sp,
-              color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis
-            )
-            Text(
-              text = "${track.artist} • ${track.album}",
-              fontSize = 15.sp,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis
-            )
-          }
-
-          TrackActionsMenu(
-            track = track,
-            isFavorite = track.id in favoriteIds,
-            playlists = playlists,
-            onToggleFavorite = { onToggleFavorite(track) },
-            onPlayNext = { onPlayNext(track) },
-            onAddToQueue = { onAddToQueue(track) },
-            onAddToPlaylist = { id -> onAddToPlaylist(id, track) },
-            onCreatePlaylist = { name -> onCreatePlaylist(name, track) }
+    // 5. While searching: the same query on Audius, below the library. Its songs play in the app.
+    if (searchQuery.isNotBlank()) {
+      item(key = "audius_header") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          TarkasSectionTitle("No Audius", modifier = Modifier.weight(1f))
+          if (audiusSearching) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        }
+      }
+      items(audiusResults, key = { "audius_result_${it.id}" }) { track ->
+        SongRow(track, "audius_result_${track.id}", onClick = { onPlayAudiusResult(track) })
+      }
+      if (audiusResults.isEmpty() && !audiusSearching) {
+        item(key = "audius_empty") {
+          Text(
+            "Nada encontrado no Audius.",
+            fontSize = 15.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
           )
         }
-        HorizontalDivider(
-          modifier = Modifier.padding(start = 78.dp, top = 4.dp),
-          color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-        )
       }
     }
   }
+}
 
-  // Curiosity Detail Dialog when clicked (shown only on demand)
-  if (showActiveCuriosityDialog && activeCuriosity != null) {
-    CuriosityDetailDialog(
-      curiosity = activeCuriosity,
-      onDismiss = { showActiveCuriosityDialog = false }
-    )
-  }
+/** A song row: cover, title, artist and album, and the ⋮ menu. */
+@Composable
+private fun TrackRow(
+  track: Track,
+  isSelected: Boolean,
+  isPlaying: Boolean,
+  isFavorite: Boolean,
+  playlists: List<Playlist>,
+  onClick: () -> Unit,
+  onToggleFavorite: () -> Unit,
+  onPlayNext: () -> Unit,
+  onAddToQueue: () -> Unit,
+  onAddToPlaylist: (String) -> Unit,
+  onCreatePlaylist: (String) -> Unit,
+  modifier: Modifier = Modifier
+) {
+  Column(modifier = modifier) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .pressClickable(pressedScale = 0.97f, onClick = onClick)
+        .padding(vertical = 4.dp),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      TrackArtwork(
+        track = track,
+        shape = RoundedCornerShape(6.dp),
+        iconSize = 26.dp,
+        playing = isSelected && isPlaying,
+        modifier = Modifier.size(64.dp)
+      )
 
-  selectedCuriosityForDialog?.let { cur ->
-    CuriosityDetailDialog(
-      curiosity = cur,
-      onDismiss = { selectedCuriosityForDialog = null }
+      Spacer(modifier = Modifier.width(14.dp))
+
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          text = track.title,
+          fontSize = 17.sp,
+          color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis
+        )
+        Text(
+          text = "${track.artist} • ${track.album}",
+          fontSize = 15.sp,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis
+        )
+      }
+
+      TrackActionsMenu(
+        track = track,
+        isFavorite = isFavorite,
+        playlists = playlists,
+        onToggleFavorite = onToggleFavorite,
+        onPlayNext = onPlayNext,
+        onAddToQueue = onAddToQueue,
+        onAddToPlaylist = onAddToPlaylist,
+        onCreatePlaylist = onCreatePlaylist
+      )
+    }
+    HorizontalDivider(
+      modifier = Modifier.padding(start = 78.dp, top = 4.dp),
+      color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
     )
   }
 }

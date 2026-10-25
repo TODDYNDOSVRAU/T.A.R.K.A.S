@@ -1,0 +1,11 @@
+# Hand-written baseline profile: tells the installer to pre-compile the app and the Compose
+# classes it uses on every launch, so the first frames and the first scroll do not stutter.
+Lcom/example/**;
+HSPLcom/example/**;->**(**)**
+HSPLandroidx/compose/runtime/**;->**(**)**
+HSPLandroidx/compose/ui/**;->**(**)**
+HSPLandroidx/compose/foundation/**;->**(**)**
+HSPLandroidx/compose/animation/**;->**(**)**
+HSPLandroidx/compose/material3/**;->**(**)**
+HSPLandroidx/lifecycle/**;->**(**)**
+HSPLandroidx/activity/**;->**(**)**

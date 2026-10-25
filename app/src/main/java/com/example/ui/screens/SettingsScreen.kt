@@ -39,6 +39,13 @@ import com.example.BuildConfig
 import com.example.data.model.AudioCapabilities
 import com.example.data.model.CuriosityConfig
 import com.example.ui.components.TarkasSectionTitle
+import com.example.ui.theme.LocalBarInset
+import com.example.ui.theme.SurfaceStyle
+import com.example.ui.theme.glassContentColor
+import com.example.ui.theme.glassControl
+import com.example.ui.components.GlassChip
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.filled.Check
 
 @Composable
 fun SettingsScreen(
@@ -49,6 +56,8 @@ fun SettingsScreen(
   curiosityConfig: CuriosityConfig? = null,
   onOpenCuriositySettings: () -> Unit = {},
   hasGeminiKey: Boolean = false,
+  surfaceStyle: SurfaceStyle = SurfaceStyle.SOLID,
+  onSurfaceStyleChange: (SurfaceStyle) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val colors = MaterialTheme.colorScheme
@@ -57,7 +66,7 @@ fun SettingsScreen(
     modifier = modifier
       .fillMaxSize()
       .padding(horizontal = 20.dp),
-    contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp),
+    contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp + LocalBarInset.current),
     verticalArrangement = Arrangement.spacedBy(6.dp)
   ) {
 
@@ -82,8 +91,7 @@ fun SettingsScreen(
             Column(
               modifier = Modifier
                 .weight(1f)
-                .clip(RoundedCornerShape(10.dp))
-                .background(if (selected) colors.primary else colors.surfaceVariant)
+                .glassControl(RoundedCornerShape(18.dp), selected = selected)
                 .clickable { onThemeModeChange(modeKey) }
                 .padding(vertical = 12.dp)
                 .testTag("theme_chip_$modeKey"),
@@ -92,7 +100,7 @@ fun SettingsScreen(
               Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (selected) colors.onPrimary else colors.onSurfaceVariant,
+                tint = glassContentColor(selected),
                 modifier = Modifier.size(22.dp)
               )
               Spacer(modifier = Modifier.height(6.dp))
@@ -100,7 +108,7 @@ fun SettingsScreen(
                 text = label,
                 fontSize = 12.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                color = if (selected) colors.onPrimary else colors.onSurface,
+                color = glassContentColor(selected),
                 textAlign = TextAlign.Center,
                 maxLines = 1
               )
@@ -112,6 +120,47 @@ fun SettingsScreen(
           title = "Preto puro",
           subtitle = "O modo AMOLED usa fundo totalmente preto, que economiza bateria em telas OLED."
         )
+      }
+    }
+
+    // Surface style of the floating bar and player controls
+    item { SectionTitle("Superfícies") }
+    item {
+      SettingsGroup(modifier = Modifier.testTag("settings_surface_card")) {
+        SurfaceStyle.entries.forEachIndexed { index, style ->
+          val selected = surfaceStyle == style
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .clickable { onSurfaceStyleChange(style) }
+              .padding(vertical = 14.dp)
+              .testTag("surface_style_${style.key}"),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                text = style.label,
+                fontSize = 17.sp,
+                color = if (selected) colors.primary else colors.onSurface
+              )
+              Text(
+                text = style.description,
+                fontSize = 15.sp,
+                lineHeight = 20.sp,
+                color = colors.onSurfaceVariant
+              )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Box(modifier = Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+              if (selected) {
+                Icon(Icons.Default.Check, contentDescription = "Selecionado", tint = colors.primary)
+              }
+            }
+          }
+          if (index < SurfaceStyle.entries.size - 1) {
+            HorizontalDivider(color = colors.outline.copy(alpha = 0.4f))
+          }
+        }
       }
     }
 
@@ -161,8 +210,8 @@ fun SettingsScreen(
         HorizontalDivider(color = colors.outline.copy(alpha = 0.4f))
         SettingsRow(
           title = "Áudio de outros apps",
-          subtitle = "O Android não deixa um app equalizar o som de outros apps, como Spotify e YouTube Music, " +
-            "sem acesso de root. Na aba Áudio, o medidor de nível só mede o volume deles."
+          subtitle = "Para equalizar Spotify, YouTube e os outros apps, escolha ADB ou Root em Áudio > Alcance do equalizador. " +
+            "Sem root, o equalizador vale para o que o T.A.R.K.A.S. toca."
         )
       }
     }

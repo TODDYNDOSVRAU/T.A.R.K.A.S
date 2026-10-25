@@ -14,6 +14,24 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
+import com.example.ui.theme.LocalBarInset
+import com.example.ui.theme.LocalHazeState
+import com.example.ui.theme.LocalSurfaceStyle
+import com.example.ui.theme.glassPill
+import com.example.ui.theme.screenTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -45,6 +63,13 @@ import androidx.compose.runtime.SideEffect
 import androidx.core.view.WindowCompat
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableStateOf
+import com.example.ui.components.BootScreen
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -74,6 +99,8 @@ import com.example.ui.viewmodel.TarkasViewModel
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
+    // Must run before super.onCreate: swaps the splash theme for the normal one after the first frame.
+    installSplashScreen()
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     setContent {
@@ -134,7 +161,11 @@ class MainActivity : ComponentActivity() {
         controller.isAppearanceLightNavigationBars = !isDarkApp
       }
 
+      // The opening animation plays once per launch (it survives rotation).
+      var showBoot by rememberSaveable { mutableStateOf(true) }
+
       TarkasTheme(themeMode = themeMode) {
+        Box(modifier = Modifier.fillMaxSize()) {
         TarkasAppContent(
           viewModel = viewModel,
           onRequestSystemAudioCapture = {
@@ -146,6 +177,10 @@ class MainActivity : ComponentActivity() {
             }
           }
         )
+        if (showBoot) {
+          BootScreen(onFinished = { showBoot = false })
+        }
+        }
       }
     }
   }
@@ -160,12 +195,14 @@ fun TarkasAppContent(
   val tracks by viewModel.musicRepository.tracks.collectAsState()
   val currentTrack by viewModel.musicRepository.currentTrack.collectAsState()
   val isPlaying by viewModel.audioEngineManager.isPlaying.collectAsState()
-  val currentPosMs by viewModel.audioEngineManager.currentPositionMs.collectAsState()
-  val durationMs by viewModel.audioEngineManager.durationMs.collectAsState()
-  val waveformEnergy by viewModel.audioEngineManager.waveformEnergy.collectAsState()
-  val activeProfile by viewModel.audioEngineManager.activeProfile.collectAsState()
-  val allProfiles by viewModel.allProfiles.collectAsState()
-  val isEffectEnabled by viewModel.audioEngineManager.isEffectEnabled.collectAsState()
+  // Values that change many times a second are kept as State and read only where they are drawn,
+  // so a tick does not recompose the whole app.
+  val currentPosMs = viewModel.audioEngineManager.currentPositionMs.collectAsState()
+  val durationMs = viewModel.audioEngineManager.durationMs.collectAsState()
+  val eqSettings by viewModel.eqSettings.collectAsState()
+  val eqPresets by viewModel.eqPresets.collectAsState()
+  val activePresetId by viewModel.activePresetId.collectAsState()
+  val eqModified by viewModel.eqModified.collectAsState()
   val capabilities by viewModel.audioEngineManager.capabilities.collectAsState()
   val activeCuriosity by viewModel.activeCuriosity.collectAsState()
   val assistantMessages by viewModel.assistantMessages.collectAsState()
@@ -173,12 +210,15 @@ fun TarkasAppContent(
   val activeTimers by viewModel.activeTimers.collectAsState()
   val reminders by viewModel.reminders.collectAsState()
   val themeMode by viewModel.themeMode.collectAsState()
+  val surfaceStyle by viewModel.surfaceStyle.collectAsState()
+  // One drifting light for every liquid glass surface (off for the other styles and with reduced motion).
+  val glassLight = com.example.ui.theme.rememberGlassLight(
+    active = surfaceStyle == com.example.ui.theme.SurfaceStyle.LIQUID && !com.example.ui.theme.rememberReducedMotion()
+  )
   val systemAudioStatus by viewModel.systemAudioStatus.collectAsState()
   val isSearchingAudius by viewModel.isSearchingAudius.collectAsState()
-  val spectrumBars by viewModel.audioEngineManager.spectrumBars.collectAsState()
-  val preampDb by viewModel.audioEngineManager.preampDb.collectAsState()
+  val spectrumBars = viewModel.audioEngineManager.spectrumBars.collectAsState()
   val activeApps by viewModel.activeApps.collectAsState()
-  val allCuriosities = viewModel.curiosityRepository.getAllCuriosities()
   val favoriteIds by viewModel.favorites.collectAsState()
   val playlists by viewModel.playlists.collectAsState()
   val savedTracks by viewModel.savedTracks.collectAsState()
@@ -188,6 +228,12 @@ fun TarkasAppContent(
   val favoriteTracks = favoriteIds.mapNotNull { id -> tracks.firstOrNull { it.id == id } ?: savedTracks[id] }
 
   val isShowingCuriositySettings by viewModel.isShowingCuriositySettings.collectAsState()
+  val eqReach by viewModel.eqReach.collectAsState()
+  val globalEqStatus by viewModel.globalEqStatus.collectAsState()
+  val audiusResults by viewModel.audiusResults.collectAsState()
+  val audiusSearching by viewModel.audiusSearching.collectAsState()
+  // Full-screen pages opened from Ajustes, shown over the tabs.
+  val overlayOpen = isShowingCuriositySettings
   val curiosityConfig by viewModel.curiosityConfig.collectAsState()
   val isAiSpeakingCuriosity by viewModel.isAiSpeakingCuriosity.collectAsState()
   val currentCuriositySpeechText by viewModel.currentCuriositySpeechText.collectAsState()
@@ -200,7 +246,7 @@ fun TarkasAppContent(
     "light" -> false
     else -> isSystemInDarkTheme()
   }
-  val statusOverDarkPage = currentTab == TarkasNavTab.MUSIC && !isShowingCuriositySettings
+  val statusOverDarkPage = currentTab == TarkasNavTab.MUSIC && !overlayOpen
   SideEffect {
     val activityWindow = (hostView.context as? android.app.Activity)?.window ?: return@SideEffect
     WindowCompat.getInsetsController(activityWindow, hostView).isAppearanceLightStatusBars =
@@ -208,7 +254,7 @@ fun TarkasAppContent(
   }
 
   // Hardware / gesture back button handling
-  BackHandler(enabled = isShowingCuriositySettings || currentTab != TarkasNavTab.HOME) {
+  BackHandler(enabled = overlayOpen || currentTab != TarkasNavTab.HOME) {
     if (isShowingCuriositySettings) {
       viewModel.closeCuriositySettings()
     } else {
@@ -221,122 +267,58 @@ fun TarkasAppContent(
     contentWindowInsets = WindowInsets.safeDrawing,
     topBar = {
       // The full player has its own chrome (grabber + artwork), like the Apple Music Now Playing sheet
-      if (currentTab != TarkasNavTab.MUSIC && !isShowingCuriositySettings) {
-        TarkasLargeTitle(
-          title = currentTab.label,
-          onOpenSettings = { viewModel.setTab(TarkasNavTab.SETTINGS) }
-        )
-      }
-    },
-    bottomBar = {
-      Column {
-        // Floating AI Curiosity Speech Banner
-        AnimatedVisibility(
-          visible = isAiSpeakingCuriosity &&
-            !currentCuriositySpeechText.isNullOrBlank() &&
-            curiosityConfig.displayMode == com.example.data.model.CuriosityDisplayMode.VOICE_AND_BANNER
+      if (currentTab != TarkasNavTab.MUSIC && !overlayOpen) {
+        // The title's gear button is a glass control, so it needs the chosen surface style too.
+        CompositionLocalProvider(
+          LocalSurfaceStyle provides surfaceStyle,
+          com.example.ui.theme.LocalGlassLight provides glassLight
         ) {
-          Surface(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(horizontal = 12.dp, vertical = 6.dp),
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            tonalElevation = 6.dp,
-            shadowElevation = 4.dp
-          ) {
-            Row(
-              modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Box(
-                modifier = Modifier
-                  .size(32.dp)
-                  .clip(CircleShape)
-                  .background(Brush.radialGradient(listOf(AppleMusicPink, AppleMusicPurple))),
-                contentAlignment = Alignment.Center
-              ) {
-                Icon(
-                  imageVector = Icons.Default.GraphicEq,
-                  contentDescription = null,
-                  tint = Color.White,
-                  modifier = Modifier.size(18.dp)
-                )
-              }
-
-              Spacer(modifier = Modifier.width(10.dp))
-
-              Column(modifier = Modifier.weight(1f)) {
-                Text(
-                  text = if (curiositySpeechStage == "intro") "🎙️ IA narrando curiosidade antes da música..." else "🎙️ Curiosidade falada pela IA...",
-                  fontWeight = FontWeight.Bold,
-                  fontSize = 11.sp,
-                  color = AppleMusicPink
-                )
-                Text(
-                  text = currentCuriositySpeechText ?: "",
-                  fontSize = 11.sp,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis
-                )
-              }
-
-              Spacer(modifier = Modifier.width(8.dp))
-
-              Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.clickable { viewModel.skipCuriositySpeech() }
-              ) {
-                Text(
-                  text = "Pular",
-                  fontWeight = FontWeight.Bold,
-                  fontSize = 11.sp,
-                  color = MaterialTheme.colorScheme.onPrimaryContainer,
-                  modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                )
-              }
-            }
-          }
-        }
-
-        // Frosted Mini player shown docked above bottom nav when not on full Music screen
-        if (currentTab != TarkasNavTab.MUSIC && currentTrack != null) {
-          MiniPlayerBar(
-            track = currentTrack,
-            isPlaying = isPlaying,
-            waveformEnergy = waveformEnergy,
-            onTogglePlayPause = { viewModel.togglePlayPause() },
-            onNext = { viewModel.playNextTrack() },
-            onClick = { viewModel.setTab(TarkasNavTab.MUSIC) }
+          TarkasLargeTitle(
+            title = currentTab.label,
+            onOpenSettings = { viewModel.setTab(TarkasNavTab.SETTINGS) }
           )
         }
-
-        TarkasBottomNav(
-          currentTab = currentTab,
-          onTabSelected = { tab ->
-            if (isShowingCuriositySettings) viewModel.closeCuriositySettings()
-            viewModel.setTab(tab)
-          }
-        )
       }
     }
   ) { innerPadding ->
-    // The player page draws under the status bar (it is tinted by the artwork), so it keeps only the bottom inset
-    val contentPadding = if (currentTab == TarkasNavTab.MUSIC && !isShowingCuriositySettings) {
-      PaddingValues(bottom = innerPadding.calculateBottomPadding())
-    } else {
-      innerPadding
-    }
+    // The bottom bar floats over the content (so glass styles have something to blur). The content
+    // keeps its own bottom space through LocalBarInset, and the player page draws under the status bar.
+    val layoutDirection = LocalLayoutDirection.current
+    val playerPage = currentTab == TarkasNavTab.MUSIC && !overlayOpen
+    val contentPadding = PaddingValues(
+      start = innerPadding.calculateStartPadding(layoutDirection),
+      end = innerPadding.calculateEndPadding(layoutDirection),
+      top = if (playerPage) 0.dp else innerPadding.calculateTopPadding(),
+      bottom = 0.dp
+    )
+    val hazeState = remember { HazeState() }
+    var barHeightPx by remember { mutableIntStateOf(0) }
+    val barInset = with(LocalDensity.current) { barHeightPx.toDp() }
+
+    CompositionLocalProvider(
+      LocalSurfaceStyle provides surfaceStyle,
+      com.example.ui.theme.LocalGlassLight provides glassLight,
+      LocalHazeState provides hazeState,
+      LocalBarInset provides barInset
+    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
     Box(
       modifier = Modifier
         .fillMaxSize()
         .padding(contentPadding)
+        .hazeSource(hazeState)
     ) {
-      if (isShowingCuriositySettings) {
+      val screenKey: Any = when {
+        isShowingCuriositySettings -> "curiosity"
+        else -> currentTab
+      }
+      val reducedMotion = com.example.ui.theme.rememberReducedMotion()
+      AnimatedContent(
+        targetState = screenKey,
+        transitionSpec = { screenTransition(initialState, targetState, reducedMotion) },
+        label = "screen"
+      ) { screen ->
+      if (screen == "curiosity") {
         MusicalCuriositySettingsScreen(
           config = curiosityConfig,
           isSpeaking = isAiSpeakingCuriosity,
@@ -347,15 +329,12 @@ fun TarkasAppContent(
           onBack = { viewModel.closeCuriositySettings() }
         )
       } else {
-      when (currentTab) {
+      when (screen as TarkasNavTab) {
         TarkasNavTab.HOME -> {
           HomeScreen(
             currentTrack = currentTrack,
             tracks = tracks,
             isPlaying = isPlaying,
-            waveformEnergy = waveformEnergy,
-            activeCuriosity = activeCuriosity,
-            allCuriosities = allCuriosities,
             favoriteIds = favoriteIds,
             playlists = playlists,
             onToggleFavorite = { track -> viewModel.toggleFavorite(track) },
@@ -363,15 +342,15 @@ fun TarkasAppContent(
             onAddToQueue = { track -> viewModel.addToQueue(track) },
             onAddToPlaylist = { id, track -> viewModel.addToPlaylist(id, track) },
             onCreatePlaylist = { name, track -> viewModel.createPlaylist(name, track) },
+            audiusResults = audiusResults,
+            audiusSearching = audiusSearching,
+            onSearchAudiusOnline = { q -> viewModel.searchAudiusOnline(q) },
+            onPlayAudiusResult = { track -> viewModel.playAudiusResult(track) },
             onPlayTrack = { track -> viewModel.playTrack(track) },
             onTogglePlayPause = { viewModel.togglePlayPause() },
             onNextTrack = { viewModel.playNextTrack() },
             onPreviousTrack = { viewModel.playPreviousTrack() },
-            onNavigateToTab = { tab -> viewModel.setTab(tab) },
-            onSearchAudius = { q -> viewModel.searchAudius(q) },
-            onAddLocalTrack = { title, artist, uri, dur ->
-              viewModel.addLocalAudio(title, artist, uri, dur)
-            }
+            onNavigateToTab = { tab -> viewModel.setTab(tab) }
           )
         }
 
@@ -380,9 +359,8 @@ fun TarkasAppContent(
             currentTrack = currentTrack,
             tracks = tracks,
             isPlaying = isPlaying,
-            currentPositionMs = currentPosMs,
-            durationMs = durationMs,
-            waveformEnergy = waveformEnergy,
+            currentPositionMs = { currentPosMs.value },
+            durationMs = { durationMs.value },
             activeCuriosity = activeCuriosity,
             isSearchingAudius = isSearchingAudius,
             onPlayTrack = { track -> viewModel.playTrack(track) },
@@ -422,6 +400,9 @@ fun TarkasAppContent(
             onPlayFromList = { track, list -> viewModel.playFromList(track, list) },
             onShuffleList = { list -> viewModel.shuffleFrom(list) },
             onCreatePlaylist = { name -> viewModel.createPlaylist(name) },
+            onAddLocalTrack = { title, artist, uri, dur ->
+              viewModel.addLocalAudio(title, artist, uri, dur)
+            },
             onRenamePlaylist = { id, name -> viewModel.renamePlaylist(id, name) },
             onDeletePlaylist = { id -> viewModel.deletePlaylist(id) },
             onRemoveFromPlaylist = { id, trackId -> viewModel.removeFromPlaylist(id, trackId) },
@@ -435,31 +416,28 @@ fun TarkasAppContent(
         TarkasNavTab.AUDIO -> {
           AudioScreen(
             capabilities = capabilities,
-            activeProfile = activeProfile,
-            allProfiles = allProfiles,
-            isEffectEnabled = isEffectEnabled,
+            eqSettings = eqSettings,
+            presets = eqPresets,
+            activePresetId = activePresetId,
+            eqModified = eqModified,
             systemAudioStatus = systemAudioStatus,
             isPlaying = isPlaying,
-            spectrumBars = spectrumBars,
-            preampDb = preampDb,
-            onPreampChange = { db -> viewModel.setPreampDb(db) },
+            spectrumBars = { spectrumBars.value },
             activeApps = activeApps,
             onRefreshActiveApps = { viewModel.refreshActiveApps() },
-            onSelectProfile = { profile -> viewModel.selectProfile(profile) },
-            onSaveCustomProfile = { name -> viewModel.saveCustomProfile(name) },
-            onUpdateBandLevel = { band, level ->
-              viewModel.audioEngineManager.updateCustomBand(band, level)
-            },
-            onResetAllBandsToZero = { viewModel.resetAllBandsToZero() },
-            onUpdateBassBoost = { strength ->
-              viewModel.audioEngineManager.updateCustomBassBoost(strength)
-            },
-            onUpdateVirtualizer = { strength ->
-              viewModel.audioEngineManager.updateCustomVirtualizer(strength)
-            },
-            onToggleEffectsEnabled = { enabled ->
-              viewModel.audioEngineManager.setEffectsEnabled(enabled)
-            },
+            eqReach = eqReach,
+            globalEqStatus = globalEqStatus,
+            rootPresent = viewModel.rootPresent,
+            onSetEqReach = { viewModel.setEqReach(it) },
+            onSetEnabled = { on -> viewModel.setEqEnabled(on) },
+            onUpdateEq = { transform -> viewModel.updateEq(transform) },
+            onUpdateBand = { index, transform -> viewModel.updateEqBand(index, transform) },
+            onSelectPreset = { preset -> viewModel.selectEqPreset(preset) },
+            onSavePresetAs = { name -> viewModel.saveEqPresetAs(name) },
+            onOverwritePreset = { viewModel.overwriteActiveEqPreset() },
+            onRenamePreset = { id, name -> viewModel.renameEqPreset(id, name) },
+            onDeletePreset = { id -> viewModel.deleteEqPreset(id) },
+            onReset = { viewModel.resetEq() },
             onRequestSystemAudioCapture = onRequestSystemAudioCapture
           )
         }
@@ -486,11 +464,127 @@ fun TarkasAppContent(
             onBackToHome = { viewModel.setTab(TarkasNavTab.HOME) },
             curiosityConfig = curiosityConfig,
             onOpenCuriositySettings = { viewModel.openCuriositySettings() },
-            hasGeminiKey = viewModel.assistantEngine.hasGeminiKey
+            hasGeminiKey = viewModel.assistantEngine.hasGeminiKey,
+            surfaceStyle = surfaceStyle,
+            onSurfaceStyleChange = { style -> viewModel.setSurfaceStyle(style) }
           )
         }
       }
       }
+      }
+    }
+      // Fades the content into the page colour behind the floating capsules, so text never runs
+      // legibly under or below them. Drawn outside the blur source, so the glass still sees the content.
+      val scrimColor = if (currentTab == TarkasNavTab.MUSIC) Color.Black else MaterialTheme.colorScheme.background
+      Box(
+        modifier = Modifier
+          .align(Alignment.BottomCenter)
+          .fillMaxWidth()
+          .height(barInset + 36.dp)
+          .background(
+            Brush.verticalGradient(
+              0f to scrimColor.copy(alpha = 0f),
+              0.35f to scrimColor.copy(alpha = 0.9f),
+              1f to scrimColor.copy(alpha = 0.97f)
+            )
+          )
+      )
+      Column(
+        modifier = Modifier
+          .align(Alignment.BottomCenter)
+          .fillMaxWidth()
+          .onSizeChanged { barHeightPx = it.height }
+          .imePadding()
+          .navigationBarsPadding()
+          .padding(start = 14.dp, end = 14.dp, bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+       com.example.ui.theme.TarkasDarkOverride(enabled = currentTab == TarkasNavTab.MUSIC) {
+        // Floating AI Curiosity Speech Banner. Curiosities appear only on the player page (and in
+        // notifications), never on the other tabs.
+        AnimatedVisibility(
+          visible = currentTab == TarkasNavTab.MUSIC &&
+            !isShowingCuriositySettings &&
+            isAiSpeakingCuriosity &&
+            !currentCuriositySpeechText.isNullOrBlank() &&
+            curiosityConfig.displayMode == com.example.data.model.CuriosityDisplayMode.VOICE_AND_BANNER
+        ) {
+          // A floating glass capsule, like the mini player under it.
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .glassPill(cornerRadius = 30.dp)
+          ) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Box(
+                modifier = Modifier
+                  .size(36.dp)
+                  .clip(CircleShape)
+                  .background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(
+                  imageVector = Icons.Default.GraphicEq,
+                  contentDescription = null,
+                  tint = MaterialTheme.colorScheme.onPrimary,
+                  modifier = Modifier.size(20.dp)
+                )
+              }
+
+              Spacer(modifier = Modifier.width(10.dp))
+
+              Column(modifier = Modifier.weight(1f)) {
+                Text(
+                  text = if (curiositySpeechStage == "intro") "Curiosidade antes da música" else "Curiosidade da faixa",
+                  fontWeight = FontWeight.Bold,
+                  fontSize = 13.sp,
+                  color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                  text = currentCuriositySpeechText ?: "",
+                  fontSize = 13.sp,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis
+                )
+              }
+
+              Spacer(modifier = Modifier.width(8.dp))
+
+              com.example.ui.components.GlassChip(
+                label = "Pular",
+                onClick = { viewModel.skipCuriositySpeech() }
+              )
+            }
+          }
+        }
+
+        // Frosted Mini player shown docked above bottom nav when not on full Music screen
+        if (currentTab != TarkasNavTab.MUSIC && currentTrack != null) {
+          MiniPlayerBar(
+            track = currentTrack,
+            isPlaying = isPlaying,
+            onTogglePlayPause = { viewModel.togglePlayPause() },
+            onNext = { viewModel.playNextTrack() },
+            onClick = { viewModel.setTab(TarkasNavTab.MUSIC) }
+          )
+        }
+
+        TarkasBottomNav(
+          currentTab = currentTab,
+          onTabSelected = { tab ->
+            if (isShowingCuriositySettings) viewModel.closeCuriositySettings()
+            viewModel.setTab(tab)
+          }
+        )
+       }
+      }
+    }
     }
   }
 }
