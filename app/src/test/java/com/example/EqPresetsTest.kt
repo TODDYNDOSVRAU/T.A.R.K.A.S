@@ -38,6 +38,40 @@ class EqPresetsTest {
   }
 
   @Test
+  fun parametricModeAndItsBandsSurviveAJsonRoundTrip() {
+    val s = EqSettings(
+      parametric = true,
+      paramBands = listOf(EqBand(freqHz = 2500f, gainDb = 3f, q = 0.9f), EqBand(freqHz = 60f, gainDb = -2f, type = FilterType.LOW_SHELF))
+    )
+    val back = EqPresets.settingsFromJson(JSONObject(EqPresets.settingsToJson(s).toString()))
+    assertEquals(s, back)
+  }
+
+  @Test
+  fun parametricStartsWithOneBandAndOldSettingsStayGraphic() {
+    assertEquals(1, EqSettings().paramBands.size)
+    val old = EqPresets.settingsFromJson(JSONObject().put("preamp", -1.0))
+    assertEquals(false, old.parametric)
+    assertEquals(EqSettings.DEFAULT_PARAM_BANDS, old.paramBands)
+  }
+
+  @Test
+  fun theUnusedBandSetNeverMakesAPresetLookEdited() {
+    val graphic = EqSettings(paramBands = listOf(EqBand(freqHz = 500f, gainDb = 6f)))
+    assertEquals(EqSettings().userCurve, graphic.userCurve)
+    val param = EqSettings(parametric = true, bands = EqSettings.withGains(List(15) { 3f }).bands)
+    assertEquals(EqSettings(parametric = true).userCurve, param.userCurve)
+  }
+
+  @Test
+  fun editingGoesToTheActiveBandSet() {
+    val p = EqSettings(parametric = true)
+    val edited = p.withActiveBands(listOf(EqBand(freqHz = 4000f, gainDb = 2f)))
+    assertEquals(4000f, edited.paramBands[0].freqHz, 0f)
+    assertEquals(EqSettings.DEFAULT_BANDS, edited.bands)
+  }
+
+  @Test
   fun userPresetsRoundTripAndComeBackAsCustom() {
     val presets = listOf(EqPreset("custom_1", "Fone de casa", EqSettings(bassDb = 3f)))
     val back = EqPresets.presetsFromJson(EqPresets.presetsToJson(presets))

@@ -146,6 +146,18 @@ import androidx.compose.ui.graphics.compositeOver
 import com.example.ui.theme.rememberReducedMotion
 import com.example.ui.theme.subPageTransition
 import com.example.ui.viewmodel.DeviceSearchState
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.key
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.animation.scaleOut
+import androidx.compose.ui.input.pointer.positionChange
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.log10
 import kotlin.math.pow
@@ -154,8 +166,21 @@ import kotlin.math.roundToInt
 private val PanelShape = RoundedCornerShape(24.dp)
 private const val GRAPH_DB_RANGE = 15f
 
-/** The three pages of the equalizer: everyday controls, technical controls, and the fone list. */
-private enum class AudioPage { MAIN, ADVANCED, DEVICES }
+/** The two pages of the equalizer: the console everyone uses, and the technical controls. */
+private enum class AudioPage { MAIN, ADVANCED }
+
+/** How the bands are shown on the console: one fader each, or one card each with every parameter. */
+private enum class EqMode { GRAPHIC, PARAMETRIC }
+
+/**
+ * What the band strip shows right now, shared with the overview graph underneath: the strip's
+ * scroll and the width of its window, so the graph can draw that window and drag it.
+ */
+@androidx.compose.runtime.Stable
+private class StripView(val scroll: ScrollState) {
+  var viewport by mutableIntStateOf(0)
+  val total: Int get() = scroll.maxValue + viewport
+}
 
 @Composable
 fun AudioScreen(
@@ -191,84 +216,115 @@ fun AudioScreen(
   modifier: Modifier = Modifier
 ) {
   var page by rememberSaveable { mutableStateOf(AudioPage.MAIN) }
+  var showPresets by rememberSaveable { mutableStateOf(false) }
   var showSaveAs by remember { mutableStateOf(false) }
   var showRename by remember { mutableStateOf(false) }
   var showDelete by remember { mutableStateOf(false) }
   val activePreset = presets.firstOrNull { it.id == activePresetId }
   val reduced = rememberReducedMotion()
+  // Closing the panel also clears its search, so it opens on the full list next time.
+  val closePresets = {
+    showPresets = false
+    if (deviceSearch.query.isNotEmpty()) onSearchDevices("", deviceSearch.source)
+  }
 
-  // Back leaves a sub-page first, before it leaves the tab.
-  BackHandler(enabled = page != AudioPage.MAIN) { page = AudioPage.MAIN }
+  // Back closes the preset panel, then leaves a sub-page, before it leaves the tab.
+  BackHandler(enabled = showPresets) { closePresets() }
+  BackHandler(enabled = !showPresets && page != AudioPage.MAIN) { page = AudioPage.MAIN }
 
-  AnimatedContent(
-    targetState = page,
-    transitionSpec = { subPageTransition(forward = targetState != AudioPage.MAIN, reduced = reduced) },
-    label = "audioPage",
-    modifier = modifier.fillMaxSize()
-  ) { shown ->
-    when (shown) {
-      AudioPage.MAIN -> EqMainPage(
-        capabilities = capabilities,
-        eqSettings = eqSettings,
-        presets = presets,
-        activePresetId = activePresetId,
-        activePreset = activePreset,
-        eqModified = eqModified,
-        isPlaying = isPlaying,
-        spectrumBars = spectrumBars,
-        onSetEnabled = onSetEnabled,
-        onUpdateEq = onUpdateEq,
-        onUpdateBand = onUpdateBand,
-        onSelectPreset = onSelectPreset,
-        onOverwritePreset = onOverwritePreset,
-        onReset = onReset,
-        onSaveAs = { showSaveAs = true },
-        onRename = { showRename = true },
-        onDelete = { showDelete = true },
-        onOpenDevices = { page = AudioPage.DEVICES; onOpenDevicePicker() },
-        onClearDevice = onClearDevice,
-        onOpenAdvanced = { page = AudioPage.ADVANCED }
-      )
-      AudioPage.ADVANCED -> EqAdvancedPage(
-        capabilities = capabilities,
-        eqSettings = eqSettings,
-        systemAudioStatus = systemAudioStatus,
-        isPlaying = isPlaying,
-        spectrumBars = spectrumBars,
-        activeApps = activeApps,
-        onRefreshActiveApps = onRefreshActiveApps,
-        eqReach = eqReach,
-        globalEqStatus = globalEqStatus,
-        rootPresent = rootPresent,
-        onSetEqReach = onSetEqReach,
-        onUpdateEq = onUpdateEq,
-        onUpdateBand = onUpdateBand,
-        onRequestSystemAudioCapture = onRequestSystemAudioCapture,
-        onBack = { page = AudioPage.MAIN }
-      )
-      AudioPage.DEVICES -> DevicePickerPage(
-        state = deviceSearch,
-        current = eqSettings.device,
-        onSearch = onSearchDevices,
-        onRetry = onOpenDevicePicker,
-        onPick = { entry -> onApplyDevice(entry) { page = AudioPage.MAIN } },
-        onBack = { page = AudioPage.MAIN }
-      )
+  Box(modifier = modifier.fillMaxSize()) {
+    AnimatedContent(
+      targetState = page,
+      transitionSpec = { subPageTransition(forward = targetState != AudioPage.MAIN, reduced = reduced) },
+      label = "audioPage",
+      modifier = Modifier.fillMaxSize()
+    ) { shown ->
+      when (shown) {
+        AudioPage.MAIN -> EqMainPage(
+          capabilities = capabilities,
+          eqSettings = eqSettings,
+          activePreset = activePreset,
+          eqModified = eqModified,
+          isPlaying = isPlaying,
+          spectrumBars = spectrumBars,
+          onSetEnabled = onSetEnabled,
+          onUpdateEq = onUpdateEq,
+          onUpdateBand = onUpdateBand,
+          onOverwritePreset = onOverwritePreset,
+          onReset = onReset,
+          onSaveAs = { showSaveAs = true },
+          onRename = { showRename = true },
+          onDelete = { showDelete = true },
+          onOpenPresets = { showPresets = true; onOpenDevicePicker() },
+          onOpenAdvanced = { page = AudioPage.ADVANCED }
+        )
+        AudioPage.ADVANCED -> EqAdvancedPage(
+          capabilities = capabilities,
+          eqSettings = eqSettings,
+          systemAudioStatus = systemAudioStatus,
+          activeApps = activeApps,
+          onRefreshActiveApps = onRefreshActiveApps,
+          eqReach = eqReach,
+          globalEqStatus = globalEqStatus,
+          rootPresent = rootPresent,
+          onSetEqReach = onSetEqReach,
+          onUpdateEq = onUpdateEq,
+          onRequestSystemAudioCapture = onRequestSystemAudioCapture,
+          onBack = { page = AudioPage.MAIN }
+        )
+      }
+    }
+
+    // The preset panel floats over the console, growing out of the preset button.
+    AnimatedVisibility(
+      visible = showPresets,
+      enter = fadeIn(tween(160)),
+      exit = fadeOut(tween(140)),
+      modifier = Modifier.fillMaxSize()
+    ) {
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .background(Color.Black.copy(alpha = 0.55f))
+          .pointerInput(Unit) { detectTapGestures { closePresets() } }
+      ) {
+        PresetPanel(
+          presets = presets,
+          activePresetId = activePresetId,
+          device = eqSettings.device,
+          deviceSearch = deviceSearch,
+          onSearchDevices = onSearchDevices,
+          onRetryDevices = onOpenDevicePicker,
+          onPickPreset = { onSelectPreset(it); closePresets() },
+          onPickDevice = { entry -> onApplyDevice(entry) { closePresets() } },
+          onClearDevice = onClearDevice,
+          onClose = { closePresets() },
+          modifier = Modifier
+            .align(Alignment.TopCenter)
+            .padding(horizontal = 14.dp)
+            .padding(top = 56.dp, bottom = 24.dp + LocalBarInset.current)
+            .animateEnterExit(
+              enter = scaleIn(spring(dampingRatio = 0.8f, stiffness = 420f), initialScale = 0.86f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.85f)) +
+                slideInVertically(spring(dampingRatio = 0.85f, stiffness = 380f)) { it / 6 },
+              exit = scaleOut(tween(140), targetScale = 0.92f) + fadeOut(tween(120))
+            )
+        )
+      }
     }
   }
 
   if (showSaveAs) {
     NamePlaylistDialog(
-      title = "Salvar preset",
+      title = "Salvar predefinição",
       confirmLabel = "Salvar",
-      initialName = if (activePreset?.isCustom == true) "${activePreset.name} 2" else "Meu preset",
+      initialName = if (activePreset?.isCustom == true) "${activePreset.name} 2" else "Minha predefinição",
       onConfirm = { name -> onSavePresetAs(name); showSaveAs = false },
       onDismiss = { showSaveAs = false }
     )
   }
   if (showRename && activePreset != null) {
     NamePlaylistDialog(
-      title = "Renomear preset",
+      title = "Renomear predefinição",
       confirmLabel = "Salvar",
       initialName = activePreset.name,
       onConfirm = { name -> onRenamePreset(activePreset.id, name); showRename = false },
@@ -279,7 +335,7 @@ fun AudioScreen(
     AlertDialog(
       onDismissRequest = { showDelete = false },
       title = { Text("Excluir \"${activePreset.name}\"?") },
-      text = { Text("O som atual continua igual. Só o preset salvo é apagado.") },
+      text = { Text("O som atual continua igual. Só a predefinição salva é apagada.") },
       confirmButton = {
         TextButton(onClick = { onDeletePreset(activePreset.id); showDelete = false }) { Text("Excluir") }
       },
@@ -288,14 +344,17 @@ fun AudioScreen(
   }
 }
 
-// ---------------- main page: what most people touch ----------------
+// ---------------- main page: the console ----------------
 
+/**
+ * The console, laid out like a hardware EQ: the band strip on top (faders or parametric cards, with
+ * the preamp fixed on the left), the whole curve underneath as an overview whose bright window shows
+ * and drags the part of the strip in view, then the switches, the preset, and bass and treble.
+ */
 @Composable
 private fun EqMainPage(
   capabilities: AudioCapabilities,
   eqSettings: EqSettings,
-  presets: List<EqPreset>,
-  activePresetId: String,
   activePreset: EqPreset?,
   eqModified: Boolean,
   isPlaying: Boolean,
@@ -303,132 +362,162 @@ private fun EqMainPage(
   onSetEnabled: (Boolean) -> Unit,
   onUpdateEq: ((EqSettings) -> EqSettings) -> Unit,
   onUpdateBand: (Int, (EqBand) -> EqBand) -> Unit,
-  onSelectPreset: (EqPreset) -> Unit,
   onOverwritePreset: () -> Unit,
   onReset: () -> Unit,
   onSaveAs: () -> Unit,
   onRename: () -> Unit,
   onDelete: () -> Unit,
-  onOpenDevices: () -> Unit,
-  onClearDevice: () -> Unit,
+  onOpenPresets: () -> Unit,
   onOpenAdvanced: () -> Unit
 ) {
   val colors = MaterialTheme.colorScheme
   val enabled = eqSettings.enabled
+  val mode = if (eqSettings.parametric) EqMode.PARAMETRIC else EqMode.GRAPHIC
+  var selectedBand by rememberSaveable { mutableIntStateOf(0) }
+  val bandIndex = selectedBand.coerceIn(0, (eqSettings.paramBands.size - 1).coerceAtLeast(0))
+  // Each mode keeps its own scroll, so switching back finds the strip where it was.
+  val graphicView = remember { StripView(ScrollState(0)) }
+  val paramView = remember { StripView(ScrollState(0)) }
+  val view = if (mode == EqMode.GRAPHIC) graphicView else paramView
+  val reduced = rememberReducedMotion()
 
   LazyColumn(
-    modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
+    modifier = Modifier.fillMaxSize(),
     contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp + LocalBarInset.current),
-    verticalArrangement = Arrangement.spacedBy(18.dp)
+    verticalArrangement = Arrangement.spacedBy(14.dp)
   ) {
-    // Master switch and output
     item {
-      Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
-          Text("Equalizador", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = colors.onBackground)
-          Text(
-            text = "Saída: ${capabilities.activeRouteName} · ${String.format("%.1f", capabilities.sampleRateHz / 1000f)} kHz",
-            fontSize = 15.sp,
-            color = colors.onSurfaceVariant
-          )
-        }
-        Switch(
-          checked = enabled,
-          onCheckedChange = onSetEnabled,
-          colors = SwitchDefaults.colors(checkedTrackColor = colors.primary, checkedThumbColor = colors.onPrimary),
-          modifier = Modifier.testTag("audio_dsp_switch")
+      Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+        Text("Equalizador", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = colors.onBackground)
+        Text(
+          text = "Saída: ${capabilities.activeRouteName} · ${String.format("%.1f", capabilities.sampleRateHz / 1000f)} kHz",
+          fontSize = 15.sp,
+          color = colors.onSurfaceVariant
         )
       }
     }
 
-    // The curve, as heard: fone correction + style + faders
+    // Band strip: the two modes cross-fade, each with its own layout.
     item {
-      EqGraph(
-        settings = eqSettings,
-        selectedBand = -1,
-        spectrumBars = spectrumBars,
-        isPlaying = isPlaying,
-        onSelectBand = {},
-        onDragBand = { i, freq, gain ->
-          onUpdateBand(i) { b -> b.copy(freqHz = freq, gainDb = if (b.type.usesGain) gain else b.gainDb) }
+      AnimatedContent(
+        targetState = mode,
+        transitionSpec = {
+          if (reduced) EnterTransition.None togetherWith ExitTransition.None
+          else (fadeIn(tween(220, 80)) + scaleIn(tween(260, 60), initialScale = 0.97f)) togetherWith fadeOut(tween(120))
         },
-        modifier = Modifier.fillMaxWidth().height(210.dp).testTag("audio_spectrum_graph_card")
-      )
-    }
-
-    // Fone correction
-    item {
-      DeviceCard(device = eqSettings.device, onOpen = onOpenDevices, onClear = onClearDevice)
-    }
-
-    // Styles (presets)
-    item {
-      Column {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          TarkasSectionTitle("Estilo")
-          AnimatedVisibility(visible = eqModified, enter = fadeIn() + scaleIn(initialScale = 0.8f), exit = fadeOut()) {
-            Text("  editado", fontSize = 15.sp, color = colors.onSurfaceVariant)
-          }
+        label = "eqMode",
+        modifier = Modifier.fillMaxWidth().height(STRIP_HEIGHT).padding(horizontal = 12.dp)
+      ) { m ->
+        when (m) {
+          EqMode.GRAPHIC -> GraphicFaders(
+            settings = eqSettings,
+            enabled = enabled,
+            view = graphicView,
+            onBandGain = { i, db -> onUpdateBand(i) { it.copy(gainDb = db) } },
+            onPreamp = { db -> onUpdateEq { it.copy(preampDb = db) } }
+          )
+          EqMode.PARAMETRIC -> ParametricStrip(
+            settings = eqSettings,
+            selected = bandIndex,
+            view = paramView,
+            onSelect = { selectedBand = it },
+            onUpdateBand = onUpdateBand,
+            onUpdateEq = onUpdateEq
+          )
         }
-        Spacer(Modifier.height(10.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          items(presets, key = { it.id }) { preset ->
-            GlassChip(
-              label = preset.name,
-              selected = preset.id == activePresetId,
-              onClick = { onSelectPreset(preset) },
-              modifier = Modifier.testTag("profile_chip_${preset.id}")
+      }
+    }
+
+    // Overview: the curve as heard, with the strip's window on it.
+    item {
+      Column(modifier = Modifier.padding(horizontal = 12.dp)) {
+        EqGraph(
+          settings = eqSettings,
+          selectedBand = if (mode == EqMode.PARAMETRIC) bandIndex else -1,
+          spectrumBars = spectrumBars,
+          isPlaying = isPlaying,
+          window = view,
+          compact = true,
+          modifier = Modifier.fillMaxWidth().height(104.dp).testTag("audio_spectrum_graph_card")
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+          text = consoleCaption(eqSettings, mode),
+          fontSize = 11.sp,
+          fontWeight = FontWeight.Bold,
+          letterSpacing = 1.sp,
+          color = colors.onSurfaceVariant,
+          textAlign = TextAlign.Center,
+          modifier = Modifier.fillMaxWidth()
+        )
+      }
+    }
+
+    // Switches, preset and tone, in the console's lower deck
+    item {
+      Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+          ConsoleToggle(
+            label = "Equ",
+            on = enabled,
+            description = if (enabled) "Desligar equalizador" else "Ligar equalizador",
+            onClick = { onSetEnabled(!enabled) },
+            modifier = Modifier.testTag("audio_dsp_switch")
+          )
+          ConsoleToggle(
+            label = "Limit",
+            on = eqSettings.limiterEnabled,
+            description = if (eqSettings.limiterEnabled) "Desligar limitador" else "Ligar limitador",
+            onClick = { onUpdateEq { it.copy(limiterEnabled = !it.limiterEnabled) } },
+            modifier = Modifier.testTag("switch_limiter")
+          )
+          ConsoleToggle(
+            label = if (mode == EqMode.GRAPHIC) "Gráf" else "Param",
+            on = false,
+            icon = if (mode == EqMode.GRAPHIC) Icons.Default.GraphicEq else Icons.Default.Tune,
+            description = if (mode == EqMode.GRAPHIC) "Mudar para paramétrico" else "Mudar para gráfico",
+            onClick = { onUpdateEq { it.copy(parametric = !it.parametric) } },
+            modifier = Modifier.testTag("eq_mode_toggle")
+          )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            PresetButton(
+              preset = activePreset,
+              device = eqSettings.device,
+              modified = eqModified,
+              onClick = onOpenPresets,
+              modifier = Modifier.weight(1f)
+            )
+            ConsoleMenu(
+              isCustom = activePreset?.isCustom == true,
+              modified = eqModified,
+              onSaveAs = onSaveAs,
+              onOverwrite = onOverwritePreset,
+              onRename = onRename,
+              onDelete = onDelete,
+              onReset = onReset,
+              onOpenAdvanced = onOpenAdvanced
             )
           }
-        }
-        Spacer(Modifier.height(10.dp))
-        Row(
-          modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-          horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-          GlassChip(label = "Salvar como…", icon = Icons.Default.SaveAs, onClick = onSaveAs, modifier = Modifier.testTag("btn_save_15b_profile"))
-          if (activePreset?.isCustom == true) {
-            if (eqModified) GlassChip(label = "Atualizar", icon = Icons.Default.Save, onClick = onOverwritePreset)
-            GlassChip(label = "Renomear", icon = Icons.Default.Edit, onClick = onRename)
-            GlassChip(label = "Excluir", icon = Icons.Default.Delete, onClick = onDelete)
+          Spacer(Modifier.height(10.dp))
+          Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            ToneKnob(
+              label = "Graves",
+              db = eqSettings.bassDb,
+              enabled = enabled,
+              testTag = "knob_bass",
+              onChange = { db -> onUpdateEq { it.copy(bassDb = db) } }
+            )
+            ToneKnob(
+              label = "Agudos",
+              db = eqSettings.trebleDb,
+              enabled = enabled,
+              testTag = "knob_treble",
+              onChange = { db -> onUpdateEq { it.copy(trebleDb = db) } }
+            )
           }
-          GlassChip(label = "Zerar", icon = Icons.Default.RestartAlt, onClick = onReset, modifier = Modifier.testTag("btn_reset_eq_zero"))
-        }
-      }
-    }
-
-    // Bands
-    item {
-      GlassPanel(modifier = Modifier.testTag("equalizer_15_bands_card")) {
-        PanelTitle("Bandas")
-        GraphicFaders(
-          settings = eqSettings,
-          enabled = enabled,
-          onBandGain = { i, db -> onUpdateBand(i) { it.copy(gainDb = db) } },
-          onPreamp = { db -> onUpdateEq { it.copy(preampDb = db) } }
-        )
-      }
-    }
-
-    // Quick tone
-    item {
-      // Two knobs, centred at 0 dB: turn up or right to boost, double-tap to reset.
-      GlassPanel {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-          ToneKnob(
-            label = "Graves",
-            db = eqSettings.bassDb,
-            enabled = enabled,
-            testTag = "knob_bass",
-            onChange = { db -> onUpdateEq { it.copy(bassDb = db) } }
-          )
-          ToneKnob(
-            label = "Agudos",
-            db = eqSettings.trebleDb,
-            enabled = enabled,
-            testTag = "knob_treble",
-            onChange = { db -> onUpdateEq { it.copy(trebleDb = db) } }
-          )
         }
       }
     }
@@ -438,72 +527,115 @@ private fun EqMainPage(
       NavRow(
         icon = Icons.Default.Tune,
         title = "Ajustes avançados",
-        subtitle = "Paramétrico, alcance (ADB e root), saída, limitador e medidores",
+        subtitle = "Alcance (ADB e root), saída, limitador, frequências de graves e agudos e medidores",
         onClick = onOpenAdvanced,
-        modifier = Modifier.testTag("eq_open_advanced")
+        modifier = Modifier.padding(horizontal = 20.dp).testTag("eq_open_advanced")
       )
     }
   }
 }
 
-/** The fone in use, or the invitation to choose one. Tapping opens the list. */
+private val STRIP_HEIGHT = 360.dp
+
+/** The small caption under the curve, like a console's status line: mode, bands and stages on. */
+private fun consoleCaption(s: EqSettings, mode: EqMode): String = buildList {
+  if (!s.enabled) add("EQ DESLIGADO")
+  else add(if (mode == EqMode.GRAPHIC) "EQ GRÁFICO" else "EQ PARAMÉTRICO")
+  add("${s.activeBands.size} ${if (s.activeBands.size == 1) "BANDA" else "BANDAS"}")
+  if (s.device != null) add("FONE")
+  if (s.limiterEnabled) add("LIMIT")
+}.joinToString(" · ")
+
+/** A square-ish console switch: lit when on, plain when off. */
 @Composable
-private fun DeviceCard(device: DeviceCorrection?, onOpen: () -> Unit, onClear: () -> Unit) {
+private fun ConsoleToggle(
+  label: String,
+  on: Boolean,
+  description: String,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+  icon: ImageVector? = null
+) {
   val colors = MaterialTheme.colorScheme
-  Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .glassControl(PanelShape, selected = false)
-      .pressClickable(pressedScale = 0.98f, onClick = onOpen)
-      .padding(horizontal = 16.dp, vertical = 14.dp)
-      .testTag("eq_device_card"),
-    verticalAlignment = Alignment.CenterVertically
+  val content = com.example.ui.theme.glassContentColor(on)
+  Box(
+    modifier = modifier
+      .size(width = 64.dp, height = 44.dp)
+      .glassControl(RoundedCornerShape(22.dp), selected = on)
+      .pressClickable(pressedScale = 0.92f, onClick = onClick)
+      .semantics { contentDescription = description },
+    contentAlignment = Alignment.Center
   ) {
-    Box(
-      modifier = Modifier.size(44.dp).clip(CircleShape).background(colors.primary.copy(alpha = if (device != null) 1f else 0.16f)),
-      contentAlignment = Alignment.Center
-    ) {
-      Icon(
-        Icons.Default.Headphones,
-        contentDescription = null,
-        tint = if (device != null) colors.onPrimary else colors.primary,
-        modifier = Modifier.size(24.dp)
-      )
-    }
-    Spacer(Modifier.width(14.dp))
+    if (icon != null) Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(22.dp))
+    else Text(label, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = content)
+  }
+}
+
+/** The preset in use (and the fone under it). Opens the preset panel. */
+@Composable
+private fun PresetButton(preset: EqPreset?, device: DeviceCorrection?, modified: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+  val colors = MaterialTheme.colorScheme
+  Column(
+    modifier = modifier
+      .heightIn(min = 48.dp)
+      .glassControl(RoundedCornerShape(24.dp))
+      .pressClickable(pressedScale = 0.97f, onClick = onClick)
+      .padding(horizontal = 16.dp, vertical = 6.dp)
+      .testTag("eq_preset_button"),
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.Center
+  ) {
     AnimatedContent(
-      targetState = device,
-      transitionSpec = { (fadeIn(tween(220, 60)) + slideInVertically { it / 3 }) togetherWith (fadeOut(tween(100)) + slideOutVertically { -it / 3 }) },
-      contentKey = { it?.name to it?.source },
-      label = "device",
-      modifier = Modifier.weight(1f)
-    ) { d ->
-      Column {
-        Text(
-          d?.name ?: "Escolher meu fone",
-          fontSize = 17.sp,
-          fontWeight = FontWeight.SemiBold,
-          color = colors.onSurface,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis
-        )
-        Text(
-          if (d != null) "Correção de ${d.source} · ${d.bands.size} filtros" else "Corrige o som do seu fone com medições de oratory1990, crinacle e outros",
-          fontSize = 13.sp,
-          lineHeight = 17.sp,
-          color = colors.onSurfaceVariant,
-          maxLines = 2
-        )
-      }
+      targetState = (preset?.name ?: "Predefinição") + if (modified) " · editada" else "",
+      transitionSpec = { (fadeIn(tween(200, 60)) + slideInVertically { it / 3 }) togetherWith (fadeOut(tween(90)) + slideOutVertically { -it / 3 }) },
+      label = "presetName"
+    ) { name ->
+      Text(name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
     if (device != null) {
-      IconButton(onClick = onClear) {
-        Icon(Icons.Default.Close, contentDescription = "Remover correção do fone", tint = colors.onSurfaceVariant)
-      }
-    } else {
-      Icon(Icons.Default.ChevronRight, contentDescription = null, tint = colors.onSurfaceVariant)
+      Text(device.name, fontSize = 12.sp, color = colors.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
   }
+}
+
+/** The ⋮ menu: everything that acts on the preset, and the way to the technical controls. */
+@Composable
+private fun ConsoleMenu(
+  isCustom: Boolean,
+  modified: Boolean,
+  onSaveAs: () -> Unit,
+  onOverwrite: () -> Unit,
+  onRename: () -> Unit,
+  onDelete: () -> Unit,
+  onReset: () -> Unit,
+  onOpenAdvanced: () -> Unit
+) {
+  var open by remember { mutableStateOf(false) }
+  Box {
+    IconButton(onClick = { open = true }, modifier = Modifier.testTag("eq_menu")) {
+      Icon(Icons.Default.MoreVert, contentDescription = "Mais opções", tint = MaterialTheme.colorScheme.onSurface)
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = RoundedCornerShape(20.dp)) {
+      val close = { open = false }
+      MenuEntry("Salvar como…", Icons.Default.SaveAs, close = close, action = onSaveAs)
+      MenuEntry("Atualizar predefinição", Icons.Default.Save, enabled = isCustom && modified, close = close, action = onOverwrite)
+      MenuEntry("Renomear", Icons.Default.Edit, enabled = isCustom, close = close, action = onRename)
+      MenuEntry("Excluir", Icons.Default.Delete, enabled = isCustom, close = close, action = onDelete)
+      MenuEntry("Restaurar padrões", Icons.Default.RestartAlt, close = close, action = onReset)
+      HorizontalDivider()
+      MenuEntry("Ajustes avançados", Icons.Default.Tune, close = close, action = onOpenAdvanced)
+    }
+  }
+}
+
+@Composable
+private fun MenuEntry(label: String, icon: ImageVector, close: () -> Unit, action: () -> Unit, enabled: Boolean = true) {
+  DropdownMenuItem(
+    text = { Text(label, fontSize = 16.sp) },
+    leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
+    enabled = enabled,
+    onClick = { close(); action() }
+  )
 }
 
 @Composable
@@ -545,8 +677,6 @@ private fun EqAdvancedPage(
   capabilities: AudioCapabilities,
   eqSettings: EqSettings,
   systemAudioStatus: SystemAudioStatus,
-  isPlaying: Boolean,
-  spectrumBars: () -> List<Float>,
   activeApps: ActiveAppsState,
   onRefreshActiveApps: () -> Unit,
   eqReach: EqReach,
@@ -554,13 +684,10 @@ private fun EqAdvancedPage(
   rootPresent: Boolean,
   onSetEqReach: (EqReach) -> Unit,
   onUpdateEq: ((EqSettings) -> EqSettings) -> Unit,
-  onUpdateBand: (Int, (EqBand) -> EqBand) -> Unit,
   onRequestSystemAudioCapture: () -> Unit,
   onBack: () -> Unit
 ) {
   val colors = MaterialTheme.colorScheme
-  var selectedBand by rememberSaveable { mutableIntStateOf(8) }
-  val bandIndex = selectedBand.coerceIn(0, (eqSettings.bands.size - 1).coerceAtLeast(0))
 
   // Keep "Apps tocando agora" fresh while this page is open.
   LaunchedEffect(Unit) {
@@ -580,33 +707,6 @@ private fun EqAdvancedPage(
     // Reach: only the app, every app with ADB, every app with root
     item { ReachPanel(reach = eqReach, status = globalEqStatus, rootPresent = rootPresent, onSetReach = onSetEqReach) }
 
-    // Parametric editor: a strip of band cards (gain fader, filter shape, Q and frequency knobs),
-    // the preamp fixed on the left, and the curve underneath showing the selected band.
-    item {
-      Column {
-        PanelTitle("Paramétrico")
-        ParametricStrip(
-          settings = eqSettings,
-          selected = bandIndex,
-          onSelect = { selectedBand = it },
-          onUpdateBand = onUpdateBand,
-          onUpdateEq = onUpdateEq
-        )
-        Spacer(Modifier.height(12.dp))
-        EqGraph(
-          settings = eqSettings,
-          selectedBand = bandIndex,
-          spectrumBars = spectrumBars,
-          isPlaying = isPlaying,
-          onSelectBand = { selectedBand = it },
-          onDragBand = { i, freq, gain ->
-            selectedBand = i
-            onUpdateBand(i) { b -> b.copy(freqHz = freq, gainDb = if (b.type.usesGain) gain else b.gainDb) }
-          },
-          modifier = Modifier.fillMaxWidth().height(140.dp)
-        )
-      }
-    }
 
     // Tone corners
     item {
@@ -672,7 +772,7 @@ private fun EqAdvancedPage(
             checked = eqSettings.limiterEnabled,
             onCheckedChange = { on -> onUpdateEq { it.copy(limiterEnabled = on) } },
             colors = SwitchDefaults.colors(checkedTrackColor = colors.primary, checkedThumbColor = colors.onPrimary),
-            modifier = Modifier.testTag("switch_limiter")
+            modifier = Modifier.testTag("switch_limiter_advanced")
           )
         }
         AnimatedVisibility(visible = eqSettings.limiterEnabled, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
@@ -782,79 +882,115 @@ private val BandColors = listOf(
 
 private fun bandColor(i: Int): Color = BandColors[i % BandColors.size]
 
+private val CARD_WIDTH = 204.dp
+private val CARD_GAP = 8.dp
+
 @Composable
 private fun ParametricStrip(
   settings: EqSettings,
   selected: Int,
+  view: StripView,
   onSelect: (Int) -> Unit,
   onUpdateBand: (Int, (EqBand) -> EqBand) -> Unit,
   onUpdateEq: ((EqSettings) -> EqSettings) -> Unit
 ) {
-  val listState = rememberLazyListState()
-  // Selecting a band on the curve brings its card into view.
+  val density = androidx.compose.ui.platform.LocalDensity.current
+  // Selecting a band on the curve brings its card to the middle of the strip.
   LaunchedEffect(selected) {
-    if (selected in settings.bands.indices) listState.animateScrollToItem(selected)
+    if (selected !in settings.paramBands.indices || view.viewport == 0) return@LaunchedEffect
+    val step = with(density) { (CARD_WIDTH + CARD_GAP).toPx() }
+    val card = with(density) { CARD_WIDTH.toPx() }
+    val target = (selected * step - (view.viewport - card) / 2f).roundToInt().coerceIn(0, view.scroll.maxValue)
+    if (abs(target - view.scroll.value) > 4) view.scroll.animateScrollTo(target, spring(dampingRatio = 0.86f, stiffness = 300f))
   }
-  Row(modifier = Modifier.fillMaxWidth().height(440.dp)) {
-    // Preamp, fixed while the bands scroll
-    Column(
-      modifier = Modifier.width(64.dp).fillMaxHeight().glassControl(RoundedCornerShape(32.dp)).padding(vertical = 14.dp),
-      horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-      EqRailFader(
-        value = settings.preampDb / EqSettings.PREAMP_RANGE_DB,
-        onChange = { v -> onUpdateEq { it.copy(preampDb = snap(v * EqSettings.PREAMP_RANGE_DB)) } },
-        enabled = settings.enabled,
-        description = "Pré-amplificação",
-        modifier = Modifier.weight(1f).fillMaxWidth().testTag("fader_preamp_strip")
-      )
-      Spacer(Modifier.height(8.dp))
-      Text("Pré", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-      Text(formatDb(settings.preampDb), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
+  Row(modifier = Modifier.fillMaxSize()) {
+    PreampColumn(settings, onUpdateEq)
     Spacer(Modifier.width(8.dp))
-    LazyRow(
-      state = listState,
-      horizontalArrangement = Arrangement.spacedBy(8.dp),
-      modifier = Modifier.weight(1f).fillMaxHeight()
+    Row(
+      modifier = Modifier
+        .weight(1f)
+        .fillMaxHeight()
+        .onSizeChanged { view.viewport = it.width }
+        .edgeFade(view.scroll)
+        .horizontalScroll(view.scroll),
+      horizontalArrangement = Arrangement.spacedBy(CARD_GAP)
     ) {
-      itemsIndexed(settings.bands) { i, band ->
-        BandCard(
-          index = i,
-          band = band,
-          selected = i == selected,
-          color = bandColor(i),
-          eqEnabled = settings.enabled,
-          onSelect = { onSelect(i) },
-          onChange = { t -> onSelect(i); onUpdateBand(i, t) },
-          onDelete = {
-            onUpdateEq { s -> s.copy(bands = s.bands.filterIndexed { j, _ -> j != i }) }
-            onSelect((i - 1).coerceAtLeast(0))
-          }
-        )
-      }
-      item {
-        Column(
-          modifier = Modifier.fillMaxHeight().padding(horizontal = 4.dp),
-          verticalArrangement = Arrangement.Center,
-          horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-          GlassChip(
-            label = "Adicionar banda",
-            icon = Icons.Default.Add,
-            onClick = {
-              onUpdateEq { s -> s.copy(bands = s.bands + EqBand(freqHz = 1000f, q = 1.4f)) }
-              onSelect(settings.bands.size)
-            },
-            modifier = Modifier.testTag("eq_add_band")
+      settings.paramBands.forEachIndexed { i, band ->
+        key(i) {
+          BandCard(
+            index = i,
+            band = band,
+            selected = i == selected,
+            color = bandColor(i),
+            eqEnabled = settings.enabled,
+            onSelect = { onSelect(i) },
+            onChange = { t -> onSelect(i); onUpdateBand(i, t) },
+            onDelete = {
+              onUpdateEq { s -> s.copy(paramBands = s.paramBands.filterIndexed { j, _ -> j != i }) }
+              onSelect((i - 1).coerceAtLeast(0))
+            }
           )
         }
+      }
+      Column(
+        modifier = Modifier.fillMaxHeight().padding(horizontal = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally
+      ) {
+        GlassChip(
+          label = "Adicionar banda",
+          icon = Icons.Default.Add,
+          onClick = {
+            onUpdateEq { s -> s.copy(paramBands = s.paramBands + EqBand(freqHz = 1000f, q = 1.4f)) }
+            onSelect(settings.paramBands.size)
+          },
+          modifier = Modifier.testTag("eq_add_band")
+        )
       }
     }
   }
 }
 
-/** A band as a coloured card: gain fader on the left, filter shape, Q knob and frequency knob. */
+/** The preamp, fixed at the left of the strip while the bands scroll. */
+@Composable
+private fun PreampColumn(settings: EqSettings, onUpdateEq: ((EqSettings) -> EqSettings) -> Unit) {
+  Column(
+    modifier = Modifier.width(60.dp).fillMaxHeight().glassControl(RoundedCornerShape(30.dp)).padding(vertical = 14.dp),
+    horizontalAlignment = Alignment.CenterHorizontally
+  ) {
+    EqRailFader(
+      value = settings.preampDb / EqSettings.PREAMP_RANGE_DB,
+      onChange = { v -> onUpdateEq { it.copy(preampDb = snap(v * EqSettings.PREAMP_RANGE_DB)) } },
+      enabled = settings.enabled,
+      description = "Pré-amplificação",
+      modifier = Modifier.weight(1f).fillMaxWidth().testTag("fader_preamp_strip")
+    )
+    Spacer(Modifier.height(8.dp))
+    Text("Pré", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+    Text(formatDb(settings.preampDb), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+  }
+}
+
+/** Fades the strip's edges where more bands wait off screen. */
+private fun Modifier.edgeFade(scroll: ScrollState): Modifier = this
+  .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+  .drawWithContent {
+    drawContent()
+    val fade = 24.dp.toPx()
+    val startA = if (scroll.canScrollBackward) 0f else 1f
+    val endA = if (scroll.canScrollForward) 0f else 1f
+    drawRect(
+      brush = Brush.horizontalGradient(
+        0f to Color.Black.copy(alpha = startA),
+        (fade / size.width) to Color.Black,
+        (1f - fade / size.width) to Color.Black,
+        1f to Color.Black.copy(alpha = endA)
+      ),
+      blendMode = BlendMode.DstIn
+    )
+  }
+
+/** A band as a coloured card: gain fader on the left; filter shape, Q knob and frequency knob on the right. */
 @Composable
 private fun BandCard(
   index: Int,
@@ -879,13 +1015,13 @@ private fun BandCard(
 
   Column(
     modifier = Modifier
-      .width(212.dp)
+      .width(CARD_WIDTH)
       .fillMaxHeight()
       .graphicsLayer { scaleX = lift; scaleY = lift }
       .clip(RoundedCornerShape(32.dp))
       .background(fill)
       .pointerInput(Unit) { detectTapGestures { onSelect() } }
-      .padding(12.dp)
+      .padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 12.dp)
       .testTag("band_card_$index")
   ) {
     // Band number and its switches
@@ -905,7 +1041,7 @@ private fun BandCard(
     }
     Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
       // Gain
-      Column(modifier = Modifier.width(64.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
+      Column(modifier = Modifier.width(60.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
         EqRailFader(
           value = band.gainDb / EqBand.MAX_GAIN,
           onChange = { v -> onChange { it.copy(gainDb = snap(v * EqBand.MAX_GAIN)) } },
@@ -930,17 +1066,17 @@ private fun BandCard(
             .pressClickable(pressedScale = 0.92f) {
               onChange { b -> b.copy(type = FilterType.entries[(b.type.ordinal + 1) % FilterType.entries.size]) }
             }
+            .semantics { contentDescription = "Filtro ${band.type.label}. Toque para trocar." }
             .padding(horizontal = 16.dp, vertical = 9.dp)
             .testTag("band_type_$index"),
           contentAlignment = Alignment.Center
         ) {
           AnimatedContent(targetState = band.type, label = "filterShape") { t -> FilterShapeIcon(t, color = onCard) }
         }
-        Text(band.type.label, fontSize = 11.sp, color = onCard.copy(alpha = 0.8f), maxLines = 1)
         EqKnob(
           value = qToKnob(band.q),
           onChange = { v -> onChange { it.copy(q = knobToQ(v)) } },
-          size = 84.dp,
+          size = 78.dp,
           accent = accent,
           defaultValue = qToKnob(EqBand.DEFAULT_Q),
           enabled = live,
@@ -950,7 +1086,7 @@ private fun BandCard(
         EqKnob(
           value = freqToX(band.freqHz),
           onChange = { v -> onChange { it.copy(freqHz = xToFreq(v)) } },
-          size = 84.dp,
+          size = 78.dp,
           accent = accent,
           defaultValue = freqToX(1000f),
           enabled = live,
@@ -996,126 +1132,233 @@ private fun ValuePill(name: String, value: String) {
 private fun qToKnob(q: Float): Float = (log10(q.coerceIn(EqBand.MIN_Q, EqBand.MAX_Q) / EqBand.MIN_Q) / log10(EqBand.MAX_Q / EqBand.MIN_Q))
 private fun knobToQ(v: Float): Float = EqBand.MIN_Q * (EqBand.MAX_Q / EqBand.MIN_Q).pow(v.coerceIn(0f, 1f))
 
-// ---------------- fone list (AutoEq) ----------------
+// ---------------- preset panel: styles, own presets and fones in one list ----------------
 
+private enum class PresetFilter(val label: String) { ALL("Todas"), MINE("Minhas"), BUILT_IN("Embutidas"), FONES("Fones (AutoEq)") }
+
+/**
+ * One searchable list of everything that shapes the sound: the user's presets, the built-in ones
+ * (each with a thumbnail of its curve) and the 8,850 measured fones of AutoEq. A preset replaces
+ * the user's curve; a fone is a correction layer underneath it, so it stays when presets change.
+ */
 @Composable
-private fun DevicePickerPage(
-  state: DeviceSearchState,
-  current: DeviceCorrection?,
-  onSearch: (String, String?) -> Unit,
-  onRetry: () -> Unit,
-  onPick: (AutoEqEntry) -> Unit,
-  onBack: () -> Unit
+private fun PresetPanel(
+  presets: List<EqPreset>,
+  activePresetId: String,
+  device: DeviceCorrection?,
+  deviceSearch: DeviceSearchState,
+  onSearchDevices: (String, String?) -> Unit,
+  onRetryDevices: () -> Unit,
+  onPickPreset: (EqPreset) -> Unit,
+  onPickDevice: (AutoEqEntry) -> Unit,
+  onClearDevice: () -> Unit,
+  onClose: () -> Unit,
+  modifier: Modifier = Modifier
 ) {
   val colors = MaterialTheme.colorScheme
-  LazyColumn(
-    modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
-    contentPadding = PaddingValues(bottom = 32.dp + LocalBarInset.current),
-    verticalArrangement = Arrangement.spacedBy(4.dp)
+  var filter by rememberSaveable { mutableStateOf(PresetFilter.ALL) }
+  val query = deviceSearch.query
+  val words = query.trim().lowercase()
+  val mine = presets.filter { it.isCustom && (words.isEmpty() || words in it.name.lowercase()) }
+  val builtIn = presets.filter { !it.isCustom && (words.isEmpty() || words in it.name.lowercase()) }
+  val showMine = filter == PresetFilter.ALL || filter == PresetFilter.MINE
+  val showBuiltIn = filter == PresetFilter.ALL || filter == PresetFilter.BUILT_IN
+  val showFones = filter == PresetFilter.ALL || filter == PresetFilter.FONES
+  // With no search, "Todas" lists only a taste of the fones; the Fones filter lists them all.
+  val fones = if (filter == PresetFilter.ALL && words.isEmpty()) deviceSearch.results.take(12) else deviceSearch.results
+
+  Column(
+    modifier = modifier
+      .fillMaxWidth()
+      .clip(RoundedCornerShape(28.dp))
+      .background(colors.surface)
+      .pointerInput(Unit) { detectTapGestures { } } // taps inside don't close the panel
+      .padding(top = 12.dp)
+      .testTag("eq_preset_panel")
   ) {
-    item { SubPageHeader("Meu fone", onBack) }
-    item {
+    // Search
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp)) {
       TextField(
-        value = state.query,
-        onValueChange = { onSearch(it, state.source) },
-        placeholder = { Text("Modelo do fone, ex.: HD 650, Galaxy Buds", fontSize = 16.sp) },
+        value = query,
+        onValueChange = { onSearchDevices(it, deviceSearch.source) },
+        placeholder = { Text("Pesquisar estilo ou fone", fontSize = 16.sp) },
         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp)) },
         trailingIcon = {
-          if (state.query.isNotEmpty()) {
-            IconButton(onClick = { onSearch("", state.source) }) { Icon(Icons.Default.Close, contentDescription = "Limpar", modifier = Modifier.size(18.dp)) }
+          if (query.isNotEmpty()) {
+            IconButton(onClick = { onSearchDevices("", deviceSearch.source) }) { Icon(Icons.Default.Close, contentDescription = "Limpar", modifier = Modifier.size(18.dp)) }
           }
         },
         singleLine = true,
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(26.dp),
         colors = TextFieldDefaults.colors(
           unfocusedContainerColor = Color.Transparent,
           focusedContainerColor = Color.Transparent,
           unfocusedIndicatorColor = Color.Transparent,
           focusedIndicatorColor = Color.Transparent
         ),
-        modifier = Modifier.fillMaxWidth().glassControl(RoundedCornerShape(28.dp)).testTag("device_search_input")
+        modifier = Modifier.weight(1f).glassControl(RoundedCornerShape(26.dp)).testTag("device_search_input")
       )
+      IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Fechar", tint = colors.onSurface) }
     }
-    if (state.sources.isNotEmpty()) {
-      item {
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 8.dp)) {
-          item { GlassChip(label = "Todas as medições", selected = state.source == null, onClick = { onSearch(state.query, null) }) }
-          items(state.sources.take(10)) { s ->
-            GlassChip(label = s, selected = state.source == s, onClick = { onSearch(state.query, s) })
-          }
+
+    // Filters
+    LazyRow(
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+      items(PresetFilter.entries) { f ->
+        GlassChip(label = f.label, selected = filter == f, onClick = { filter = f }, modifier = Modifier.testTag("preset_filter_${f.name}"))
+      }
+    }
+    AnimatedVisibility(visible = filter == PresetFilter.FONES && deviceSearch.sources.isNotEmpty(), enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+      LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 10.dp)) {
+        item { GlassChip(label = "Todas as medições", selected = deviceSearch.source == null, onClick = { onSearchDevices(query, null) }) }
+        items(deviceSearch.sources.take(10)) { s ->
+          GlassChip(label = s, selected = deviceSearch.source == s, onClick = { onSearchDevices(query, s) })
         }
       }
     }
-    item {
-      AnimatedContent(
-        targetState = when {
-          state.loading -> "loading"
-          state.error != null && state.total == 0 -> "error"
-          else -> "count"
-        },
-        label = "deviceStatus"
-      ) { status ->
-        when (status) {
-          "loading" -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 12.dp)) {
-            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-            Spacer(Modifier.width(10.dp))
-            Text("Baixando a lista de fones…", fontSize = 15.sp, color = colors.onSurfaceVariant)
+
+    // The fone in use, removable here
+    if (device != null) {
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = 12.dp)
+          .clip(RoundedCornerShape(18.dp))
+          .background(colors.primary.copy(alpha = 0.14f))
+          .padding(start = 14.dp, top = 6.dp, bottom = 6.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Icon(Icons.Default.Headphones, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+          Text(device.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          Text("Correção de ${device.source} · ${device.bands.size} filtros", fontSize = 12.sp, color = colors.onSurfaceVariant, maxLines = 1)
+        }
+        TextButton(onClick = onClearDevice) { Text("Remover") }
+      }
+      Spacer(Modifier.height(4.dp))
+    }
+
+    LazyColumn(
+      modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp),
+      contentPadding = PaddingValues(start = 8.dp, end = 8.dp, bottom = 12.dp)
+    ) {
+      if (showMine && mine.isNotEmpty()) {
+        item(key = "h_mine") { PanelSection("Minhas") }
+        items(mine, key = { "p_" + it.id }) { p ->
+          PresetRow(p.name, "Minha predefinição", p.settings, selected = p.id == activePresetId, onClick = { onPickPreset(p) }, modifier = Modifier.animateItem())
+        }
+      }
+      if (showBuiltIn && builtIn.isNotEmpty()) {
+        item(key = "h_builtin") { PanelSection("Embutidas") }
+        items(builtIn, key = { "p_" + it.id }) { p ->
+          PresetRow(p.name, "Embutida", p.settings, selected = p.id == activePresetId, onClick = { onPickPreset(p) }, modifier = Modifier.animateItem())
+        }
+      }
+      if (showFones) {
+        item(key = "h_fones") {
+          Column {
+            PanelSection("Fones · AutoEq")
+            when {
+              deviceSearch.loading -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(10.dp))
+                Text("Baixando a lista de fones…", fontSize = 14.sp, color = colors.onSurfaceVariant)
+              }
+              deviceSearch.error != null && deviceSearch.total == 0 -> Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+                Text(deviceSearch.error, fontSize = 14.sp, color = colors.error)
+                Spacer(Modifier.height(8.dp))
+                GlassChip(label = "Tentar de novo", onClick = onRetryDevices)
+              }
+              else -> {
+                if (deviceSearch.error != null) Text(deviceSearch.error, fontSize = 13.sp, color = colors.error, modifier = Modifier.padding(horizontal = 12.dp))
+                Text(
+                  if (words.isEmpty()) "${deviceSearch.total} fones medidos. Pesquise o modelo do seu." else "${deviceSearch.results.size} fone(s)",
+                  fontSize = 13.sp,
+                  color = colors.onSurfaceVariant,
+                  modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                )
+              }
+            }
           }
-          "error" -> Column(modifier = Modifier.padding(vertical = 8.dp)) {
-            Text(state.error ?: "", fontSize = 15.sp, color = colors.error)
-            Spacer(Modifier.height(8.dp))
-            GlassChip(label = "Tentar de novo", onClick = onRetry)
-          }
-          else -> Text(
-            if (state.query.isBlank()) "${state.total} fones medidos. Digite o modelo do seu."
-            else "${state.results.size} resultado(s)",
-            fontSize = 13.sp,
+        }
+        items(fones, key = { "d_" + it.path }) { entry ->
+          val selected = device != null && device.name == entry.name && device.source == entry.source
+          FoneRow(entry, selected, applying = deviceSearch.applyingPath == entry.path, onClick = { onPickDevice(entry) }, modifier = Modifier.animateItem())
+        }
+        item(key = "credit") {
+          Text(
+            "Curvas do projeto AutoEq (Jaakko Pasanen, licença MIT), a partir de medições de oratory1990, crinacle, Rtings e outros. " +
+              "Precisa de internet só para baixar.",
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
             color = colors.onSurfaceVariant,
-            modifier = Modifier.padding(vertical = 6.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
           )
         }
       }
-    }
-    if (state.error != null && state.total > 0) {
-      item { Text(state.error, fontSize = 13.sp, color = colors.error) }
-    }
-    items(state.results, key = { it.path }) { entry ->
-      val selected = current != null && current.name == entry.name && current.source == entry.source
-      DeviceRow(
-        entry = entry,
-        selected = selected,
-        applying = state.applyingPath == entry.path,
-        onClick = { onPick(entry) },
-        modifier = Modifier.animateItem()
-      )
-    }
-    item {
-      Text(
-        "Curvas do projeto AutoEq (Jaakko Pasanen, licença MIT), calculadas a partir de medições de oratory1990, " +
-          "crinacle, Rtings e outros, rumo ao alvo Harman. Precisa de internet só para baixar.",
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-        color = colors.onSurfaceVariant,
-        modifier = Modifier.padding(top = 16.dp)
-      )
     }
   }
 }
 
 @Composable
-private fun DeviceRow(entry: AutoEqEntry, selected: Boolean, applying: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun PanelSection(title: String) {
+  Text(
+    title,
+    fontSize = 13.sp,
+    fontWeight = FontWeight.Bold,
+    color = MaterialTheme.colorScheme.onSurfaceVariant,
+    modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 4.dp)
+  )
+}
+
+/** A preset with a thumbnail of the curve it makes. */
+@Composable
+private fun PresetRow(name: String, subtitle: String, settings: EqSettings, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
   val colors = MaterialTheme.colorScheme
   Row(
     modifier = modifier
       .fillMaxWidth()
       .clip(RoundedCornerShape(16.dp))
+      .background(if (selected) colors.primary.copy(alpha = 0.10f) else Color.Transparent)
       .pressClickable(pressedScale = 0.98f, onClick = onClick)
-      .padding(vertical = 10.dp, horizontal = 4.dp),
+      .padding(horizontal = 10.dp, vertical = 8.dp),
     verticalAlignment = Alignment.CenterVertically
   ) {
+    CurveThumb(settings, modifier = Modifier.size(width = 72.dp, height = 34.dp))
+    Spacer(Modifier.width(14.dp))
     Column(modifier = Modifier.weight(1f)) {
-      Text(entry.name, fontSize = 17.sp, color = if (selected) colors.primary else colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-      Text("${entry.source} · ${entry.form}", fontSize = 13.sp, color = colors.onSurfaceVariant, maxLines = 1)
+      Text(name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = if (selected) colors.primary else colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      Text(subtitle, fontSize = 12.sp, color = colors.onSurfaceVariant, maxLines = 1)
+    }
+    if (selected) Icon(Icons.Default.Check, contentDescription = "Em uso", tint = colors.primary)
+  }
+}
+
+@Composable
+private fun FoneRow(entry: AutoEqEntry, selected: Boolean, applying: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+  val colors = MaterialTheme.colorScheme
+  Row(
+    modifier = modifier
+      .fillMaxWidth()
+      .clip(RoundedCornerShape(16.dp))
+      .background(if (selected) colors.primary.copy(alpha = 0.10f) else Color.Transparent)
+      .pressClickable(pressedScale = 0.98f, onClick = onClick)
+      .padding(horizontal = 10.dp, vertical = 8.dp),
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    Box(
+      modifier = Modifier.size(width = 72.dp, height = 34.dp).clip(RoundedCornerShape(10.dp)).background(colors.onSurface.copy(alpha = 0.06f)),
+      contentAlignment = Alignment.Center
+    ) {
+      Icon(Icons.Default.Headphones, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
+    }
+    Spacer(Modifier.width(14.dp))
+    Column(modifier = Modifier.weight(1f)) {
+      Text(entry.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = if (selected) colors.primary else colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      Text("${entry.source} · ${entry.form}", fontSize = 12.sp, color = colors.onSurfaceVariant, maxLines = 1)
     }
     Box(modifier = Modifier.size(28.dp), contentAlignment = Alignment.Center) {
       when {
@@ -1125,6 +1368,35 @@ private fun DeviceRow(entry: AutoEqEntry, selected: Boolean, applying: Boolean, 
     }
   }
 }
+
+/** A tiny drawing of a preset's curve, coloured from bass (warm) to treble (cool). */
+@Composable
+private fun CurveThumb(settings: EqSettings, modifier: Modifier = Modifier) {
+  val colors = MaterialTheme.colorScheme
+  val points = remember(settings) {
+    val user = settings.copy(enabled = true, device = null)
+    FloatArray(THUMB_POINTS) { i -> EqDsp.responseDb(user, xToFreq(i / (THUMB_POINTS - 1f)).toDouble()).toFloat() }
+  }
+  val bg = colors.onSurface.copy(alpha = 0.06f)
+  val zero = colors.onSurface.copy(alpha = 0.18f)
+  val brush = Brush.horizontalGradient(listOf(Color(0xFFFFB45C), colors.primary, Color(0xFF8C7CFF)))
+  Canvas(modifier = modifier.clip(RoundedCornerShape(10.dp)).background(bg)) {
+    val w = size.width
+    val h = size.height
+    val mid = h / 2f
+    val range = 12f
+    drawLine(zero, Offset(0f, mid), Offset(w, mid), 1f)
+    val path = Path()
+    points.forEachIndexed { i, db ->
+      val x = i / (THUMB_POINTS - 1f) * w
+      val y = mid - (db.coerceIn(-range, range) / range) * (mid - 3.dp.toPx())
+      if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+    }
+    drawPath(path, brush, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
+  }
+}
+
+private const val THUMB_POINTS = 48
 
 // ---------------- building blocks ----------------
 
@@ -1200,48 +1472,33 @@ private fun LogSlider(
   )
 }
 
-/** The graphic mode: one vertical fader per band (gain only), plus the preamp. */
+/** The graphic mode: one tall fader per band (gain only), with the preamp fixed on the left. */
 @Composable
 private fun GraphicFaders(
   settings: EqSettings,
   enabled: Boolean,
+  view: StripView,
   onBandGain: (Int, Float) -> Unit,
   onPreamp: (Float) -> Unit
 ) {
-  Row(modifier = Modifier.fillMaxWidth()) {
-    // Preamp stays in place while the bands scroll
-    Box(modifier = Modifier.padding(end = 4.dp)) {
-      EqFader(
-        value = settings.preampDb / EqSettings.PREAMP_RANGE_DB,
-        enabled = enabled,
-        name = "Pré",
-        readout = formatDb(settings.preampDb),
-        widthDp = 52,
-        onChange = { v -> onPreamp(snap(v * EqSettings.PREAMP_RANGE_DB)) }
-      )
-    }
-    val scrollState = rememberScrollState()
-    // The bands scroll sideways; the edges fade out where more bands wait.
+  Row(modifier = Modifier.fillMaxSize()) {
+    EqFader(
+      value = settings.preampDb / EqSettings.PREAMP_RANGE_DB,
+      enabled = enabled,
+      name = "Pré",
+      readout = formatDb(settings.preampDb),
+      widthDp = 52,
+      modifier = Modifier.fillMaxHeight().glassControl(RoundedCornerShape(26.dp)).testTag("fader_preamp"),
+      onChange = { v -> onPreamp(snap(v * EqSettings.PREAMP_RANGE_DB)) }
+    )
+    Spacer(Modifier.width(6.dp))
     Row(
       modifier = Modifier
         .weight(1f)
-        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-        .drawWithContent {
-          drawContent()
-          val fade = 28.dp.toPx()
-          val startA = if (scrollState.canScrollBackward) 0f else 1f
-          val endA = if (scrollState.canScrollForward) 0f else 1f
-          drawRect(
-            brush = Brush.horizontalGradient(
-              0f to Color.Black.copy(alpha = startA),
-              (fade / size.width) to Color.Black,
-              (1f - fade / size.width) to Color.Black,
-              1f to Color.Black.copy(alpha = endA)
-            ),
-            blendMode = BlendMode.DstIn
-          )
-        }
-        .horizontalScroll(scrollState),
+        .fillMaxHeight()
+        .onSizeChanged { view.viewport = it.width }
+        .edgeFade(view.scroll)
+        .horizontalScroll(view.scroll),
       horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
       settings.bands.forEachIndexed { i, band ->
@@ -1250,8 +1507,8 @@ private fun GraphicFaders(
           enabled = enabled && band.type.usesGain,
           name = formatHz(band.freqHz),
           readout = if (band.type.usesGain) formatDb(band.gainDb) else band.type.label.take(5),
-          widthDp = 44,
-          modifier = Modifier.testTag("vertical_fader_band_$i"),
+          widthDp = 42,
+          modifier = Modifier.fillMaxHeight().testTag("vertical_fader_band_$i"),
           onChange = { v -> onBandGain(i, snap(v * EqBand.MAX_GAIN)) }
         )
       }
@@ -1260,8 +1517,9 @@ private fun GraphicFaders(
 }
 
 /**
- * A tall fader: a thin rail, a bar from the 0 dB line to the handle, a rounded handle, and the name
- * and dB readout underneath. [value] runs from -1 (bottom) to +1 (top). Colours follow the theme.
+ * A tall fader like a mixing desk's: a rail with printed ticks, a lit bar from the bottom up to the
+ * handle, and the name and dB readout underneath. While a finger holds it, the rail lights up and the
+ * readout grows, so the value can be read past the thumb. [value] runs from -1 (bottom) to +1 (top).
  */
 @Composable
 private fun EqFader(
@@ -1275,72 +1533,86 @@ private fun EqFader(
 ) {
   val colors = MaterialTheme.colorScheme
   var heightPx by remember { mutableStateOf(1f) }
-  val boost = colors.primary
-  val cut = colors.secondary
-  val accent = if (value >= 0f) boost else cut
+  var held by remember { mutableStateOf(false) }
+  val glow by animateFloatAsState(if (held) 1f else 0f, spring(dampingRatio = 0.8f, stiffness = 600f), label = "faderHeld")
+  val accent = colors.primary
   val rail = colors.onSurface.copy(alpha = 0.18f)
-  val thumb = colors.surface
-  val thumbEdge = colors.onSurface.copy(alpha = 0.25f)
+  val tick = colors.onSurface.copy(alpha = 0.28f)
+  val thumb = colors.surfaceVariant
+  val thumbEdge = colors.onSurface.copy(alpha = 0.3f)
   val ink = colors.onSurface
+  val thumbH = 48.dp
 
-  Column(modifier = modifier.width(widthDp.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+  Column(modifier = modifier.width(widthDp.dp).padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
     Box(
       modifier = Modifier
         .width(widthDp.dp)
-        .height(190.dp)
+        .weight(1f)
         .onSizeChanged { heightPx = it.height.toFloat() }
         .semantics { contentDescription = "$name $readout dB" }
         .pointerInput(enabled) {
           if (!enabled) return@pointerInput
-          detectTapGestures { offset -> onChange((1f - 2f * (offset.y / heightPx)).coerceIn(-1f, 1f)) }
+          val handle = thumbH.toPx()
+          fun toValue(y: Float) = (1f - 2f * ((y - handle / 2f) / (heightPx - handle))).coerceIn(-1f, 1f)
+          detectTapGestures(
+            onPress = {
+              held = true
+              tryAwaitRelease()
+              held = false
+            },
+            onTap = { offset -> onChange(toValue(offset.y)) }
+          )
         }
         .pointerInput(enabled) {
           if (!enabled) return@pointerInput
-          detectVerticalDragGestures { change, _ ->
+          val handle = thumbH.toPx()
+          fun toValue(y: Float) = (1f - 2f * ((y - handle / 2f) / (heightPx - handle))).coerceIn(-1f, 1f)
+          detectVerticalDragGestures(
+            onDragStart = { held = true },
+            onDragEnd = { held = false },
+            onDragCancel = { held = false }
+          ) { change, _ ->
             change.consume()
-            onChange((1f - 2f * (change.position.y / heightPx)).coerceIn(-1f, 1f))
+            onChange(toValue(change.position.y))
           }
         }
     ) {
       Canvas(modifier = Modifier.fillMaxSize()) {
         val cx = size.width / 2f
-        val thumbH = 24.dp.toPx()
-        val thumbW = (size.width - 8.dp.toPx()).coerceAtMost(36.dp.toPx())
-        val travelTop = thumbH / 2f
-        val travelBottom = size.height - thumbH / 2f
-        val centerY = (travelTop + travelBottom) / 2f
-        val handleY = travelBottom - (value.coerceIn(-1f, 1f) + 1f) / 2f * (travelBottom - travelTop)
+        val handleH = thumbH.toPx()
+        val handleW = (size.width - 12.dp.toPx()).coerceAtMost(28.dp.toPx())
+        val top = handleH / 2f
+        val bottom = size.height - handleH / 2f
+        val mid = (top + bottom) / 2f
+        val y = bottom - (value.coerceIn(-1f, 1f) + 1f) / 2f * (bottom - top)
 
-        drawLine(rail, Offset(cx, travelTop), Offset(cx, travelBottom), strokeWidth = 3f, cap = StrokeCap.Round)
-        drawLine(rail, Offset(cx - 8.dp.toPx(), centerY), Offset(cx + 8.dp.toPx(), centerY), strokeWidth = 2f)
-        if (enabled && abs(handleY - centerY) > 1f) {
-          drawLine(
-            accent,
-            Offset(cx, minOf(handleY, centerY)),
-            Offset(cx, maxOf(handleY, centerY)),
-            strokeWidth = 5f,
-            cap = StrokeCap.Round
-          )
+        // Printed scale: ends and 0 dB
+        listOf(top, mid, bottom).forEach { ty ->
+          val len = if (ty == mid) 9.dp.toPx() else 6.dp.toPx()
+          drawLine(tick, Offset(cx - 5.dp.toPx() - len, ty), Offset(cx - 5.dp.toPx(), ty), 1.5f)
+          drawLine(tick, Offset(cx + 5.dp.toPx(), ty), Offset(cx + 5.dp.toPx() + len, ty), 1.5f)
         }
-        val left = cx - thumbW / 2f
+        drawLine(rail.copy(alpha = 0.18f + 0.5f * glow), Offset(cx, top), Offset(cx, bottom), strokeWidth = 2.5.dp.toPx(), cap = StrokeCap.Round)
+        if (enabled) {
+          val lit = if (glow > 0f) androidx.compose.ui.graphics.lerp(accent, Color.White, glow * 0.6f) else accent
+          drawLine(lit.copy(alpha = 0.28f), Offset(cx, bottom), Offset(cx, y), strokeWidth = 8.dp.toPx(), cap = StrokeCap.Round)
+          drawLine(lit, Offset(cx, bottom), Offset(cx, y), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
+        }
+        val left = cx - handleW / 2f
+        val corner = CornerRadius(handleW / 2f)
+        drawRoundRect(if (enabled) thumb else thumb.copy(alpha = 0.5f), Offset(left, y - handleH / 2f), Size(handleW, handleH), corner)
         drawRoundRect(
-          color = if (enabled) thumb else thumb.copy(alpha = 0.5f),
-          topLeft = Offset(left, handleY - thumbH / 2f),
-          size = Size(thumbW, thumbH),
-          cornerRadius = CornerRadius(12.dp.toPx())
-        )
-        drawRoundRect(
-          color = thumbEdge,
-          topLeft = Offset(left, handleY - thumbH / 2f),
-          size = Size(thumbW, thumbH),
-          cornerRadius = CornerRadius(12.dp.toPx()),
-          style = Stroke(width = 1.5f)
+          thumbEdge.copy(alpha = 0.3f + 0.6f * glow),
+          Offset(left, y - handleH / 2f),
+          Size(handleW, handleH),
+          corner,
+          style = Stroke((1.5f + 1.5f * glow).dp.toPx())
         )
         drawLine(
-          ink.copy(alpha = if (enabled) 0.8f else 0.3f),
-          Offset(cx - 8.dp.toPx(), handleY),
-          Offset(cx + 8.dp.toPx(), handleY),
-          strokeWidth = 2.5f,
+          ink.copy(alpha = if (enabled) 0.9f else 0.3f),
+          Offset(cx - handleW * 0.28f, y),
+          Offset(cx + handleW * 0.28f, y),
+          strokeWidth = 3.dp.toPx(),
           cap = StrokeCap.Round
         )
       }
@@ -1349,8 +1621,9 @@ private fun EqFader(
     Text(name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ink, maxLines = 1, textAlign = TextAlign.Center)
     Text(
       readout,
-      fontSize = 11.sp,
-      color = if (value == 0f) colors.onSurfaceVariant else accent,
+      fontSize = (11f + 4f * glow).sp,
+      fontWeight = if (held) FontWeight.Bold else FontWeight.Normal,
+      color = if (value == 0f && !held) colors.onSurfaceVariant else accent,
       maxLines = 1,
       textAlign = TextAlign.Center
     )
@@ -1360,7 +1633,7 @@ private fun EqFader(
 /**
  * The real frequency response of the whole chain (bands, tone shelves and preamp), computed from the
  * same filter maths the audio uses, over 20 Hz to 20 kHz on a log scale. The live spectrum sits
- * behind it. Each band is a node: tap to select it, drag to move its frequency and gain.
+ * behind it. Each band shows as a dot, for reading only.
  */
 @Composable
 private fun EqGraph(
@@ -1368,11 +1641,12 @@ private fun EqGraph(
   selectedBand: Int,
   spectrumBars: () -> List<Float>,
   isPlaying: Boolean,
-  onSelectBand: (Int) -> Unit,
-  onDragBand: (Int, Float, Float) -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  window: StripView? = null,
+  compact: Boolean = false
 ) {
   val colors = MaterialTheme.colorScheme
+  val scope = androidx.compose.runtime.rememberCoroutineScope()
   val target = remember(settings) {
     FloatArray(CURVE_POINTS) { i ->
       val f = xToFreq(i / (CURVE_POINTS - 1f))
@@ -1407,46 +1681,21 @@ private fun EqGraph(
       morph.animateTo(1f, spring(dampingRatio = 0.72f, stiffness = 240f))
     }
   }
-  val current by rememberUpdatedState(settings)
   val accent = colors.primary
   val grid = colors.onSurface.copy(alpha = 0.10f)
   val zero = colors.onSurface.copy(alpha = 0.30f)
   val label = colors.onSurfaceVariant
   val nodeFill = colors.surface
   val dim = if (settings.enabled) 1f else 0.35f
+  val windowFill = colors.onSurface.copy(alpha = 0.10f)
+  val windowEdge = colors.onSurface.copy(alpha = 0.45f)
 
   Box(
     modifier = modifier
       .clip(RoundedCornerShape(16.dp))
       .background(colors.onSurface.copy(alpha = 0.04f))
-      .pointerInput(Unit) {
-        // Only a touch that starts on a node belongs to the graph; any other touch is left to the
-        // page, so the screen still scrolls when the finger passes over the graph.
-        awaitEachGesture {
-          val down = awaitFirstDown(requireUnconsumed = false)
-          val w = size.width.toFloat()
-          val h = size.height.toFloat()
-          val band = nearestBand(current, down.position, w, h) ?: return@awaitEachGesture
-          fun moveTo(p: Offset) {
-            val freq = xToFreq((p.x / w).coerceIn(0f, 1f))
-            val gain = yToDb(p.y, h).coerceIn(EqBand.MIN_GAIN, EqBand.MAX_GAIN)
-            onDragBand(band, freq, snap(gain))
-          }
-          down.consume()
-          val start = awaitTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
-          if (start == null) {
-            // Lifted without moving: a tap selects the band.
-            onSelectBand(band)
-            return@awaitEachGesture
-          }
-          moveTo(start.position)
-          drag(start.id) { change ->
-            change.consume()
-            moveTo(change.position)
-          }
-        }
-      }
-      .semantics { contentDescription = "Curva do equalizador. Arraste um ponto para mudar frequência e ganho." }
+      .then(if (window != null) Modifier.overviewGestures(window, scope) else Modifier)
+      .semantics { contentDescription = "Curva do equalizador. Arraste para o lado para rolar as bandas." }
   ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
       val w = size.width
@@ -1509,7 +1758,7 @@ private fun EqGraph(
       drawPath(path, accent.copy(alpha = dim), style = Stroke(width = 3f, cap = StrokeCap.Round))
 
       // Band nodes
-      settings.bands.forEachIndexed { i, band ->
+      settings.activeBands.forEachIndexed { i, band ->
         val pos = nodePosition(settings, i, w, h)
         val isSel = i == selectedBand
         val r = if (isSel) 9.dp.toPx() else 6.dp.toPx()
@@ -1517,6 +1766,23 @@ private fun EqGraph(
         if (isSel) drawCircle(accent.copy(alpha = 0.22f), radius = r * 1.9f, center = pos)
         drawCircle(nodeFill, radius = r, center = pos)
         drawCircle(c.copy(alpha = dim), radius = r, center = pos, style = Stroke(width = 2.5f))
+      }
+
+      // The strip's window: the part of the bands in view, bright, with the rest dimmed
+      window?.let { v ->
+        val total = v.total
+        if (total > 0 && v.scroll.maxValue > 0) {
+          val left = v.scroll.value.toFloat() / total * w
+          val ww = v.viewport.toFloat() / total * w
+          val shade = Color.Black.copy(alpha = 0.32f)
+          drawRect(shade, Offset.Zero, Size(left, h))
+          drawRect(shade, Offset(left + ww, 0f), Size(w - left - ww, h))
+          val corner = CornerRadius(12.dp.toPx())
+          drawRoundRect(windowFill, Offset(left, 0f), Size(ww, h), corner)
+          drawRoundRect(windowEdge, Offset(left, 0f), Size(ww, h), corner, style = Stroke(1.5.dp.toPx()))
+          // Grip, like the dot a thumb lands on
+          drawCircle(windowEdge, radius = 5.dp.toPx(), center = Offset(left + ww - 14.dp.toPx(), h - 14.dp.toPx()))
+        }
       }
     }
 
@@ -1527,12 +1793,49 @@ private fun EqGraph(
     ) {
       listOf("20", "100", "1k", "10k", "20k").forEach { Text(it, fontSize = 10.sp, color = label) }
     }
-    Text(
-      "+12 dB",
-      fontSize = 10.sp,
-      color = label,
-      modifier = Modifier.align(Alignment.TopStart).padding(start = 6.dp, top = 2.dp)
-    )
+    if (!compact) {
+      Text(
+        "+12 dB",
+        fontSize = 10.sp,
+        color = label,
+        modifier = Modifier.align(Alignment.TopStart).padding(start = 6.dp, top = 2.dp)
+      )
+    }
+  }
+}
+
+/**
+ * Gestures of the overview graph: drag sideways to slide the strip's window (and with it the strip),
+ * tap to jump the window there. The band nodes only show the curve; they never take a touch.
+ * Vertical drags are left alone, so the page still scrolls over the graph.
+ */
+private fun Modifier.overviewGestures(
+  view: StripView,
+  scope: kotlinx.coroutines.CoroutineScope
+): Modifier = pointerInput(view) {
+  awaitEachGesture {
+    val down = awaitFirstDown(requireUnconsumed = false)
+    val w = size.width.toFloat()
+    val h = size.height.toFloat()
+    fun stripPerPx() = view.total / w
+    val slop = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
+      change.consume()
+      view.scroll.dispatchRawDelta(over * stripPerPx())
+    }
+    if (slop == null) {
+      val up = currentEvent.changes.firstOrNull { it.id == down.id }
+      if (up != null && !up.pressed && !up.isConsumed) {
+        val ww = view.viewport.toFloat()
+        val target = (down.position.x * stripPerPx() - ww / 2f).roundToInt().coerceIn(0, view.scroll.maxValue)
+        scope.launch { view.scroll.animateScrollTo(target, spring(dampingRatio = 0.86f, stiffness = 320f)) }
+      }
+      return@awaitEachGesture
+    }
+    horizontalDrag(slop.id) { change ->
+      val dx = change.positionChange().x
+      change.consume()
+      view.scroll.dispatchRawDelta(dx * stripPerPx())
+    }
   }
 }
 
@@ -1557,24 +1860,10 @@ private fun yToDb(y: Float, h: Float): Float {
 
 /** Where band [i] is drawn: at its gain for peaks and shelves, on the curve for passes. */
 private fun nodePosition(s: EqSettings, i: Int, w: Float, h: Float): Offset {
-  val b = s.bands[i]
+  val b = s.activeBands[i]
   val x = freqToX(b.freqHz) * w
   val db = if (b.type.usesGain) b.gainDb else EqDsp.responseDb(s, b.freqHz.toDouble()).toFloat()
   return Offset(x, dbToY(db.coerceIn(-GRAPH_DB_RANGE, GRAPH_DB_RANGE), h))
-}
-
-private fun nearestBand(s: EqSettings, pos: Offset, w: Float, h: Float): Int? {
-  var best: Int? = null
-  var bestD = Float.MAX_VALUE
-  s.bands.indices.forEach { i ->
-    val d = (nodePosition(s, i, w, h) - pos).getDistance()
-    if (d < bestD) {
-      bestD = d
-      best = i
-    }
-  }
-  // Only pick a node near the finger (about a thumb's width).
-  return if (bestD < 90f) best else null
 }
 
 /** Rounds to 0.5 dB and snaps near zero, so returning a control to flat is easy. */

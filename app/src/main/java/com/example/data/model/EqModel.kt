@@ -73,12 +73,30 @@ data class EqSettings(
   /** Android's hardware virtualizer, 0..1000. Only works where the device offers it. */
   val virtualizerStrength: Int = 0,
   /** Correction for the fone in use, applied before everything else. Null = none chosen. */
-  val device: DeviceCorrection? = null
+  val device: DeviceCorrection? = null,
+  /** True when the parametric bands are the ones heard, false for the graphic faders. */
+  val parametric: Boolean = false,
+  /** The parametric equalizer's own bands, kept apart from the graphic ones. Starts with one. */
+  val paramBands: List<EqBand> = DEFAULT_PARAM_BANDS
 ) {
-  /** The user's own curve, without the fone correction: what presets store and compare. */
-  val userCurve: EqSettings get() = copy(enabled = true, device = null)
+  /** The bands that shape the sound right now: graphic or parametric. */
+  val activeBands: List<EqBand> get() = if (parametric) paramBands else bands
+
+  /** Replaces the bands of the mode in use. */
+  fun withActiveBands(list: List<EqBand>): EqSettings = if (parametric) copy(paramBands = list) else copy(bands = list)
+
+  /**
+   * The user's own curve, without the fone correction: what presets store and compare. The set of
+   * bands not in use is left at its default, so it never makes a preset look edited.
+   */
+  val userCurve: EqSettings
+    get() = copy(enabled = true, device = null).let {
+      if (parametric) it.copy(bands = DEFAULT_BANDS) else it.copy(paramBands = DEFAULT_PARAM_BANDS)
+    }
 
   companion object {
+    val DEFAULT_PARAM_BANDS: List<EqBand> = listOf(EqBand(freqHz = 1000f, q = 1.4f))
+
     val DEFAULT_FREQUENCIES = listOf(
       25f, 40f, 63f, 100f, 160f, 250f, 400f, 630f,
       1000f, 1600f, 2500f, 4000f, 6300f, 10000f, 16000f
@@ -191,6 +209,8 @@ object EqPresets {
     .put("ceiling", s.limiterCeilingDb.toDouble())
     .put("virt", s.virtualizerStrength)
     .apply { s.device?.let { put("device", deviceToJson(it)) } }
+    .put("parametric", s.parametric)
+    .put("paramBands", JSONArray().apply { s.paramBands.forEach { put(bandToJson(it)) } })
 
   fun deviceToJson(d: DeviceCorrection): JSONObject = JSONObject()
     .put("name", d.name)
@@ -217,7 +237,13 @@ object EqPresets {
     val bands = if (bandsJson != null && bandsJson.length() > 0) {
       (0 until bandsJson.length()).map { bandFromJson(bandsJson.getJSONObject(it)) }
     } else d.bands
+    val paramJson = o.optJSONArray("paramBands")
+    val paramBands = if (paramJson != null && paramJson.length() > 0) {
+      (0 until paramJson.length()).map { bandFromJson(paramJson.getJSONObject(it)) }
+    } else EqSettings.DEFAULT_PARAM_BANDS
     return EqSettings(
+      parametric = o.optBoolean("parametric", false),
+      paramBands = paramBands,
       enabled = o.optBoolean("enabled", true),
       bands = bands,
       preampDb = o.optDouble("preamp", 0.0).toFloat().coerceIn(-EqSettings.PREAMP_RANGE_DB, EqSettings.PREAMP_RANGE_DB),

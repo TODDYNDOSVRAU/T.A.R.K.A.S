@@ -137,9 +137,9 @@ class EqDsp {
     fun activeFilters(s: EqSettings, sampleRate: Int): List<BiquadCoefficients> {
       val rate = sampleRate.toDouble()
       val device = s.device?.bands.orEmpty()
-      val out = ArrayList<BiquadCoefficients>(device.size + s.bands.size + 2)
+      val out = ArrayList<BiquadCoefficients>(device.size + s.activeBands.size + 2)
       // The fone correction first, then the user's own curve on top of it.
-      (device + s.bands).forEach { b ->
+      (device + s.activeBands).forEach { b ->
         if (!b.enabled) return@forEach
         if (b.type.usesGain && abs(b.gainDb) < 0.05f) return@forEach
         out += BiquadCoefficients.design(b.type, b.freqHz.toDouble(), b.gainDb.toDouble(), b.q.toDouble(), rate)

@@ -566,9 +566,11 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
 
   fun setEqEnabled(enabled: Boolean) = updateEq { it.copy(enabled = enabled) }
 
+  /** Edits a band of the mode in use (graphic or parametric). */
   fun updateEqBand(index: Int, transform: (EqBand) -> EqBand) = updateEq { s ->
-    if (index !in s.bands.indices) s
-    else s.copy(bands = s.bands.toMutableList().also { it[index] = transform(it[index]) })
+    val bands = s.activeBands
+    if (index !in bands.indices) s
+    else s.withActiveBands(bands.toMutableList().also { it[index] = transform(it[index]) })
   }
 
   /** Loads a preset. The on/off switch stays as it is. */
@@ -576,11 +578,20 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     val current = audioEngineManager.eqSettings.value
     _activePresetId.value = preset.id
     preferencesRepository.saveActiveProfileId(preset.id)
-    // The fone correction is its own stage: changing the preset keeps it.
-    updateEq { preset.settings.copy(enabled = current.enabled, device = current.device) }
+    // The fone correction is its own stage: changing the preset keeps it. A graphic preset leaves
+    // the parametric bands as they were, so switching back finds them.
+    updateEq {
+      val p = preset.settings
+      p.copy(enabled = current.enabled, device = current.device, paramBands = if (p.parametric) p.paramBands else current.paramBands)
+    }
   }
 
-  fun resetEq() = selectEqPreset(EqPresets.FLAT)
+  /** Back to flat in the mode in use: graphic faders at zero, or the parametric back to one band. */
+  fun resetEq() {
+    val wasParametric = audioEngineManager.eqSettings.value.parametric
+    selectEqPreset(EqPresets.FLAT)
+    if (wasParametric) updateEq { it.copy(parametric = true, paramBands = EqSettings.DEFAULT_PARAM_BANDS) }
+  }
 
   fun saveEqPresetAs(name: String) {
     val preset = EqPreset(

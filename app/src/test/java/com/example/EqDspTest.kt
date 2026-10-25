@@ -68,6 +68,17 @@ class EqDspTest {
     assertEquals(3.0, EqDsp.responseDb(boosted, 1000.0), 0.2)
   }
 
+  @Test
+  fun onlyTheBandsOfTheModeInUseAreHeard() {
+    val graphicBoost = EqSettings.withGains(List(15) { if (it == 8) 6f else 0f }).bands // 1 kHz
+    val paramCut = listOf(EqBand(freqHz = 1000f, gainDb = -6f, q = 1f))
+    val graphic = EqSettings(bands = graphicBoost, paramBands = paramCut)
+    assertTrue(EqDsp.responseDb(graphic, 1000.0) > 3.0)
+    val param = graphic.copy(parametric = true)
+    assertEquals(-6.0, EqDsp.responseDb(param, 1000.0), 0.2)
+    assertEquals(1, EqDsp.activeFilters(param, 48000).size)
+  }
+
   private fun sine(freq: Double, amp: Float, frames: Int, channels: Int = 2): FloatArray {
     val buf = FloatArray(frames * channels)
     for (i in 0 until frames) {
