@@ -13,6 +13,7 @@ import android.os.PowerManager
 import androidx.core.content.ContextCompat
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.BassBoost
+import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.Equalizer
 import android.media.audiofx.Virtualizer
 import android.media.audiofx.Visualizer
@@ -45,6 +46,7 @@ class AudioEngineManager(private val context: Context) {
   private var equalizer: Equalizer? = null
   private var bassBoost: BassBoost? = null
   private var virtualizer: Virtualizer? = null
+  private var loudness: LoudnessEnhancer? = null
   private var visualizer: Visualizer? = null
   private var isRealFftActive = false
 
@@ -65,6 +67,10 @@ class AudioEngineManager(private val context: Context) {
 
   private val _isEffectEnabled = MutableStateFlow(true)
   val isEffectEnabled: StateFlow<Boolean> = _isEffectEnabled.asStateFlow()
+
+  // Preamp in dB: above 0 uses the loudness enhancer, below 0 lowers the player volume.
+  private val _preampDb = MutableStateFlow(0f)
+  val preampDb: StateFlow<Float> = _preampDb.asStateFlow()
 
   private val _capabilities = MutableStateFlow(detectCapabilities(0))
   val capabilities: StateFlow<AudioCapabilities> = _capabilities.asStateFlow()
@@ -166,13 +172,16 @@ class AudioEngineManager(private val context: Context) {
           if (mp.isPlaying) mp.pause()
           _isPlaying.value = false
         }
-        AudioFocusPolicy.Action.DUCK -> mp.setVolume(DUCK_VOLUME, DUCK_VOLUME)
+        AudioFocusPolicy.Action.DUCK -> {
+          val v = preampVolume() * DUCK_VOLUME
+          mp.setVolume(v, v)
+        }
         AudioFocusPolicy.Action.RESUME -> {
-          mp.setVolume(1f, 1f)
+          applyPreampVolume()
           mp.start()
           _isPlaying.value = true
         }
-        AudioFocusPolicy.Action.UNDUCK -> mp.setVolume(1f, 1f)
+        AudioFocusPolicy.Action.UNDUCK -> applyPreampVolume()
         AudioFocusPolicy.Action.NONE -> Unit
       }
     } catch (e: Exception) {
@@ -229,6 +238,7 @@ class AudioEngineManager(private val context: Context) {
           _isPlaying.value = true
           _durationMs.value = mp.duration.toLong().coerceAtLeast(1L)
           attachAudioEffects(mp.audioSessionId)
+          applyPreampVolume()
           startProgressTracking(onCompletion)
           updateCapabilities()
         }
@@ -265,7 +275,7 @@ class AudioEngineManager(private val context: Context) {
         if (mp.isPlaying) {
           pauseByUser()
         } else if (requestFocus()) {
-          mp.setVolume(1f, 1f)
+          applyPreampVolume()
           mp.start()
           registerNoisyReceiver()
           _isPlaying.value = true
@@ -369,6 +379,15 @@ class AudioEngineManager(private val context: Context) {
     }
 
     try {
+      loudness = LoudnessEnhancer(audioSessionId).apply {
+        enabled = _isEffectEnabled.value
+      }
+    } catch (e: Exception) {
+      Log.w(TAG, "LoudnessEnhancer not supported on this session", e)
+      loudness = null
+    }
+
+    try {
       val viz = Visualizer(audioSessionId).apply {
         val range = Visualizer.getCaptureSizeRange()
         captureSize = range.getOrNull(1)?.coerceAtMost(1024) ?: 512
@@ -457,10 +476,14 @@ class AudioEngineManager(private val context: Context) {
     try {
       virtualizer?.release()
     } catch (_: Exception) {}
+    try {
+      loudness?.release()
+    } catch (_: Exception) {}
     visualizer = null
     equalizer = null
     bassBoost = null
     virtualizer = null
+    loudness = null
     isRealFftActive = false
   }
 
@@ -469,6 +492,35 @@ class AudioEngineManager(private val context: Context) {
     equalizer?.enabled = enabled
     bassBoost?.enabled = enabled
     virtualizer?.enabled = enabled
+    loudness?.enabled = enabled
+    applyPreampVolume()
+  }
+
+  /** Sets the preamp, from -12 dB to +12 dB. */
+  fun setPreampDb(db: Float) {
+    _preampDb.value = db.coerceIn(-12f, 12f)
+    applyPreampVolume()
+  }
+
+  /** Linear player volume for the preamp: only cuts here; boosts go through the loudness enhancer. */
+  private fun preampVolume(): Float {
+    val db = if (_isEffectEnabled.value) _preampDb.value else 0f
+    return if (db < 0f) Math.pow(10.0, db / 20.0).toFloat() else 1f
+  }
+
+  private fun applyPreampVolume() {
+    val db = if (_isEffectEnabled.value) _preampDb.value else 0f
+    try {
+      loudness?.setTargetGain((db.coerceAtLeast(0f) * 100f).toInt())
+    } catch (e: Exception) {
+      Log.w(TAG, "Could not set the loudness gain", e)
+    }
+    try {
+      val v = preampVolume()
+      mediaPlayer?.setVolume(v, v)
+    } catch (e: Exception) {
+      Log.w(TAG, "Could not set the player volume", e)
+    }
   }
 
   fun applyProfile(profile: AudioProfile) {
@@ -477,13 +529,15 @@ class AudioEngineManager(private val context: Context) {
     equalizer?.let { eq ->
       try {
         val numBands = eq.numberOfBands.toInt()
-        val minLevel = eq.bandLevelRange?.getOrNull(0) ?: -1500
-        val maxLevel = eq.bandLevelRange?.getOrNull(1) ?: 1500
+        val minLevel = eq.bandLevelRange?.getOrNull(0)?.toInt() ?: -1500
+        val maxLevel = eq.bandLevelRange?.getOrNull(1)?.toInt() ?: 1500
 
+        // The device has few bands (usually 5): sample the 15-band curve at each one's centre
+        // frequency instead of copying the first few bands onto the wrong frequencies.
+        val centers = (0 until numBands).map { eq.getCenterFreq(it.toShort()) }
+        val levels = EqBandMapper.toHardware(profile.bandLevelsMb, centers, minLevel, maxLevel)
         for (i in 0 until numBands) {
-          val targetMb = profile.bandLevelsMb.getOrElse(i) { 0.toShort() }
-          val clamped = targetMb.coerceIn(minLevel, maxLevel)
-          eq.setBandLevel(i.toShort(), clamped)
+          eq.setBandLevel(i.toShort(), levels[i])
         }
       } catch (e: Exception) {
         Log.e(TAG, "Error applying band levels to equalizer", e)

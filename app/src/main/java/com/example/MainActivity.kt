@@ -176,6 +176,8 @@ fun TarkasAppContent(
   val systemAudioStatus by viewModel.systemAudioStatus.collectAsState()
   val isSearchingAudius by viewModel.isSearchingAudius.collectAsState()
   val spectrumBars by viewModel.audioEngineManager.spectrumBars.collectAsState()
+  val preampDb by viewModel.audioEngineManager.preampDb.collectAsState()
+  val activeApps by viewModel.activeApps.collectAsState()
   val allCuriosities = viewModel.curiosityRepository.getAllCuriosities()
   val favoriteIds by viewModel.favorites.collectAsState()
   val playlists by viewModel.playlists.collectAsState()
@@ -439,6 +441,10 @@ fun TarkasAppContent(
             systemAudioStatus = systemAudioStatus,
             isPlaying = isPlaying,
             spectrumBars = spectrumBars,
+            preampDb = preampDb,
+            onPreampChange = { db -> viewModel.setPreampDb(db) },
+            activeApps = activeApps,
+            onRefreshActiveApps = { viewModel.refreshActiveApps() },
             onSelectProfile = { profile -> viewModel.selectProfile(profile) },
             onSaveCustomProfile = { name -> viewModel.saveCustomProfile(name) },
             onUpdateBandLevel = { band, level ->

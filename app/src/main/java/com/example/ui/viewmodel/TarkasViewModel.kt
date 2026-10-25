@@ -25,6 +25,8 @@ import com.example.data.notification.NotificationActionReceiver
 import com.example.data.repository.CuriosityRepository
 import com.example.data.repository.MusicRepository
 import com.example.data.repository.PreferencesRepository
+import com.example.data.systemaudio.ActiveAppsReader
+import com.example.data.systemaudio.ActiveAppsState
 import com.example.data.systemaudio.SystemAudioCaptureManager
 import com.example.data.systemaudio.SystemAudioStatus
 import kotlinx.coroutines.Dispatchers
@@ -464,6 +466,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
 
   fun resetAllBandsToZero() {
     selectProfile(AudioProfile.FLAT)
+    audioEngineManager.setPreampDb(0f)
   }
 
   fun saveCustomProfile(name: String) {
@@ -524,6 +527,19 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   /** Shows an honest "unavailable" state; never fakes a detected track. */
   fun markSystemCaptureUnavailable(reason: String) {
     systemAudioCaptureManager.markUnavailable(reason)
+  }
+
+  // Apps playing now, read from `dumpsys audio` (needs the DUMP permission granted over adb)
+  private val activeAppsReader = ActiveAppsReader(context)
+  private val _activeApps = MutableStateFlow<ActiveAppsState>(ActiveAppsState.PermissionMissing)
+  val activeApps: StateFlow<ActiveAppsState> = _activeApps.asStateFlow()
+
+  fun refreshActiveApps() {
+    viewModelScope.launch { _activeApps.value = activeAppsReader.read() }
+  }
+
+  fun setPreampDb(db: Float) {
+    audioEngineManager.setPreampDb(db)
   }
 
   private fun addTimer(timer: LocalTimer) {

@@ -3,6 +3,8 @@ package com.example.ui.screens
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
@@ -15,38 +17,38 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,22 +58,40 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.AudioCapabilities
 import com.example.data.model.AudioProfile
+import com.example.data.systemaudio.ActiveAppsState
 import com.example.data.systemaudio.SystemAudioStatus
-import com.example.ui.theme.SpaceGrotesk
-import kotlinx.coroutines.launch
+import com.example.ui.components.TarkasSectionTitle
+import kotlinx.coroutines.delay
+import kotlin.math.atan2
+import kotlin.math.roundToInt
+
+// Colours of the equalizer deck: always a dark panel, like a hardware unit, in both themes.
+private val DeckPanel = Color(0xFF0A0D10)
+private val DeckButton = Color(0xFF1A1F24)
+private val DeckThumb = Color(0xFF242A30)
+private val DeckGuide = Color(0xFF3A434B)
+private val DeckText = Color(0xFFE9EBED)
+private val DeckMuted = Color(0xFF8B949C)
+private val DeckBoost = Color(0xFF7EE3EA)
+private val DeckCut = Color(0xFF2F9FB0)
+
+private const val BAND_RANGE_MB = 1500f
+private const val PREAMP_RANGE_DB = 12f
 
 @Composable
 fun AudioScreen(
@@ -82,6 +102,10 @@ fun AudioScreen(
   systemAudioStatus: SystemAudioStatus,
   isPlaying: Boolean = false,
   spectrumBars: List<Float> = emptyList(),
+  preampDb: Float = 0f,
+  onPreampChange: (Float) -> Unit = {},
+  activeApps: ActiveAppsState = ActiveAppsState.PermissionMissing,
+  onRefreshActiveApps: () -> Unit = {},
   onSelectProfile: (AudioProfile) -> Unit,
   onSaveCustomProfile: (String) -> Unit,
   onUpdateBandLevel: (Int, Short) -> Unit,
@@ -94,22 +118,27 @@ fun AudioScreen(
 ) {
   var showSaveProfileDialog by remember { mutableStateOf(false) }
   var newProfileName by remember { mutableStateOf("") }
+  var showPresetMenu by remember { mutableStateOf(false) }
 
   val colors = MaterialTheme.colorScheme
-  val boostColor = colors.primary
-  val cutColor = colors.secondary
-  val zeroColor = colors.onSurfaceVariant.copy(alpha = 0.55f)
-  val gridColor = colors.outline.copy(alpha = 0.45f)
+
+  // Keep "Apps tocando agora" fresh while this screen is open.
+  LaunchedEffect(Unit) {
+    while (true) {
+      onRefreshActiveApps()
+      delay(2500)
+    }
+  }
 
   LazyColumn(
     modifier = modifier
       .fillMaxSize()
       .padding(horizontal = 20.dp),
     contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp),
-    verticalArrangement = Arrangement.spacedBy(28.dp)
+    verticalArrangement = Arrangement.spacedBy(20.dp)
   ) {
 
-    // 1. Header: output route + master DSP switch
+    // 1. Output route, master switch and what this device supports
     item {
       Column {
         Row(
@@ -120,14 +149,13 @@ fun AudioScreen(
           Column(modifier = Modifier.weight(1f)) {
             Text(
               text = "Equalizador",
-              fontFamily = SpaceGrotesk,
               fontWeight = FontWeight.Bold,
               fontSize = 22.sp,
               color = colors.onBackground
             )
             Text(
               text = "${capabilities.activeRouteName} • ${String.format("%.1f", capabilities.sampleRateHz / 1000f)} kHz",
-              fontSize = 12.sp,
+              fontSize = 15.sp,
               color = colors.onSurfaceVariant
             )
           }
@@ -150,278 +178,195 @@ fun AudioScreen(
       }
     }
 
-    // 2. Spectrum and EQ response curve
+    // 2. The deck: preamp + 15 band faders, spectrum strip, buttons and knobs
     item {
-      Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = colors.surfaceVariant,
+      Column(
         modifier = Modifier
           .fillMaxWidth()
-          .testTag("audio_spectrum_graph_card")
+          .clip(RoundedCornerShape(16.dp))
+          .background(DeckPanel)
+          .padding(vertical = 14.dp)
+          .testTag("equalizer_15_bands_card")
       ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Text(
-              text = "Resposta em frequência",
-              fontWeight = FontWeight.SemiBold,
-              fontSize = 14.sp,
-              color = colors.onSurface
-            )
-            val flat = activeProfile.bandLevelsMb.all { it == 0.toShort() }
-            Text(
-              text = if (flat) "Linear (0 dB)" else "Curva modificada",
-              fontSize = 12.sp,
-              fontWeight = FontWeight.SemiBold,
-              color = if (flat) colors.onSurfaceVariant else colors.primary
+        Row(modifier = Modifier.fillMaxWidth()) {
+          // Preamp stays in place while the bands scroll
+          Box(modifier = Modifier.padding(start = 10.dp, end = 4.dp)) {
+            DeckFader(
+              value = (preampDb / PREAMP_RANGE_DB).coerceIn(-1f, 1f),
+              enabled = isEffectEnabled,
+              name = "Preamp",
+              readout = formatDb(preampDb),
+              widthDp = 56,
+              modifier = Modifier.testTag("fader_preamp"),
+              onChange = { v -> onPreampChange(v * PREAMP_RANGE_DB) }
             )
           }
 
-          Spacer(modifier = Modifier.height(12.dp))
+          val scrollState = rememberScrollState()
+          Row(
+            modifier = Modifier
+              .weight(1f)
+              .horizontalScroll(scrollState)
+              .padding(end = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+          ) {
+            AudioProfile.BAND_FREQUENCIES.forEachIndexed { index, freqLabel ->
+              val levelMb = activeProfile.bandLevelsMb.getOrElse(index) { 0.toShort() }
+              DeckFader(
+                value = (levelMb / BAND_RANGE_MB).coerceIn(-1f, 1f),
+                enabled = isEffectEnabled,
+                name = freqLabel.replace(" Hz", "").replace(" kHz", "k").replace(" ", ""),
+                readout = formatDb(levelMb / 100f),
+                widthDp = 46,
+                modifier = Modifier.testTag("vertical_fader_band_$index"),
+                onChange = { v -> onUpdateBandLevel(index, (v * BAND_RANGE_MB).roundToInt().toShort()) }
+              )
+            }
+          }
+        }
 
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Spectrum strip with the response curve on top
+        Box(
+          modifier = Modifier
+            .padding(horizontal = 10.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color(0xFF12161A))
+            .testTag("audio_spectrum_graph_card")
+        ) {
           SpectrumResponseCanvasWithVisualizer(
             bandLevelsMb = activeProfile.bandLevelsMb,
             spectrumBars = spectrumBars,
             isPlaying = isPlaying,
-            curveColor = boostColor,
-            cutColor = cutColor,
-            zeroColor = zeroColor,
-            gridColor = gridColor,
-            nodeBackground = colors.surfaceVariant,
+            curveColor = DeckBoost,
+            cutColor = DeckCut,
+            zeroColor = DeckMuted.copy(alpha = 0.6f),
+            gridColor = DeckGuide.copy(alpha = 0.6f),
+            nodeBackground = Color(0xFF12161A),
             modifier = Modifier
               .fillMaxWidth()
-              .height(150.dp)
+              .height(96.dp)
           )
-
-          Spacer(modifier = Modifier.height(6.dp))
-
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-          ) {
-            listOf("25 Hz", "250 Hz", "1 kHz", "4 kHz", "16 kHz").forEach {
-              Text(it, fontSize = 10.sp, color = colors.onSurfaceVariant)
-            }
-          }
-          if (!isPlaying) {
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-              text = "O espectro aparece quando uma faixa estiver tocando.",
-              fontSize = 11.sp,
-              color = colors.onSurfaceVariant
-            )
-          }
         }
-      }
-    }
 
-    // 3. Profiles
-    item {
-      Column {
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // EQ on/off, preset picker, save, reset
         Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
           verticalAlignment = Alignment.CenterVertically
         ) {
-          Text(
-            text = "Perfis",
-            fontFamily = SpaceGrotesk,
-            fontWeight = FontWeight.Bold,
-            fontSize = 22.sp,
-            color = colors.onBackground
+          DeckPill(
+            text = "EQ",
+            highlighted = isEffectEnabled,
+            onClick = { onToggleEffectsEnabled(!isEffectEnabled) },
+            modifier = Modifier.testTag("btn_eq_toggle")
           )
-          TextButton(
-            onClick = onResetAllBandsToZero,
-            modifier = Modifier.testTag("btn_reset_eq_zero")
-          ) {
-            Icon(imageVector = Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(4.dp))
-            Text("Zerar (0 dB)", fontSize = 13.sp)
-          }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          items(allProfiles) { profile ->
-            val isSelected = activeProfile.id == profile.id
-            FilterChip(
-              selected = isSelected,
-              onClick = { onSelectProfile(profile) },
-              label = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                  if (profile.isCustom) {
-                    Icon(
-                      imageVector = Icons.Default.Bookmark,
-                      contentDescription = null,
-                      modifier = Modifier.size(12.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                  }
-                  Text(
-                    profile.name,
-                    fontSize = 13.sp,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                  )
-                }
-              },
-              border = FilterChipDefaults.filterChipBorder(
-                enabled = true,
-                selected = isSelected,
-                borderColor = Color.Transparent,
-                selectedBorderColor = Color.Transparent
-              ),
-              colors = FilterChipDefaults.filterChipColors(
-                containerColor = colors.surfaceVariant,
-                labelColor = colors.onSurface,
-                selectedContainerColor = colors.primary,
-                selectedLabelColor = colors.onPrimary
-              ),
-              modifier = Modifier.heightIn(min = 40.dp).testTag("profile_chip_${profile.id}")
-            )
-          }
-        }
-
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-          text = activeProfile.description,
-          fontSize = 12.sp,
-          color = colors.onSurfaceVariant,
-          lineHeight = 16.sp
-        )
-      }
-    }
-
-    // 4. 15 vertical band faders (horizontal drag scrolls, vertical drag adjusts the nearest band)
-    item {
-      Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = colors.surface,
-        modifier = Modifier
-          .fillMaxWidth()
-          .testTag("equalizer_15_bands_card")
-      ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Text(
-              text = "15 bandas • 25 Hz a 16 kHz",
-              fontWeight = FontWeight.SemiBold,
-              fontSize = 14.sp,
-              color = colors.onSurface
-            )
-            TextButton(
-              onClick = {
-                newProfileName = "Meu Perfil 15B"
-                showSaveProfileDialog = true
-              },
-              modifier = Modifier.testTag("btn_save_15b_profile")
-            ) {
-              Icon(imageVector = Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
-              Spacer(modifier = Modifier.width(4.dp))
-              Text("Salvar", fontSize = 13.sp)
-            }
-          }
-
-          Spacer(modifier = Modifier.height(8.dp))
-
-          // Only a drag that starts on a fader changes that band. Everywhere else the page scrolls
-          // vertically and the deck scrolls horizontally.
-          val scrollState = rememberScrollState()
-
-          Box(modifier = Modifier.fillMaxWidth()) {
-            Row(
+          Box(modifier = Modifier.weight(1f)) {
+            DeckPill(
+              text = activeProfile.name,
+              icon = Icons.Default.Headphones,
+              onClick = { showPresetMenu = true },
               modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(scrollState)
-                .padding(vertical = 4.dp),
-              horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-              AudioProfile.BAND_FREQUENCIES.forEachIndexed { index, freqLabel ->
-                val levelMb = activeProfile.bandLevelsMb.getOrElse(index) { 0.toShort() }
-                VerticalBandFader(
-                  bandIndex = index,
-                  frequencyLabel = freqLabel,
-                  gainMb = levelMb,
-                  gainDb = levelMb.toFloat() / 100f,
-                  enabled = isEffectEnabled,
-                  boostColor = boostColor,
-                  cutColor = cutColor,
-                  zeroColor = zeroColor,
-                  trackColor = colors.surfaceVariant,
-                  borderColor = colors.outline,
-                  labelColor = colors.onSurfaceVariant,
-                  onLevelChange = { newLevel -> onUpdateBandLevel(index, newLevel) }
+                .testTag("btn_preset_picker")
+            )
+            DropdownMenu(expanded = showPresetMenu, onDismissRequest = { showPresetMenu = false }) {
+              allProfiles.forEach { profile ->
+                DropdownMenuItem(
+                  text = {
+                    Text(
+                      profile.name,
+                      color = if (profile.id == activeProfile.id) colors.primary else colors.onSurface
+                    )
+                  },
+                  leadingIcon = if (profile.isCustom) {
+                    { Icon(Icons.Default.Bookmark, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                  } else null,
+                  onClick = {
+                    onSelectProfile(profile)
+                    showPresetMenu = false
+                  },
+                  modifier = Modifier.testTag("profile_chip_${profile.id}")
                 )
               }
             }
           }
+          DeckPill(
+            text = "Salvar",
+            icon = Icons.Default.Save,
+            onClick = {
+              newProfileName = "Meu Perfil"
+              showSaveProfileDialog = true
+            },
+            modifier = Modifier.testTag("btn_save_15b_profile")
+          )
+          DeckPill(
+            text = "Zerar",
+            icon = Icons.Default.RestartAlt,
+            onClick = onResetAllBandsToZero,
+            modifier = Modifier.testTag("btn_reset_eq_zero")
+          )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Bass Boost and Virtualizer knobs
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+          horizontalArrangement = Arrangement.SpaceEvenly,
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          DeckKnob(
+            label = "Graves",
+            fraction = activeProfile.bassBoostStrength / 1000f,
+            enabled = isEffectEnabled && capabilities.isBassBoostAvailable,
+            accent = DeckBoost,
+            testTag = "knob_bass",
+            onChange = { f -> onUpdateBassBoost((f * 1000f).roundToInt().toShort()) }
+          )
+          DeckKnob(
+            label = "Palco",
+            fraction = activeProfile.virtualizerStrength / 1000f,
+            enabled = isEffectEnabled && capabilities.isVirtualizerAvailable,
+            accent = DeckCut,
+            testTag = "knob_virtualizer",
+            onChange = { f -> onUpdateVirtualizer((f * 1000f).roundToInt().toShort()) }
+          )
         }
       }
     }
 
-    // 5. Dynamics (Bass Boost & Virtualizer)
+    item {
+      Text(
+        text = activeProfile.description,
+        fontSize = 15.sp,
+        color = colors.onSurfaceVariant,
+        lineHeight = 20.sp
+      )
+    }
+
+    // 3. Apps playing now (read from dumpsys audio with the DUMP permission)
     item {
       Column {
-        Text(
-          text = "Dinâmica",
-          fontFamily = SpaceGrotesk,
-          fontWeight = FontWeight.Bold,
-          fontSize = 22.sp,
-          color = colors.onBackground
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Surface(shape = RoundedCornerShape(12.dp), color = colors.surface, modifier = Modifier.fillMaxWidth()) {
-          Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            val bassPct = (activeProfile.bassBoostStrength.toFloat() / 10f).toInt()
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-              Text("Bass Boost", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.onSurface)
-              Text("$bassPct%", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = colors.primary)
-            }
-            Slider(
-              value = activeProfile.bassBoostStrength.toFloat(),
-              onValueChange = { onUpdateBassBoost(it.toInt().toShort()) },
-              valueRange = 0f..1000f,
-              enabled = isEffectEnabled && capabilities.isBassBoostAvailable,
-              colors = SliderDefaults.colors(thumbColor = colors.primary, activeTrackColor = colors.primary)
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            val virtPct = (activeProfile.virtualizerStrength.toFloat() / 10f).toInt()
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-              Text("Virtualizador de palco", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = colors.onSurface)
-              Text("$virtPct%", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = colors.primary)
-            }
-            Slider(
-              value = activeProfile.virtualizerStrength.toFloat(),
-              onValueChange = { onUpdateVirtualizer(it.toInt().toShort()) },
-              valueRange = 0f..1000f,
-              enabled = isEffectEnabled && capabilities.isVirtualizerAvailable,
-              colors = SliderDefaults.colors(thumbColor = colors.primary, activeTrackColor = colors.primary)
-            )
-          }
-        }
+        TarkasSectionTitle("Apps tocando agora")
+        Spacer(modifier = Modifier.height(10.dp))
+        ActiveAppsList(activeApps)
       }
     }
 
-    // 6. System audio level meter (measures other apps' output; does not equalize it)
+    // 4. System audio level meter (measures other apps' output; does not equalize it)
     item {
       Column {
-        Text(
-          text = "Áudio do sistema",
-          fontFamily = SpaceGrotesk,
-          fontWeight = FontWeight.Bold,
-          fontSize = 22.sp,
-          color = colors.onBackground
-        )
-        Spacer(modifier = Modifier.height(8.dp))
+        TarkasSectionTitle("Medidor de nível")
+        Spacer(modifier = Modifier.height(10.dp))
         Surface(
           shape = RoundedCornerShape(12.dp),
           color = colors.surfaceVariant,
@@ -436,14 +381,13 @@ fun AudioScreen(
               verticalAlignment = Alignment.CenterVertically
             ) {
               Text(
-                text = "Medidor de nível (experimental)",
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 14.sp,
+                text = "Áudio do sistema (experimental)",
+                fontSize = 17.sp,
                 color = colors.onSurface
               )
               Text(
                 text = if (systemAudioStatus.isCapturing) "Ativo" else "Inativo",
-                fontSize = 12.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 color = if (systemAudioStatus.isCapturing) colors.primary else colors.onSurfaceVariant
               )
@@ -453,10 +397,10 @@ fun AudioScreen(
 
             Text(
               text = "Mede o volume do áudio tocado por outros apps, usando a captura de áudio do Android (10 ou mais). " +
-                "Não aplica equalização neles e não identifica a música.",
-              fontSize = 12.sp,
+                "Apps que bloqueiam a captura não aparecem. Não aplica equalização neles e não identifica a música.",
+              fontSize = 15.sp,
               color = colors.onSurfaceVariant,
-              lineHeight = 16.sp
+              lineHeight = 20.sp
             )
 
             if (systemAudioStatus.isCapturing) {
@@ -482,7 +426,7 @@ fun AudioScreen(
               Spacer(modifier = Modifier.height(8.dp))
               Text(
                 text = systemAudioStatus.errorMessage,
-                fontSize = 12.sp,
+                fontSize = 15.sp,
                 color = colors.error
               )
             }
@@ -494,6 +438,7 @@ fun AudioScreen(
               enabled = systemAudioStatus.isMediaProjectionSupported,
               modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(min = 52.dp)
                 .testTag("btn_request_system_audio_capture"),
               colors = ButtonDefaults.buttonColors(containerColor = colors.primary, contentColor = colors.onPrimary),
               shape = RoundedCornerShape(12.dp)
@@ -501,7 +446,7 @@ fun AudioScreen(
               Text(
                 text = if (systemAudioStatus.isCapturing) "Reiniciar captura" else "Ativar medidor",
                 fontWeight = FontWeight.Bold,
-                fontSize = 14.sp
+                fontSize = 17.sp
               )
             }
           }
@@ -509,13 +454,13 @@ fun AudioScreen(
       }
     }
 
-    // 7. Honest limits of Android audio
+    // 5. Honest limits of Android audio
     item {
       Text(
         text = capabilities.systemDisclaimer,
-        fontSize = 11.sp,
+        fontSize = 13.sp,
         color = colors.onSurfaceVariant,
-        lineHeight = 15.sp
+        lineHeight = 18.sp
       )
     }
   }
@@ -524,10 +469,10 @@ fun AudioScreen(
   if (showSaveProfileDialog) {
     AlertDialog(
       onDismissRequest = { showSaveProfileDialog = false },
-      title = { Text("Salvar perfil", fontFamily = SpaceGrotesk, fontWeight = FontWeight.Bold) },
+      title = { Text("Salvar perfil", fontWeight = FontWeight.Bold) },
       text = {
         Column {
-          Text("Dê um nome a esta curva de equalização:", fontSize = 13.sp)
+          Text("Dê um nome a esta curva de equalização:", fontSize = 15.sp)
           Spacer(modifier = Modifier.height(8.dp))
           OutlinedTextField(
             value = newProfileName,
@@ -557,6 +502,99 @@ fun AudioScreen(
   }
 }
 
+private fun formatDb(db: Float): String {
+  val rounded = (db * 10f).roundToInt() / 10f
+  return if (rounded > 0f) "+${"%.1f".format(rounded)}" else "%.1f".format(rounded)
+}
+
+@Composable
+private fun ActiveAppsList(state: ActiveAppsState) {
+  val colors = MaterialTheme.colorScheme
+  Column(modifier = Modifier.testTag("active_apps_list")) {
+    when (state) {
+      is ActiveAppsState.PermissionMissing -> {
+        Text(
+          text = "Para ver quais apps estão tocando, libere a permissão DUMP uma vez. " +
+            "O Android só a concede por computador, com este comando:",
+          fontSize = 15.sp,
+          lineHeight = 20.sp,
+          color = colors.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+          text = "adb shell pm grant com.aistudio.tarkas.app android.permission.DUMP",
+          fontSize = 13.sp,
+          lineHeight = 18.sp,
+          color = colors.onSurface,
+          modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(colors.surfaceVariant)
+            .padding(12.dp)
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+          text = "A permissão só deixa o app ler o estado do áudio. Ela não captura nem muda o som de outros apps.",
+          fontSize = 13.sp,
+          lineHeight = 18.sp,
+          color = colors.onSurfaceVariant
+        )
+      }
+
+      is ActiveAppsState.Failed -> {
+        Text(text = state.message, fontSize = 15.sp, color = colors.error)
+      }
+
+      is ActiveAppsState.Ready -> {
+        if (state.apps.isEmpty()) {
+          Text(
+            text = "Nenhum outro app está tocando agora.",
+            fontSize = 15.sp,
+            color = colors.onSurfaceVariant
+          )
+        } else {
+          HorizontalDivider(color = colors.outline.copy(alpha = 0.5f))
+          state.apps.forEach { app ->
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Box(
+                modifier = Modifier
+                  .size(10.dp)
+                  .clip(CircleShape)
+                  .background(colors.primary)
+              )
+              Spacer(modifier = Modifier.width(12.dp))
+              Column(modifier = Modifier.weight(1f)) {
+                Text(app.label, fontSize = 17.sp, color = colors.onSurface)
+                Text(
+                  text = usageLabel(app.usage),
+                  fontSize = 15.sp,
+                  color = colors.onSurfaceVariant
+                )
+              }
+            }
+            HorizontalDivider(color = colors.outline.copy(alpha = 0.5f))
+          }
+        }
+      }
+    }
+  }
+}
+
+private fun usageLabel(usage: String?): String = when (usage) {
+  "USAGE_MEDIA" -> "Música ou vídeo"
+  "USAGE_GAME" -> "Jogo"
+  "USAGE_VOICE_COMMUNICATION" -> "Chamada de voz"
+  "USAGE_ASSISTANT" -> "Assistente"
+  "USAGE_NOTIFICATION", "USAGE_ASSISTANCE_SONIFICATION" -> "Som do sistema"
+  null -> "Tocando agora"
+  else -> "Tocando agora"
+}
+
 @Composable
 private fun CapabilityPill(label: String, available: Boolean) {
   val colors = MaterialTheme.colorScheme
@@ -566,136 +604,267 @@ private fun CapabilityPill(label: String, available: Boolean) {
   ) {
     Text(
       text = if (available) label else "$label indisponível",
-      fontSize = 11.sp,
+      fontSize = 13.sp,
       fontWeight = FontWeight.SemiBold,
       color = if (available) colors.primary else colors.onSurfaceVariant,
-      modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+      modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+    )
+  }
+}
+
+/** A rounded dark button of the equalizer deck. */
+@Composable
+private fun DeckPill(
+  text: String,
+  modifier: Modifier = Modifier,
+  icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+  highlighted: Boolean = false,
+  onClick: () -> Unit
+) {
+  Row(
+    modifier = modifier
+      .heightIn(min = 44.dp)
+      .clip(RoundedCornerShape(22.dp))
+      .background(DeckButton)
+      .then(if (highlighted) Modifier.border(1.5.dp, DeckBoost, RoundedCornerShape(22.dp)) else Modifier)
+      .clickable(onClick = onClick)
+      .padding(horizontal = 14.dp),
+    horizontalArrangement = Arrangement.Center,
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    if (icon != null) {
+      Icon(icon, contentDescription = null, tint = DeckText, modifier = Modifier.size(16.dp))
+      Spacer(modifier = Modifier.width(6.dp))
+    }
+    Text(
+      text = text,
+      fontSize = 13.sp,
+      fontWeight = FontWeight.SemiBold,
+      color = if (highlighted) DeckBoost else DeckText,
+      maxLines = 1
     )
   }
 }
 
 /**
- * Vertical fader for a single band: dB readout, 0 dB notch and frequency label.
- * Colours come from the theme, so the fader follows light and dark mode.
+ * A tall fader: a thin rail, a glowing bar from the 0 dB line to the handle, a wide rounded
+ * handle, and the name and dB readout underneath. [value] runs from -1 (bottom) to +1 (top).
  */
 @Composable
-fun VerticalBandFader(
-  bandIndex: Int,
-  frequencyLabel: String,
-  gainMb: Short,
-  gainDb: Float,
+private fun DeckFader(
+  value: Float,
   enabled: Boolean,
-  boostColor: Color,
-  cutColor: Color,
-  zeroColor: Color,
-  trackColor: Color,
-  borderColor: Color,
-  labelColor: Color,
-  onLevelChange: (Short) -> Unit
+  name: String,
+  readout: String,
+  widthDp: Int,
+  onChange: (Float) -> Unit,
+  modifier: Modifier = Modifier
 ) {
-  var trackHeightPx by remember { mutableStateOf(1f) }
+  var heightPx by remember { mutableStateOf(1f) }
+  val accent = if (value >= 0f) DeckBoost else DeckCut
 
   Column(
-    modifier = Modifier
-      .width(35.dp)
-      .testTag("vertical_fader_band_$bandIndex"),
+    modifier = modifier.width(widthDp.dp),
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
-    Text(
-      text = "${if (gainDb > 0) "+" else ""}${String.format("%.1f", gainDb)}",
-      fontSize = 9.sp,
-      fontWeight = FontWeight.Bold,
-      color = when {
-        gainDb > 0f -> boostColor
-        gainDb < 0f -> cutColor
-        else -> labelColor
-      },
-      maxLines = 1
-    )
-
-    Spacer(modifier = Modifier.height(4.dp))
-
     Box(
       modifier = Modifier
-        .width(26.dp)
-        .height(128.dp)
-        .clip(RoundedCornerShape(10.dp))
-        .background(trackColor)
-        .border(1.dp, borderColor, RoundedCornerShape(10.dp))
-        .onSizeChanged { trackHeightPx = it.height.toFloat() }
+        .width(widthDp.dp)
+        .height(210.dp)
+        .onSizeChanged { heightPx = it.height.toFloat() }
+        .semantics { contentDescription = "$name $readout dB" }
         .pointerInput(enabled) {
           if (!enabled) return@pointerInput
           detectTapGestures { offset ->
-            val fraction = 1f - (offset.y / trackHeightPx).coerceIn(0f, 1f)
-            val newMb = ((fraction * 3000f) - 1500f).toInt().toShort()
-            onLevelChange(newMb)
+            onChange((1f - 2f * (offset.y / heightPx)).coerceIn(-1f, 1f))
           }
         }
         .pointerInput(enabled) {
           if (!enabled) return@pointerInput
           detectVerticalDragGestures { change, _ ->
             change.consume()
-            val fraction = 1f - (change.position.y / trackHeightPx).coerceIn(0f, 1f)
-            val newMb = ((fraction * 3000f) - 1500f).toInt().toShort()
-            onLevelChange(newMb)
+            onChange((1f - 2f * (change.position.y / heightPx)).coerceIn(-1f, 1f))
           }
-        },
-      contentAlignment = Alignment.Center
+        }
     ) {
       Canvas(modifier = Modifier.fillMaxSize()) {
-        val w = size.width
-        val h = size.height
-        val centerY = h / 2f
+        val cx = size.width / 2f
+        val thumbH = 26.dp.toPx()
+        val thumbW = (size.width - 6.dp.toPx()).coerceAtMost(40.dp.toPx())
+        // The handle's centre travels between half a handle from the top and from the bottom.
+        val travelTop = thumbH / 2f
+        val travelBottom = size.height - thumbH / 2f
+        val centerY = (travelTop + travelBottom) / 2f
+        val handleY = travelBottom - (value + 1f) / 2f * (travelBottom - travelTop)
 
-        // 0 dB guide line
-        drawLine(
-          color = zeroColor,
-          start = Offset(2f, centerY),
-          end = Offset(w - 2f, centerY),
-          strokeWidth = 1.5f
-        )
+        // Dotted guides at the top and bottom of the travel
+        val dots = PathEffect.dashPathEffect(floatArrayOf(4f, 6f))
+        drawLine(DeckGuide, Offset(2f, travelTop), Offset(size.width - 2f, travelTop), strokeWidth = 2f, pathEffect = dots)
+        drawLine(DeckGuide, Offset(2f, travelBottom), Offset(size.width - 2f, travelBottom), strokeWidth = 2f, pathEffect = dots)
 
-        // gainMb in [-1500, +1500] -> y in [h, 0]
-        val frac = ((gainMb.toFloat() + 1500f) / 3000f).coerceIn(0f, 1f)
-        val handleY = h - (frac * h)
-        val accent = when {
-          gainMb > 0 -> boostColor
-          gainMb < 0 -> cutColor
-          else -> zeroColor
+        // Rail
+        drawLine(DeckGuide, Offset(cx, travelTop), Offset(cx, travelBottom), strokeWidth = 3f, cap = StrokeCap.Round)
+
+        // Glowing bar from the 0 dB line to the handle
+        if (enabled && kotlin.math.abs(handleY - centerY) > 1f) {
+          val top = minOf(handleY, centerY)
+          val bottom = maxOf(handleY, centerY)
+          drawLine(accent.copy(alpha = 0.25f), Offset(cx, top), Offset(cx, bottom), strokeWidth = 12f, cap = StrokeCap.Round)
+          drawLine(accent, Offset(cx, top), Offset(cx, bottom), strokeWidth = 5f, cap = StrokeCap.Round)
         }
 
-        if (gainMb != 0.toShort()) {
-          val top = if (handleY < centerY) handleY else centerY
-          val bottom = if (handleY > centerY) handleY else centerY
-          drawRoundRect(
-            color = accent.copy(alpha = 0.45f),
-            topLeft = Offset(w * 0.32f, top),
-            size = Size(w * 0.36f, bottom - top),
-            cornerRadius = CornerRadius(3f, 3f)
-          )
-        }
-
-        // Thumb
+        // Handle
+        val left = cx - thumbW / 2f
         drawRoundRect(
-          color = accent,
-          topLeft = Offset(2f, handleY - 8f),
-          size = Size(w - 4f, 16f),
-          cornerRadius = CornerRadius(8f, 8f)
+          color = if (enabled) DeckThumb else DeckThumb.copy(alpha = 0.5f),
+          topLeft = Offset(left, handleY - thumbH / 2f),
+          size = Size(thumbW, thumbH),
+          cornerRadius = CornerRadius(10.dp.toPx())
+        )
+        drawRoundRect(
+          color = DeckGuide,
+          topLeft = Offset(left, handleY - thumbH / 2f),
+          size = Size(thumbW, thumbH),
+          cornerRadius = CornerRadius(10.dp.toPx()),
+          style = Stroke(width = 1.5f)
+        )
+        drawLine(
+          if (enabled) DeckText.copy(alpha = 0.8f) else DeckMuted,
+          Offset(cx - 9.dp.toPx(), handleY),
+          Offset(cx + 9.dp.toPx(), handleY),
+          strokeWidth = 2.5f,
+          cap = StrokeCap.Round
         )
       }
     }
 
-    Spacer(modifier = Modifier.height(5.dp))
-
+    Spacer(modifier = Modifier.height(6.dp))
     Text(
-      text = frequencyLabel.replace(" ", ""),
-      fontSize = 9.sp,
-      fontWeight = FontWeight.SemiBold,
-      color = labelColor,
-      textAlign = TextAlign.Center,
+      text = name,
+      fontSize = 13.sp,
+      fontWeight = FontWeight.Bold,
+      color = DeckText,
       maxLines = 1,
-      modifier = Modifier.fillMaxWidth()
+      textAlign = TextAlign.Center
     )
+    Text(
+      text = readout,
+      fontSize = 11.sp,
+      color = if (value == 0f) DeckMuted else accent,
+      maxLines = 1,
+      textAlign = TextAlign.Center
+    )
+  }
+}
+
+/**
+ * A round knob: drag around it to turn. The arc shows the value between 7 o'clock and 5 o'clock.
+ */
+@Composable
+private fun DeckKnob(
+  label: String,
+  fraction: Float,
+  enabled: Boolean,
+  accent: Color,
+  testTag: String,
+  onChange: (Float) -> Unit
+) {
+  val startAngle = 135f
+  val sweep = 270f
+
+  Row(verticalAlignment = Alignment.CenterVertically) {
+    Column(horizontalAlignment = Alignment.End) {
+      Text(label, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = DeckText)
+      Text("${(fraction * 100).roundToInt()}%", fontSize = 13.sp, color = if (enabled) accent else DeckMuted)
+    }
+    Spacer(modifier = Modifier.width(10.dp))
+    Box(
+      modifier = Modifier
+        .size(96.dp)
+        .semantics { contentDescription = "$label ${(fraction * 100).roundToInt()}%" }
+        .testTag(testTag)
+        .pointerInput(enabled) {
+          if (!enabled) return@pointerInput
+          fun fractionAt(p: Offset): Float {
+            val dx = p.x - size.width / 2f
+            val dy = p.y - size.height / 2f
+            var deg = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
+            if (deg < 0f) deg += 360f
+            // Angle measured from the start of the arc; the gap at the bottom snaps to the near end.
+            var rel = deg - startAngle
+            if (rel < 0f) rel += 360f
+            val f = when {
+              rel <= sweep -> rel / sweep
+              rel - sweep < (360f - sweep) / 2f -> 1f
+              else -> 0f
+            }
+            return f.coerceIn(0f, 1f)
+          }
+          detectDragGestures(
+            onDragStart = { onChange(fractionAt(it)) },
+            onDrag = { change, _ ->
+              change.consume()
+              onChange(fractionAt(change.position))
+            }
+          )
+        }
+        .pointerInput(enabled) {
+          if (!enabled) return@pointerInput
+          detectTapGestures { offset ->
+            val dx = offset.x - size.width / 2f
+            val dy = offset.y - size.height / 2f
+            var deg = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
+            if (deg < 0f) deg += 360f
+            var rel = deg - startAngle
+            if (rel < 0f) rel += 360f
+            if (rel <= sweep) onChange((rel / sweep).coerceIn(0f, 1f))
+          }
+        }
+    ) {
+      Canvas(modifier = Modifier.fillMaxSize()) {
+        val stroke = 6.dp.toPx()
+        val arcInset = stroke / 2f
+        val arcSize = Size(size.width - stroke, size.height - stroke)
+        // Rail and value arc
+        drawArc(
+          color = DeckGuide,
+          startAngle = startAngle,
+          sweepAngle = sweep,
+          useCenter = false,
+          topLeft = Offset(arcInset, arcInset),
+          size = arcSize,
+          style = Stroke(width = stroke, cap = StrokeCap.Round)
+        )
+        if (enabled && fraction > 0f) {
+          drawArc(
+            color = accent,
+            startAngle = startAngle,
+            sweepAngle = sweep * fraction,
+            useCenter = false,
+            topLeft = Offset(arcInset, arcInset),
+            size = arcSize,
+            style = Stroke(width = stroke, cap = StrokeCap.Round)
+          )
+        }
+        // Dial body and its pointer
+        val bodyRadius = size.minDimension / 2f - stroke * 1.9f
+        drawCircle(
+          brush = Brush.verticalGradient(listOf(Color(0xFF2A3036), Color(0xFF14181C))),
+          radius = bodyRadius,
+          center = center
+        )
+        val angle = Math.toRadians((startAngle + sweep * fraction).toDouble())
+        val inner = bodyRadius * 0.45f
+        val outer = bodyRadius * 0.85f
+        drawLine(
+          color = if (enabled) DeckText else DeckMuted,
+          start = Offset(center.x + (inner * Math.cos(angle)).toFloat(), center.y + (inner * Math.sin(angle)).toFloat()),
+          end = Offset(center.x + (outer * Math.cos(angle)).toFloat(), center.y + (outer * Math.sin(angle)).toFloat()),
+          strokeWidth = 3.dp.toPx(),
+          cap = StrokeCap.Round
+        )
+      }
+    }
   }
 }
 
