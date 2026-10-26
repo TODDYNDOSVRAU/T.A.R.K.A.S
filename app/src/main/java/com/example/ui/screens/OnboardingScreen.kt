@@ -232,7 +232,7 @@ private fun WelcomeStep() {
     Text("Boas-vindas ao T.A.R.K.A.S.", fontWeight = FontWeight.Bold, fontSize = 28.sp, textAlign = TextAlign.Center, color = colors.onBackground)
     Spacer(Modifier.height(10.dp))
     Text(
-      "Música do aparelho e do Audius, um equalizador completo com correção para o seu fone, curiosidades sobre as faixas e um assistente por voz.",
+      "Música do aparelho, do Audius, do YouTube Music e do Spotify, um equalizador completo com correção para o seu fone, curiosidades sobre as faixas e um assistente por voz.",
       fontSize = 16.sp,
       lineHeight = 23.sp,
       textAlign = TextAlign.Center,

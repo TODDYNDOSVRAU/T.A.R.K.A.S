@@ -80,6 +80,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.audio.dsp.EqDsp
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import com.example.data.model.AudioCapabilities
 import com.example.data.model.EqBand
 import com.example.data.model.EqPreset
@@ -785,6 +787,34 @@ private fun EqAdvancedPage(
             color = colors.onSurfaceVariant
           )
           Spacer(Modifier.height(6.dp))
+        }
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+            .toggleable(
+              value = eqSettings.autoPreamp,
+              role = Role.Switch,
+              onValueChange = { on -> onUpdateEq { it.copy(autoPreamp = on) } }
+            )
+            .testTag("switch_auto_preamp"),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Column(modifier = Modifier.weight(1f)) {
+            Text("Pré-amp automático", fontSize = 17.sp, color = colors.onSurface)
+            val auto = EqDsp.autoPreampDb(eqSettings)
+            Text(
+              if (eqSettings.autoPreamp && auto < 0f) "Baixa ${String.format(java.util.Locale.US, "%.1f", -auto)} dB para os reforços não distorcerem"
+              else "Baixa o volume o quanto a curva reforça, para não distorcer",
+              fontSize = 13.sp,
+              color = colors.onSurfaceVariant
+            )
+          }
+          Switch(
+            checked = eqSettings.autoPreamp,
+            onCheckedChange = null,
+            colors = SwitchDefaults.colors(checkedTrackColor = colors.primary, checkedThumbColor = colors.onPrimary)
+          )
         }
         LabeledSlider(
           label = "Balanço",

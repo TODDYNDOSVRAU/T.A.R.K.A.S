@@ -19,6 +19,9 @@ data class PlayingApp(
   val sessionId: Int = 0
 ) {
   val isStarted: Boolean get() = state.equals("started", ignoreCase = true)
+
+  /** Playing or paused: the effect stays on through a pause, so resuming has no gap or click. */
+  val isLive: Boolean get() = isStarted || state.equals("paused", ignoreCase = true)
 }
 
 /** What the Áudio screen shows in "Apps tocando agora". */

@@ -39,6 +39,22 @@ class CuriositySpeechManager(
 
   private var activeCompletionCallback: (() -> Unit)? = null
 
+  /** The utterance whose end runs [activeCompletionCallback]; the end of an older, replaced one is ignored. */
+  private var activeUtteranceId: String? = null
+
+  private fun finish(utteranceId: String?) {
+    scope.launch {
+      if (utteranceId != activeUtteranceId) return@launch
+      activeUtteranceId = null
+      _isSpeaking.value = false
+      _currentSpokenText.value = null
+      _speechStage.value = null
+      val callback = activeCompletionCallback
+      activeCompletionCallback = null
+      callback?.invoke()
+    }
+  }
+
   init {
     try {
       tts = TextToSpeech(context.applicationContext, this)
@@ -56,46 +72,25 @@ class CuriositySpeechManager(
           engine.language = Locale.getDefault()
         }
 
+        engine.setAudioAttributes(
+          android.media.AudioAttributes.Builder()
+            .setUsage(android.media.AudioAttributes.USAGE_ASSISTANT)
+            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
+        )
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
           override fun onStart(utteranceId: String?) {
             scope.launch {
-              _isSpeaking.value = true
+              if (utteranceId == activeUtteranceId) _isSpeaking.value = true
             }
           }
 
-          override fun onDone(utteranceId: String?) {
-            scope.launch {
-              _isSpeaking.value = false
-              _currentSpokenText.value = null
-              _speechStage.value = null
-              val callback = activeCompletionCallback
-              activeCompletionCallback = null
-              callback?.invoke()
-            }
-          }
+          override fun onDone(utteranceId: String?) = finish(utteranceId)
 
           @Deprecated("Deprecated in Java")
-          override fun onError(utteranceId: String?) {
-            scope.launch {
-              _isSpeaking.value = false
-              _currentSpokenText.value = null
-              _speechStage.value = null
-              val callback = activeCompletionCallback
-              activeCompletionCallback = null
-              callback?.invoke()
-            }
-          }
+          override fun onError(utteranceId: String?) = finish(utteranceId)
 
-          override fun onError(utteranceId: String?, errorCode: Int) {
-            scope.launch {
-              _isSpeaking.value = false
-              _currentSpokenText.value = null
-              _speechStage.value = null
-              val callback = activeCompletionCallback
-              activeCompletionCallback = null
-              callback?.invoke()
-            }
-          }
+          override fun onError(utteranceId: String?, errorCode: Int) = finish(utteranceId)
         })
       }
       isInitialized = true
@@ -163,6 +158,7 @@ class CuriositySpeechManager(
 
         val params = Bundle()
         val utteranceId = "curiosity_${UUID.randomUUID()}"
+        activeUtteranceId = utteranceId
         speak(spokenText, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
       }
     } catch (e: Exception) {
@@ -202,6 +198,7 @@ class CuriositySpeechManager(
 
         val params = Bundle()
         val utteranceId = "test_voice_${UUID.randomUUID()}"
+        activeUtteranceId = utteranceId
         speak(sampleText, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
       }
     } catch (e: Exception) {
@@ -214,7 +211,13 @@ class CuriositySpeechManager(
     }
   }
 
-  fun stopSpeech() {
+  /**
+   * Stops the narration. With [continueAfter] (the "skip" button) what was waiting for it, such as the
+   * track after an intro, carries on; without it (Next, Previous, a new track) it is dropped, because the
+   * caller starts something else itself.
+   */
+  fun stopSpeech(continueAfter: Boolean = false) {
+    activeUtteranceId = null
     try {
       tts?.stop()
     } catch (_: Exception) {}
@@ -225,7 +228,7 @@ class CuriositySpeechManager(
 
     val callback = activeCompletionCallback
     activeCompletionCallback = null
-    callback?.invoke()
+    if (continueAfter) callback?.invoke()
   }
 
   fun shutdown() {

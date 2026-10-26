@@ -33,6 +33,7 @@ import com.example.data.model.EqSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -306,7 +307,7 @@ class AudioEngineManager(private val context: Context) {
       completionCallback = onCompletion
       errorCallback = onError
       pendingStart = true
-      eqDsp.update(_eqSettings.value)
+      eqDsp.update(processedSettings())
       p.setMediaItem(MediaItem.fromUri(uri))
       p.prepare()
     } catch (e: Exception) {
@@ -319,6 +320,10 @@ class AudioEngineManager(private val context: Context) {
   /** Attaches the live spectrum again, after the microphone permission it needs was granted. */
   fun refreshVisualizer() {
     if (player != null && _isPlaying.value) attachAudioEffects()
+  }
+
+  fun pause() {
+    if (_isPlaying.value) pauseByUser()
   }
 
   fun togglePlayPause() {
@@ -370,6 +375,15 @@ class AudioEngineManager(private val context: Context) {
       releaseAudioEffects()
       updateCapabilities()
     }
+  }
+
+  /** Frees the player, its audio track and session; the manager is not used after this. */
+  fun release() {
+    stopPlayback()
+    releaseAudioEffects()
+    runCatching { player?.release() }
+    player = null
+    coroutineScope.cancel()
   }
 
   private fun startProgressTracking() {
@@ -477,9 +491,20 @@ class AudioEngineManager(private val context: Context) {
   /** Applies the whole equalizer state. Takes effect on the next audio buffer (a few ms). */
   fun applyEqSettings(settings: EqSettings) {
     _eqSettings.value = settings
-    eqDsp.update(settings)
+    eqDsp.update(processedSettings())
     applyVirtualizer()
   }
+
+  /** The root equalizer on the output mix processes this player too; then its own curve is bypassed. */
+  private var coveredByOutputMix = false
+
+  fun setCoveredByOutputMix(covered: Boolean) {
+    coveredByOutputMix = covered
+    eqDsp.update(processedSettings())
+  }
+
+  private fun processedSettings(): EqSettings =
+    if (coveredByOutputMix) _eqSettings.value.copy(enabled = false) else _eqSettings.value
 
 
   private fun applyVirtualizer() {

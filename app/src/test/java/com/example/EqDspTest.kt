@@ -59,7 +59,7 @@ class EqDspTest {
 
   @Test
   fun responseAddsPreampAndBandsAndSkipsFlatOnes() {
-    val s = EqSettings(preampDb = -3f)
+    val s = EqSettings(preampDb = -3f, autoPreamp = false)
     // All bands at 0 dB: only the preamp remains.
     assertEquals(-3.0, EqDsp.responseDb(s, 1000.0), 0.01)
     assertTrue(EqDsp.activeFilters(s, 48000).isEmpty())
@@ -72,7 +72,7 @@ class EqDspTest {
   fun onlyTheBandsOfTheModeInUseAreHeard() {
     val graphicBoost = EqSettings.withGains(List(15) { if (it == 8) 6f else 0f }).bands // 1 kHz
     val paramCut = listOf(EqBand(freqHz = 1000f, gainDb = -6f, q = 1f))
-    val graphic = EqSettings(bands = graphicBoost, paramBands = paramCut)
+    val graphic = EqSettings(bands = graphicBoost, paramBands = paramCut, autoPreamp = false)
     assertTrue(EqDsp.responseDb(graphic, 1000.0) > 3.0)
     val param = graphic.copy(parametric = true)
     assertEquals(-6.0, EqDsp.responseDb(param, 1000.0), 0.2)
@@ -99,13 +99,17 @@ class EqDspTest {
     return sqrt(sum / n)
   }
 
+  /** Changes glide in over a few milliseconds; run silence through until they have settled. */
+  private fun settle(dsp: EqDsp) = dsp.process(FloatArray(9600), 4800)
+
   @Test
   fun processingA1kHzToneWithA6dBPeakDoublesIt() {
     val dsp = EqDsp().apply { configure(48000, 2) }
     dsp.update(
       EqSettings(
         bands = listOf(EqBand(freqHz = 1000f, gainDb = 6.02f, q = 1f)),
-        limiterEnabled = false
+        limiterEnabled = false,
+        autoPreamp = false
       )
     )
     val input = sine(1000.0, 0.1f, 9600)
@@ -119,7 +123,7 @@ class EqDspTest {
   @Test
   fun flatSettingsLeaveTheSignalUntouched() {
     val dsp = EqDsp().apply { configure(48000, 2) }
-    dsp.update(EqSettings())
+    dsp.update(EqSettings(limiterEnabled = false))
     val input = sine(440.0, 0.5f, 2000)
     val out = input.copyOf()
     dsp.process(out, 2000)
@@ -130,6 +134,7 @@ class EqDspTest {
   fun disabledChainIsABypass() {
     val dsp = EqDsp().apply { configure(48000, 2) }
     dsp.update(EqSettings(enabled = false, preampDb = 12f, balance = -1f))
+    settle(dsp)
     val input = sine(440.0, 0.5f, 1000)
     val out = input.copyOf()
     dsp.process(out, 1000)
@@ -152,13 +157,63 @@ class EqDspTest {
   fun zeroWidthIsMonoAndFullLeftBalanceSilencesTheRight() {
     val dsp = EqDsp().apply { configure(48000, 2) }
     dsp.update(EqSettings(stereoWidth = 0f, limiterEnabled = false))
+    settle(dsp)
     val stereo = FloatArray(200) { i -> if (i % 2 == 0) 0.4f else -0.2f }
     dsp.process(stereo, 100)
     for (i in 0 until 100) assertEquals(stereo[i * 2], stereo[i * 2 + 1], 1e-6f)
 
     dsp.update(EqSettings(balance = -1f, limiterEnabled = false))
+    settle(dsp)
     val buf = sine(440.0, 0.5f, 500)
     dsp.process(buf, 500)
     for (i in 0 until 500) assertEquals(0f, buf[i * 2 + 1], 0f)
+  }
+
+  @Test
+  fun autoPreampLowersTheLevelByTheLoudestBoost() {
+    val boosted = EqSettings(bands = listOf(EqBand(freqHz = 1000f, gainDb = 6f, q = 1f)))
+    assertEquals(-6.0, EqDsp.autoPreampDb(boosted).toDouble(), 0.1)
+    // The curve as heard peaks at 0 dB, so the limiter has nothing to catch.
+    assertEquals(0.0, EqDsp.responseDb(boosted, 1000.0), 0.1)
+    // Cuts only: nothing to make room for.
+    val cut = EqSettings(bands = listOf(EqBand(freqHz = 1000f, gainDb = -6f, q = 1f)))
+    assertEquals(0f, EqDsp.autoPreampDb(cut), 0f)
+    assertEquals(0f, EqDsp.autoPreampDb(boosted.copy(autoPreamp = false)), 0f)
+  }
+
+  @Test
+  fun movingAFaderThroughZeroDoesNotRestartTheFilters() {
+    val dsp = EqDsp().apply { configure(48000, 2) }
+    val at = { g: Float -> EqSettings(bands = listOf(EqBand(freqHz = 1000f, gainDb = g, q = 1f)), limiterEnabled = false, autoPreamp = false) }
+    dsp.update(at(0.5f))
+    val tone = sine(1000.0, 0.3f, 4800 * 3)
+    val first = tone.copyOfRange(0, 9600)
+    dsp.process(first, 4800)
+    dsp.update(at(0f))
+    val second = tone.copyOfRange(9600, 19200)
+    dsp.process(second, 4800)
+    dsp.update(at(-0.5f))
+    val third = tone.copyOfRange(19200, 28800)
+    dsp.process(third, 4800)
+    // No jump at the buffer edges: consecutive samples stay as close as the tone itself allows.
+    val out = first + second + third
+    val maxStep = (2 * PI * 1000.0 / rate * 0.3 * 1.1).toFloat()
+    for (i in 1 until out.size / 2) {
+      val step = abs(out[i * 2] - out[(i - 1) * 2])
+      assertTrue("jump of $step at frame $i", step <= maxStep)
+    }
+  }
+
+  @Test
+  fun limiterDelaysBySomeMillisecondsAndCatchesThePeakInAdvance() {
+    val dsp = EqDsp().apply { configure(48000, 1) }
+    dsp.update(EqSettings(limiterEnabled = true, limiterCeilingDb = -6f, autoPreamp = false))
+    val buf = FloatArray(4800)
+    buf[2000] = 1f
+    dsp.process(buf, 4800)
+    val ceiling = Math.pow(10.0, -6.0 / 20.0).toFloat()
+    val outPeak = buf.indices.maxByOrNull { abs(buf[it]) }!!
+    assertTrue("peak came out at $outPeak", outPeak in 2001..2200)
+    assertTrue(abs(buf[outPeak]) <= ceiling + 1e-4f)
   }
 }

@@ -22,6 +22,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import com.example.data.repository.PreferencesRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -42,6 +43,7 @@ class GlobalEqService : Service() {
     private const val CHANNEL_ID = "tarkas_global_eq"
     private const val NOTIFICATION_ID = 4107
     private const val POLL_MS = 2000L
+    private const val SETTINGS_MIN_INTERVAL_MS = 50L
     /** The output mix: effects there reach sounds that have no session of their own. */
     private const val GLOBAL_SESSION = 0
 
@@ -103,7 +105,25 @@ class GlobalEqService : Service() {
     // Players in other apps send these, so the receiver must be exported.
     ContextCompat.registerReceiver(this, sessionReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
 
-    scope.launch { GlobalEq.settings.collect { equalizer.update(it) } }
+    if (!GlobalEq.loadedByApp) {
+      // Restarted by the system after the process died: the app is not there to hand over the curve.
+      val prefs = PreferencesRepository(this)
+      GlobalEq.reach.value = EqReach.fromKey(prefs.getEqReach())
+      prefs.getEqSettings()?.let { GlobalEq.settings.value = it }
+    }
+    if (GlobalEq.reach.value == EqReach.APP) {
+      stopSelf()
+      return
+    }
+
+    // A fader drag changes the curve on every frame; each update is one call per band per effect,
+    // so the effects get at most one update every few frames.
+    scope.launch {
+      GlobalEq.settings.collect {
+        equalizer.update(it)
+        delay(SETTINGS_MIN_INTERVAL_MS)
+      }
+    }
     scope.launch {
       if (GlobalEq.reach.value == EqReach.ROOT) prepareRoot()
       while (isActive) {
@@ -113,7 +133,8 @@ class GlobalEqService : Service() {
     }
   }
 
-  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int =
+    if (GlobalEq.reach.value == EqReach.APP) START_NOT_STICKY else START_STICKY
 
   /** Root mode: grant DUMP to ourselves; if that fails, read dumpsys through su each time. */
   private suspend fun prepareRoot() {
@@ -135,21 +156,15 @@ class GlobalEqService : Service() {
     val players = dump?.let { DumpsysAudioParser.parsePlayers(it) }
       // The web players (YouTube Music, Spotify) run in this app's own process, so own-uid players
       // count too, except the music player, which carries its equalizer already.
-      ?.filter {
-        it.isStarted && it.sessionId > 0 &&
-          (it.uid != own || (com.example.data.web.WebPlayerHost.state.value.active && it.sessionId != GlobalEq.ownPlayerSession))
-      }
+      ?.filter { it.isLive && it.sessionId > 0 && it.uid != own }
       .orEmpty()
 
-    val alive = players.map { it.sessionId }.toMutableSet() + announced.keys
-    var globalOutput = false
-    val targets = if (reach == EqReach.ROOT) {
-      globalOutput = equalizer.attach(GLOBAL_SESSION)
-      alive + GLOBAL_SESSION
-    } else {
-      alive
-    }
-    alive.forEach { equalizer.attach(it) }
+    val alive = players.map { it.sessionId }.toSet() + announced.keys
+    // Root: the output mix carries every app already, so per-app effects on top would apply the curve
+    // twice. Per-app effects are the fallback for devices that refuse the output mix.
+    val globalOutput = reach == EqReach.ROOT && equalizer.attach(GLOBAL_SESSION)
+    val targets = if (globalOutput) setOf(GLOBAL_SESSION) else alive
+    targets.forEach { equalizer.attach(it) }
     equalizer.retainOnly(targets)
 
     val names = (players.map { labelFor(it.uid) } + announced.values.map { labelForPackage(it) }).distinct()
@@ -167,9 +182,14 @@ class GlobalEqService : Service() {
 
   private suspend fun readDumpsys(): String? = withContext(Dispatchers.IO) {
     try {
-      withTimeoutOrNull(4000) {
-        val process = Runtime.getRuntime().exec(arrayOf("dumpsys", "audio"))
-        process.inputStream.bufferedReader().use { it.readText() }
+      val process = ProcessBuilder("dumpsys", "audio").redirectErrorStream(true).start()
+      try {
+        // readText() blocks and ignores cancellation; destroying the process on timeout unblocks it.
+        withTimeoutOrNull(4000) {
+          kotlinx.coroutines.runInterruptible { process.inputStream.bufferedReader().use { it.readText() } }
+        }
+      } finally {
+        process.destroy()
       }
     } catch (e: Exception) {
       Log.w(TAG, "dumpsys audio failed: ${e.javaClass.simpleName}")

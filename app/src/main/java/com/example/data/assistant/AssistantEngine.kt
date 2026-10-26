@@ -316,9 +316,6 @@ class AssistantEngine(
       Regex("\\b(olá|ola|oi)\\b").containsMatchIn(lower) -> {
         "Olá! Em que posso ajudar com sua música ou áudio hoje?"
       }
-      lower.contains("tarkus") -> {
-        "Tarkus é o clássico de 1971 do Emerson, Lake & Palmer. Uma suíte épica em compasso 5/4 com sintetizadores analógicos Moog."
-      }
       else -> {
         "Comando recebido. Diga ou digite **help** para ver o que posso fazer."
       }
@@ -342,6 +339,8 @@ class AssistantEngine(
       Você é um assistente de voz e áudio estilo Siri/Google Assistant no app Tarkas.
       Responda de forma direta, concisa (máximo 40 palavras), cortês e em português brasileiro.
       Não repita listas de comandos a menos que o usuário peça 'help' ou 'ajuda'.
+      Nunca conte curiosidades, história ou fatos sobre músicas, artistas ou álbuns: isso só aparece no player do app.
+      Se pedirem, diga que as curiosidades ficam no player.
       Música tocando agora: '${currentTrack?.title ?: "Nenhuma"}' (${currentTrack?.artist ?: ""}).
     """.trimIndent()
 

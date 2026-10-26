@@ -24,7 +24,7 @@ object LegalTexts {
   /** The short version shown on the acceptance step. */
   val summary = listOf(
     "Seus ajustes, favoritos e playlists ficam só neste aparelho. O T.A.R.K.A.S. não tem conta nem servidor próprio.",
-    "Quando você busca no Início, o termo da busca vai para o Audius, que entrega as músicas.",
+    "Quando você busca no Início, o termo da busca vai para o Audius, o YouTube Music e o Spotify, que entregam as músicas.",
     "A lista de fones do equalizador é baixada do projeto AutoEq, no GitHub.",
     "O assistente só usa IA online (Gemini) se uma chave for configurada no app.",
     "Você pode exportar ou apagar todos os seus dados em Ajustes > Privacidade, quando quiser."

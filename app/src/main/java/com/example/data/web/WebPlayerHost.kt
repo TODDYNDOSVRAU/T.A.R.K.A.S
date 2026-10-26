@@ -2,7 +2,11 @@ package com.example.data.web
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
@@ -12,6 +16,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -77,14 +82,24 @@ object WebPlayerHost {
       var e=document.querySelector('video,audio');
       if(e&&!e.__tk){e.__tk=1;e.addEventListener('ended',function(){window.__tkEnded=(window.__tkEnded||0)+1;try{e.pause()}catch(x){}});}
       return JSON.stringify({p:e?!e.paused:false,pos:e?e.currentTime:0,dur:(e&&isFinite(e.duration))?e.duration:0,
-        end:window.__tkEnded||0,has:!!e,rs:e?e.readyState:-1,er:(e&&e.error)?e.error.code:0,u:location.href.slice(0,70),ad:!!document.querySelector('.ad-showing')});
+        end:window.__tkEnded||0,has:!!e});
     })()
   """
 
-  /** Creates the hidden player once, on the activity's window. */
+  /**
+   * Puts the hidden player on [activity]'s window, creating it the first time. A new activity (after a
+   * rotation, say) takes the existing player over, so a song keeps playing through it.
+   */
   @SuppressLint("SetJavaScriptEnabled")
   fun attach(activity: Activity) {
-    if (view != null) return
+    val root = activity.window.decorView as ViewGroup
+    view?.let { existing ->
+      if (existing.parent !== root) {
+        (existing.parent as? ViewGroup)?.removeView(existing)
+        root.addView(existing, ViewGroup.LayoutParams(1, 1))
+      }
+      return
+    }
     val web = KeepAliveWebView(activity.applicationContext).apply {
       settings.apply {
         javaScriptEnabled = true
@@ -102,9 +117,15 @@ object WebPlayerHost {
       setAcceptCookie(true)
       setAcceptThirdPartyCookies(web, true)
     }
-    (activity.window.decorView as ViewGroup).addView(web, ViewGroup.LayoutParams(1, 1))
+    root.addView(web, ViewGroup.LayoutParams(1, 1))
     view = web
-    // The activity's window is gone with the activity; a new one attaches a new player.
+    appContext = activity.applicationContext
+  }
+
+  /** The activity is going away: take the player off its window so it does not keep it in memory. */
+  fun release(activity: Activity) {
+    val root = activity.window.decorView as ViewGroup
+    view?.let { if (it.parent === root) root.removeView(it) }
   }
 
   fun detach() {
@@ -136,16 +157,67 @@ object WebPlayerHost {
     web.onResume()
     web.resumeTimers()
     web.loadUrl(url)
-    acquireWakeLock(context)
+    takeAudio(context)
     startPolling()
   }
 
+  /** True while the user wants the song to play (false once they paused it). */
+  val wantsToPlay: Boolean get() = wantPlaying
+
   fun togglePlayPause() {
+    if (wantPlaying) pause() else resume()
+  }
+
+  /** Pauses on the user's request, or when the headphones are unplugged. */
+  fun pause() {
     val web = view ?: return
-    wantPlaying = !_state.value.playing
-    web.evaluateJavascript(
-      "(function(){var e=document.querySelector('video,audio');if(e){e.paused?e.play():e.pause()}})()", null
-    )
+    wantPlaying = false
+    web.evaluateJavascript("(function(){var e=document.querySelector('video,audio');if(e)e.pause()})()", null)
+    releaseAudio()
+  }
+
+  fun resume() {
+    val web = view ?: return
+    val context = appContext ?: return
+    if (!_state.value.active) return
+    wantPlaying = true
+    autoplayTries = 0
+    takeAudio(context)
+    web.evaluateJavascript("(function(){var e=document.querySelector('video,audio');if(e)e.play()})()", null)
+    startPolling()
+  }
+
+  // ---- headphones and the wake lock ----
+  // Audio focus is not requested here: the WebView takes it itself when the page plays (and pauses on a
+  // call), so a request of our own would be lost to the page at once and pause the song.
+
+  private var appContext: Context? = null
+  private var noisyRegistered = false
+
+  private val noisyReceiver = object : BroadcastReceiver() {
+    override fun onReceive(context: Context?, intent: Intent?) {
+      // Headphones unplugged or Bluetooth gone: do not carry on through the speaker.
+      if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY && wantPlaying) pause()
+    }
+  }
+
+  private fun takeAudio(context: Context) {
+    if (!noisyRegistered) {
+      ContextCompat.registerReceiver(
+        context.applicationContext, noisyReceiver,
+        IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY), ContextCompat.RECEIVER_NOT_EXPORTED
+      )
+      noisyRegistered = true
+    }
+    acquireWakeLock(context)
+  }
+
+  private fun releaseAudio() {
+    if (noisyRegistered) {
+      runCatching { appContext?.unregisterReceiver(noisyReceiver) }
+      noisyRegistered = false
+    }
+    releaseWakeLock()
   }
 
   fun seekTo(ms: Long) {
@@ -164,7 +236,7 @@ object WebPlayerHost {
       it.evaluateJavascript("(function(){var e=document.querySelector('video,audio');if(e)e.pause()})()", null)
       it.loadUrl("about:blank")
     }
-    releaseWakeLock()
+    releaseAudio()
     _state.value = WebNowPlaying()
   }
 
@@ -209,6 +281,8 @@ object WebPlayerHost {
           // Spotify only starts from its own play button; YouTube accepts the media element's play().
           web.evaluateJavascript(click ?: "(function(){var e=document.querySelector('video,audio');if(e)e.play()})()", null)
         }
+        // Paused by the user: read once more to show it, then stop polling until they resume.
+        if (!wantPlaying && !playing) polling = false
         val ended = json.optInt("end")
         if (ended > endedSeen) {
           endedSeen = ended

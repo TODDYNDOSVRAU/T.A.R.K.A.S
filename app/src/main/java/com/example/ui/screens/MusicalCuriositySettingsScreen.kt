@@ -99,6 +99,7 @@ fun MusicalCuriositySettingsScreen(
   config: CuriosityConfig,
   isSpeaking: Boolean,
   currentSpokenText: String?,
+  speechStage: String? = null,
   onConfigChange: (CuriosityConfig) -> Unit,
   onTestVoice: () -> Unit,
   onStopVoice: () -> Unit,
@@ -189,8 +190,9 @@ fun MusicalCuriositySettingsScreen(
       }
     }
 
-    // Shown while the voice sample or a narration is playing
-    if (isSpeaking && !currentSpokenText.isNullOrBlank()) {
+    // Shown while the voice sample plays. A real narration is never written here: curiosities appear
+    // only in the player and the notification.
+    if (isSpeaking && speechStage == "test" && !currentSpokenText.isNullOrBlank()) {
       item {
         Row(
           modifier = Modifier

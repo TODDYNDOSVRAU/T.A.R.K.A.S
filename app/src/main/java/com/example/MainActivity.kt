@@ -115,6 +115,13 @@ class MainActivity : ComponentActivity() {
     AppMotion.readSystem(this)
   }
 
+  override fun onDestroy() {
+    // The hidden web views outlive the activity; take them off this window so it can be freed.
+    com.example.data.web.WebSearchHost.release(this)
+    com.example.data.web.WebPlayerHost.release(this)
+    super.onDestroy()
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     AppMotion.readSystem(this)
     // Must run before super.onCreate: swaps the splash theme for the normal one after the first frame.
@@ -469,6 +476,7 @@ fun TarkasAppContent(
           config = curiosityConfig,
           isSpeaking = isAiSpeakingCuriosity,
           currentSpokenText = currentCuriositySpeechText,
+          speechStage = viewModel.curiositySpeechStage.collectAsState().value,
           onConfigChange = { viewModel.updateCuriosityConfig(it) },
           onTestVoice = { viewModel.testCuriosityVoice() },
           onStopVoice = { viewModel.skipCuriositySpeech() },

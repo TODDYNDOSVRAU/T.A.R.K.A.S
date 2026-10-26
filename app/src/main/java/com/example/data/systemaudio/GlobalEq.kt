@@ -18,8 +18,8 @@ enum class EqReach(val key: String, val label: String, val description: String) 
   ),
   ROOT(
     "root", "Root",
-    "Tudo do modo ADB sem computador: o app libera a permissão sozinho pelo root e tenta também " +
-      "a saída geral, para os sons sem sessão própria (sistema, notificações)."
+    "Tudo do modo ADB sem computador: o app libera a permissão sozinho pelo root e usa a saída " +
+      "geral quando o aparelho deixa, para alcançar também os sons sem sessão própria."
   );
 
   companion object {
@@ -47,6 +47,13 @@ object GlobalEq {
 
   /** Audio session of the app's own player, which has its equalizer already (not applied twice). */
   @Volatile var ownPlayerSession = 0
+
+  /**
+   * True once the app has put the user's curve and reach here. A service the system restarts on its own
+   * (after the process was killed) finds this false and reads them from the saved preferences instead of
+   * applying a flat curve.
+   */
+  @Volatile var loadedByApp = false
 
   private val _status = MutableStateFlow(GlobalEqStatus())
   val status: StateFlow<GlobalEqStatus> = _status.asStateFlow()

@@ -32,7 +32,8 @@ object WebSearchHost {
   private var view: WebView? = null
   private val lock = Mutex()
 
-  @Volatile private var pageFailed = false
+  /** Search views whose last page failed to load (offline); each view has its own state. */
+  private val failed = java.util.Collections.synchronizedSet(mutableSetOf<WebView>())
 
   private const val ROWS_SCRIPT = """
     (function(){
@@ -83,21 +84,39 @@ object WebSearchHost {
       }
       alpha = 0.01f
       webViewClient = object : WebViewClient() {
-        override fun onPageStarted(v: WebView?, url: String?, favicon: Bitmap?) { pageFailed = false }
+        override fun onPageStarted(v: WebView?, url: String?, favicon: Bitmap?) { v?.let(failed::remove) }
         override fun onReceivedError(v: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
-          if (request?.isForMainFrame == true) pageFailed = true
+          if (request?.isForMainFrame == true) v?.let(failed::add)
         }
       }
     }
-    // A desktop page lays out for a wide window; give it one, scaled to a single pixel on screen.
-    (activity.window.decorView as ViewGroup).addView(web, ViewGroup.LayoutParams(if (desktop) 1280 else 1, if (desktop) 900 else 1))
     if (desktop) { web.scaleX = 0.001f; web.scaleY = 0.001f }
     return web
   }
 
+  /** Puts [web] on [activity]'s window, moving it off a previous (destroyed) window if needed. */
+  private fun place(activity: Activity, web: WebView, desktop: Boolean) {
+    val root = activity.window.decorView as ViewGroup
+    if (web.parent === root) return
+    (web.parent as? ViewGroup)?.removeView(web)
+    // A desktop page lays out for a wide window; give it one, scaled to a single pixel on screen.
+    root.addView(web, ViewGroup.LayoutParams(if (desktop) 1280 else 1, if (desktop) 900 else 1))
+  }
+
   fun attach(activity: Activity) {
-    if (view == null) view = newView(activity, desktop = false)
-    if (spotifyView == null) spotifyView = newView(activity, desktop = true)
+    val v = view ?: newView(activity, desktop = false).also { view = it }
+    val s = spotifyView ?: newView(activity, desktop = true).also { spotifyView = it }
+    place(activity, v, desktop = false)
+    place(activity, s, desktop = true)
+  }
+
+  /**
+   * The activity is going away (rotation, theme change, exit): take the views off its window so they
+   * do not keep it in memory. They stay alive, and the next activity puts them on its own window.
+   */
+  fun release(activity: Activity) {
+    val root = activity.window.decorView as ViewGroup
+    listOf(view, spotifyView).forEach { w -> if (w != null && w.parent === root) root.removeView(w) }
   }
 
   fun detach() {
@@ -125,7 +144,7 @@ object WebSearchHost {
   ): List<Track>? = lock.withLock {
     web ?: return null
     suspendCancellableCoroutine { cont ->
-      pageFailed = false
+      failed.remove(web)
       web.loadUrl(url)
       var tries = 0
       var lastCount = -1
@@ -134,7 +153,7 @@ object WebSearchHost {
       val probe = object : Runnable {
         override fun run() {
           if (!cont.isActive) return
-          if (pageFailed) { cont.resume(null); return }
+          if (web in failed) { cont.resume(null); return }
           tries++
           web.evaluateJavascript(script) { raw ->
             if (!cont.isActive) return@evaluateJavascript
@@ -143,7 +162,7 @@ object WebSearchHost {
             stable = if (tracks.size == lastCount && tracks.isNotEmpty()) stable + 1 else 0
             lastCount = tracks.size
             if (stable >= 1 || tries >= 16) {
-              cont.resume(if (best.isEmpty() && pageFailed) null else best)
+              cont.resume(if (best.isEmpty() && web in failed) null else best)
             } else {
               main.postDelayed(this, 700L)
             }

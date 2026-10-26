@@ -54,6 +54,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -292,6 +293,8 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     NotificationActionReceiver.onActionReceived = { action ->
       when (action) {
         NotificationActionReceiver.ACTION_TOGGLE -> togglePlayPause()
+        NotificationActionReceiver.ACTION_PLAY -> if (!isPlaying.value) togglePlayPause()
+        NotificationActionReceiver.ACTION_PAUSE -> pause()
         NotificationActionReceiver.ACTION_NEXT -> playNextTrack()
         NotificationActionReceiver.ACTION_PREV -> playPreviousTrack()
       }
@@ -427,7 +430,10 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
       // A page that never starts (no connection, a blocked video) would leave the player silent.
       webWatchdog = viewModelScope.launch {
         delay(WEB_START_TIMEOUT_MS)
-        if (musicRepository.currentTrack.value?.id == track.id && !isPlaying.value && positionMs.value == 0L) {
+        // A song the user paused right away is not a failure.
+        if (musicRepository.currentTrack.value?.id == track.id && !isPlaying.value && positionMs.value == 0L &&
+          WebPlayerHost.wantsToPlay
+        ) {
           onTrackFailed(track, network = false)
         }
       }
@@ -483,6 +489,13 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     } else {
       audioEngineManager.togglePlayPause()
     }
+    updateSystemNotification()
+  }
+
+  /** Pauses whatever plays; does nothing when already paused (unlike a toggle). */
+  fun pause() {
+    if (!isPlaying.value) return
+    if (musicRepository.currentTrack.value?.isWeb == true) WebPlayerHost.pause() else audioEngineManager.pause()
     updateSystemNotification()
   }
 
@@ -587,7 +600,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     libraryRepository.removeFromPlaylist(playlistId, trackId)
 
   fun skipCuriositySpeech() {
-    curiositySpeechManager.stopSpeech()
+    curiositySpeechManager.stopSpeech(continueAfter = true)
   }
 
   // ---- Audius (searched from the Início search bar; full tracks played by the app's own player) ----
@@ -1055,22 +1068,28 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   init {
     // The service applies the same curve the app uses.
     viewModelScope.launch { audioEngineManager.eqSettings.collect { GlobalEq.settings.value = it } }
+    // Root on the output mix already equalizes this app's own player too: its own processor steps aside.
+    viewModelScope.launch {
+      GlobalEq.status.map { it.globalOutput }.distinctUntilChanged().collect { audioEngineManager.setCoveredByOutputMix(it) }
+    }
+    GlobalEq.loadedByApp = true
     applyEqReach(_eqReach.value)
   }
 
   fun setEqReach(reach: EqReach) {
     _eqReach.value = reach
     preferencesRepository.saveEqReach(reach.key)
-    applyEqReach(reach)
+    applyEqReach(reach, restart = true)
   }
 
-  private fun applyEqReach(reach: EqReach) {
+  private fun applyEqReach(reach: EqReach, restart: Boolean = false) {
     GlobalEq.reach.value = reach
     if (reach == EqReach.APP) {
       GlobalEqService.stop(context)
     } else {
-      // Restart so a change between ADB and root takes effect (root asks for su on start).
-      GlobalEqService.stop(context)
+      // A change between ADB and root restarts the service (root asks for su on start); opening the app
+      // only makes sure it runs, without tearing down effects that are already applied.
+      if (restart) GlobalEqService.stop(context)
       GlobalEqService.start(context)
     }
   }
@@ -1174,7 +1193,10 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     super.onCleared()
     timerTickerJob?.cancel()
     curiositySpeechManager.shutdown()
-    audioEngineManager.stopPlayback()
+    audioEngineManager.release()
+    WebPlayerHost.stop()
+    NotificationActionReceiver.onActionReceived = null
+    MusicNotificationManager.onSeekToRequested = null
     PlaybackService.stop()
     stopSystemAudioCapture()
     MusicNotificationManager.clearNotification(context)

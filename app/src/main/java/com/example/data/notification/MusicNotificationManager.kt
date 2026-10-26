@@ -47,11 +47,11 @@ object MusicNotificationManager {
         setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS)
         setCallback(object : MediaSession.Callback() {
           override fun onPlay() {
-            NotificationActionReceiver.onActionReceived?.invoke(NotificationActionReceiver.ACTION_TOGGLE)
+            NotificationActionReceiver.onActionReceived?.invoke(NotificationActionReceiver.ACTION_PLAY)
           }
 
           override fun onPause() {
-            NotificationActionReceiver.onActionReceived?.invoke(NotificationActionReceiver.ACTION_TOGGLE)
+            NotificationActionReceiver.onActionReceived?.invoke(NotificationActionReceiver.ACTION_PAUSE)
           }
 
           override fun onSkipToNext() {
@@ -66,9 +66,10 @@ object MusicNotificationManager {
             onSeekToRequested?.invoke(pos)
           }
         })
-        isActive = true
       }
     }
+    // Back on after clearNotification switched it off, so headset buttons reach the app again.
+    mediaSession!!.isActive = true
     return mediaSession!!
   }
 

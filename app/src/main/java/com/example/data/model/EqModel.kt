@@ -70,6 +70,8 @@ data class EqSettings(
   val stereoWidth: Float = 1f,
   val limiterEnabled: Boolean = true,
   val limiterCeilingDb: Float = -0.5f,
+  /** Lowers the level by the curve's loudest boost, so boosting never pushes the music into the limiter. */
+  val autoPreamp: Boolean = true,
   /** Android's hardware virtualizer, 0..1000. Only works where the device offers it. */
   val virtualizerStrength: Int = 0,
   /** Correction for the fone in use, applied before everything else. Null = none chosen. */
@@ -133,14 +135,17 @@ object EqPresets {
     )
   )
 
+  private fun EqPreset.withoutVirtualizer() = copy(settings = settings.copy(virtualizerStrength = 0))
+
   val FLAT: EqPreset = fromLegacy(AudioProfile.FLAT).copy(name = "Flat")
 
   val BUILT_IN: List<EqPreset> = listOf(
     FLAT,
-    fromLegacy(AudioProfile.PROG_ROCK),
-    fromLegacy(AudioProfile.ACOUSTIC_CLARITY),
-    fromLegacy(AudioProfile.VOCAL_PRESENCE),
-    fromLegacy(AudioProfile.BASS_PUNCH),
+    // A preset changes the curve only; it never switches the hardware virtualizer on behind the user's back.
+    fromLegacy(AudioProfile.PROG_ROCK).withoutVirtualizer(),
+    fromLegacy(AudioProfile.ACOUSTIC_CLARITY).withoutVirtualizer(),
+    fromLegacy(AudioProfile.VOCAL_PRESENCE).withoutVirtualizer(),
+    fromLegacy(AudioProfile.BASS_PUNCH).withoutVirtualizer(),
     EqPreset(
       "preset_pop", "Pop",
       EqSettings.withGains(listOf(-1f, 0f, 1.5f, 2.5f, 2f, 0.5f, -0.5f, -1f, -0.5f, 0.5f, 1.5f, 2.5f, 3f, 3f, 2.5f))
@@ -187,9 +192,10 @@ object EqPresets {
     .put("t", b.type.key)
     .put("on", b.enabled)
 
-  fun bandFromJson(o: JSONObject): EqBand = EqBand(
+  /** [maxGainDb]: the user's bands stop at ±15 dB; fone corrections may need up to ±20 dB. */
+  fun bandFromJson(o: JSONObject, maxGainDb: Float = EqBand.MAX_GAIN): EqBand = EqBand(
     freqHz = o.optDouble("f", 1000.0).toFloat().coerceIn(EqBand.MIN_FREQ, EqBand.MAX_FREQ),
-    gainDb = o.optDouble("g", 0.0).toFloat().coerceIn(EqBand.MIN_GAIN, EqBand.MAX_GAIN),
+    gainDb = o.optDouble("g", 0.0).toFloat().coerceIn(-maxGainDb, maxGainDb),
     q = o.optDouble("q", EqBand.DEFAULT_Q.toDouble()).toFloat().coerceIn(EqBand.MIN_Q, EqBand.MAX_Q),
     type = FilterType.fromKey(o.optString("t")),
     enabled = o.optBoolean("on", true)
@@ -207,6 +213,7 @@ object EqPresets {
     .put("width", s.stereoWidth.toDouble())
     .put("limiter", s.limiterEnabled)
     .put("ceiling", s.limiterCeilingDb.toDouble())
+    .put("autoPre", s.autoPreamp)
     .put("virt", s.virtualizerStrength)
     .apply { s.device?.let { put("device", deviceToJson(it)) } }
     .put("parametric", s.parametric)
@@ -227,9 +234,12 @@ object EqPresets {
       source = o.optString("source"),
       rig = o.optString("rig"),
       preampDb = o.optDouble("preamp", 0.0).toFloat().coerceIn(-30f, 10f),
-      bands = (0 until arr.length()).map { bandFromJson(arr.getJSONObject(it)) }
+      bands = (0 until arr.length()).map { bandFromJson(arr.getJSONObject(it), maxGainDb = DEVICE_MAX_GAIN_DB) }
     )
   }
+
+  /** The same limit the AutoEq parser accepts. */
+  private const val DEVICE_MAX_GAIN_DB = 20f
 
   fun settingsFromJson(o: JSONObject): EqSettings {
     val d = EqSettings()
@@ -255,6 +265,7 @@ object EqPresets {
       stereoWidth = o.optDouble("width", 1.0).toFloat().coerceIn(0f, 2f),
       limiterEnabled = o.optBoolean("limiter", true),
       limiterCeilingDb = o.optDouble("ceiling", -0.5).toFloat().coerceIn(-12f, 0f),
+      autoPreamp = o.optBoolean("autoPre", true),
       virtualizerStrength = o.optInt("virt", 0).coerceIn(0, 1000),
       device = deviceFromJson(o.optJSONObject("device"))
     )
