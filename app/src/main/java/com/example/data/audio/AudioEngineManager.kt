@@ -65,6 +65,7 @@ class AudioEngineManager(private val context: Context) {
   private var virtualizer: Virtualizer? = null
   private var visualizer: Visualizer? = null
   private var isRealFftActive = false
+  private var effectsAttached = false
 
   // Set by playTrack; consumed when the new item is ready, so focus is asked only once per track.
   private var pendingStart = false
@@ -214,6 +215,30 @@ class AudioEngineManager(private val context: Context) {
   // --- player ---
 
   private val playerListener = object : Player.Listener {
+    override fun onIsPlayingChanged(isPlaying: Boolean) {
+      // The position is read ten times a second only while something plays.
+      if (isPlaying) {
+        if (!effectsAttached) attachAudioEffects()
+        startProgressTracking()
+      } else {
+        progressJob?.cancel()
+        player?.let { _currentPositionMs.value = it.currentPosition.coerceAtLeast(0L) }
+      }
+    }
+
+    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+      val p = player ?: return
+      if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO || p.currentMediaItemIndex == 0) return
+      // The queued next track started with no gap: drop the finished one so the playlist is
+      // always [playing, next].
+      p.removeMediaItems(0, p.currentMediaItemIndex)
+      _durationMs.value = p.duration.takeIf { it != C.TIME_UNSET }?.coerceAtLeast(1L) ?: 0L
+      _currentPositionMs.value = 0L
+      val advanced = upNextAdvanced
+      upNextAdvanced = null
+      advanced?.invoke()
+    }
+
     override fun onPlaybackStateChanged(state: Int) {
       val p = player ?: return
       when (state) {
@@ -231,8 +256,6 @@ class AudioEngineManager(private val context: Context) {
             p.play()
             registerNoisyReceiver()
             _isPlaying.value = true
-            attachAudioEffects()
-            startProgressTracking()
             updateCapabilities()
           }
         }
@@ -289,32 +312,117 @@ class AudioEngineManager(private val context: Context) {
       }
   }
 
-  fun playTrack(filePathOrUri: String, onCompletion: () -> Unit = {}, onError: (network: Boolean) -> Unit = {}) {
-    try {
-      stopPlayback()
+  /** A playable URI for a file path or a URI string; null for a local file that no longer exists. */
+  private fun uriFor(filePathOrUri: String): Uri? {
+    val isRemoteOrContent = filePathOrUri.startsWith("content://") || filePathOrUri.startsWith("file://") ||
+      filePathOrUri.startsWith("http://") || filePathOrUri.startsWith("https://")
+    // Validate before handing it to the player, so a missing file never starts a broken load.
+    if (!isRemoteOrContent && !File(filePathOrUri).exists()) return null
+    return if (isRemoteOrContent) Uri.parse(filePathOrUri) else Uri.fromFile(File(filePathOrUri))
+  }
 
-      val isRemoteOrContent = filePathOrUri.startsWith("content://") || filePathOrUri.startsWith("file://") ||
-        filePathOrUri.startsWith("http://") || filePathOrUri.startsWith("https://")
-      // Validate before handing it to the player, so a missing file never starts a broken load.
-      if (!isRemoteOrContent && !File(filePathOrUri).exists()) {
+  /**
+   * Loads a track and, with [autoStart], plays it as soon as it is ready. Without it (a track restored at
+   * launch) it waits at [startPositionMs] for play.
+   */
+  fun playTrack(
+    filePathOrUri: String,
+    onCompletion: () -> Unit = {},
+    onError: (network: Boolean) -> Unit = {},
+    startPositionMs: Long = 0L,
+    autoStart: Boolean = true
+  ) {
+    try {
+      // Between two tracks the focus and the headphones receiver are kept: the next one starts at once.
+      resetPlayer()
+      val uri = uriFor(filePathOrUri)
+      if (uri == null) {
         Log.e(TAG, "Audio file does not exist: $filePathOrUri")
         onError(false)
         return
       }
-      val uri = if (isRemoteOrContent) Uri.parse(filePathOrUri) else Uri.fromFile(File(filePathOrUri))
 
       val p = ensurePlayer()
       completionCallback = onCompletion
       errorCallback = onError
-      pendingStart = true
+      upNextAdvanced = null
+      pendingStart = autoStart
       eqDsp.update(processedSettings())
-      p.setMediaItem(MediaItem.fromUri(uri))
+      p.setMediaItem(MediaItem.fromUri(uri), startPositionMs.coerceAtLeast(0L))
+      _currentPositionMs.value = startPositionMs.coerceAtLeast(0L)
       p.prepare()
+      if (!autoStart) {
+        abandonFocus()
+        unregisterNoisyReceiver()
+      }
     } catch (e: Exception) {
       Log.e(TAG, "Error playing audio file", e)
       _isPlaying.value = false
       onError(false)
     }
+  }
+
+  /** Runs when the queued next track (see [setUpNext]) took over with no gap. */
+  private var upNextAdvanced: (() -> Unit)? = null
+
+  /**
+   * Queues [filePathOrUri] right after the playing track, so the player moves to it with no gap
+   * (gapless). Null removes it, e.g. when the queue changed or the next song needs a narration first.
+   * [onAdvanced] runs once the player has moved on to it.
+   */
+  fun setUpNext(filePathOrUri: String?, onAdvanced: () -> Unit) {
+    val p = player ?: return
+    try {
+      if (p.mediaItemCount > 1) p.removeMediaItems(1, p.mediaItemCount)
+      upNextAdvanced = null
+      val uri = filePathOrUri?.let(::uriFor) ?: return
+      if (p.mediaItemCount == 0) return
+      p.addMediaItem(MediaItem.fromUri(uri))
+      upNextAdvanced = onAdvanced
+    } catch (e: Exception) {
+      Log.w(TAG, "Could not queue the next track", e)
+    }
+  }
+
+  /** New callbacks for the track that just took over (after a gapless move). */
+  fun updateCallbacks(onCompletion: () -> Unit, onError: (network: Boolean) -> Unit) {
+    completionCallback = onCompletion
+    errorCallback = onError
+  }
+
+  /** True when a track is loaded (playing or paused), so play can resume it. */
+  val hasLoadedTrack: Boolean
+    get() = player?.let { it.playbackState != Player.STATE_IDLE && it.playbackState != Player.STATE_ENDED } == true
+
+  /** Stops the player and empties it, keeping the audio focus. */
+  private fun resetPlayer() {
+    try {
+      progressJob?.cancel()
+      pendingStart = false
+      upNextAdvanced = null
+      player?.let {
+        it.stop()
+        it.clearMediaItems()
+      }
+    } catch (e: Exception) {
+      Log.e(TAG, "Error resetting player", e)
+    }
+    _isPlaying.value = false
+    _currentPositionMs.value = 0L
+    _durationMs.value = 0L
+  }
+
+  /** Fades the volume out over [durationMs] and pauses: the sleep timer's end. */
+  suspend fun fadeOutAndPause(durationMs: Long) {
+    val p = player ?: return
+    if (!_isPlaying.value) return
+    val steps = 30
+    for (i in steps downTo 0) {
+      p.volume = i / steps.toFloat()
+      delay(durationMs / steps)
+    }
+    pauseByUser()
+    p.volume = 1f
   }
 
   /** Attaches the live spectrum again, after the microphone permission it needs was granted. */
@@ -333,6 +441,9 @@ class AudioEngineManager(private val context: Context) {
         pauseByUser()
       } else if (p.playbackState == Player.STATE_IDLE || p.playbackState == Player.STATE_ENDED) {
         Log.w(TAG, "Nothing loaded to resume")
+      } else if (p.playbackState == Player.STATE_BUFFERING && !p.playWhenReady) {
+        // Still loading a restored track: start as soon as it is ready.
+        pendingStart = true
       } else if (requestFocus()) {
         p.volume = 1f
         p.play()
@@ -359,6 +470,7 @@ class AudioEngineManager(private val context: Context) {
     try {
       progressJob?.cancel()
       pendingStart = false
+      upNextAdvanced = null
       player?.let {
         it.stop()
         it.clearMediaItems()
@@ -413,6 +525,7 @@ class AudioEngineManager(private val context: Context) {
     releaseAudioEffects()
     val sessionId = audioSessionId
     if (sessionId == 0) return
+    effectsAttached = true
 
     try {
       virtualizer = Virtualizer(0, sessionId).apply { enabled = _eqSettings.value.enabled }
@@ -484,6 +597,7 @@ class AudioEngineManager(private val context: Context) {
     visualizer = null
     virtualizer = null
     isRealFftActive = false
+    effectsAttached = false
   }
 
   // --- processing chain ---

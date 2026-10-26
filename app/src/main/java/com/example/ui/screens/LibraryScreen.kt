@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
@@ -76,6 +78,7 @@ import com.example.ui.theme.SpaceGrotesk
 import com.example.ui.theme.staggeredEntrance
 
 private enum class LibrarySection(val label: String) {
+  SONGS("Músicas"),
   PLAYLISTS("Playlists"),
   FAVORITES("Favoritos"),
   QUEUE("Fila")
@@ -87,6 +90,10 @@ fun LibraryScreen(
   favoriteTracks: List<Track>,
   savedTracks: Map<String, Track>,
   allTracks: List<Track>,
+  deviceTracks: List<Track> = emptyList(),
+  deviceScanning: Boolean = false,
+  hasMusicPermission: Boolean = false,
+  onScanDevice: () -> Unit = {},
   queue: List<Track>,
   currentTrack: Track?,
   isPlaying: Boolean,
@@ -105,7 +112,7 @@ fun LibraryScreen(
   onQueueOpened: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
-  var section by rememberSaveable { mutableStateOf(LibrarySection.PLAYLISTS) }
+  var section by rememberSaveable { mutableStateOf(LibrarySection.SONGS) }
   var openPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
   var showNewPlaylist by remember { mutableStateOf(false) }
   var renamingPlaylist by remember { mutableStateOf<Playlist?>(null) }
@@ -123,9 +130,12 @@ fun LibraryScreen(
   // Imports an audio file from the device into the local library (system file picker).
   val context = LocalContext.current
   val audioPickerLauncher = rememberLauncherForActivityResult(
-    contract = ActivityResultContracts.GetContent()
+    contract = ActivityResultContracts.OpenDocument()
   ) { uri: Uri? ->
     uri?.let {
+      runCatching {
+        context.contentResolver.takePersistableUriPermission(it, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      }
       var displayName = "Áudio Local"
       try {
         context.contentResolver.query(it, null, null, null, null)?.use { cursor ->
@@ -146,6 +156,14 @@ fun LibraryScreen(
       onAddLocalTrack(displayName, "Biblioteca Local", it.toString(), if (realDurationMs > 0) realDurationMs else 180000L)
     }
   }
+
+  // The device's music: asked for when the user opens it, read again each time Biblioteca opens.
+  var musicAllowed by remember { mutableStateOf(hasMusicPermission) }
+  val musicPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+    musicAllowed = granted
+    if (granted) onScanDevice()
+  }
+  androidx.compose.runtime.LaunchedEffect(Unit) { if (musicAllowed) onScanDevice() }
 
   // Tracks of the current catalog win over the saved snapshot (fresher data).
   val byId = savedTracks + allTracks.associateBy { it.id }
@@ -181,7 +199,7 @@ fun LibraryScreen(
       )
     } else {
       Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
       ) {
         LibrarySection.values().forEach { s ->
@@ -200,12 +218,40 @@ fun LibraryScreen(
         label = "librarySection"
       ) { shownSection ->
       when (shownSection) {
+        LibrarySection.SONGS -> if (!musicAllowed) {
+          com.example.ui.components.EmptyState(
+            icon = Icons.Default.LibraryMusic,
+            title = "Suas músicas do aparelho",
+            message = "Permita o acesso às músicas para ver aqui tudo o que está no celular, com capa, artista e álbum.",
+            actionLabel = "Permitir acesso",
+            onAction = {
+              musicPermissionLauncher.launch(
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) android.Manifest.permission.READ_MEDIA_AUDIO
+                else android.Manifest.permission.READ_EXTERNAL_STORAGE
+              )
+            }
+          )
+        } else {
+          TrackList(
+            emptyText = if (deviceScanning) "Procurando músicas no aparelho…" else "Nenhuma música encontrada no aparelho.",
+            tracks = deviceTracks,
+            onHeaderPlay = { onPlayFromList(deviceTracks.first(), deviceTracks) },
+            onHeaderShuffle = { onShuffleList(deviceTracks) },
+            currentTrack = currentTrack,
+            isPlaying = isPlaying,
+            onPlay = { track -> onPlayFromList(track, deviceTracks) },
+            trailingIcon = null,
+            trailingDescription = "",
+            onTrailing = {}
+          )
+        }
+
         LibrarySection.PLAYLISTS -> PlaylistsList(
           playlists = playlists,
           byId = byId,
           onOpen = { openPlaylistId = it.id },
           onNew = { showNewPlaylist = true },
-          onImportAudio = { audioPickerLauncher.launch("audio/*") }
+          onImportAudio = { audioPickerLauncher.launch(arrayOf("audio/*")) }
         )
 
         LibrarySection.FAVORITES -> TrackList(
@@ -496,7 +542,7 @@ private fun TrackList(
   currentTrack: Track?,
   isPlaying: Boolean,
   onPlay: (Track) -> Unit,
-  trailingIcon: androidx.compose.ui.graphics.vector.ImageVector,
+  trailingIcon: androidx.compose.ui.graphics.vector.ImageVector?,
   trailingDescription: String,
   onTrailing: (Track) -> Unit
 ) {
@@ -515,7 +561,7 @@ private fun TrackList(
         onClick = { onPlay(track) },
         modifier = Modifier.animateItem().staggeredEntrance(index),
         trailing = {
-          IconButton(onClick = { onTrailing(track) }) {
+          if (trailingIcon != null) IconButton(onClick = { onTrailing(track) }) {
             Icon(trailingIcon, contentDescription = trailingDescription, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
           }
         }

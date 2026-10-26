@@ -8,6 +8,11 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- The music on the device (asked when the user opens it in Biblioteca). -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <!-- Lets the app read `dumpsys audio` to list the apps playing now. Android grants it only
          over adb: adb shell pm grant com.aistudio.tarkas.app android.permission.DUMP -->
     <uses-permission
@@ -40,20 +45,16 @@
             </intent-filter>
         </activity>
 
-        <receiver
-            android:name=".data.notification.NotificationActionReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.example.tarkas.ACTION_PREV" />
-                <action android:name="com.example.tarkas.ACTION_TOGGLE" />
-                <action android:name="com.example.tarkas.ACTION_NEXT" />
-            </intent-filter>
-        </receiver>
-
+        <!-- The media session: notification, lock screen, headphones, Bluetooth, cars and watches. -->
         <service
             android:name=".data.playback.PlaybackService"
-            android:exported="false"
-            android:foregroundServiceType="mediaPlayback" />
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
 
         <!-- ADB and root modes: applies the equalizer to other apps' audio sessions. -->
         <service

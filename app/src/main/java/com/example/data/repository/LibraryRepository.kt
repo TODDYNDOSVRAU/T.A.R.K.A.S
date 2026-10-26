@@ -3,6 +3,7 @@ package com.example.data.repository
 import android.content.Context
 import com.example.data.model.Playlist
 import com.example.data.model.Track
+import com.example.data.model.TrackJson
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -108,18 +109,7 @@ class LibraryRepository(context: Context) {
   private fun persistSavedTracks() {
     // Keep only tracks that something still points at.
     val used = _favorites.value.toSet() + _playlists.value.flatMap { it.trackIds }
-    val array = JSONArray()
-    _savedTracks.value.values.filter { it.id in used }.forEach { t ->
-      array.put(
-        JSONObject()
-          .put("id", t.id).put("title", t.title).put("artist", t.artist).put("album", t.album)
-          .put("dur", t.durationMs).put("genre", t.genre).put("era", t.era)
-          .put("local", t.isLocalFile).put("path", t.filePath ?: JSONObject.NULL)
-          .put("color", t.colorHex)
-          .put("art", t.artworkUrl ?: JSONObject.NULL)
-          .put("web", t.webSource ?: JSONObject.NULL).put("webId", t.webId ?: JSONObject.NULL)
-      )
-    }
+    val array = TrackJson.listToJson(_savedTracks.value.values.filter { it.id in used })
     prefs.edit().putString(KEY_TRACKS, array.toString()).apply()
   }
 
@@ -142,27 +132,7 @@ class LibraryRepository(context: Context) {
   }
 
   private fun loadSavedTracks(): Map<String, Track> = try {
-    val array = JSONArray(prefs.getString(KEY_TRACKS, "[]"))
-    (0 until array.length()).mapNotNull { i ->
-      val o = array.getJSONObject(i)
-      // YouTube songs saved while that integration existed can no longer play: drop them.
-      if (o.has("yt") && !o.isNull("yt")) return@mapNotNull null
-      Track(
-        id = o.getString("id"),
-        title = o.getString("title"),
-        artist = o.getString("artist"),
-        album = o.getString("album"),
-        durationMs = o.optLong("dur", 0L),
-        genre = o.optString("genre", ""),
-        era = o.optString("era", ""),
-        isLocalFile = o.optBoolean("local", false),
-        filePath = if (o.isNull("path")) null else o.getString("path"),
-        colorHex = o.optLong("color", 0xFF46C9D3),
-        artworkUrl = if (o.isNull("art")) null else o.optString("art").ifBlank { null },
-        webSource = if (o.isNull("web")) null else o.optString("web").ifBlank { null },
-        webId = if (o.isNull("webId")) null else o.optString("webId").ifBlank { null }
-      )
-    }.associateBy { it.id }
+    TrackJson.listFromJson(JSONArray(prefs.getString(KEY_TRACKS, "[]"))).associateBy { it.id }
   } catch (_: Exception) {
     emptyMap()
   }

@@ -12,8 +12,8 @@ android {
     applicationId = "com.aistudio.tarkas.app"
     minSdk = 24
     targetSdk = 36
-    versionCode = 10
-    versionName = "1.9"
+    versionCode = 11
+    versionName = "1.10"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -99,6 +99,7 @@ dependencies {
   implementation(libs.backdrop)
   // Playback with our own audio processing (parametric EQ with adjustable Q, tone, limiter, width)
   implementation(libs.androidx.media3.exoplayer)
+  implementation(libs.androidx.media3.session)
   // Cover art and thumbnails
   implementation(libs.coil.compose)
   // implementation(libs.androidx.datastore.preferences)

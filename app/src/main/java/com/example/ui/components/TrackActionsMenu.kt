@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
@@ -45,7 +46,10 @@ fun TrackActionsMenu(
   onCreatePlaylist: (name: String) -> Unit,
   modifier: Modifier = Modifier,
   iconTint: Color? = null,
-  icon: ImageVector = Icons.Default.MoreVert
+  icon: ImageVector = Icons.Default.MoreVert,
+  /** Shown only in the player: the sleep timer entry, with what it is set to (null = off). */
+  sleepTimerLabel: String? = null,
+  onSleepTimer: (() -> Unit)? = null
 ) {
   var expanded by remember { mutableStateOf(false) }
   var showPlaylists by remember { mutableStateOf(false) }
@@ -93,6 +97,14 @@ fun TrackActionsMenu(
           leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null) },
           onClick = { showPlaylists = true }
         )
+        if (onSleepTimer != null) {
+          DropdownMenuItem(
+            text = { Text(sleepTimerLabel?.let { "Timer de dormir: $it" } ?: "Timer de dormir") },
+            leadingIcon = { Icon(Icons.Default.Bedtime, contentDescription = null) },
+            onClick = { onSleepTimer(); expanded = false },
+            modifier = Modifier.testTag("menu_sleep_timer")
+          )
+        }
       } else {
         DropdownMenuItem(
           text = { Text("Nova playlist…") },

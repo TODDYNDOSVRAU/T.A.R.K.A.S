@@ -116,10 +116,24 @@ fun MusicScreen(
   onCreatePlaylist: (String, Track) -> Unit,
   onOpenQueue: () -> Unit = {},
   onClose: () -> Unit = {},
+  sleepTimer: com.example.data.playback.SleepTimer? = null,
+  onSetSleepTimer: (Int) -> Unit = {},
+  onSleepAtEndOfTrack: () -> Unit = {},
+  onCancelSleepTimer: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
   var showCuriosityDialog by remember { mutableStateOf(false) }
+  var showSleepTimer by remember { mutableStateOf(false) }
+  if (showSleepTimer) {
+    com.example.ui.components.SleepTimerDialog(
+      timer = sleepTimer,
+      onMinutes = onSetSleepTimer,
+      onEndOfTrack = onSleepAtEndOfTrack,
+      onCancel = onCancelSleepTimer,
+      onDismiss = { showSleepTimer = false }
+    )
+  }
   val reduced = com.example.ui.theme.rememberReducedMotion()
   val scope = androidx.compose.runtime.rememberCoroutineScope()
   val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
@@ -334,7 +348,9 @@ fun MusicScreen(
               onAddToPlaylist = { id -> onAddToPlaylist(id, currentTrack) },
               onCreatePlaylist = { name -> onCreatePlaylist(name, currentTrack) },
               iconTint = onPage,
-              icon = Icons.Default.MoreHoriz
+              icon = Icons.Default.MoreHoriz,
+              sleepTimerLabel = com.example.ui.components.sleepTimerLabel(sleepTimer),
+              onSleepTimer = { showSleepTimer = true }
             )
           }
         }

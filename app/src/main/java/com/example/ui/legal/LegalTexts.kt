@@ -84,6 +84,7 @@ object LegalTexts {
         "• Reconhecimento de voz e leitura em voz alta: feitos pelos serviços do próprio Android, segundo as regras do fabricante do seu aparelho.",
       "Permissões do aparelho" to
         "• Notificações: para mostrar os controles da música.\n" +
+        "• Músicas e áudio: para listar as músicas do aparelho na Biblioteca. A lista fica só no aparelho.\n" +
         "• Microfone: só para o espectro ao vivo no equalizador. O Android exige essa permissão para ler o som que o app toca; nada é gravado ou enviado.\n" +
         "• Captura de tela/áudio (medidor de nível, opcional): mede o volume do som dos outros apps enquanto você estiver na página; nada é gravado.\n" +
         "• Permissão DUMP (Modo ADB, opcional): lê quais apps estão tocando, para aplicar o equalizador neles.\n" +
@@ -111,6 +112,14 @@ object LegalTexts {
     title = "Novidades",
     subtitle = "O que mudou em cada versão",
     sections = listOf(
+      "1.10" to
+        "• A música continua tocando com a tela apagada e com o app fechado, com controles na notificação, na tela de bloqueio, no fone e no Bluetooth.\n" +
+        "• Biblioteca > Músicas: todas as músicas do celular, com capa, artista e álbum.\n" +
+        "• Sem pausa entre as faixas (gapless).\n" +
+        "• O app lembra a música, a posição e a fila quando é reaberto.\n" +
+        "• Timer de dormir no menu ⋯ do player: de 5 a 90 minutos ou no fim da faixa.\n" +
+        "• Equalizador sem estalos, limitador mais limpo e pré-amp automático.\n" +
+        "• Correções: pular durante uma curiosidade pulava duas músicas; o EQ em outros apps ficava plano depois de o Android fechar o app.",
       "1.9" to
         "• A busca do Início traz também YouTube Music e Spotify, com selo, e toca pelo player do T.A.R.K.A.S., até com a tela apagada.\n" +
         "• Entrar nas contas em Ajustes > Streaming (Premium do YouTube sem anúncios; Spotify no plano grátis, com anúncios).\n" +

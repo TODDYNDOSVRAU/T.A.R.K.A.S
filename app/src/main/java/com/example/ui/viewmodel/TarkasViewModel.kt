@@ -21,10 +21,7 @@ import com.example.data.model.Playlist
 import com.example.data.model.RepeatMode
 import com.example.data.model.Track
 import com.example.data.repository.LibraryRepository
-import com.example.data.notification.MusicNotificationManager
 import com.example.data.playback.PlaybackOrder
-import com.example.data.playback.PlaybackService
-import com.example.data.notification.NotificationActionReceiver
 import com.example.data.repository.CuriosityRepository
 import com.example.data.repository.MusicRepository
 import com.example.data.repository.PreferencesRepository
@@ -101,40 +98,27 @@ enum class TarkasNavTab(val label: String) {
 @OptIn(FlowPreview::class)
 class TarkasViewModel(application: Application) : AndroidViewModel(application) {
 
-  private companion object {
-    const val IDLE_BEFORE_LEAVING_FOREGROUND_MS = 3000L
-    const val WEB_START_TIMEOUT_MS = 25_000L
-  }
-
   private val context = application.applicationContext
-  val musicRepository = MusicRepository(context)
-  val curiosityRepository = CuriosityRepository()
-  val audioEngineManager = AudioEngineManager(context)
-  val preferencesRepository = PreferencesRepository(context)
+  // The player and what feeds it live as long as the process, not as long as this view model.
+  private val graph = com.example.AppGraph.also { it.init(context) }
+  private val playback = graph.playback
+  val musicRepository = graph.musicRepository
+  val curiosityRepository = graph.curiosityRepository
+  val audioEngineManager = graph.audioEngineManager
+  val preferencesRepository = graph.preferencesRepository
   val systemAudioCaptureManager = SystemAudioCaptureManager(context)
-  val curiositySpeechManager = com.example.data.assistant.CuriositySpeechManager(context)
+  val curiositySpeechManager = graph.curiositySpeechManager
 
-  val libraryRepository = LibraryRepository(context)
+  val libraryRepository = graph.libraryRepository
   val favorites: StateFlow<List<String>> = libraryRepository.favorites
   val playlists: StateFlow<List<Playlist>> = libraryRepository.playlists
   val savedTracks: StateFlow<Map<String, Track>> = libraryRepository.savedTracks
 
-  // Playback order: manual queue ("Up Next") first, then the playback context.
-  private val _queue = MutableStateFlow<List<Track>>(emptyList())
-  val queue: StateFlow<List<Track>> = _queue.asStateFlow()
-
-  private val _shuffle = MutableStateFlow(preferencesRepository.getShuffle())
-  val shuffle: StateFlow<Boolean> = _shuffle.asStateFlow()
-
-  private val _repeatMode = MutableStateFlow(preferencesRepository.getRepeatMode())
-  val repeatMode: StateFlow<RepeatMode> = _repeatMode.asStateFlow()
-
-  // null = the whole library; otherwise the playlist/favorites the user started from.
-  private var contextTracks: List<Track>? = null
-  private val playHistory = mutableListOf<Track>()
-
-  private val _curiosityConfig = MutableStateFlow(preferencesRepository.getCuriosityConfig())
-  val curiosityConfig: StateFlow<com.example.data.model.CuriosityConfig> = _curiosityConfig.asStateFlow()
+  val queue: StateFlow<List<Track>> = playback.queue
+  val shuffle: StateFlow<Boolean> = playback.shuffle
+  val repeatMode: StateFlow<RepeatMode> = playback.repeatMode
+  val curiosityConfig: StateFlow<com.example.data.model.CuriosityConfig> = playback.curiosityConfig
+  val sleepTimer: StateFlow<com.example.data.playback.SleepTimer?> = playback.sleepTimer
 
   val isAiSpeakingCuriosity: StateFlow<Boolean> = curiositySpeechManager.isSpeaking
   val currentCuriositySpeechText: StateFlow<String?> = curiositySpeechManager.currentSpokenText
@@ -160,8 +144,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   val eqSettings: StateFlow<EqSettings> get() = audioEngineManager.eqSettings
   private var eqSaveJob: Job? = null
 
-  private val _activeCuriosity = MutableStateFlow<Curiosity?>(null)
-  val activeCuriosity: StateFlow<Curiosity?> = _activeCuriosity.asStateFlow()
+  val activeCuriosity: StateFlow<Curiosity?> = playback.activeCuriosity
 
   private val _assistantMessages = MutableStateFlow<List<AssistantMessage>>(emptyList())
   val assistantMessages: StateFlow<List<AssistantMessage>> = _assistantMessages.asStateFlow()
@@ -178,20 +161,9 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   val systemAudioStatus: StateFlow<SystemAudioStatus> = systemAudioCaptureManager.status
 
   // The player screens read these: they follow the local engine, or the hidden web player for a web track.
-  val isPlaying: StateFlow<Boolean> = combine(
-    musicRepository.currentTrack, audioEngineManager.isPlaying, WebPlayerHost.state
-  ) { track, local, web -> if (track?.isWeb == true) web.playing else local }
-    .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
-  val positionMs: StateFlow<Long> = combine(
-    musicRepository.currentTrack, audioEngineManager.currentPositionMs, WebPlayerHost.state
-  ) { track, local, web -> if (track?.isWeb == true) web.positionMs else local }
-    .stateIn(viewModelScope, SharingStarted.Eagerly, 0L)
-
-  val durationMs: StateFlow<Long> = combine(
-    musicRepository.currentTrack, audioEngineManager.durationMs, WebPlayerHost.state
-  ) { track, local, web -> if (track?.isWeb == true) web.durationMs.takeIf { it > 0 } ?: track.durationMs else local }
-    .stateIn(viewModelScope, SharingStarted.Eagerly, 0L)
+  val isPlaying: StateFlow<Boolean> = playback.isPlaying
+  val positionMs: StateFlow<Long> = playback.positionMs
+  val durationMs: StateFlow<Long> = playback.durationMs
 
   private val _notice = MutableStateFlow<Notice?>(null)
   val notice: StateFlow<Notice?> = _notice.asStateFlow()
@@ -203,9 +175,6 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   fun dismissNotice(id: Long) {
     if (_notice.value?.id == id) _notice.value = null
   }
-
-  /** Tracks that failed one after another; stops the skipping when nothing in the list plays. */
-  private var failuresInARow = 0
 
   /** Set by the player's queue button: the Library opens on Fila, then clears it. */
   private val _openQueueRequest = MutableStateFlow(false)
@@ -228,10 +197,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     audioEngineManager = audioEngineManager,
     onTimerCreated = { timer -> addTimer(timer) },
     onTimerCancelled = { cancelAllTimers() },
-    onCuriosityUpdated = { cur ->
-      _activeCuriosity.value = cur
-      updateSystemNotification()
-    },
+    onCuriosityUpdated = { cur -> playback.setActiveCuriosity(cur) },
     onPlayerCommand = { command -> runPlayerCommand(command) },
     onEqPreset = { preset -> selectEqPreset(preset) }
   )
@@ -266,11 +232,11 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
       }
       PlayerCommand.TOGGLE_SHUFFLE -> {
         toggleShuffle()
-        if (_shuffle.value) "Aleatório ligado" else "Aleatório desligado"
+        if (shuffle.value) "Aleatório ligado" else "Aleatório desligado"
       }
       PlayerCommand.CYCLE_REPEAT -> {
         cycleRepeatMode()
-        when (_repeatMode.value) {
+        when (repeatMode.value) {
           RepeatMode.OFF -> "Repetir desligado"
           RepeatMode.ALL -> "Repetindo a lista toda"
           RepeatMode.ONE -> "Repetindo uma faixa"
@@ -286,22 +252,9 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   init {
     loadInitialData()
     startTimerTicker()
-    setupNotificationReceiver()
-  }
-
-  private fun setupNotificationReceiver() {
-    NotificationActionReceiver.onActionReceived = { action ->
-      when (action) {
-        NotificationActionReceiver.ACTION_TOGGLE -> togglePlayPause()
-        NotificationActionReceiver.ACTION_PLAY -> if (!isPlaying.value) togglePlayPause()
-        NotificationActionReceiver.ACTION_PAUSE -> pause()
-        NotificationActionReceiver.ACTION_NEXT -> playNextTrack()
-        NotificationActionReceiver.ACTION_PREV -> playPreviousTrack()
-      }
-    }
-    MusicNotificationManager.onSeekToRequested = { pos ->
-      seekTo(pos)
-      updateSystemNotification()
+    // Playback messages (a track that failed, the sleep timer) appear over the mini player.
+    viewModelScope.launch {
+      playback.notices.collect { showNotice(Notice(it.text, it.actionLabel, it.action)) }
     }
   }
 
@@ -317,35 +270,6 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
       _activePresetId.value = preset.id
       _eqModified.value = settings.userCurve != preset.settings.userCurve
       audioEngineManager.applyEqSettings(settings)
-
-      // Initial track curiosity
-      musicRepository.currentTrack.collect { track ->
-        if (track != null) {
-          _activeCuriosity.value = curiosityRepository.getCuriosityForTrack(track)
-          updateSystemNotification()
-        }
-      }
-    }
-
-    // Monitor isPlaying changes for notification
-    viewModelScope.launch {
-      isPlaying.collect { playing ->
-        if (playing) failuresInARow = 0
-        updateSystemNotification()
-        // Playing: keep the app alive in the background as a foreground media service.
-        if (playing) PlaybackService.start(context)
-      }
-    }
-
-    // Nothing playing and nothing being narrated for a few seconds: leave the foreground.
-    // The delay covers the gap between two tracks, so the service is not torn down and rebuilt.
-    viewModelScope.launch {
-      combine(isPlaying, curiositySpeechManager.isSpeaking) { playing, speaking ->
-        playing || speaking
-      }
-        .debounce(IDLE_BEFORE_LEAVING_FOREGROUND_MS)
-        .distinctUntilChanged()
-        .collect { active -> if (!active) PlaybackService.release() }
     }
 
     // Initial Siri greeting (concise without listing commands unless user asks for help)
@@ -356,12 +280,6 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
         text = "Como posso ajudar com sua música ou áudio hoje?"
       )
     )
-  }
-
-  fun updateSystemNotification() {
-    val track = musicRepository.currentTrack.value
-    val cur = _activeCuriosity.value
-    MusicNotificationManager.updatePlaybackNotification(context, track, isPlaying.value, cur, positionMs.value)
   }
 
   /** The tab the player was opened from, so back returns there instead of to Início. */
@@ -378,209 +296,45 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     setTab(if (_currentTab.value == TarkasNavTab.MUSIC) tabBeforePlayer else TarkasNavTab.HOME)
   }
 
-  /** Plays a track from the whole library. */
-  fun playTrack(track: Track) {
-    contextTracks = null
-    playInternal(track, recordHistory = true)
-  }
+  fun playTrack(track: Track) = playback.playTrack(track)
 
-  /** Plays a track and keeps going through [list] (a playlist, favorites, ...). */
-  fun playFromList(track: Track, list: List<Track>) {
-    contextTracks = list
-    playInternal(track, recordHistory = true)
-  }
+  fun playFromList(track: Track, list: List<Track>) = playback.playFromList(track, list)
 
-  private fun playInternal(track: Track, recordHistory: Boolean) {
-    if (recordHistory) {
-      musicRepository.currentTrack.value?.let { prev ->
-        val updated = PlaybackOrder.pushHistory(playHistory, prev, track)
-        playHistory.clear()
-        playHistory.addAll(updated)
-      }
-    }
-    musicRepository.selectTrack(track)
-    val cur = curiosityRepository.getCuriosityForTrack(track)
-    _activeCuriosity.value = cur
-    updateSystemNotification()
+  fun togglePlayPause() = playback.togglePlayPause()
 
-    val config = _curiosityConfig.value
-    // Only a verified curiosity is spoken; a track without one simply plays.
-    if (cur != null && config.enabled && (config.timing == com.example.data.model.CuriosityTiming.START_OF_TRACK || config.timing == com.example.data.model.CuriosityTiming.BOTH)) {
-      // Intro curiosity begins playing BEFORE the music track
-      audioEngineManager.stopPlayback()
-      WebPlayerHost.stop()
-      curiositySpeechManager.speakCuriosity(track, cur, isIntro = true, config = config) {
-        startTrackAudio(track)
-      }
-    } else {
-      startTrackAudio(track)
-    }
-  }
+  fun pause() = playback.pause()
 
-  private var webWatchdog: Job? = null
+  fun seekTo(ms: Long) = playback.seekTo(ms)
 
-  private fun startTrackAudio(track: Track) {
-    val path = track.filePath
-    webWatchdog?.cancel()
-    if (track.isWeb) {
-      audioEngineManager.stopPlayback()
-      val done = { onTrackPlaybackCompleted(track) }
-      if (track.webSource == "spotify") WebPlayerHost.playSpotify(context, track.webId.orEmpty(), done)
-      else WebPlayerHost.playYouTube(context, track.webId.orEmpty(), done)
-      // A page that never starts (no connection, a blocked video) would leave the player silent.
-      webWatchdog = viewModelScope.launch {
-        delay(WEB_START_TIMEOUT_MS)
-        // A song the user paused right away is not a failure.
-        if (musicRepository.currentTrack.value?.id == track.id && !isPlaying.value && positionMs.value == 0L &&
-          WebPlayerHost.wantsToPlay
-        ) {
-          onTrackFailed(track, network = false)
-        }
-      }
-    } else if (path == null) {
-      onTrackFailed(track, network = false)
-    } else {
-      WebPlayerHost.stop()
-      audioEngineManager.playTrack(
-        path,
-        onCompletion = { onTrackPlaybackCompleted(track) },
-        onError = { network -> onTrackFailed(track, network) }
-      )
-    }
-    updateSystemNotification()
-  }
+  fun playNextTrack() = playback.playNextTrack()
 
-  /** Says what went wrong and moves on, unless several tracks in a row failed (offline, say). */
-  private fun onTrackFailed(track: Track, network: Boolean) {
-    failuresInARow++
-    val reason = if (network) "Sem conexão para tocar “${track.title}”." else "Não foi possível tocar “${track.title}”."
-    val list = contextTracks ?: musicRepository.tracks.value
-    val canSkip = failuresInARow < 3 && (list.size > 1 || _queue.value.isNotEmpty())
-    if (canSkip) {
-      showNotice(Notice("$reason Pulando para a próxima."))
-      advance(auto = false)
-    } else {
-      showNotice(Notice(reason, actionLabel = "Tentar de novo", action = { failuresInARow = 0; playInternal(track, recordHistory = false) }))
-    }
-  }
+  fun playPreviousTrack() = playback.playPreviousTrack()
 
-  private fun onTrackPlaybackCompleted(completedTrack: Track) {
-    val config = _curiosityConfig.value
-    val cur = _activeCuriosity.value ?: curiosityRepository.getCuriosityForTrack(completedTrack)
-    // Repeat-one loops the same track, so don't narrate its curiosity again on every pass.
-    val narrate = cur != null && _repeatMode.value != RepeatMode.ONE
-    if (narrate && config.enabled && (config.timing == com.example.data.model.CuriosityTiming.END_OF_TRACK || config.timing == com.example.data.model.CuriosityTiming.BOTH)) {
-      // Outro curiosity spoken at the end of the track
-      curiositySpeechManager.speakCuriosity(completedTrack, cur!!, isIntro = false, config = config) {
-        advance(auto = true)
-      }
-    } else {
-      advance(auto = true)
-    }
-  }
+  // --- queue, shuffle, repeat, sleep timer ---
 
-  fun togglePlayPause() {
-    val current = musicRepository.currentTrack.value
-    if (!isPlaying.value && positionMs.value == 0L && current != null) {
-      // Restart the same track without losing the playlist context or adding it to the history.
-      playInternal(current, recordHistory = false)
-    } else if (current?.isWeb == true) {
-      WebPlayerHost.togglePlayPause()
-    } else {
-      audioEngineManager.togglePlayPause()
-    }
-    updateSystemNotification()
-  }
+  fun toggleShuffle() = playback.toggleShuffle()
 
-  /** Pauses whatever plays; does nothing when already paused (unlike a toggle). */
-  fun pause() {
-    if (!isPlaying.value) return
-    if (musicRepository.currentTrack.value?.isWeb == true) WebPlayerHost.pause() else audioEngineManager.pause()
-    updateSystemNotification()
-  }
+  fun cycleRepeatMode() = playback.cycleRepeatMode()
 
-  /** Moves the playing track, local or web, to [ms]. */
-  fun seekTo(ms: Long) {
-    if (musicRepository.currentTrack.value?.isWeb == true) WebPlayerHost.seekTo(ms) else audioEngineManager.seekTo(ms)
-  }
+  fun shuffleFrom(list: List<Track>) = playback.shuffleFrom(list)
 
-  fun playNextTrack() = advance(auto = false)
+  fun playNext(track: Track) = playback.playNext(track)
 
-  /** [auto] is true when the track ended by itself; false for the Next button. */
-  private fun advance(auto: Boolean) {
-    curiositySpeechManager.stopSpeech()
-    val current = musicRepository.currentTrack.value
-    val next = PlaybackOrder.resolveNext(
-      current = current,
-      queue = _queue.value,
-      list = contextTracks ?: musicRepository.tracks.value,
-      shuffle = _shuffle.value,
-      repeat = _repeatMode.value,
-      auto = auto
-    )
-    _queue.value = next.remainingQueue
-    val track = next.track ?: return
-    if (next.loopSameTrack) {
-      startTrackAudio(track)
-    } else {
-      playInternal(track, recordHistory = true)
-    }
-  }
-  fun playPreviousTrack() {
-    curiositySpeechManager.stopSpeech()
-    // Like Apple Music: a few seconds in, "previous" restarts the track.
-    if (positionMs.value > 3000L) {
-      seekTo(0L)
-      return
-    }
-    val prev = if (playHistory.isNotEmpty()) {
-      playHistory.removeAt(playHistory.lastIndex)
-    } else {
-      musicRepository.selectPreviousTrack()
-    }
-    if (prev != null) playInternal(prev, recordHistory = false)
-  }
+  fun addToQueue(track: Track) = playback.addToQueue(track)
 
-  // --- queue, shuffle, repeat ---
+  fun removeFromQueue(index: Int) = playback.removeFromQueue(index)
 
-  fun toggleShuffle() {
-    _shuffle.value = !_shuffle.value
-    preferencesRepository.saveShuffle(_shuffle.value)
-  }
+  fun moveInQueue(from: Int, to: Int) = playback.moveInQueue(from, to)
 
-  fun cycleRepeatMode() {
-    _repeatMode.value = PlaybackOrder.nextRepeatMode(_repeatMode.value)
-    preferencesRepository.saveRepeatMode(_repeatMode.value)
-  }
+  fun clearQueue() = playback.clearQueue()
 
-  /** Turns shuffle on and starts a random track of [list]. */
-  fun shuffleFrom(list: List<Track>) {
-    if (list.isEmpty()) return
-    if (!_shuffle.value) toggleShuffle()
-    playFromList(list.random(), list)
-  }
+  fun playFromQueue(index: Int) = playback.playFromQueue(index)
 
-  fun playNext(track: Track) {
-    _queue.value = PlaybackOrder.enqueueNext(_queue.value, track)
-  }
+  fun setSleepTimer(minutes: Int) = playback.setSleepTimer(minutes)
 
-  fun addToQueue(track: Track) {
-    _queue.value = PlaybackOrder.enqueueLast(_queue.value, track)
-  }
+  fun setSleepAtEndOfTrack() = playback.setSleepAtEndOfTrack()
 
-  fun removeFromQueue(index: Int) {
-    _queue.value = PlaybackOrder.removeAt(_queue.value, index)
-  }
-
-  fun clearQueue() {
-    _queue.value = emptyList()
-  }
-
-  fun playFromQueue(index: Int) {
-    val jump = PlaybackOrder.jumpTo(_queue.value, index) ?: return
-    _queue.value = jump.remainingQueue
-    jump.track?.let { playInternal(it, recordHistory = true) }
-  }
+  fun cancelSleepTimer() = playback.cancelSleepTimer()
 
   // --- favorites and playlists ---
 
@@ -599,9 +353,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   fun removeFromPlaylist(playlistId: String, trackId: String) =
     libraryRepository.removeFromPlaylist(playlistId, trackId)
 
-  fun skipCuriositySpeech() {
-    curiositySpeechManager.stopSpeech(continueAfter = true)
-  }
+  fun skipCuriositySpeech() = playback.skipCuriositySpeech()
 
   // ---- Audius (searched from the Início search bar; full tracks played by the app's own player) ----
 
@@ -735,13 +487,10 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     _isShowingCuriositySettings.value = false
   }
 
-  fun updateCuriosityConfig(newConfig: com.example.data.model.CuriosityConfig) {
-    _curiosityConfig.value = newConfig
-    preferencesRepository.saveCuriosityConfig(newConfig)
-  }
+  fun updateCuriosityConfig(newConfig: com.example.data.model.CuriosityConfig) = playback.setCuriosityConfig(newConfig)
 
   fun testCuriosityVoice() {
-    curiositySpeechManager.testVoiceSample(_curiosityConfig.value)
+    curiositySpeechManager.testVoiceSample(curiosityConfig.value)
   }
 
   // ---- Equalizer ----
@@ -1131,6 +880,40 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     }
   }
 
+  // ---- the music on the device ----
+
+  val deviceTracks: StateFlow<List<Track>> = musicRepository.deviceTracks
+
+  private val _deviceScanning = MutableStateFlow(false)
+  val deviceScanning: StateFlow<Boolean> = _deviceScanning.asStateFlow()
+
+  /** Reads the device's music again (after the permission was granted, or when Biblioteca opens). */
+  fun scanDeviceMusic() {
+    if (_deviceScanning.value) return
+    _deviceScanning.value = true
+    viewModelScope.launch {
+      try {
+        musicRepository.scanDevice()
+      } finally {
+        _deviceScanning.value = false
+      }
+    }
+  }
+
+  init {
+    if (hasMusicPermission()) scanDeviceMusic()
+  }
+
+  fun hasMusicPermission(): Boolean {
+    val permission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+      android.Manifest.permission.READ_MEDIA_AUDIO
+    } else {
+      android.Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+    return androidx.core.content.ContextCompat.checkSelfPermission(context, permission) ==
+      android.content.pm.PackageManager.PERMISSION_GRANTED
+  }
+
   /** Adds a file picked on the device and plays it like any other track of the library. */
   fun addLocalAudio(title: String, artist: String, uriString: String, durationMs: Long) {
     playTrack(musicRepository.addLocalTrack(title, artist, uriString, durationMs))
@@ -1192,13 +975,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   override fun onCleared() {
     super.onCleared()
     timerTickerJob?.cancel()
-    curiositySpeechManager.shutdown()
-    audioEngineManager.release()
-    WebPlayerHost.stop()
-    NotificationActionReceiver.onActionReceived = null
-    MusicNotificationManager.onSeekToRequested = null
-    PlaybackService.stop()
+    // The player is not stopped: it belongs to the process and the media session, and keeps playing.
     stopSystemAudioCapture()
-    MusicNotificationManager.clearNotification(context)
   }
 }

@@ -115,6 +115,26 @@ class MainActivity : ComponentActivity() {
     AppMotion.readSystem(this)
   }
 
+  /**
+   * Connected to the media session while the app is on screen, which starts the playback service.
+   * Once music plays the service keeps itself in the foreground, so playing goes on after this ends.
+   */
+  private var sessionConnection: com.google.common.util.concurrent.ListenableFuture<androidx.media3.session.MediaController>? = null
+
+  override fun onStart() {
+    super.onStart()
+    val token = androidx.media3.session.SessionToken(
+      this, android.content.ComponentName(this, com.example.data.playback.PlaybackService::class.java)
+    )
+    sessionConnection = androidx.media3.session.MediaController.Builder(this, token).buildAsync()
+  }
+
+  override fun onStop() {
+    sessionConnection?.let { androidx.media3.session.MediaController.releaseFuture(it) }
+    sessionConnection = null
+    super.onStop()
+  }
+
   override fun onDestroy() {
     // The hidden web views outlive the activity; take them off this window so it can be freed.
     com.example.data.web.WebSearchHost.release(this)
@@ -123,6 +143,7 @@ class MainActivity : ComponentActivity() {
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
+    AppGraph.init(this)
     AppMotion.readSystem(this)
     // Must run before super.onCreate: swaps the splash theme for the normal one after the first frame.
     installSplashScreen()
@@ -557,6 +578,10 @@ fun TarkasAppContent(
             onAddToPlaylist = { id, track -> viewModel.addToPlaylist(id, track) },
             onCreatePlaylist = { name, track -> viewModel.createPlaylist(name, track) },
             onOpenQueue = { viewModel.openQueue() },
+            sleepTimer = viewModel.sleepTimer.collectAsState().value,
+            onSetSleepTimer = { m -> viewModel.setSleepTimer(m) },
+            onSleepAtEndOfTrack = { viewModel.setSleepAtEndOfTrack() },
+            onCancelSleepTimer = { viewModel.cancelSleepTimer() },
             onClose = { viewModel.goBack() }
           )
         }
@@ -567,6 +592,10 @@ fun TarkasAppContent(
             favoriteTracks = favoriteTracks,
             savedTracks = savedTracks,
             allTracks = tracks,
+            deviceTracks = viewModel.deviceTracks.collectAsState().value,
+            deviceScanning = viewModel.deviceScanning.collectAsState().value,
+            hasMusicPermission = viewModel.hasMusicPermission(),
+            onScanDevice = { viewModel.scanDeviceMusic() },
             queue = queue,
             currentTrack = currentTrack,
             isPlaying = isPlaying,
