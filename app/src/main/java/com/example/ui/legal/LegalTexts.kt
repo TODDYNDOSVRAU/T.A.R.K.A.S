@@ -12,7 +12,7 @@ data class LegalDoc(val title: String, val subtitle: String, val sections: List<
  * publishing on the Play Store, which also needs the Privacy Policy at a public web address.
  */
 object LegalTexts {
-  const val TERMS_VERSION = 1
+  const val TERMS_VERSION = 2
   const val UPDATED = "25 de outubro de 2026"
 
   const val CONTROLLER = "Roger Moreira"
@@ -45,6 +45,7 @@ object LegalTexts {
         "O app é oferecido gratuitamente, no estado em que se encontra, sem garantia de funcionamento contínuo ou livre de erros. " +
         "Serviços de terceiros, como o Audius e o AutoEq, podem mudar ou ficar fora do ar sem aviso.",
       "4. Conteúdo de terceiros" to
+        "As músicas do YouTube Music e do Spotify pertencem aos seus titulares e são entregues pelos próprios serviços, segundo os termos e o plano da sua conta; o T.A.R.K.A.S. não baixa nem guarda essas músicas. " +
         "As músicas do Audius pertencem aos seus artistas e são entregues pelo próprio Audius, de acordo com os termos dele. " +
         "As curvas de fones vêm do projeto AutoEq (licença MIT). O T.A.R.K.A.S. não hospeda nem vende músicas.",
       "5. Uso adequado" to
@@ -77,6 +78,7 @@ object LegalTexts {
         "Esses dados não são enviados para nenhum servidor nosso: o T.A.R.K.A.S. não tem servidor nem conta de usuário.",
       "Dados enviados a terceiros, e para quê" to
         "• Audius: o texto que você busca no Início e os pedidos das faixas que você toca, para listar e transmitir as músicas. O Audius recebe também o endereço IP da conexão, como qualquer site.\n" +
+        "• YouTube Music e Spotify: o texto que você busca no Início e os pedidos das músicas que você toca, feitos pelas páginas web desses serviços dentro do app. Se você entrar na sua conta, o login é feito na página do próprio serviço (o T.A.R.K.A.S. não vê a sua senha) e os cookies de sessão ficam só no aparelho; \"Sair das contas\" em Ajustes os apaga. Esses serviços recebem o IP e seguem as próprias políticas.\n" +
         "• GitHub (projeto AutoEq): pedidos para baixar a lista de fones e a curva do fone escolhido. Nenhum dado seu vai junto além do IP.\n" +
         "• Google Gemini: só se uma chave de IA estiver configurada no app, as mensagens que você escreve ao assistente que não são comandos locais.\n" +
         "• Reconhecimento de voz e leitura em voz alta: feitos pelos serviços do próprio Android, segundo as regras do fabricante do seu aparelho.",
@@ -109,6 +111,11 @@ object LegalTexts {
     title = "Novidades",
     subtitle = "O que mudou em cada versão",
     sections = listOf(
+      "1.9" to
+        "• A busca do Início traz também YouTube Music e Spotify, com selo, e toca pelo player do T.A.R.K.A.S., até com a tela apagada.\n" +
+        "• Entrar nas contas em Ajustes > Streaming (Premium do YouTube sem anúncios; Spotify no plano grátis, com anúncios).\n" +
+        "• Novo nome no launcher: T.A.R.K.A.S.\n" +
+        "• Limitação: o equalizador do app ainda não atua no som do YouTube e do Spotify.",
       "1.8" to
         "• Liquid glass de verdade na barra de abas, no mini player e nos avisos (Android 13 ou mais novo): o vidro curva o que passa por trás.\n" +
         "• Troca de abas mais rápida, indicador que estica como uma gota e barra que encolhe ao rolar.\n" +
