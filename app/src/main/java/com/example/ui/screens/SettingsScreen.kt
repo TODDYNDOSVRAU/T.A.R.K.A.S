@@ -109,6 +109,7 @@ fun SettingsScreen(
   onClearCache: (onDone: () -> Unit) -> Unit = {},
   onExportData: (Uri) -> Unit = {},
   onEraseAllData: () -> Unit = {},
+  onSignOutWeb: () -> Unit = {},
   onRestartOnboarding: () -> Unit = {},
   termsAcceptedAt: Long = 0L,
   modifier: Modifier = Modifier
@@ -130,7 +131,7 @@ fun SettingsScreen(
         themeMode, capabilities, onThemeModeChange, curiosityConfig, onOpenCuriositySettings, hasGeminiKey,
         surfaceStyle, onSurfaceStyleChange, reduceMotion, onReduceMotionChange, reduceTransparency, onReduceTransparencyChange,
         accent, onAccentChange, isShuffle, repeatMode, onToggleShuffle, onCycleRepeat, onOpenAudio,
-        cacheSizeBytes, onClearCache, onExportData, onEraseAllData,
+        cacheSizeBytes, onClearCache, onExportData, onEraseAllData, onSignOutWeb,
         onOpenAbout = { page = SettingsPage.ABOUT },
         onOpenTerms = { page = SettingsPage.TERMS },
         onOpenPrivacy = { page = SettingsPage.PRIVACY }
@@ -174,6 +175,7 @@ private fun MainSettings(
   onClearCache: (onDone: () -> Unit) -> Unit,
   onExportData: (Uri) -> Unit,
   onEraseAllData: () -> Unit,
+  onSignOutWeb: () -> Unit,
   onOpenAbout: () -> Unit,
   onOpenTerms: () -> Unit,
   onOpenPrivacy: () -> Unit
@@ -182,6 +184,8 @@ private fun MainSettings(
   val context = LocalContext.current
   val hairline = colors.outline.copy(alpha = 0.4f)
   var confirmErase by remember { mutableStateOf(false) }
+  var showLogin by rememberSaveable { mutableStateOf(false) }
+  var showSpotifyLogin by rememberSaveable { mutableStateOf(false) }
   var cacheSize by remember { mutableStateOf<Long?>(null) }
   var cacheRefresh by remember { mutableStateOf(0) }
   LaunchedEffect(cacheRefresh) { cacheSize = cacheSizeBytes() }
@@ -321,6 +325,39 @@ private fun MainSettings(
           chevron = true
         )
       }
+    }
+
+    // Contas
+    item { SectionTitle("Streaming") }
+    item {
+      SettingsGroup {
+        SettingsRow(
+          title = "Entrar no YouTube Music",
+          subtitle = "Com o Premium, as músicas do YouTube tocam sem anúncios e com a tela apagada. Use a busca do Início para achar músicas.",
+          onClick = { showLogin = true },
+          chevron = true,
+          modifier = Modifier.testTag("settings_web_login")
+        )
+        HorizontalDivider(color = hairline)
+        SettingsRow(
+          title = "Entrar no Spotify",
+          subtitle = "Sem Premium, toca no plano grátis dele (com anúncios). Precisa da conta para tocar.",
+          onClick = { showSpotifyLogin = true },
+          chevron = true,
+          modifier = Modifier.testTag("settings_spotify_login")
+        )
+        HorizontalDivider(color = hairline)
+        SettingsRow(
+          title = "Sair das contas",
+          subtitle = "Apaga neste aparelho as sessões guardadas do YouTube Music e do Spotify.",
+          onClick = onSignOutWeb,
+          modifier = Modifier.testTag("settings_web_signout")
+        )
+      }
+    }
+    item {
+      if (showLogin) WebLoginDialog(onClose = { showLogin = false })
+      if (showSpotifyLogin) WebLoginDialog(spotify = true, onClose = { showSpotifyLogin = false })
     }
 
     // Curiosidades e assistente

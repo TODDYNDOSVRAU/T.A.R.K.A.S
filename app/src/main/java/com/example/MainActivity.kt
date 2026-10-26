@@ -121,6 +121,11 @@ class MainActivity : ComponentActivity() {
     installSplashScreen()
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+    // The hidden web views (search and player) need the window to exist.
+    window.decorView.post {
+      com.example.data.web.WebSearchHost.attach(this)
+      com.example.data.web.WebPlayerHost.attach(this)
+    }
     setContent {
       val viewModel: TarkasViewModel = viewModel()
       val themeMode by viewModel.themeMode.collectAsState()
@@ -283,11 +288,11 @@ fun TarkasAppContent(
   val currentTab by viewModel.currentTab.collectAsState()
   val tracks by viewModel.musicRepository.tracks.collectAsState()
   val currentTrack by viewModel.musicRepository.currentTrack.collectAsState()
-  val isPlaying by viewModel.audioEngineManager.isPlaying.collectAsState()
+  val isPlaying by viewModel.isPlaying.collectAsState()
   // Values that change many times a second are kept as State and read only where they are drawn,
   // so a tick does not recompose the whole app.
-  val currentPosMs = viewModel.audioEngineManager.currentPositionMs.collectAsState()
-  val durationMs = viewModel.audioEngineManager.durationMs.collectAsState()
+  val currentPosMs = viewModel.positionMs.collectAsState()
+  val durationMs = viewModel.durationMs.collectAsState()
   val eqSettings by viewModel.eqSettings.collectAsState()
   val eqPresets by viewModel.eqPresets.collectAsState()
   val activePresetId by viewModel.activePresetId.collectAsState()
@@ -322,6 +327,11 @@ fun TarkasAppContent(
   val globalEqStatus by viewModel.globalEqStatus.collectAsState()
   val audiusResults by viewModel.audiusResults.collectAsState()
   val audiusSearching by viewModel.audiusSearching.collectAsState()
+  val youtubeResults by viewModel.youtubeResults.collectAsState()
+  val youtubeSearching by viewModel.youtubeSearching.collectAsState()
+  val youtubeOffline by viewModel.youtubeOffline.collectAsState()
+  val spotifyResults by viewModel.spotifyResults.collectAsState()
+  val spotifySearching by viewModel.spotifySearching.collectAsState()
   // Full-screen pages opened from Ajustes, shown over the tabs.
   val overlayOpen = isShowingCuriositySettings
   val curiosityConfig by viewModel.curiosityConfig.collectAsState()
@@ -487,6 +497,21 @@ fun TarkasAppContent(
               viewModel.playAudiusResult(track)
               viewModel.setTab(TarkasNavTab.MUSIC)
             },
+            youtubeResults = youtubeResults,
+            youtubeSearching = youtubeSearching,
+            youtubeOffline = youtubeOffline,
+            onSearchYouTubeOnline = { q -> viewModel.searchYouTubeOnline(q) },
+            onPlayYouTubeResult = { track ->
+              viewModel.playYouTubeResult(track)
+              viewModel.setTab(TarkasNavTab.MUSIC)
+            },
+            spotifyResults = spotifyResults,
+            spotifySearching = spotifySearching,
+            onSearchSpotifyOnline = { q -> viewModel.searchSpotifyOnline(q) },
+            onPlaySpotifyResult = { track ->
+              viewModel.playSpotifyResult(track)
+              viewModel.setTab(TarkasNavTab.MUSIC)
+            },
             onPlayTrack = { track ->
               viewModel.playTrack(track)
               viewModel.setTab(TarkasNavTab.MUSIC)
@@ -511,7 +536,7 @@ fun TarkasAppContent(
             onTogglePlayPause = { viewModel.togglePlayPause() },
             onNextTrack = { viewModel.playNextTrack() },
             onPreviousTrack = { viewModel.playPreviousTrack() },
-            onSeekTo = { pos -> viewModel.audioEngineManager.seekTo(pos) },
+            onSeekTo = { pos -> viewModel.seekTo(pos) },
             isShuffle = isShuffle,
             repeatMode = repeatMode,
             favoriteIds = favoriteIds,
@@ -634,6 +659,7 @@ fun TarkasAppContent(
             onClearCache = { done -> viewModel.clearCache(done) },
             onExportData = { uri -> viewModel.writeExport(uri) },
             onEraseAllData = { viewModel.eraseAllData() },
+            onSignOutWeb = { viewModel.signOutOfWebServices() },
             onRestartOnboarding = { viewModel.restartOnboarding() },
             termsAcceptedAt = viewModel.termsAcceptedAt
           )

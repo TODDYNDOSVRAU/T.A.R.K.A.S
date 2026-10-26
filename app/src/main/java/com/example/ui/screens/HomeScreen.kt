@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -88,13 +89,26 @@ fun HomeScreen(
   audiusOffline: Boolean = false,
   onSearchAudiusOnline: (String) -> Unit = {},
   onPlayAudiusResult: (Track) -> Unit = {},
+  youtubeResults: List<Track> = emptyList(),
+  youtubeSearching: Boolean = false,
+  youtubeOffline: Boolean = false,
+  onSearchYouTubeOnline: (String) -> Unit = {},
+  onPlayYouTubeResult: (Track) -> Unit = {},
+  spotifyResults: List<Track> = emptyList(),
+  spotifySearching: Boolean = false,
+  onSearchSpotifyOnline: (String) -> Unit = {},
+  onPlaySpotifyResult: (Track) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   var searchQuery by rememberSaveable { mutableStateOf("") }
   var showDemos by rememberSaveable { mutableStateOf(false) }
 
   // The same search bar also searches Audius (the ViewModel waits for a pause in typing).
-  LaunchedEffect(searchQuery) { onSearchAudiusOnline(searchQuery) }
+  LaunchedEffect(searchQuery) {
+    onSearchAudiusOnline(searchQuery)
+    onSearchYouTubeOnline(searchQuery)
+    onSearchSpotifyOnline(searchQuery)
+  }
 
   // The user's own music; the synthesized demo tracks sit in their own section at the bottom.
   val myTracks = tracks.filter { !it.isDemo }
@@ -312,7 +326,74 @@ fun HomeScreen(
           }
         }
       }
+
+      item(key = "youtube_header") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          TarkasSectionTitle("No YouTube Music", modifier = Modifier.weight(1f))
+          if (youtubeSearching) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        }
+      }
+      itemsIndexed(youtubeResults.take(10), key = { _, t -> "youtube_result_${t.id}" }) { index, track ->
+        SongRow(track, "youtube_result_${track.id}", onClick = { onPlayYouTubeResult(track) }, modifier = Modifier.animateItem().staggeredEntrance(index))
+      }
+      if (youtubeResults.isEmpty() && !youtubeSearching) {
+        item(key = "youtube_empty") {
+          Text(
+            if (youtubeOffline) "Sem conexão com o YouTube Music." else "Nada encontrado no YouTube Music.",
+            fontSize = 15.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag("youtube_empty")
+          )
+        }
+      }
+
+      item(key = "spotify_header") {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          TarkasSectionTitle("No Spotify", modifier = Modifier.weight(1f))
+          if (spotifySearching) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        }
+      }
+      itemsIndexed(spotifyResults.take(10), key = { _, t -> "spotify_result_${t.id}" }) { index, track ->
+        SongRow(track, "spotify_result_${track.id}", onClick = { onPlaySpotifyResult(track) }, modifier = Modifier.animateItem().staggeredEntrance(index))
+      }
+      if (spotifyResults.isEmpty() && !spotifySearching) {
+        item(key = "spotify_empty") {
+          Text(
+            "Nada encontrado no Spotify.",
+            fontSize = 15.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag("spotify_empty")
+          )
+        }
+      }
     }
+  }
+}
+
+/** Under a streamed result: which service it comes from. */
+@Composable
+private fun SourceBadge(track: Track) {
+  val spotify = track.webSource == "spotify"
+  Row(
+    modifier = Modifier.padding(top = 3.dp),
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    Box(
+      modifier = Modifier
+        .size(14.dp)
+        .clip(RoundedCornerShape(4.dp))
+        .background(if (spotify) Color(0xFF1DB954) else Color(0xFFE5322D)),
+      contentAlignment = Alignment.Center
+    ) {
+      Icon(
+        imageVector = Icons.Default.PlayArrow,
+        contentDescription = null,
+        tint = Color.White,
+        modifier = Modifier.size(10.dp)
+      )
+    }
+    Spacer(Modifier.width(6.dp))
+    Text(if (spotify) "Spotify" else "YouTube Music", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
   }
 }
 
@@ -483,12 +564,13 @@ private fun TrackRow(
           overflow = TextOverflow.Ellipsis
         )
         Text(
-          text = "${track.artist} • ${track.album}",
+          text = if (track.isWeb) track.artist.ifBlank { track.album } else "${track.artist} • ${track.album}",
           fontSize = 15.sp,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis
         )
+        if (track.isWeb) SourceBadge(track)
       }
 
       TrackActionsMenu(

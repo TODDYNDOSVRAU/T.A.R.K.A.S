@@ -133,7 +133,12 @@ class GlobalEqService : Service() {
     }
     val own = applicationInfo.uid
     val players = dump?.let { DumpsysAudioParser.parsePlayers(it) }
-      ?.filter { it.isStarted && it.uid != own && it.sessionId > 0 }
+      // The web players (YouTube Music, Spotify) run in this app's own process, so own-uid players
+      // count too, except the music player, which carries its equalizer already.
+      ?.filter {
+        it.isStarted && it.sessionId > 0 &&
+          (it.uid != own || (com.example.data.web.WebPlayerHost.state.value.active && it.sessionId != GlobalEq.ownPlayerSession))
+      }
       .orEmpty()
 
     val alive = players.map { it.sessionId }.toMutableSet() + announced.keys

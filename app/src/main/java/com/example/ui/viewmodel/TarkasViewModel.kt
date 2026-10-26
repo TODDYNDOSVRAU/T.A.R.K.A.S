@@ -44,8 +44,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.FlowPreview
+import com.example.data.web.WebPlayerHost
+import com.example.data.web.WebSearchHost
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
@@ -98,6 +102,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
 
   private companion object {
     const val IDLE_BEFORE_LEAVING_FOREGROUND_MS = 3000L
+    const val WEB_START_TIMEOUT_MS = 25_000L
   }
 
   private val context = application.applicationContext
@@ -171,6 +176,22 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
 
   val systemAudioStatus: StateFlow<SystemAudioStatus> = systemAudioCaptureManager.status
 
+  // The player screens read these: they follow the local engine, or the hidden web player for a web track.
+  val isPlaying: StateFlow<Boolean> = combine(
+    musicRepository.currentTrack, audioEngineManager.isPlaying, WebPlayerHost.state
+  ) { track, local, web -> if (track?.isWeb == true) web.playing else local }
+    .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+  val positionMs: StateFlow<Long> = combine(
+    musicRepository.currentTrack, audioEngineManager.currentPositionMs, WebPlayerHost.state
+  ) { track, local, web -> if (track?.isWeb == true) web.positionMs else local }
+    .stateIn(viewModelScope, SharingStarted.Eagerly, 0L)
+
+  val durationMs: StateFlow<Long> = combine(
+    musicRepository.currentTrack, audioEngineManager.durationMs, WebPlayerHost.state
+  ) { track, local, web -> if (track?.isWeb == true) web.durationMs.takeIf { it > 0 } ?: track.durationMs else local }
+    .stateIn(viewModelScope, SharingStarted.Eagerly, 0L)
+
   private val _notice = MutableStateFlow<Notice?>(null)
   val notice: StateFlow<Notice?> = _notice.asStateFlow()
 
@@ -230,12 +251,12 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
         if (track == null) {
           null
         } else {
-          if (!audioEngineManager.isPlaying.value) togglePlayPause()
+          if (!isPlaying.value) togglePlayPause()
           "Reproduzindo ${track.title}"
         }
       }
       PlayerCommand.PAUSE -> {
-        if (audioEngineManager.isPlaying.value) {
+        if (isPlaying.value) {
           togglePlayPause()
           "Pausado"
         } else {
@@ -276,7 +297,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
       }
     }
     MusicNotificationManager.onSeekToRequested = { pos ->
-      audioEngineManager.seekTo(pos)
+      seekTo(pos)
       updateSystemNotification()
     }
   }
@@ -305,7 +326,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
 
     // Monitor isPlaying changes for notification
     viewModelScope.launch {
-      audioEngineManager.isPlaying.collect { playing ->
+      isPlaying.collect { playing ->
         if (playing) failuresInARow = 0
         updateSystemNotification()
         // Playing: keep the app alive in the background as a foreground media service.
@@ -316,7 +337,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     // Nothing playing and nothing being narrated for a few seconds: leave the foreground.
     // The delay covers the gap between two tracks, so the service is not torn down and rebuilt.
     viewModelScope.launch {
-      combine(audioEngineManager.isPlaying, curiositySpeechManager.isSpeaking) { playing, speaking ->
+      combine(isPlaying, curiositySpeechManager.isSpeaking) { playing, speaking ->
         playing || speaking
       }
         .debounce(IDLE_BEFORE_LEAVING_FOREGROUND_MS)
@@ -336,10 +357,8 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
 
   fun updateSystemNotification() {
     val track = musicRepository.currentTrack.value
-    val isPlaying = audioEngineManager.isPlaying.value
     val cur = _activeCuriosity.value
-    val pos = audioEngineManager.currentPositionMs.value
-    MusicNotificationManager.updatePlaybackNotification(context, track, isPlaying, cur, pos)
+    MusicNotificationManager.updatePlaybackNotification(context, track, isPlaying.value, cur, positionMs.value)
   }
 
   /** The tab the player was opened from, so back returns there instead of to Início. */
@@ -386,6 +405,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     if (cur != null && config.enabled && (config.timing == com.example.data.model.CuriosityTiming.START_OF_TRACK || config.timing == com.example.data.model.CuriosityTiming.BOTH)) {
       // Intro curiosity begins playing BEFORE the music track
       audioEngineManager.stopPlayback()
+      WebPlayerHost.stop()
       curiositySpeechManager.speakCuriosity(track, cur, isIntro = true, config = config) {
         startTrackAudio(track)
       }
@@ -394,11 +414,27 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     }
   }
 
+  private var webWatchdog: Job? = null
+
   private fun startTrackAudio(track: Track) {
     val path = track.filePath
-    if (path == null) {
+    webWatchdog?.cancel()
+    if (track.isWeb) {
+      audioEngineManager.stopPlayback()
+      val done = { onTrackPlaybackCompleted(track) }
+      if (track.webSource == "spotify") WebPlayerHost.playSpotify(context, track.webId.orEmpty(), done)
+      else WebPlayerHost.playYouTube(context, track.webId.orEmpty(), done)
+      // A page that never starts (no connection, a blocked video) would leave the player silent.
+      webWatchdog = viewModelScope.launch {
+        delay(WEB_START_TIMEOUT_MS)
+        if (musicRepository.currentTrack.value?.id == track.id && !isPlaying.value && positionMs.value == 0L) {
+          onTrackFailed(track, network = false)
+        }
+      }
+    } else if (path == null) {
       onTrackFailed(track, network = false)
     } else {
+      WebPlayerHost.stop()
       audioEngineManager.playTrack(
         path,
         onCompletion = { onTrackPlaybackCompleted(track) },
@@ -439,13 +475,20 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
 
   fun togglePlayPause() {
     val current = musicRepository.currentTrack.value
-    if (!audioEngineManager.isPlaying.value && audioEngineManager.currentPositionMs.value == 0L && current != null) {
+    if (!isPlaying.value && positionMs.value == 0L && current != null) {
       // Restart the same track without losing the playlist context or adding it to the history.
       playInternal(current, recordHistory = false)
+    } else if (current?.isWeb == true) {
+      WebPlayerHost.togglePlayPause()
     } else {
       audioEngineManager.togglePlayPause()
     }
     updateSystemNotification()
+  }
+
+  /** Moves the playing track, local or web, to [ms]. */
+  fun seekTo(ms: Long) {
+    if (musicRepository.currentTrack.value?.isWeb == true) WebPlayerHost.seekTo(ms) else audioEngineManager.seekTo(ms)
   }
 
   fun playNextTrack() = advance(auto = false)
@@ -473,8 +516,8 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   fun playPreviousTrack() {
     curiositySpeechManager.stopSpeech()
     // Like Apple Music: a few seconds in, "previous" restarts the track.
-    if (audioEngineManager.currentPositionMs.value > 3000L) {
-      audioEngineManager.seekTo(0L)
+    if (positionMs.value > 3000L) {
+      seekTo(0L)
       return
     }
     val prev = if (playHistory.isNotEmpty()) {
@@ -598,6 +641,78 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
 
   /** Plays an Audius result; Next goes on through the rest of the results. */
   fun playAudiusResult(track: Track) = playFromList(track, _audiusResults.value)
+
+  // ---- YouTube Music (same search bar; the hidden web player produces the sound) ----
+
+  private val _youtubeResults = MutableStateFlow<List<Track>>(emptyList())
+  val youtubeResults: StateFlow<List<Track>> = _youtubeResults.asStateFlow()
+
+  private val _youtubeSearching = MutableStateFlow(false)
+  val youtubeSearching: StateFlow<Boolean> = _youtubeSearching.asStateFlow()
+
+  private val _youtubeOffline = MutableStateFlow(false)
+  val youtubeOffline: StateFlow<Boolean> = _youtubeOffline.asStateFlow()
+
+  private var youtubeSearchJob: Job? = null
+
+  fun searchYouTubeOnline(query: String) {
+    youtubeSearchJob?.cancel()
+    if (query.isBlank()) {
+      _youtubeResults.value = emptyList()
+      _youtubeSearching.value = false
+      _youtubeOffline.value = false
+      return
+    }
+    youtubeSearchJob = viewModelScope.launch {
+      delay(600)
+      _youtubeSearching.value = true
+      try {
+        val found = WebSearchHost.searchYouTube(query.trim())
+        _youtubeOffline.value = found == null
+        _youtubeResults.value = found.orEmpty()
+      } finally {
+        _youtubeSearching.value = false
+      }
+    }
+  }
+
+  fun playYouTubeResult(track: Track) = playFromList(track, _youtubeResults.value)
+
+  // ---- Spotify (same bar; its web player plays free with ads, or without them on Premium) ----
+
+  private val _spotifyResults = MutableStateFlow<List<Track>>(emptyList())
+  val spotifyResults: StateFlow<List<Track>> = _spotifyResults.asStateFlow()
+
+  private val _spotifySearching = MutableStateFlow(false)
+  val spotifySearching: StateFlow<Boolean> = _spotifySearching.asStateFlow()
+
+  private var spotifySearchJob: Job? = null
+
+  fun searchSpotifyOnline(query: String) {
+    spotifySearchJob?.cancel()
+    if (query.isBlank()) {
+      _spotifyResults.value = emptyList()
+      _spotifySearching.value = false
+      return
+    }
+    spotifySearchJob = viewModelScope.launch {
+      delay(900)
+      _spotifySearching.value = true
+      try {
+        val found = WebSearchHost.searchSpotify(query.trim()).orEmpty()
+        _spotifyResults.value = found
+      } finally {
+        _spotifySearching.value = false
+      }
+    }
+  }
+
+  fun playSpotifyResult(track: Track) = playFromList(track, _spotifyResults.value)
+
+  /** Forgets the Google and Spotify sessions kept for the web players. */
+  fun signOutOfWebServices() {
+    WebPlayerHost.signOut { showNotice(Notice("Contas desconectadas.")) }
+  }
 
   fun openCuriositySettings() {
     _isShowingCuriositySettings.value = true

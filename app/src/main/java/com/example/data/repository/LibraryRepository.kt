@@ -117,6 +117,7 @@ class LibraryRepository(context: Context) {
           .put("local", t.isLocalFile).put("path", t.filePath ?: JSONObject.NULL)
           .put("color", t.colorHex)
           .put("art", t.artworkUrl ?: JSONObject.NULL)
+          .put("web", t.webSource ?: JSONObject.NULL).put("webId", t.webId ?: JSONObject.NULL)
       )
     }
     prefs.edit().putString(KEY_TRACKS, array.toString()).apply()
@@ -157,7 +158,9 @@ class LibraryRepository(context: Context) {
         isLocalFile = o.optBoolean("local", false),
         filePath = if (o.isNull("path")) null else o.getString("path"),
         colorHex = o.optLong("color", 0xFF46C9D3),
-        artworkUrl = if (o.isNull("art")) null else o.optString("art").ifBlank { null }
+        artworkUrl = if (o.isNull("art")) null else o.optString("art").ifBlank { null },
+        webSource = if (o.isNull("web")) null else o.optString("web").ifBlank { null },
+        webId = if (o.isNull("webId")) null else o.optString("webId").ifBlank { null }
       )
     }.associateBy { it.id }
   } catch (_: Exception) {

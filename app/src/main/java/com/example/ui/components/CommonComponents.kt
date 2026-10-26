@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.PlayCircleFilled
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Home

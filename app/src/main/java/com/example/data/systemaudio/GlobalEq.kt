@@ -45,6 +45,9 @@ object GlobalEq {
   val settings = MutableStateFlow(EqSettings())
   val reach = MutableStateFlow(EqReach.APP)
 
+  /** Audio session of the app's own player, which has its equalizer already (not applied twice). */
+  @Volatile var ownPlayerSession = 0
+
   private val _status = MutableStateFlow(GlobalEqStatus())
   val status: StateFlow<GlobalEqStatus> = _status.asStateFlow()
 
