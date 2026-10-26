@@ -1,15 +1,15 @@
 # Arquitetura técnica
 
 ## Direção inicial
-Aplicativo Android nativo de distribuição, com Flutter/Dart para interface e lógica de apresentação e Kotlin para integrações Android que não estejam adequadamente expostas pelo Flutter.
+Aplicativo Android nativo em Kotlin com Jetpack Compose para a interface. O plano inicial previa Flutter/Dart; a implementação real (desde a 1.0) é toda em Kotlin.
 
-Stack candidata:
-- Flutter/Dart: UI e estado.
+Stack em uso:
+- Kotlin + Jetpack Compose: UI e estado (ViewModel com StateFlow).
 - Kotlin: APIs nativas Android.
 - AndroidX Media3: player e sessão de mídia, se confirmada como adequada à fonte escolhida.
 - Persistência local: escolher solução simples após revisar compatibilidade e necessidade; evitar adicionar banco complexo sem caso de uso.
 - Git: controle de versão.
-- Testes unitários/widget e testes de integração quando possível.
+- Testes unitários JVM e Robolectric (`gradle :app:testDebugUnitTest`).
 
 As versões exatas devem ser selecionadas durante a auditoria, verificando compatibilidade e estabilidade. Não fixar versões por suposição.
 

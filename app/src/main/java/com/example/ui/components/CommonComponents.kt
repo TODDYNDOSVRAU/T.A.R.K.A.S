@@ -27,7 +27,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.PlayCircleFilled
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Equalizer
@@ -75,6 +74,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.launch
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -114,6 +118,8 @@ fun GlassChip(
       .graphicsLayer {
         scaleX = scale.value
         scaleY = scale.value
+        // A disabled chip is faded as a whole, so a filled one does not still look tappable.
+        alpha = if (enabled) 1f else 0.45f
       }
       .heightIn(min = 44.dp)
       .glassControl(RoundedCornerShape(22.dp), selected = selected)
@@ -141,6 +147,47 @@ fun GlassChip(
       maxLines = 1,
       softWrap = false
     )
+  }
+}
+
+/**
+ * What a section shows when it has nothing: an icon, what happened, what to do, and a button for it.
+ * Used for the offline, failed and empty states, so they all read the same.
+ */
+@Composable
+fun EmptyState(
+  icon: androidx.compose.ui.graphics.vector.ImageVector,
+  title: String,
+  message: String,
+  modifier: Modifier = Modifier,
+  actionLabel: String? = null,
+  onAction: () -> Unit = {}
+) {
+  Column(
+    modifier = modifier.fillMaxWidth().padding(vertical = 20.dp),
+    horizontalAlignment = Alignment.CenterHorizontally
+  ) {
+    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(40.dp))
+    Spacer(modifier = Modifier.height(10.dp))
+    Text(
+      text = title,
+      fontSize = 17.sp,
+      fontWeight = FontWeight.SemiBold,
+      color = MaterialTheme.colorScheme.onSurface,
+      textAlign = androidx.compose.ui.text.style.TextAlign.Center
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+    Text(
+      text = message,
+      fontSize = 15.sp,
+      lineHeight = 20.sp,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      textAlign = androidx.compose.ui.text.style.TextAlign.Center
+    )
+    if (actionLabel != null) {
+      Spacer(modifier = Modifier.height(14.dp))
+      GlassChip(label = actionLabel, selected = true, onClick = onAction)
+    }
   }
 }
 
@@ -265,7 +312,8 @@ fun TarkasMark(
 fun TarkasBottomNav(
   currentTab: TarkasNavTab,
   onTabSelected: (TarkasNavTab) -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  collapsed: Boolean = false
 ) {
   val items = listOf(
     // No "Música" tab: the player opens from the mini player, the only way in.
@@ -275,11 +323,14 @@ fun TarkasBottomNav(
     Triple(TarkasNavTab.ASSISTANT, "Assistente", Icons.Default.Psychology)
   )
 
-  // One lighter capsule marks the selected tab and glides between tabs on a spring, stretching a
-  // little while it travels (its width follows its speed), like a drop of glass sliding along.
+  // One lighter capsule marks the selected tab. Its two ends travel on different springs: the end
+  // facing the new tab leaves first and fast, the other follows slower, so the capsule stretches
+  // towards the tab and then snaps back to size, like a drop of glass (the iOS 26 tab bar).
   val selectedIndex = items.indexOfFirst { it.first == currentTab }
   val reduced = com.example.ui.theme.rememberReducedMotion()
-  val indicator = remember { androidx.compose.animation.core.Animatable(selectedIndex.coerceAtLeast(0).toFloat()) }
+  val start0 = selectedIndex.coerceAtLeast(0).toFloat()
+  val leftEdge = remember { androidx.compose.animation.core.Animatable(start0) }
+  val rightEdge = remember { androidx.compose.animation.core.Animatable(start0 + 1f) }
   val indicatorAlpha by androidx.compose.animation.core.animateFloatAsState(
     targetValue = if (selectedIndex >= 0) 1f else 0f,
     animationSpec = tween(200),
@@ -287,24 +338,45 @@ fun TarkasBottomNav(
   )
   androidx.compose.runtime.LaunchedEffect(selectedIndex, reduced) {
     if (selectedIndex < 0) return@LaunchedEffect
-    if (reduced) indicator.snapTo(selectedIndex.toFloat())
-    else indicator.animateTo(
-      selectedIndex.toFloat(),
-      androidx.compose.animation.core.spring(dampingRatio = 0.74f, stiffness = 420f)
-    )
+    val target = selectedIndex.toFloat()
+    if (reduced) {
+      leftEdge.snapTo(target)
+      rightEdge.snapTo(target + 1f)
+      return@LaunchedEffect
+    }
+    val movingRight = target > leftEdge.value
+    val lead = com.example.ui.theme.Motion.fastSpatial<Float>()
+    val trail = com.example.ui.theme.Motion.slowSpatial<Float>()
+    kotlinx.coroutines.coroutineScope {
+      launch { leftEdge.animateTo(target, if (movingRight) trail else lead) }
+      launch { rightEdge.animateTo(target + 1f, if (movingRight) lead else trail) }
+    }
   }
   val pillColor = MaterialTheme.colorScheme.onSurface
+
+  // While the page scrolls down the capsule draws back a little and its labels fade, like the
+  // iOS 26 tab bar; scrolling up brings it back. Scale only, so the page layout never moves.
+  val shrink by androidx.compose.animation.core.animateFloatAsState(
+    targetValue = if (collapsed && !reduced) 1f else 0f,
+    animationSpec = com.example.ui.theme.Motion.defaultSpatial(),
+    label = "navShrink"
+  )
 
   Row(
     modifier = modifier
       .fillMaxWidth()
+      .graphicsLayer {
+        val s = 1f - 0.1f * shrink
+        scaleX = s
+        scaleY = s
+        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
+      }
       .glassPill(cornerRadius = 32.dp)
       .padding(horizontal = 6.dp, vertical = 6.dp)
       .drawBehind {
         val slot = size.width / items.size
-        val stretch = (kotlin.math.abs(indicator.velocity) / 14f).coerceAtMost(0.3f)
-        val w = slot * (1f + stretch)
-        val x = indicator.value * slot + slot / 2f - w / 2f
+        val x = leftEdge.value * slot
+        val w = (rightEdge.value - leftEdge.value) * slot
         drawRoundRect(
           pillColor.copy(alpha = 0.10f * indicatorAlpha),
           topLeft = androidx.compose.ui.geometry.Offset(x, 0f),
@@ -352,6 +424,8 @@ fun TarkasBottomNav(
             .graphicsLayer {
               scaleX = pop
               scaleY = pop
+              // With the labels faded, the icons drop to the middle of the capsule.
+              translationY = shrink * 7.dp.toPx()
             }
         )
         Spacer(modifier = Modifier.height(2.dp))
@@ -361,7 +435,8 @@ fun TarkasBottomNav(
           fontSize = 11.sp,
           maxLines = 1,
           softWrap = false,
-          fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+          fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+          modifier = Modifier.graphicsLayer { alpha = 1f - shrink }
         )
       }
     }
@@ -375,21 +450,67 @@ fun MiniPlayerBar(
   onTogglePlayPause: () -> Unit,
   onNext: () -> Unit,
   onClick: () -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  onPrevious: () -> Unit = {},
+  progress: () -> Float = { 0f }
 ) {
   if (track == null) return
+
+  // Swiping the capsule sideways changes the track (left: next, right: previous) with a tick, like
+  // Apple Music's mini player. The content follows the finger and springs back.
+  val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+  val scope = androidx.compose.runtime.rememberCoroutineScope()
+  val swipe = remember { androidx.compose.animation.core.Animatable(0f) }
+  val reduced = com.example.ui.theme.rememberReducedMotion()
+  val currentNext by androidx.compose.runtime.rememberUpdatedState(onNext)
+  val currentPrevious by androidx.compose.runtime.rememberUpdatedState(onPrevious)
+  val track0 = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+  val fill = MaterialTheme.colorScheme.primary
 
   // Its own floating capsule of glass, like the tab bar below it.
   Box(
     modifier = modifier
       .fillMaxWidth()
       .glassPill(cornerRadius = 30.dp)
+      .pointerInput(Unit) {
+        val threshold = size.width * 0.22f
+        detectHorizontalDragGestures(
+          onDragEnd = {
+            val offset = swipe.value
+            scope.launch {
+              if (kotlin.math.abs(offset) > threshold) {
+                haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                if (offset < 0) currentNext() else currentPrevious()
+                // The new track slides in from the side the old one left towards.
+                if (!reduced) swipe.snapTo(if (offset < 0) size.width * 0.3f else -size.width * 0.3f)
+              }
+              swipe.animateTo(0f, com.example.ui.theme.Motion.defaultSpatial())
+            }
+          },
+          onDragCancel = { scope.launch { swipe.animateTo(0f, com.example.ui.theme.Motion.defaultSpatial()) } }
+        ) { change, dx ->
+          change.consume()
+          scope.launch { swipe.snapTo(swipe.value + dx) }
+        }
+      }
       .pressClickable(pressedScale = 0.985f, onClick = onClick)
+      // A thin line of progress along the bottom edge.
+      .drawBehind {
+        val h = 2.5.dp.toPx()
+        val inset = 22.dp.toPx()
+        val w = size.width - inset * 2
+        drawRoundRect(track0, topLeft = androidx.compose.ui.geometry.Offset(inset, size.height - h - 3.dp.toPx()), size = Size(w, h), cornerRadius = CornerRadius(h))
+        drawRoundRect(fill, topLeft = androidx.compose.ui.geometry.Offset(inset, size.height - h - 3.dp.toPx()), size = Size(w * progress().coerceIn(0f, 1f), h), cornerRadius = CornerRadius(h))
+      }
       .testTag("mini_player_bar")
   ) {
     Row(
       modifier = Modifier
         .fillMaxWidth()
+        .graphicsLayer {
+          translationX = swipe.value
+          alpha = 1f - (kotlin.math.abs(swipe.value) / size.width.coerceAtLeast(1f)).coerceIn(0f, 0.6f)
+        }
         .padding(start = 10.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
       verticalAlignment = Alignment.CenterVertically
     ) {
@@ -420,9 +541,8 @@ fun MiniPlayerBar(
           .size(48.dp)
           .testTag("mini_player_play_pause")
       ) {
-        Icon(
-          imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-          contentDescription = if (isPlaying) "Pausar" else "Reproduzir",
+        PlayPauseIcon(
+          isPlaying = isPlaying,
           tint = MaterialTheme.colorScheme.onSurface,
           modifier = Modifier.size(34.dp)
         )
@@ -435,13 +555,43 @@ fun MiniPlayerBar(
           .testTag("mini_player_next")
       ) {
         Icon(
-          imageVector = Icons.Default.FastForward,
+          imageVector = Icons.Default.SkipNext,
           contentDescription = "Próxima Faixa",
           tint = MaterialTheme.colorScheme.onSurface,
           modifier = Modifier.size(34.dp)
         )
       }
     }
+  }
+}
+
+/**
+ * Play and pause turn into each other: the old symbol spins away and shrinks while the new one
+ * springs in, instead of a hard swap. With reduced motion it simply swaps.
+ */
+@Composable
+fun PlayPauseIcon(isPlaying: Boolean, tint: Color, modifier: Modifier = Modifier) {
+  val reduced = com.example.ui.theme.rememberReducedMotion()
+  androidx.compose.animation.AnimatedContent(
+    targetState = isPlaying,
+    transitionSpec = {
+      if (reduced) {
+        androidx.compose.animation.EnterTransition.None togetherWith androidx.compose.animation.ExitTransition.None
+      } else {
+        (androidx.compose.animation.scaleIn(com.example.ui.theme.Motion.fastSpatial(), initialScale = 0.4f) +
+          androidx.compose.animation.fadeIn(tween(120))) togetherWith
+          (androidx.compose.animation.scaleOut(tween(120), targetScale = 0.4f) + androidx.compose.animation.fadeOut(tween(90)))
+      }
+    },
+    label = "playPause",
+    modifier = modifier
+  ) { playing ->
+    Icon(
+      imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+      contentDescription = if (playing) "Pausar" else "Reproduzir",
+      tint = tint,
+      modifier = Modifier.fillMaxSize()
+    )
   }
 }
 

@@ -63,6 +63,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -213,6 +214,9 @@ fun AudioScreen(
   onDeletePreset: (String) -> Unit,
   onReset: () -> Unit,
   onRequestSystemAudioCapture: () -> Unit,
+  onStopSystemAudioCapture: () -> Unit = {},
+  spectrumAllowed: Boolean = true,
+  onAllowSpectrum: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   var page by rememberSaveable { mutableStateOf(AudioPage.MAIN) }
@@ -256,7 +260,9 @@ fun AudioScreen(
           onRename = { showRename = true },
           onDelete = { showDelete = true },
           onOpenPresets = { showPresets = true; onOpenDevicePicker() },
-          onOpenAdvanced = { page = AudioPage.ADVANCED }
+          onOpenAdvanced = { page = AudioPage.ADVANCED },
+          spectrumAllowed = spectrumAllowed,
+          onAllowSpectrum = onAllowSpectrum
         )
         AudioPage.ADVANCED -> EqAdvancedPage(
           capabilities = capabilities,
@@ -270,6 +276,7 @@ fun AudioScreen(
           onSetEqReach = onSetEqReach,
           onUpdateEq = onUpdateEq,
           onRequestSystemAudioCapture = onRequestSystemAudioCapture,
+          onStopSystemAudioCapture = onStopSystemAudioCapture,
           onBack = { page = AudioPage.MAIN }
         )
       }
@@ -368,7 +375,9 @@ private fun EqMainPage(
   onRename: () -> Unit,
   onDelete: () -> Unit,
   onOpenPresets: () -> Unit,
-  onOpenAdvanced: () -> Unit
+  onOpenAdvanced: () -> Unit,
+  spectrumAllowed: Boolean,
+  onAllowSpectrum: () -> Unit
 ) {
   val colors = MaterialTheme.colorScheme
   val enabled = eqSettings.enabled
@@ -450,6 +459,29 @@ private fun EqMainPage(
           textAlign = TextAlign.Center,
           modifier = Modifier.fillMaxWidth()
         )
+        // The spectrum behind the curve needs the microphone permission, asked only from here.
+        if (!spectrumAllowed) {
+          Spacer(Modifier.height(10.dp))
+          Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Text(
+              text = "O Android só entrega o espectro ao vivo com a permissão do microfone. O app não grava nada.",
+              fontSize = 13.sp,
+              lineHeight = 18.sp,
+              color = colors.onSurfaceVariant,
+              modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(10.dp))
+            GlassChip(
+              label = "Ver espectro",
+              selected = true,
+              onClick = onAllowSpectrum,
+              modifier = Modifier.testTag("audio_allow_spectrum")
+            )
+          }
+        }
       }
     }
 
@@ -685,9 +717,14 @@ private fun EqAdvancedPage(
   onSetEqReach: (EqReach) -> Unit,
   onUpdateEq: ((EqSettings) -> EqSettings) -> Unit,
   onRequestSystemAudioCapture: () -> Unit,
+  onStopSystemAudioCapture: () -> Unit,
   onBack: () -> Unit
 ) {
   val colors = MaterialTheme.colorScheme
+
+  // The level meter only runs while this page is open: leaving it ends the capture and its service.
+  val stopMeter by androidx.compose.runtime.rememberUpdatedState(onStopSystemAudioCapture)
+  androidx.compose.runtime.DisposableEffect(Unit) { onDispose { stopMeter() } }
 
   // Keep "Apps tocando agora" fresh while this page is open.
   LaunchedEffect(Unit) {
@@ -825,7 +862,8 @@ private fun EqAdvancedPage(
           Spacer(modifier = Modifier.height(8.dp))
           Text(
             text = "Mede o volume do áudio tocado por outros apps, usando a captura de áudio do Android (10 ou mais). " +
-              "Apps que bloqueiam a captura não aparecem. Não aplica equalização neles e não identifica a música.",
+              "Apps que bloqueiam a captura não aparecem. Não aplica equalização neles e não identifica a música. " +
+              "Desliga sozinho quando você sai desta página.",
             fontSize = 15.sp,
             color = colors.onSurfaceVariant,
             lineHeight = 20.sp
@@ -845,10 +883,10 @@ private fun EqAdvancedPage(
           }
           Spacer(modifier = Modifier.height(12.dp))
           GlassChip(
-            label = if (systemAudioStatus.isCapturing) "Reiniciar captura" else "Ativar medidor",
-            selected = true,
+            label = if (systemAudioStatus.isCapturing) "Desligar medidor" else "Ativar medidor",
+            selected = !systemAudioStatus.isCapturing,
             enabled = systemAudioStatus.isMediaProjectionSupported,
-            onClick = onRequestSystemAudioCapture,
+            onClick = if (systemAudioStatus.isCapturing) onStopSystemAudioCapture else onRequestSystemAudioCapture,
             modifier = Modifier.fillMaxWidth().testTag("btn_request_system_audio_capture")
           )
         }
@@ -1687,8 +1725,14 @@ private fun EqGraph(
   val label = colors.onSurfaceVariant
   val nodeFill = colors.surface
   val dim = if (settings.enabled) 1f else 0.35f
-  val windowFill = colors.onSurface.copy(alpha = 0.10f)
+  // The window is the bright part and the rest is dimmed. On the dark themes that means a light
+  // window over a darkened curve; on the light theme a clear window over a faint grey (a black
+  // veil there turned the whole graph a heavy grey).
+  val darkPage = colors.background.luminance() < 0.5f
+  // (Drawn over the curve, so on the light page the window stays clear and only its edge shows.)
+  val windowFill = if (darkPage) colors.onSurface.copy(alpha = 0.10f) else Color.Transparent
   val windowEdge = colors.onSurface.copy(alpha = 0.45f)
+  val outsideShade = if (darkPage) Color.Black.copy(alpha = 0.32f) else colors.onSurface.copy(alpha = 0.07f)
 
   Box(
     modifier = modifier
@@ -1774,7 +1818,7 @@ private fun EqGraph(
         if (total > 0 && v.scroll.maxValue > 0) {
           val left = v.scroll.value.toFloat() / total * w
           val ww = v.viewport.toFloat() / total * w
-          val shade = Color.Black.copy(alpha = 0.32f)
+          val shade = outsideShade
           drawRect(shade, Offset.Zero, Size(left, h))
           drawRect(shade, Offset(left + ww, 0f), Size(w - left - ww, h))
           val corner = CornerRadius(12.dp.toPx())

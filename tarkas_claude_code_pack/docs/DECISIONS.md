@@ -27,7 +27,7 @@
 
 ## Em aberto
 - Dispositivo de teste principal.
-- Versões de Flutter/Dart/Android Gradle Plugin/SDK.
+- Versões do Android Gradle Plugin, Kotlin e SDK (hoje em `gradle/libs.versions.toml`).
 - Application ID final.
 - Fonte musical inicial após pesquisa.
 - Estratégia definitiva de IA gratuita/local.

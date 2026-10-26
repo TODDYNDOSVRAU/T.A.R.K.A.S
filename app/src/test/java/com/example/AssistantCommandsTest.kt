@@ -105,7 +105,6 @@ class AssistantCommandsTest {
       audioEngineManager = AudioEngineManager(context),
       onTimerCreated = {},
       onTimerCancelled = {},
-      onReminderCreated = {},
       onPlayerCommand = onPlayerCommand
     )
   }

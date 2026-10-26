@@ -8,7 +8,6 @@ import com.example.data.model.AudioProfile
 import com.example.data.model.Curiosity
 import com.example.data.model.EqPreset
 import com.example.data.model.EqPresets
-import com.example.data.model.LocalReminder
 import com.example.data.model.LocalTimer
 import com.example.data.model.MessageSender
 import com.example.data.model.ToolExecutionReport
@@ -53,8 +52,7 @@ class AssistantEngine(
   private val audioEngineManager: AudioEngineManager,
   private val onTimerCreated: (LocalTimer) -> Unit,
   private val onTimerCancelled: (String) -> Unit,
-  private val onReminderCreated: (LocalReminder) -> Unit,
-  private val onCuriosityUpdated: (Curiosity) -> Unit = {},
+  private val onCuriosityUpdated: (Curiosity?) -> Unit = {},
   // Returns a short description of the result, or null when the command could not run.
   private val onPlayerCommand: suspend (PlayerCommand) -> String? = { null },
   // Loads an equalizer preset through the app, so the choice is saved like a tap on the screen.
@@ -153,13 +151,17 @@ class AssistantEngine(
         val report = ToolExecutionReport(
           toolName = "analyze_and_research_music",
           arguments = mapOf("track" to track.title, "artist" to track.artist),
-          success = true,
-          resultSummary = "Análise concluída: ${curiosity.status.label}"
+          success = curiosity != null,
+          resultSummary = curiosity?.let { "Análise concluída: ${it.status.label}" } ?: "Sem curiosidade verificada"
         )
 
         // Curiosities are shown only in the player and the notification, never in the chat, so the
         // answer points there instead of repeating the text.
-        val siriStyleAnswer = "Analisei **${track.title}** (${track.artist}). A curiosidade fica no player: toque no mini player acima da barra e depois na lâmpada."
+        val siriStyleAnswer = if (curiosity != null) {
+          "Analisei **${track.title}** (${track.artist}). A curiosidade fica no player: toque no mini player acima da barra e depois na lâmpada."
+        } else {
+          "Ainda não tenho uma curiosidade verificada sobre **${track.title}**."
+        }
 
         return AssistantMessage(
           id = UUID.randomUUID().toString(),

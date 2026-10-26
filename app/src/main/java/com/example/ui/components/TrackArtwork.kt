@@ -16,7 +16,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.data.model.Track
 
 /**
@@ -49,8 +52,11 @@ fun TrackArtwork(
       )
     } else {
       Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.White, modifier = Modifier.size(iconSize))
+      // The cover fades in over the track's colour instead of popping in.
+      val context = LocalContext.current
+      val request = remember(url) { ImageRequest.Builder(context).data(url).crossfade(220).build() }
       AsyncImage(
-        model = url,
+        model = request,
         contentDescription = null,
         contentScale = ContentScale.Crop,
         modifier = Modifier.matchParentSize()

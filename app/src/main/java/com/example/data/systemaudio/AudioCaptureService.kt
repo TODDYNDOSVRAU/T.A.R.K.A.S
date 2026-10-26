@@ -48,8 +48,8 @@ class AudioCaptureService : Service() {
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     val notification = NotificationCompat.Builder(this, CHANNEL_ID)
       .setSmallIcon(android.R.drawable.ic_media_play)
-      .setContentTitle("Tarkas: Captura de Áudio do Sistema")
-      .setContentText("Monitorando áudio de streaming (Spotify / YouTube Music)")
+      .setContentTitle("Medidor de nível ligado")
+      .setContentText("Mede o volume do som dos outros apps. Desliga ao sair de Ajustes avançados.")
       .setOngoing(true)
       .setSilent(true)
       .build()

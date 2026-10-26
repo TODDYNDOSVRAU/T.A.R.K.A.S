@@ -18,15 +18,19 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
+import com.kyant.backdrop.backdrops.layerBackdrop
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.example.ui.theme.LocalBarInset
 import com.example.ui.theme.LocalHazeState
 import com.example.ui.theme.LocalSurfaceStyle
@@ -90,6 +94,7 @@ import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LibraryScreen
 import com.example.ui.screens.MusicScreen
 import com.example.ui.screens.MusicalCuriositySettingsScreen
+import com.example.ui.screens.OnboardingScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.theme.AppleMusicPink
 import com.example.ui.theme.AppleMusicPurple
@@ -120,29 +125,43 @@ class MainActivity : ComponentActivity() {
       val viewModel: TarkasViewModel = viewModel()
       val themeMode by viewModel.themeMode.collectAsState()
 
-      // Request runtime permissions if required (POST_NOTIFICATIONS and RECORD_AUDIO)
-      val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestMultiplePermissions()
-      ) { /* Handled gracefully */ }
-
       // The opening animation plays once per launch (it survives rotation).
       var showBoot by rememberSaveable { mutableStateOf(true) }
 
-      // Asked only after the opening animation, so the system dialogs never cover it.
-      LaunchedEffect(showBoot) {
-        if (showBoot) return@LaunchedEffect
-        val permissionsToRequest = mutableListOf<String>()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-          if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
-          }
+      // Permissions are asked when they are needed, each with its reason: notifications the first
+      // time something plays, the microphone from the equalizer's spectrum.
+      // One launcher for both, told apart by the result, so a request never carries the other one.
+      var micGranted by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+      }
+      val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+      ) { results ->
+        if (Manifest.permission.POST_NOTIFICATIONS in results) viewModel.notificationsAsked()
+        val granted = results[Manifest.permission.RECORD_AUDIO] ?: return@rememberLauncherForActivityResult
+        micGranted = granted
+        if (granted) {
+          viewModel.spectrumAllowed()
+        } else {
+          viewModel.showNotice(
+            com.example.ui.viewmodel.Notice(
+              "Sem o microfone, o equalizador funciona igual, só sem o espectro ao vivo.",
+              actionLabel = "Permissões",
+              action = {
+                startActivity(
+                  android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    .setData(android.net.Uri.fromParts("package", packageName, null))
+                )
+              }
+            )
+          )
         }
-        if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-          permissionsToRequest.add(Manifest.permission.RECORD_AUDIO)
-        }
-        if (permissionsToRequest.isNotEmpty()) {
-          permissionLauncher.launch(permissionsToRequest.toTypedArray())
-        }
+      }
+      val askNotifications by viewModel.askNotifications.collectAsState()
+      val notificationsMissing = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+      if (askNotifications && !notificationsMissing) {
+        LaunchedEffect(Unit) { viewModel.notificationsAsked() }
       }
 
       // MediaProjection launcher for system audio extraction (Spotify & YouTube Music)
@@ -179,7 +198,9 @@ class MainActivity : ComponentActivity() {
         controller.isAppearanceLightNavigationBars = !isDarkApp
       }
 
-      TarkasTheme(themeMode = themeMode) {
+      val accent by viewModel.accent.collectAsState()
+      val showOnboarding by viewModel.showOnboarding.collectAsState()
+      TarkasTheme(themeMode = themeMode, accent = accent) {
         Box(modifier = Modifier.fillMaxSize()) {
         TarkasAppContent(
           viewModel = viewModel,
@@ -190,10 +211,61 @@ class MainActivity : ComponentActivity() {
             } else {
               viewModel.markSystemCaptureUnavailable("Este aparelho não oferece captura de áudio do sistema.")
             }
-          }
+          },
+          spectrumAllowed = micGranted,
+          onAllowSpectrum = { permissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) }
         )
+        // First-run setup (and the terms again when they change), right after the opening animation.
+        androidx.compose.animation.AnimatedVisibility(
+          visible = showOnboarding && !showBoot,
+          enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220)),
+          exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(260)) +
+            androidx.compose.animation.scaleOut(targetScale = 1.04f)
+        ) {
+          val reduceMotion by viewModel.reduceMotion.collectAsState()
+          val surfaceStyle by viewModel.surfaceStyle.collectAsState()
+          val curiosityConfig by viewModel.curiosityConfig.collectAsState()
+          val onlyTerms = remember { viewModel.onlyTermsChanged }
+          OnboardingScreen(
+            onlyTerms = onlyTerms,
+            themeMode = themeMode,
+            onThemeMode = { viewModel.setThemeMode(it) },
+            surfaceStyle = surfaceStyle,
+            onSurfaceStyle = { viewModel.setSurfaceStyle(it) },
+            accent = accent,
+            onAccent = { viewModel.setAccent(it) },
+            reduceMotion = reduceMotion,
+            onReduceMotion = { viewModel.setReduceMotion(it) },
+            curiosityConfig = curiosityConfig,
+            onCuriosityConfig = { viewModel.updateCuriosityConfig(it) },
+            onAcceptTerms = { viewModel.acceptTerms() },
+            onFinish = { viewModel.finishOnboarding() }
+          )
+        }
         if (showBoot) {
           BootScreen(onFinished = { showBoot = false })
+        }
+        // Asked once, after the opening animation, the first time something plays.
+        if (askNotifications && notificationsMissing && !showBoot && !showOnboarding) {
+          androidx.compose.material3.AlertDialog(
+            onDismissRequest = { viewModel.notificationsAsked() },
+            title = { Text("Controles na notificação") },
+            text = {
+              Text(
+                "Com a permissão de notificações, a música aparece na tela bloqueada e na barra de notificações, " +
+                  "com tocar, pausar e pular, e a curiosidade da faixa quando houver uma."
+              )
+            },
+            confirmButton = {
+              androidx.compose.material3.TextButton(
+                onClick = { permissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS)) },
+                modifier = Modifier.testTag("notifications_allow")
+              ) { Text("Continuar") }
+            },
+            dismissButton = {
+              androidx.compose.material3.TextButton(onClick = { viewModel.notificationsAsked() }) { Text("Agora não") }
+            }
+          )
         }
         }
       }
@@ -204,7 +276,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun TarkasAppContent(
   viewModel: TarkasViewModel,
-  onRequestSystemAudioCapture: () -> Unit
+  onRequestSystemAudioCapture: () -> Unit,
+  spectrumAllowed: Boolean = true,
+  onAllowSpectrum: () -> Unit = {}
 ) {
   val currentTab by viewModel.currentTab.collectAsState()
   val tracks by viewModel.musicRepository.tracks.collectAsState()
@@ -223,17 +297,16 @@ fun TarkasAppContent(
   val assistantMessages by viewModel.assistantMessages.collectAsState()
   val isAssistantProcessing by viewModel.isAssistantProcessing.collectAsState()
   val activeTimers by viewModel.activeTimers.collectAsState()
-  val reminders by viewModel.reminders.collectAsState()
+  val notice by viewModel.notice.collectAsState()
+  val trending by viewModel.trending.collectAsState()
+  val audiusOffline by viewModel.audiusOffline.collectAsState()
+  val openQueueRequest by viewModel.openQueueRequest.collectAsState()
   val themeMode by viewModel.themeMode.collectAsState()
   val surfaceStyle by viewModel.surfaceStyle.collectAsState()
   val reduceMotion by viewModel.reduceMotion.collectAsState()
   val deviceSearch by viewModel.deviceSearch.collectAsState()
-  // One drifting light for every liquid glass surface (off for the other styles and with reduced motion).
-  val glassLight = com.example.ui.theme.rememberGlassLight(
-    active = surfaceStyle == com.example.ui.theme.SurfaceStyle.LIQUID && !com.example.ui.theme.rememberReducedMotion()
-  )
+  val reduceTransparency by viewModel.reduceTransparency.collectAsState()
   val systemAudioStatus by viewModel.systemAudioStatus.collectAsState()
-  val isSearchingAudius by viewModel.isSearchingAudius.collectAsState()
   val spectrumBars = viewModel.audioEngineManager.spectrumBars.collectAsState()
   val activeApps by viewModel.activeApps.collectAsState()
   val favoriteIds by viewModel.favorites.collectAsState()
@@ -294,16 +367,40 @@ fun TarkasAppContent(
       bottom = 0.dp
     )
     val hazeState = remember { HazeState() }
-    // With blur and transparency reduced in the system, there is no blur source, so the floating
-    // bars fall back to solid surfaces.
-    val blurAllowed = !AppMotion.systemBlurOff
+    // With blur and transparency reduced (in the system or in Ajustes), there is no blur source, so
+    // the floating bars fall back to solid surfaces.
+    val blurAllowed = !AppMotion.systemBlurOff && !reduceTransparency
+    // Liquid glass records the screen content and refracts it; only while that style is on.
+    val liquidOn = blurAllowed && surfaceStyle == com.example.ui.theme.SurfaceStyle.LIQUID &&
+      com.example.ui.theme.liquidGlassSupported
+    val pageColor = MaterialTheme.colorScheme.background
+    val backdrop = com.kyant.backdrop.backdrops.rememberLayerBackdrop(
+      onDraw = {
+        drawRect(pageColor)
+        drawContent()
+      }
+    )
     var barHeightPx by remember { mutableIntStateOf(0) }
     val barInset = with(LocalDensity.current) { barHeightPx.toDp() }
+    // Scrolling a page down draws the tab capsule back; scrolling up (or changing tab) restores it.
+    var navCollapsed by remember { mutableStateOf(false) }
+    LaunchedEffect(currentTab) { navCollapsed = false }
+    val navScroll = remember {
+      object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+        override fun onPreScroll(
+          available: androidx.compose.ui.geometry.Offset,
+          source: androidx.compose.ui.input.nestedscroll.NestedScrollSource
+        ): androidx.compose.ui.geometry.Offset {
+          if (available.y < -8f) navCollapsed = true else if (available.y > 8f) navCollapsed = false
+          return androidx.compose.ui.geometry.Offset.Zero
+        }
+      }
+    }
 
     CompositionLocalProvider(
       LocalSurfaceStyle provides surfaceStyle,
-      com.example.ui.theme.LocalGlassLight provides glassLight,
       LocalHazeState provides if (blurAllowed) hazeState else null,
+      com.example.ui.theme.LocalBackdrop provides if (liquidOn) backdrop else null,
       LocalBarInset provides barInset
     ) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -312,6 +409,8 @@ fun TarkasAppContent(
         .fillMaxSize()
         .padding(contentPadding)
         .then(if (blurAllowed) Modifier.hazeSource(hazeState) else Modifier)
+        .then(if (liquidOn) Modifier.layerBackdrop(backdrop) else Modifier)
+        .nestedScroll(navScroll)
     ) {
       val screenKey: Any = when {
         isShowingCuriositySettings -> "curiosity"
@@ -381,6 +480,7 @@ fun TarkasAppContent(
             onCreatePlaylist = { name, track -> viewModel.createPlaylist(name, track) },
             audiusResults = audiusResults,
             audiusSearching = audiusSearching,
+            audiusOffline = audiusOffline,
             onSearchAudiusOnline = { q -> viewModel.searchAudiusOnline(q) },
             // Opening a song plays it and grows the player out of the card that was tapped.
             onPlayAudiusResult = { track ->
@@ -391,32 +491,27 @@ fun TarkasAppContent(
               viewModel.playTrack(track)
               viewModel.setTab(TarkasNavTab.MUSIC)
             },
-            onTogglePlayPause = { viewModel.togglePlayPause() },
-            onNextTrack = { viewModel.playNextTrack() },
-            onPreviousTrack = { viewModel.playPreviousTrack() },
-            onNavigateToTab = { tab -> viewModel.setTab(tab) }
+            trending = trending,
+            onRetryTrending = { viewModel.loadTrending() },
+            onPlayTrending = { track ->
+              viewModel.playTrending(track)
+              viewModel.setTab(TarkasNavTab.MUSIC)
+            },
+            onOpenLibrary = { viewModel.setTab(TarkasNavTab.LIBRARY) }
           )
         }
 
         TarkasNavTab.MUSIC -> {
           MusicScreen(
             currentTrack = currentTrack,
-            tracks = tracks,
             isPlaying = isPlaying,
             currentPositionMs = { currentPosMs.value },
             durationMs = { durationMs.value },
             activeCuriosity = activeCuriosity,
-            isSearchingAudius = isSearchingAudius,
-            onPlayTrack = { track -> viewModel.playTrack(track) },
             onTogglePlayPause = { viewModel.togglePlayPause() },
             onNextTrack = { viewModel.playNextTrack() },
             onPreviousTrack = { viewModel.playPreviousTrack() },
             onSeekTo = { pos -> viewModel.audioEngineManager.seekTo(pos) },
-            onAddLocalTrack = { title, artist, uri, dur ->
-              viewModel.addLocalAudio(title, artist, uri, dur)
-            },
-            onSearchAudius = { q -> viewModel.searchAudius(q) },
-            onLoadAudiusTrending = { viewModel.loadAudiusTrending() },
             isShuffle = isShuffle,
             repeatMode = repeatMode,
             favoriteIds = favoriteIds,
@@ -428,7 +523,8 @@ fun TarkasAppContent(
             onAddToQueue = { track -> viewModel.addToQueue(track) },
             onAddToPlaylist = { id, track -> viewModel.addToPlaylist(id, track) },
             onCreatePlaylist = { name, track -> viewModel.createPlaylist(name, track) },
-            onOpenQueue = { viewModel.setTab(TarkasNavTab.LIBRARY) }
+            onOpenQueue = { viewModel.openQueue() },
+            onClose = { viewModel.goBack() }
           )
         }
 
@@ -459,7 +555,9 @@ fun TarkasAppContent(
               viewModel.setTab(TarkasNavTab.MUSIC)
             },
             onRemoveQueueItem = { index -> viewModel.removeFromQueue(index) },
-            onClearQueue = { viewModel.clearQueue() }
+            onClearQueue = { viewModel.clearQueue() },
+            openQueue = openQueueRequest,
+            onQueueOpened = { viewModel.queueOpened() }
           )
         }
 
@@ -493,7 +591,10 @@ fun TarkasAppContent(
             onRenamePreset = { id, name -> viewModel.renameEqPreset(id, name) },
             onDeletePreset = { id -> viewModel.deleteEqPreset(id) },
             onReset = { viewModel.resetEq() },
-            onRequestSystemAudioCapture = onRequestSystemAudioCapture
+            onRequestSystemAudioCapture = onRequestSystemAudioCapture,
+            onStopSystemAudioCapture = { viewModel.stopSystemAudioCapture() },
+            spectrumAllowed = spectrumAllowed,
+            onAllowSpectrum = onAllowSpectrum
           )
         }
 
@@ -503,11 +604,8 @@ fun TarkasAppContent(
             isProcessing = isAssistantProcessing,
             hasGeminiKey = viewModel.assistantEngine.hasGeminiKey,
             activeTimers = activeTimers,
-            reminders = reminders,
             onSendMessage = { text -> viewModel.sendAssistantMessage(text) },
-            onCancelTimer = { id -> viewModel.cancelTimer(id) },
-            curiosityConfig = curiosityConfig,
-            onOpenCuriositySettings = { viewModel.openCuriositySettings() }
+            onCancelTimer = { id -> viewModel.cancelTimer(id) }
           )
         }
 
@@ -516,14 +614,28 @@ fun TarkasAppContent(
             themeMode = themeMode,
             capabilities = capabilities,
             onThemeModeChange = { mode -> viewModel.setThemeMode(mode) },
-            onBackToHome = { viewModel.setTab(TarkasNavTab.HOME) },
             curiosityConfig = curiosityConfig,
             onOpenCuriositySettings = { viewModel.openCuriositySettings() },
             hasGeminiKey = viewModel.assistantEngine.hasGeminiKey,
             surfaceStyle = surfaceStyle,
             onSurfaceStyleChange = { style -> viewModel.setSurfaceStyle(style) },
             reduceMotion = reduceMotion,
-            onReduceMotionChange = { viewModel.setReduceMotion(it) }
+            onReduceMotionChange = { viewModel.setReduceMotion(it) },
+            reduceTransparency = reduceTransparency,
+            onReduceTransparencyChange = { viewModel.setReduceTransparency(it) },
+            accent = viewModel.accent.collectAsState().value,
+            onAccentChange = { viewModel.setAccent(it) },
+            isShuffle = isShuffle,
+            repeatMode = repeatMode,
+            onToggleShuffle = { viewModel.toggleShuffle() },
+            onCycleRepeat = { viewModel.cycleRepeatMode() },
+            onOpenAudio = { viewModel.setTab(TarkasNavTab.AUDIO) },
+            cacheSizeBytes = { viewModel.cacheSizeBytes() },
+            onClearCache = { done -> viewModel.clearCache(done) },
+            onExportData = { uri -> viewModel.writeExport(uri) },
+            onEraseAllData = { viewModel.eraseAllData() },
+            onRestartOnboarding = { viewModel.restartOnboarding() },
+            termsAcceptedAt = viewModel.termsAcceptedAt
           )
         }
       }
@@ -624,6 +736,48 @@ fun TarkasAppContent(
           }
         }
 
+        // A short message (a track that could not play, a permission left off), over the mini player.
+        // It goes away by itself after a few seconds, or when its action is used.
+        var shownNotice by remember { mutableStateOf(notice) }
+        if (notice != null) shownNotice = notice
+        notice?.let { n ->
+          LaunchedEffect(n.id) {
+            kotlinx.coroutines.delay(if (n.actionLabel != null) 6000L else 3500L)
+            viewModel.dismissNotice(n.id)
+          }
+        }
+        AnimatedVisibility(visible = notice != null && !isShowingCuriositySettings) {
+          val n = shownNotice
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .glassPill(cornerRadius = 30.dp)
+              .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
+              .heightIn(min = 40.dp)
+              .testTag("app_notice"),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Text(
+              text = n?.text ?: "",
+              fontSize = 14.sp,
+              lineHeight = 19.sp,
+              color = MaterialTheme.colorScheme.onSurface,
+              modifier = Modifier.weight(1f)
+            )
+            if (n?.actionLabel != null) {
+              Spacer(modifier = Modifier.width(8.dp))
+              com.example.ui.components.GlassChip(
+                label = n.actionLabel,
+                selected = true,
+                onClick = {
+                  viewModel.dismissNotice(n.id)
+                  n.action?.invoke()
+                }
+              )
+            }
+          }
+        }
+
         // Frosted Mini player shown docked above bottom nav when not on full Music screen
         // It fades in as the closing player lands on it, and steps aside at once when the player
         // grows out of it. The last track is kept so the capsule does not empty while leaving.
@@ -641,6 +795,11 @@ fun TarkasAppContent(
             isPlaying = isPlaying,
             onTogglePlayPause = { viewModel.togglePlayPause() },
             onNext = { viewModel.playNextTrack() },
+            onPrevious = { viewModel.playPreviousTrack() },
+            progress = {
+              val d = durationMs.value
+              if (d > 0) currentPosMs.value.toFloat() / d else 0f
+            },
             onClick = { viewModel.setTab(TarkasNavTab.MUSIC) },
             modifier = Modifier
               .onGloballyPositioned { com.example.ui.theme.PlayerOrigin.mini = it.boundsInWindow() }
@@ -653,7 +812,8 @@ fun TarkasAppContent(
           onTabSelected = { tab ->
             if (isShowingCuriositySettings) viewModel.closeCuriositySettings()
             viewModel.setTab(tab)
-          }
+          },
+          collapsed = navCollapsed && currentTab != TarkasNavTab.MUSIC
         )
        }
       }

@@ -13,7 +13,6 @@ class CuriosityRepository {
       shortTrivia = "Composta em compasso 5/4 e inspirada pela estética de Bela Bartók e Alberto Ginastera, 'Eruption' foi criada por Keith Emerson no sintetizador Moog Modular. Greg Lake inicialmente rejeitou o conceito por achá-lo complexo demais, mas a suíte de 20 minutos se consolidou como marco definidor do rock progressivo britânico em 1971.",
       wordCount = 54,
       documentedFacts = "Gravado nos estúdios Advision em Londres em janeiro de 1971 sob produção de Greg Lake e engenharia de Eddy Offord. Emerson utilizou o Moog Modular 1C com osciladores descalibrados intencionalmente para criar o som 'cru' da criatura Tarkus.",
-      musicalInterpretation = "A alternância rápida entre compassos ímpares (5/4 e 10/8) simula sonoramente os passos mecânicos e destrutivos do monstro blindado híbrido armadilho-tanque.",
       sources = listOf(
         "Emerson, Keith (2004). Pictures of an Exhibitionist. John Blake Publishing.",
         "Macan, Edward (1997). Rocking the Classics: English Progressive Rock. Oxford University Press.",
@@ -21,7 +20,6 @@ class CuriosityRepository {
       ),
       status = VerificationStatus.VERIFIED_FACT,
       verifiedDate = "2026-10-15",
-      deepDive = "A pintura da capa foi criada pelo artista William Neal após ouvir as fitas de ensaio. O personagem Tarkus é um símbolo alegórico contra a mecanização bélica da sociedade contemporânea."
     ),
     "track_tubular" to Curiosity(
       trackId = "track_tubular",
@@ -30,7 +28,6 @@ class CuriosityRepository {
       shortTrivia = "Mike Oldfield tinha apenas 19 anos quando gravou quase todos os instrumentos no estúdio The Manor, sobrepondo dezenas de pistas com fitas analógicas. O álbum inaugurou a Virgin Records de Richard Branson em 1973 e ganhou projeção mundial ao ser adotado pelo diretor William Friedkin na trilha sonora clássica do filme 'O Exorcista'.",
       wordCount = 58,
       documentedFacts = "Gravado entre o outono de 1972 e a primavera de 1973 no estúdio The Manor em Oxfordshire. Oldfield gravou violões, baixo, bandolim, sintetizador Farfisa e os famosos sinos tubulares orquestrais.",
-      musicalInterpretation = "O padrão inicial de piano em 7/4 cria uma tensão rítmica hipnótica e cíclica que se desenvolve gradualmente em dinâmica orquestral de camadas sonoras.",
       sources = listOf(
         "Oldfield, Mike (2007). Changeling: The Autobiography of Mike Oldfield. Virgin Books.",
         "Sound on Sound Magazine (April 2001). Classic Tracks: Mike Oldfield's Tubular Bells by Richard Buskin.",
@@ -38,7 +35,6 @@ class CuriosityRepository {
       ),
       status = VerificationStatus.VERIFIED_FACT,
       verifiedDate = "2026-10-10",
-      deepDive = "Richard Branson inicialmente não conseguia encontrar uma gravadora disposta a lançar um disco puramente instrumental de 48 minutos, o que o levou a fundar o lendário selo Virgin Records."
     ),
     "track_debussy" to Curiosity(
       trackId = "track_debussy",
@@ -47,7 +43,6 @@ class CuriosityRepository {
       shortTrivia = "Terceiro movimento da 'Suite bergamasque', inspirada no poema homônimo de Paul Verlaine de 1869. Composta a partir de 1890 e revisada em 1905, a peça evoca a luz da lua por meio de tempo rubato, polirritmia sutil e escalas pentatônicas impressionistas que desafiaram a harmonia romântica germânica tradicional.",
       wordCount = 52,
       documentedFacts = "A peça foi publicada em 1905 pela editora musical francesa Eugène Fromont, após quase 15 anos de revisão meticulosa da partitura original pelo compositor.",
-      musicalInterpretation = "O uso do compasso 9/8 em tempo andante très expressif cria uma sensação fluida de suspensão temporal, onde o silêncio e o decaimento ressonante das cordas têm peso dramático.",
       sources = listOf(
         "Lockspeiser, Edward (1962). Debussy: His Life and Mind. Cambridge University Press.",
         "Bibliothèque nationale de France (BnF Gallica) - Archives Département de la Musique.",
@@ -55,7 +50,6 @@ class CuriosityRepository {
       ),
       status = VerificationStatus.VERIFIED_FACT,
       verifiedDate = "2026-09-28",
-      deepDive = "Debussy rejeitava o rótulo de 'impressionista', preferindo afirmar que buscava a cor e o dinamismo da natureza sem as amarras acadêmicas dos conservatórios."
     ),
     "track_satie" to Curiosity(
       trackId = "track_satie",
@@ -64,7 +58,6 @@ class CuriosityRepository {
       shortTrivia = "Publicada em Paris em 1888, a composição rompeu com o virtuosismo do século XIX através de cadências modais suaves e acordes estáticos de 7ª maior. É considerada precursora fundamental da música ambiente moderna, do minimalismo e da concepção de música para mobília ('musique d'ameublement').",
       wordCount = 48,
       documentedFacts = "Publicada pela primeira vez no periódico 'Le Chat Noir' e posteriormente em partitura impressa pelo pai de Satie, Alfred Satie, em Paris no ano de 1888.",
-      musicalInterpretation = "A oscilação constante entre Sol maior com sétima e Ré maior com sétima cria uma atmosfera melancólica, estática e desprovida de resolução tonal agressiva.",
       sources = listOf(
         "Orledge, Robert (1990). Satie the Composer. Cambridge University Press.",
         "Davis, Mary E. (2007). Erik Satie. Reaktion Books.",
@@ -72,7 +65,6 @@ class CuriosityRepository {
       ),
       status = VerificationStatus.VERIFIED_FACT,
       verifiedDate = "2026-10-02",
-      deepDive = "O termo 'Gymnopédie' remete às festividades da Grécia Antiga em Esparta, onde jovens dançavam ao ar livre em honra aos deuses sob severo rigor físico."
     ),
     "track_sweep" to Curiosity(
       trackId = "track_sweep",
@@ -81,7 +73,6 @@ class CuriosityRepository {
       shortTrivia = "Sinal de teste acústico gerado digitalmente para medição de resposta espectral e detecção de nós ressonantes na sala ou fones de ouvido. Permite avaliar a linearidade do transdutor em 60Hz (sub-bass), 1kHz (referência vocal) e 10kHz (presença de agudos), sem mascaramento ou compressão dinâmica.",
       wordCount = 51,
       documentedFacts = "Gerado em padrão PCM 16-bit 44.1 kHz linear sem dither ou compressão dinâmica de faixa dinâmica. Baseado nos padrões de calibração eletroacústica AES-67 e IEC 60268-7.",
-      musicalInterpretation = "Não é uma composição artística, mas um instrumento de diagnóstico analítico para validar a precisão dos filtros e resposta do hardware de áudio.",
       sources = listOf(
         "Audio Engineering Society (AES) Standards Committee - AES3-2003 / AES67.",
         "IEC 60268-7: Sound System Equipment - Part 7: Headphones and Earphones.",
@@ -89,35 +80,14 @@ class CuriosityRepository {
       ),
       status = VerificationStatus.TECHNICAL_SPEC,
       verifiedDate = "2026-10-18",
-      deepDive = "A varredura logarítmica expõe cancelamentos de fase e vibrações parasitas mecânicas nas caixas acústicas e gabinetes que passam despercebidos com música comum."
     )
   )
 
-  fun getCuriosityForTrack(trackId: String): Curiosity {
-    return curiosityDatabase[trackId] ?: unverified(trackId, "Faixa", "Artista")
-  }
-
-  fun getCuriosityForTrack(track: com.example.data.model.Track): Curiosity {
-    return curiosityDatabase[track.id] ?: unverified(track.id, track.title, track.artist)
-  }
-
-  // Tracks outside the curated database get an honest "no source" answer. Never invent trivia or sources.
-  private fun unverified(trackId: String, title: String, artist: String): Curiosity {
-    val message = "Não encontrei informação verificada sobre esta faixa."
-    return Curiosity(
-      trackId = trackId,
-      trackTitle = title,
-      artist = artist,
-      shortTrivia = message,
-      wordCount = message.split(" ").size,
-      documentedFacts = "Nenhuma fonte documentada para esta faixa.",
-      musicalInterpretation = "",
-      sources = emptyList(),
-      status = VerificationStatus.UNVERIFIED,
-      verifiedDate = "",
-      deepDive = ""
-    )
-  }
+  /**
+   * The verified curiosity of a track, or null when there is none. Nothing is shown, spoken or put
+   * in the notification for a track without one: never invent trivia or sources.
+   */
+  fun getCuriosityForTrack(track: com.example.data.model.Track): Curiosity? = curiosityDatabase[track.id]
 
   fun getAllCuriosities(): List<Curiosity> {
     return curiosityDatabase.values.toList()

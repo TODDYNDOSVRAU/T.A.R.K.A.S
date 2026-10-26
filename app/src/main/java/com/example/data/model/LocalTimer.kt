@@ -14,15 +14,3 @@ data class LocalTimer(
     return String.format("%02d:%02d", mins, secs)
   }
 }
-
-data class LocalReminder(
-  val id: String,
-  val title: String,
-  val scheduledEpochMs: Long,
-  val isTriggered: Boolean = false
-) {
-  fun formattedDateTime(): String {
-    val sdf = java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.getDefault())
-    return sdf.format(java.util.Date(scheduledEpochMs))
-  }
-}

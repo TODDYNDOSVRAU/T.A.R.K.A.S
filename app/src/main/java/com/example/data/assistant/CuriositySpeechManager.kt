@@ -114,18 +114,10 @@ class CuriositySpeechManager(
     curiosity: Curiosity,
     isIntro: Boolean
   ): String {
-    // Extract first 1 or 2 clean sentences from the trivia
+    // The first one or two sentences of the trivia
     val rawTrivia = curiosity.shortTrivia.trim()
-    val cleanTrivia = if (rawTrivia.isNotBlank() && !rawTrivia.contains("Não encontrei")) {
-      val sentences = rawTrivia.split(Regex("(?<=[.!?])\\s+"))
-      when {
-        sentences.size >= 2 -> "${sentences[0]} ${sentences[1]}"
-        sentences.isNotEmpty() -> sentences[0]
-        else -> rawTrivia
-      }
-    } else {
-      "Não encontrei uma curiosidade verificada sobre esta faixa."
-    }
+    val sentences = rawTrivia.split(Regex("(?<=[.!?])\\s+"))
+    val cleanTrivia = if (sentences.size >= 2) "${sentences[0]} ${sentences[1]}" else rawTrivia
 
     return if (isIntro) {
       "Curiosidade sobre ${track.title}, de ${track.artist}: $cleanTrivia Aproveite o som!"

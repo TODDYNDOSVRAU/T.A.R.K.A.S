@@ -84,7 +84,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.AssistantMessage
 import com.example.ui.theme.LocalBarInset
-import com.example.data.model.LocalReminder
 import com.example.data.model.LocalTimer
 import com.example.data.model.MessageSender
 import com.example.ui.components.ToolReportCard
@@ -100,11 +99,8 @@ fun AssistantScreen(
   isProcessing: Boolean,
   hasGeminiKey: Boolean,
   activeTimers: List<LocalTimer>,
-  reminders: List<LocalReminder>,
   onSendMessage: (String) -> Unit,
   onCancelTimer: (String) -> Unit,
-  curiosityConfig: com.example.data.model.CuriosityConfig? = null,
-  onOpenCuriositySettings: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   var textInput by remember { mutableStateOf("") }
@@ -277,56 +273,6 @@ fun AssistantScreen(
               }
             }
           }
-
-          Spacer(modifier = Modifier.height(12.dp))
-
-          // Curiosity narration settings, as a flat row
-          Box(
-            modifier = Modifier
-              .fillMaxWidth()
-              .glassControl(RoundedCornerShape(20.dp))
-              .clickable { onOpenCuriositySettings() }
-              .testTag("btn_assistant_curiosidades_musicais")
-          ) {
-            Row(
-              modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Box(
-                modifier = Modifier
-                  .size(36.dp)
-                  .clip(CircleShape)
-                  .background(colors.primary.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-              ) {
-                Icon(
-                  imageVector = Icons.Default.AutoAwesome,
-                  contentDescription = null,
-                  tint = colors.primary,
-                  modifier = Modifier.size(18.dp)
-                )
-              }
-              Spacer(modifier = Modifier.width(12.dp))
-              Column(modifier = Modifier.weight(1f)) {
-                val enabled = curiosityConfig?.enabled != false
-                Text(
-                  text = "Curiosidades musicais • ${if (enabled) "Ativadas" else "Desativadas"}",
-                  fontSize = 17.sp,
-                  color = colors.onSurface
-                )
-                Text(
-                  text = "Narração: ${curiosityConfig?.timing?.label ?: "Ao final da música"}",
-                  fontSize = 15.sp,
-                  color = colors.onSurfaceVariant
-                )
-              }
-              Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = "Ajustar",
-                tint = colors.onSurfaceVariant
-              )
-            }
-          }
         }
       }
 
@@ -337,7 +283,7 @@ fun AssistantScreen(
     }
 
     // Suggestions and input stay pinned above the bottom bar
-    QuickActions(onSendMessage = onSendMessage, onOpenCuriositySettings = onOpenCuriositySettings)
+    QuickActions(onSendMessage = onSendMessage)
 
     Row(
       modifier = Modifier
@@ -441,16 +387,13 @@ private fun MessageBubble(message: AssistantMessage) {
 }
 
 @Composable
-private fun QuickActions(
-  onSendMessage: (String) -> Unit,
-  onOpenCuriositySettings: () -> Unit
-) {
+private fun QuickActions(onSendMessage: (String) -> Unit) {
+  // Curiosities live only in the player and the notification, so no chip here asks for one.
   val actions: List<Triple<String, ImageVector, String>> = listOf(
     Triple("Próxima faixa", Icons.Default.SkipNext, "próxima faixa"),
     Triple("Aleatório", Icons.Default.Shuffle, "aleatório"),
     Triple("Repetir", Icons.Default.Repeat, "repetir"),
     Triple("Favoritar", Icons.Default.Favorite, "favoritar"),
-    Triple("Analisar música", Icons.Default.Search, "analisar música"),
     Triple("Diagnóstico de áudio", Icons.Default.GraphicEq, "diagnóstico de áudio"),
     Triple("Equalizador flat", Icons.Default.Equalizer, "equalizador flat"),
     Triple("Timer de 15 min", Icons.Default.Timer, "timer de 15 minutos"),

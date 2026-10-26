@@ -39,6 +39,7 @@ class SystemAudioCaptureManager(private val context: Context) {
   val status: StateFlow<SystemAudioStatus> = _status.asStateFlow()
 
   private var audioRecord: AudioRecord? = null
+  private var projection: MediaProjection? = null
   private var captureJob: Job? = null
   private val scope = CoroutineScope(Dispatchers.IO + Job())
 
@@ -58,6 +59,7 @@ class SystemAudioCaptureManager(private val context: Context) {
 
     try {
       stopCapture()
+      projection = mediaProjection
 
       val config = AudioPlaybackCaptureConfiguration.Builder(mediaProjection)
         .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
@@ -134,10 +136,13 @@ class SystemAudioCaptureManager(private val context: Context) {
         }
         it.release()
       }
+      // Ending the projection also removes the system's "sharing" indicator.
+      projection?.stop()
     } catch (e: Exception) {
       Log.e(TAG, "Error stopping capture", e)
     } finally {
       audioRecord = null
+      projection = null
       _status.value = _status.value.copy(isCapturing = false, currentRmsEnergy = 0f)
     }
   }

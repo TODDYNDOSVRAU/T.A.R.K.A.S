@@ -2,7 +2,6 @@ package com.example.data.repository
 
 import android.content.Context
 import com.example.data.audio.AudioSynthesizer
-import com.example.data.audius.AudiusApiService
 import com.example.data.model.Track
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,9 +14,6 @@ class MusicRepository(private val context: Context) {
 
   private val _currentTrack = MutableStateFlow<Track?>(null)
   val currentTrack: StateFlow<Track?> = _currentTrack.asStateFlow()
-
-  private val _isSearching = MutableStateFlow(false)
-  val isSearching: StateFlow<Boolean> = _isSearching.asStateFlow()
 
   suspend fun initializeCatalog() {
     val fileMap = AudioSynthesizer.ensureDemoTracksExist(context)
@@ -32,7 +28,8 @@ class MusicRepository(private val context: Context) {
         genre = "Rock Progressivo",
         era = "1971",
         filePath = fileMap["track_tarkus"],
-        colorHex = 0xFF46C9D3
+        colorHex = 0xFF46C9D3,
+        isDemo = true
       ),
       Track(
         id = "track_tubular",
@@ -43,7 +40,8 @@ class MusicRepository(private val context: Context) {
         genre = "Minimalismo / Prog",
         era = "1973",
         filePath = fileMap["track_tubular"],
-        colorHex = 0xFF2F8FA8
+        colorHex = 0xFF2F8FA8,
+        isDemo = true
       ),
       Track(
         id = "track_debussy",
@@ -54,7 +52,8 @@ class MusicRepository(private val context: Context) {
         genre = "Impressionismo Clássico",
         era = "1905",
         filePath = fileMap["track_debussy"],
-        colorHex = 0xFF0E7C86
+        colorHex = 0xFF0E7C86,
+        isDemo = true
       ),
       Track(
         id = "track_satie",
@@ -65,7 +64,8 @@ class MusicRepository(private val context: Context) {
         genre = "Música Ambiente / Modal",
         era = "1888",
         filePath = fileMap["track_satie"],
-        colorHex = 0xFF5B7C99
+        colorHex = 0xFF5B7C99,
+        isDemo = true
       ),
       Track(
         id = "track_sweep",
@@ -76,7 +76,8 @@ class MusicRepository(private val context: Context) {
         genre = "Calibração Acústica",
         era = "2026",
         filePath = fileMap["track_sweep"],
-        colorHex = 0xFF7A8A99
+        colorHex = 0xFF7A8A99,
+        isDemo = true
       )
     )
 
@@ -85,50 +86,8 @@ class MusicRepository(private val context: Context) {
     _tracks.value = demoTracks
   }
 
-  suspend fun searchAudius(query: String): List<Track> {
-    if (query.isBlank()) return emptyList()
-    _isSearching.value = true
-    try {
-      val results = AudiusApiService.searchTracks(query)
-      if (results.isNotEmpty()) {
-        val existingIds = _tracks.value.map { it.id }.toSet()
-        val newTracks = results.filter { it.id !in existingIds }
-        _tracks.value = results + _tracks.value
-      }
-      return results
-    } finally {
-      _isSearching.value = false
-    }
-  }
-
-  suspend fun loadAudiusTrending(): List<Track> {
-    _isSearching.value = true
-    try {
-      val results = AudiusApiService.getTrendingTracks()
-      if (results.isNotEmpty()) {
-        val existingIds = _tracks.value.map { it.id }.toSet()
-        val newTracks = results.filter { it.id !in existingIds }
-        _tracks.value = results + _tracks.value
-      }
-      return results
-    } finally {
-      _isSearching.value = false
-    }
-  }
-
   fun selectTrack(track: Track) {
     _currentTrack.value = track
-  }
-
-  fun selectNextTrack(): Track? {
-    val list = _tracks.value
-    if (list.isEmpty()) return null
-    val current = _currentTrack.value
-    val currentIndex = list.indexOfFirst { it.id == current?.id }
-    val nextIndex = if (currentIndex != -1 && currentIndex < list.size - 1) currentIndex + 1 else 0
-    val next = list[nextIndex]
-    _currentTrack.value = next
-    return next
   }
 
   fun selectPreviousTrack(): Track? {
@@ -142,7 +101,12 @@ class MusicRepository(private val context: Context) {
     return prev
   }
 
-  fun addLocalTrack(title: String, artist: String, uriString: String, durationMs: Long) {
+  /**
+   * Adds a file picked on the device to the library and returns it. The same file picked again
+   * returns the track already there, so the list never holds it twice.
+   */
+  fun addLocalTrack(title: String, artist: String, uriString: String, durationMs: Long): Track {
+    _tracks.value.firstOrNull { it.isLocalFile && it.filePath == uriString }?.let { return it }
     val newTrack = Track(
       id = "local_${System.currentTimeMillis()}",
       title = title,
@@ -156,6 +120,6 @@ class MusicRepository(private val context: Context) {
       colorHex = 0xFF3A9FA8
     )
     _tracks.value = listOf(newTrack) + _tracks.value
-    _currentTrack.value = newTrack
+    return newTrack
   }
 }

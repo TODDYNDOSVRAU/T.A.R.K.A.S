@@ -46,15 +46,15 @@ Se houver conflito, não adivinhe: identifique-o, explique opções e proponha u
 5. Atualizar documentação relevante.
 6. Relatar resultados sem exageros.
 
-## Stack-alvo (a validar no ambiente)
-- Flutter/Dart para UI e lógica de apresentação.
-- Kotlin para integrações Android específicas.
+## Stack em uso
+- Kotlin + Jetpack Compose para UI e lógica de apresentação (decidido; o plano inicial era Flutter).
+- Kotlin também para as integrações Android (efeitos de áudio, sessão de mídia, serviços).
 - AndroidX Media3 para reprodução e sessão de mídia quando aplicável.
 - Persistência local inicialmente; backend somente quando houver necessidade demonstrada.
 - Integração de IA atrás de uma interface de provedor; padrão inicial gratuito/offline ou modo indisponível explícito.
 - Nenhum serviço pago é requisito para iniciar o MVP.
 
-## Primeira tarefa autorizada
+## Primeira tarefa autorizada (concluída, mantida como histórico)
 Comece apenas com auditoria do ambiente e scaffold mínimo:
 - verificar Flutter, Dart, Android SDK, Java/JDK, Git e dispositivos disponíveis;
 - inspecionar se o diretório atual já contém projeto;

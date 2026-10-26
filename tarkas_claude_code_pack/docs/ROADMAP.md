@@ -1,5 +1,7 @@
 # Roadmap de implementação
 
+> Histórico: as fases 0 e 1 abaixo já foram feitas. O app foi construído em Kotlin + Jetpack Compose, não em Flutter, e já passou da versão 1.7. Os passos com Flutter ficam só como registro do plano original.
+
 ## Fase 0 — auditoria (primeira tarefa)
 - Inspecionar repositório e Git.
 - Verificar Flutter, Dart, Java/JDK, Android SDK, adb e dispositivos.

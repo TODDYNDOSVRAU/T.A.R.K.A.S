@@ -3,8 +3,7 @@ package com.example.data.model
 enum class VerificationStatus(val label: String) {
   VERIFIED_FACT("Fato Documentado & Verificado"),
   HISTORICAL_ANALYSIS("Análise Histórica & Musical"),
-  TECHNICAL_SPEC("Especificação Técnica Acústica"),
-  UNVERIFIED("Sem Fonte Confiável")
+  TECHNICAL_SPEC("Especificação Técnica Acústica")
 }
 
 data class Curiosity(
@@ -14,9 +13,7 @@ data class Curiosity(
   val shortTrivia: String,
   val wordCount: Int,
   val documentedFacts: String,
-  val musicalInterpretation: String,
   val sources: List<String>,
   val status: VerificationStatus,
-  val verifiedDate: String,
-  val deepDive: String
+  val verifiedDate: String
 )

@@ -22,8 +22,6 @@ class PreferencesRepository(context: Context) {
     private const val KEY_CURIOSITY_VOICE_PRESET = "curiosity_voice_preset"
     private const val KEY_CURIOSITY_PITCH = "curiosity_pitch"
     private const val KEY_CURIOSITY_RATE = "curiosity_rate"
-    private const val KEY_CURIOSITY_DUCK = "curiosity_duck"
-    private const val KEY_CURIOSITY_SHORT = "curiosity_short"
     private const val KEY_SHUFFLE = "shuffle"
     private const val KEY_REPEAT = "repeat_mode"
     private const val KEY_EQ_SETTINGS = "eq_settings"
@@ -81,6 +79,43 @@ class PreferencesRepository(context: Context) {
     prefs.edit().putBoolean("reduce_motion", reduce).apply()
   }
 
+  /** "Reduzir transparência": glass surfaces drawn solid. */
+  fun getReduceTransparency(): Boolean = prefs.getBoolean("reduce_transparency", false)
+
+  fun saveReduceTransparency(reduce: Boolean) {
+    prefs.edit().putBoolean("reduce_transparency", reduce).apply()
+  }
+
+  /** Accent colour key (see AccentColor); "ice" is the brand default. */
+  fun getAccent(): String = prefs.getString("accent", "ice") ?: "ice"
+
+  fun saveAccent(key: String) {
+    prefs.edit().putString("accent", key).apply()
+  }
+
+  /** First-run setup finished, and which version of the terms the user accepted, and when. */
+  fun getOnboardingDone(): Boolean = prefs.getBoolean("onboarding_done", false)
+
+  fun saveOnboardingDone(done: Boolean) {
+    prefs.edit().putBoolean("onboarding_done", done).apply()
+  }
+
+  fun getTermsVersionAccepted(): Int = prefs.getInt("terms_version_accepted", 0)
+
+  fun getTermsAcceptedAt(): Long = prefs.getLong("terms_accepted_at", 0L)
+
+  fun saveTermsAccepted(version: Int, atMillis: Long) {
+    prefs.edit().putInt("terms_version_accepted", version).putLong("terms_accepted_at", atMillis).apply()
+  }
+
+  /** Every preference this app keeps, for "Exportar meus dados". */
+  fun exportAll(): Map<String, *> = prefs.all
+
+  /** Erases every preference (LGPD: elimination of the user's data). */
+  fun clearAll() {
+    prefs.edit().clear().apply()
+  }
+
   /** "app", "adb" or "root": how far the equalizer reaches. */
   fun getEqReach(): String = prefs.getString("eq_reach", "app") ?: "app"
 
@@ -113,8 +148,6 @@ class PreferencesRepository(context: Context) {
 
     val pitch = prefs.getFloat(KEY_CURIOSITY_PITCH, voicePreset.pitch)
     val rate = prefs.getFloat(KEY_CURIOSITY_RATE, voicePreset.speechRate)
-    val duck = prefs.getBoolean(KEY_CURIOSITY_DUCK, true)
-    val shortOnly = prefs.getBoolean(KEY_CURIOSITY_SHORT, true)
 
     return com.example.data.model.CuriosityConfig(
       enabled = enabled,
@@ -122,9 +155,7 @@ class PreferencesRepository(context: Context) {
       displayMode = displayMode,
       voicePreset = voicePreset,
       pitch = pitch,
-      speechRate = rate,
-      duckMusic = duck,
-      shortSummaryOnly = shortOnly
+      speechRate = rate
     )
   }
 
@@ -136,9 +167,17 @@ class PreferencesRepository(context: Context) {
       .putString(KEY_CURIOSITY_VOICE_PRESET, config.voicePreset.name)
       .putFloat(KEY_CURIOSITY_PITCH, config.pitch)
       .putFloat(KEY_CURIOSITY_RATE, config.speechRate)
-      .putBoolean(KEY_CURIOSITY_DUCK, config.duckMusic)
-      .putBoolean(KEY_CURIOSITY_SHORT, config.shortSummaryOnly)
+      // Switches of earlier versions that never did anything.
+      .remove("curiosity_duck")
+      .remove("curiosity_short")
       .apply()
+  }
+
+  /** Whether the app already explained and asked for the notification permission once. */
+  fun getNotificationsAsked(): Boolean = prefs.getBoolean("notifications_asked", false)
+
+  fun saveNotificationsAsked() {
+    prefs.edit().putBoolean("notifications_asked", true).apply()
   }
 
   // ---- Equalizer ----

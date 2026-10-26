@@ -3,7 +3,7 @@
 T.A.R.K.A.S. é um projeto Android planejado para combinar reprodução musical, configuração de áudio, assistência pessoal e curiosidades contextuais sobre músicas.
 
 ## Estado do projeto
-Especificação inicial. A viabilidade das integrações musicais e o alcance do controle de áudio precisam ser validados antes de prometer suporte.
+Este pacote é a especificação original. O app já existe (versão 1.7), feito em Kotlin + Jetpack Compose, e o código está em `app/` na raiz do repositório. Os documentos que ainda citam Flutter registram o plano inicial, não o que foi feito.
 
 ## Objetivos do MVP
 1. App Android com interface adaptável ao tema do sistema.

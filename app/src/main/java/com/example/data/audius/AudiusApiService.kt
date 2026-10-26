@@ -30,32 +30,33 @@ object AudiusApiService {
     .followSslRedirects(true)
     .build()
 
+  /** Throws [java.io.IOException] when no server answered, so the screen can tell "offline" from "nothing found". */
   suspend fun searchTracks(query: String): List<Track> = withContext(Dispatchers.IO) {
     if (query.isBlank()) return@withContext emptyList()
     val encoded = URLEncoder.encode(query.trim(), "UTF-8")
-
-    for (node in DISCOVERY_NODES) {
-      val url = "$node/tracks/search?query=$encoded&app_name=$APP_NAME&api_key=$API_KEY"
-      val tracks = fetchTracksFromUrl(url, node)
-      if (tracks.isNotEmpty()) {
-        return@withContext tracks
-      }
-    }
-    emptyList()
+    firstAnswer { node -> "$node/tracks/search?query=$encoded&app_name=$APP_NAME&api_key=$API_KEY" }
   }
 
+  /** Throws [java.io.IOException] when no server answered. */
   suspend fun getTrendingTracks(): List<Track> = withContext(Dispatchers.IO) {
-    for (node in DISCOVERY_NODES) {
-      val url = "$node/tracks/trending?app_name=$APP_NAME&api_key=$API_KEY"
-      val tracks = fetchTracksFromUrl(url, node)
-      if (tracks.isNotEmpty()) {
-        return@withContext tracks
-      }
-    }
-    emptyList()
+    firstAnswer { node -> "$node/tracks/trending?app_name=$APP_NAME&api_key=$API_KEY" }
   }
 
-  private fun fetchTracksFromUrl(url: String, baseNode: String): List<Track> {
+  /** Tries each server until one has tracks; an empty answer means "nothing found", no answer means offline. */
+  private fun firstAnswer(urlFor: (String) -> String): List<Track> {
+    var answered = false
+    for (node in DISCOVERY_NODES) {
+      val tracks = fetchTracksFromUrl(urlFor(node), node) ?: continue
+      answered = true
+      // The same track can come back twice, and the lists key their rows by id.
+      if (tracks.isNotEmpty()) return tracks.distinctBy { it.id }
+    }
+    if (!answered) throw java.io.IOException("No Audius server answered")
+    return emptyList()
+  }
+
+  /** The tracks a server answered with, or null when it did not answer. */
+  private fun fetchTracksFromUrl(url: String, baseNode: String): List<Track>? {
     try {
       val request = Request.Builder()
         .url(url)
@@ -65,12 +66,12 @@ object AudiusApiService {
       val response = client.newCall(request).execute()
       if (!response.isSuccessful) {
         Log.w(TAG, "Audius node returned code ${response.code} for $url")
-        return emptyList()
+        return null
       }
 
-      val body = response.body?.string() ?: return emptyList()
+      val body = response.body?.string() ?: return null
       val json = JSONObject(body)
-      val data = json.optJSONArray("data") ?: return emptyList()
+      val data = json.optJSONArray("data") ?: return null
 
       val result = mutableListOf<Track>()
       for (i in 0 until data.length()) {
@@ -120,7 +121,7 @@ object AudiusApiService {
       return result
     } catch (e: Exception) {
       Log.w(TAG, "Failed to fetch from node: $baseNode", e)
-      return emptyList()
+      return null
     }
   }
 }

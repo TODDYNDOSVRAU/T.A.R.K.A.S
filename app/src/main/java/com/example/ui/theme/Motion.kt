@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.dp
 import com.example.ui.viewmodel.TarkasNavTab
 
 /**
@@ -42,10 +43,29 @@ import com.example.ui.viewmodel.TarkasNavTab
 object Motion {
   /** Fast start, long soft landing: feels like the surface settles into place. */
   val Settle = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
-  const val ScreenEnterMs = 330
-  const val ScreenExitMs = 100
-  /** Between Spring.StiffnessMediumLow and StiffnessMedium: settles in about a third of a second. */
-  const val ScreenStiffness = 700f
+
+  // Material 3 Expressive spring tokens. Spatial springs move and resize, and may overshoot a little;
+  // effect springs fade and recolour and never overshoot (a bouncing alpha looks like flicker).
+  const val FastSpatialDamping = 0.6f
+  const val FastSpatialStiffness = 800f
+  const val DefaultSpatialDamping = 0.8f
+  const val DefaultSpatialStiffness = 380f
+  const val SlowSpatialDamping = 0.8f
+  const val SlowSpatialStiffness = 200f
+  const val DefaultEffectsStiffness = 1600f
+
+  /** Taps, toggles, the tab indicator's leading edge: quick with a small bounce. */
+  fun <T> fastSpatial() = spring<T>(dampingRatio = FastSpatialDamping, stiffness = FastSpatialStiffness)
+  /** Most movement: the player, cards settling, a dragged surface going back. */
+  fun <T> defaultSpatial() = spring<T>(dampingRatio = DefaultSpatialDamping, stiffness = DefaultSpatialStiffness)
+  /** Large, unhurried movement, and the trailing edge of the tab indicator. */
+  fun <T> slowSpatial() = spring<T>(dampingRatio = SlowSpatialDamping, stiffness = SlowSpatialStiffness)
+  /** Fades and colour changes: critically damped, never overshoots. */
+  fun <T> defaultEffects() = spring<T>(dampingRatio = 1f, stiffness = DefaultEffectsStiffness)
+
+  /** How many items of a list enter one after another, and the gap between them. */
+  const val StaggerItems = 8
+  const val StaggerStepMs = 30L
 }
 
 /**
@@ -104,24 +124,11 @@ fun springAt(seconds: Float, damping: Float = 10f, mass: Float = 1f, stiffness: 
   }
 }
 
-/** Order of the screens left to right, so a tab switch slides the way the bar reads. */
-private fun screenOrder(screen: Any): Int = when (screen) {
-  TarkasNavTab.HOME -> 0
-  TarkasNavTab.LIBRARY -> 1
-  TarkasNavTab.AUDIO -> 2
-  TarkasNavTab.ASSISTANT -> 3
-  TarkasNavTab.SETTINGS -> 4
-  else -> 5
-}
-
-/** Slides between tabs: an underdamped spring that lands with a small, soft overshoot. */
-private val TabSlide = spring<IntOffset>(dampingRatio = 0.78f, stiffness = 380f)
-private val TabScale = spring<Float>(dampingRatio = 0.78f, stiffness = 380f)
-
 /**
- * Transition between screens. Tabs slide in the direction of the bar (right when moving right),
- * with the new screen settling on a soft spring while the old one drifts away and fades quickly.
- * Opening the full player zooms in; leaving it grows and fades away.
+ * Transition between screens. Tabs fade through: the old page is gone in 90 ms and the new one fades
+ * in while settling from 96% scale. No sideways movement, as Material advises for bottom tabs (a
+ * slide suggests the pages can be swiped), and quick, because switching tabs is done all the time:
+ * the indicator in the bar carries the motion. Opening the full player grows it out of what was tapped.
  */
 fun screenTransition(from: Any, to: Any, reduced: Boolean = false): ContentTransform {
   if (reduced) return EnterTransition.None togetherWith ExitTransition.None
@@ -141,12 +148,9 @@ fun screenTransition(from: Any, to: Any, reduced: Boolean = false): ContentTrans
     }
   }
 
-  val dir = if (screenOrder(to) >= screenOrder(from)) 1 else -1
-  val enter = slideInHorizontally(TabSlide) { w -> dir * w / 5 } +
-    fadeIn(tween(Motion.ScreenEnterMs - Motion.ScreenExitMs, delayMillis = Motion.ScreenExitMs / 2, easing = Motion.Settle)) +
-    scaleIn(initialScale = 0.96f, animationSpec = TabScale)
-  val exit = slideOutHorizontally(TabSlide) { w -> -dir * w / 8 } +
-    fadeOut(tween(Motion.ScreenExitMs, easing = FastOutLinearInEasing))
+  val enter = fadeIn(tween(210, delayMillis = 60, easing = Motion.Settle)) +
+    scaleIn(initialScale = 0.96f, animationSpec = spring(dampingRatio = 1f, stiffness = 700f))
+  val exit = fadeOut(tween(90, easing = FastOutLinearInEasing))
   return (enter togetherWith exit).apply {
     // The new screen draws over the old one, so it never slips behind the page that is leaving.
     targetContentZIndex = 1f
@@ -175,6 +179,29 @@ fun sectionTransition(fromIndex: Int, toIndex: Int, reduced: Boolean): ContentTr
   val slide = spring<IntOffset>(dampingRatio = 0.9f, stiffness = 500f)
   return (slideInHorizontally(slide) { w -> dir * w / 8 } + fadeIn(tween(200, delayMillis = 50))) togetherWith
     (slideOutHorizontally(slide) { w -> -dir * w / 12 } + fadeOut(tween(90)))
+}
+
+/**
+ * The first items of a list fade in and rise 12 dp one after another (30 ms apart) the first time
+ * they appear. Only the first [Motion.StaggerItems] items, only once per item (coming back to the
+ * screen shows them in place), and never with reduced motion.
+ */
+@Composable
+fun Modifier.staggeredEntrance(index: Int): Modifier {
+  if (index >= Motion.StaggerItems || AppMotion.reduced) return this
+  var shown by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+  val progress = remember { androidx.compose.animation.core.Animatable(if (shown) 1f else 0f) }
+  androidx.compose.runtime.LaunchedEffect(Unit) {
+    if (progress.value < 1f) {
+      kotlinx.coroutines.delay(index * Motion.StaggerStepMs)
+      progress.animateTo(1f, spring(dampingRatio = 1f, stiffness = Motion.DefaultSpatialStiffness))
+    }
+    shown = true
+  }
+  return this.graphicsLayer {
+    alpha = progress.value
+    translationY = (1f - progress.value) * 12.dp.toPx()
+  }
 }
 
 /**

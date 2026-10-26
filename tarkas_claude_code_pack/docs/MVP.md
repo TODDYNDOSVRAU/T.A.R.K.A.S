@@ -31,7 +31,7 @@
 
 ## Critérios de aceitação gerais
 - Build de debug concluído em ambiente Android compatível.
-- `flutter analyze` sem erros; exceções justificadas/documentadas.
+- Build do Gradle sem erros; avisos justificados quando mantidos.
 - Testes automatizados passando.
 - App informa falhas e limitações em linguagem clara.
 - Nenhum segredo no código ou no histórico Git.

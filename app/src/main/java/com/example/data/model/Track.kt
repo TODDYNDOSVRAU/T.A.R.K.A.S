@@ -13,7 +13,9 @@ data class Track(
   val synthesisPreset: String? = null,
   val colorHex: Long = 0xFF00E5FF,
   /** Cover art or thumbnail; the color gradient shows when it is missing. */
-  val artworkUrl: String? = null
+  val artworkUrl: String? = null,
+  /** One of the short synthesized tracks that ship with the app, kept apart from the user's music. */
+  val isDemo: Boolean = false
 ) {
   fun formattedDuration(): String {
     val totalSeconds = durationMs / 1000

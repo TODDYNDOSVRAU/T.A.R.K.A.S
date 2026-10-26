@@ -3,7 +3,7 @@
 ## A. Ambiente e build
 - [ ] Auditoria de ambiente documentada.
 - [ ] Projeto compila em debug no ambiente escolhido.
-- [ ] `flutter analyze` sem erros.
+- [ ] Build do Gradle (`:app:assembleRelease`) sem erros.
 - [ ] Testes automatizados passam.
 - [ ] README descreve como executar.
 

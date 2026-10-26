@@ -76,8 +76,8 @@ private val timingChoices = listOf(
   ),
   TimingChoice(
     CuriosityTiming.MANUAL_ONLY,
-    "Apenas sob comando",
-    "O app não fala sozinho. Peça no Assistente quando quiser."
+    "Só na lâmpada",
+    "O app não fala sozinho. Toque na lâmpada do player para ler a curiosidade."
   )
 )
 
@@ -91,16 +91,6 @@ private val displayChoices = listOf(
     CuriosityDisplayMode.VOICE_ONLY,
     "Apenas voz",
     "Sem avisos na tela, só o áudio."
-  ),
-  DisplayChoice(
-    CuriosityDisplayMode.VOICE_AND_NOTIFICATION,
-    "Voz + notificação",
-    "Atualiza a notificação de mídia com o fato falado."
-  ),
-  DisplayChoice(
-    CuriosityDisplayMode.VOICE_AND_MODAL,
-    "Voz + janela de detalhes",
-    "Abre uma janela com as fontes e o contexto completo."
   )
 )
 
@@ -362,38 +352,16 @@ fun MusicalCuriositySettingsScreen(
       }
     }
 
-    // Short summaries
+    // What gets narrated: always short, and only what is verified
     item {
-      Column(modifier = Modifier.padding(top = 20.dp)) {
-        HorizontalDivider(color = hairline)
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 14.dp),
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Column(modifier = Modifier.weight(1f)) {
-            Text("Só resumos curtos", fontSize = 17.sp, color = colors.onSurface)
-            Text(
-              text = "Limita a narração a uma ou duas frases para não interromper a música.",
-              fontSize = 15.sp,
-              lineHeight = 20.sp,
-              color = colors.onSurfaceVariant
-            )
-          }
-          Spacer(modifier = Modifier.width(12.dp))
-          Switch(
-            checked = config.shortSummaryOnly,
-            onCheckedChange = { onConfigChange(config.copy(shortSummaryOnly = it)) },
-            colors = SwitchDefaults.colors(
-              checkedThumbColor = colors.onPrimary,
-              checkedTrackColor = colors.primary
-            ),
-            modifier = Modifier.testTag("switch_short_summary")
-          )
-        }
-        HorizontalDivider(color = hairline)
-      }
+      Text(
+        text = "A narração usa uma ou duas frases da curiosidade, para não interromper a música. " +
+          "Faixas sem uma curiosidade verificada tocam sem narração.",
+        fontSize = 13.sp,
+        lineHeight = 18.sp,
+        color = colors.onSurfaceVariant,
+        modifier = Modifier.padding(top = 20.dp)
+      )
     }
   }
 }

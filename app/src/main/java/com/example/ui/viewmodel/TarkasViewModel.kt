@@ -15,7 +15,6 @@ import com.example.data.model.EqPreset
 import com.example.data.model.EqPresets
 import com.example.data.model.EqSettings
 import com.example.data.model.Curiosity
-import com.example.data.model.LocalReminder
 import com.example.data.model.LocalTimer
 import com.example.data.model.MessageSender
 import com.example.data.model.Playlist
@@ -67,6 +66,22 @@ data class DeviceSearchState(
   val results: List<com.example.data.autoeq.AutoEqEntry> = emptyList(),
   /** Path of the entry whose curve is downloading, to show a spinner on its row. */
   val applyingPath: String? = null
+)
+
+/** A short message over the mini player, with an optional action. A new [id] shows it again. */
+data class Notice(
+  val text: String,
+  val actionLabel: String? = null,
+  val action: (() -> Unit)? = null,
+  val id: Long = System.nanoTime()
+)
+
+/** The "Em alta no Audius" row of Início. */
+data class TrendingState(
+  val loading: Boolean = false,
+  val tracks: List<Track> = emptyList(),
+  /** No Audius server answered: offline, or Audius is down. */
+  val offline: Boolean = false
 )
 
 enum class TarkasNavTab(val label: String) {
@@ -151,14 +166,37 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   private val _activeTimers = MutableStateFlow<List<LocalTimer>>(emptyList())
   val activeTimers: StateFlow<List<LocalTimer>> = _activeTimers.asStateFlow()
 
-  private val _reminders = MutableStateFlow<List<LocalReminder>>(emptyList())
-  val reminders: StateFlow<List<LocalReminder>> = _reminders.asStateFlow()
-
   private val _themeMode = MutableStateFlow(preferencesRepository.getThemeMode())
   val themeMode: StateFlow<String> = _themeMode.asStateFlow()
 
   val systemAudioStatus: StateFlow<SystemAudioStatus> = systemAudioCaptureManager.status
-  val isSearchingAudius: StateFlow<Boolean> = musicRepository.isSearching
+
+  private val _notice = MutableStateFlow<Notice?>(null)
+  val notice: StateFlow<Notice?> = _notice.asStateFlow()
+
+  fun showNotice(notice: Notice) {
+    _notice.value = notice
+  }
+
+  fun dismissNotice(id: Long) {
+    if (_notice.value?.id == id) _notice.value = null
+  }
+
+  /** Tracks that failed one after another; stops the skipping when nothing in the list plays. */
+  private var failuresInARow = 0
+
+  /** Set by the player's queue button: the Library opens on Fila, then clears it. */
+  private val _openQueueRequest = MutableStateFlow(false)
+  val openQueueRequest: StateFlow<Boolean> = _openQueueRequest.asStateFlow()
+
+  fun openQueue() {
+    _openQueueRequest.value = true
+    setTab(TarkasNavTab.LIBRARY)
+  }
+
+  fun queueOpened() {
+    _openQueueRequest.value = false
+  }
 
   private var timerTickerJob: Job? = null
 
@@ -168,7 +206,6 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     audioEngineManager = audioEngineManager,
     onTimerCreated = { timer -> addTimer(timer) },
     onTimerCancelled = { cancelAllTimers() },
-    onReminderCreated = { reminder -> addReminder(reminder) },
     onCuriosityUpdated = { cur ->
       _activeCuriosity.value = cur
       updateSystemNotification()
@@ -269,6 +306,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     // Monitor isPlaying changes for notification
     viewModelScope.launch {
       audioEngineManager.isPlaying.collect { playing ->
+        if (playing) failuresInARow = 0
         updateSystemNotification()
         // Playing: keep the app alive in the background as a foreground media service.
         if (playing) PlaybackService.start(context)
@@ -344,7 +382,8 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     updateSystemNotification()
 
     val config = _curiosityConfig.value
-    if (config.enabled && (config.timing == com.example.data.model.CuriosityTiming.START_OF_TRACK || config.timing == com.example.data.model.CuriosityTiming.BOTH)) {
+    // Only a verified curiosity is spoken; a track without one simply plays.
+    if (cur != null && config.enabled && (config.timing == com.example.data.model.CuriosityTiming.START_OF_TRACK || config.timing == com.example.data.model.CuriosityTiming.BOTH)) {
       // Intro curiosity begins playing BEFORE the music track
       audioEngineManager.stopPlayback()
       curiositySpeechManager.speakCuriosity(track, cur, isIntro = true, config = config) {
@@ -356,22 +395,41 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   }
 
   private fun startTrackAudio(track: Track) {
-    track.filePath?.let { path ->
-      audioEngineManager.playTrack(path) {
-        onTrackPlaybackCompleted(track)
-      }
+    val path = track.filePath
+    if (path == null) {
+      onTrackFailed(track, network = false)
+    } else {
+      audioEngineManager.playTrack(
+        path,
+        onCompletion = { onTrackPlaybackCompleted(track) },
+        onError = { network -> onTrackFailed(track, network) }
+      )
     }
     updateSystemNotification()
   }
 
+  /** Says what went wrong and moves on, unless several tracks in a row failed (offline, say). */
+  private fun onTrackFailed(track: Track, network: Boolean) {
+    failuresInARow++
+    val reason = if (network) "Sem conexão para tocar “${track.title}”." else "Não foi possível tocar “${track.title}”."
+    val list = contextTracks ?: musicRepository.tracks.value
+    val canSkip = failuresInARow < 3 && (list.size > 1 || _queue.value.isNotEmpty())
+    if (canSkip) {
+      showNotice(Notice("$reason Pulando para a próxima."))
+      advance(auto = false)
+    } else {
+      showNotice(Notice(reason, actionLabel = "Tentar de novo", action = { failuresInARow = 0; playInternal(track, recordHistory = false) }))
+    }
+  }
+
   private fun onTrackPlaybackCompleted(completedTrack: Track) {
     val config = _curiosityConfig.value
+    val cur = _activeCuriosity.value ?: curiosityRepository.getCuriosityForTrack(completedTrack)
     // Repeat-one loops the same track, so don't narrate its curiosity again on every pass.
-    val narrate = _repeatMode.value != RepeatMode.ONE
+    val narrate = cur != null && _repeatMode.value != RepeatMode.ONE
     if (narrate && config.enabled && (config.timing == com.example.data.model.CuriosityTiming.END_OF_TRACK || config.timing == com.example.data.model.CuriosityTiming.BOTH)) {
       // Outro curiosity spoken at the end of the track
-      val cur = _activeCuriosity.value ?: curiosityRepository.getCuriosityForTrack(completedTrack)
-      curiositySpeechManager.speakCuriosity(completedTrack, cur, isIntro = false, config = config) {
+      curiositySpeechManager.speakCuriosity(completedTrack, cur!!, isIntro = false, config = config) {
         advance(auto = true)
       }
     } else {
@@ -497,6 +555,10 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   private val _audiusSearching = MutableStateFlow(false)
   val audiusSearching: StateFlow<Boolean> = _audiusSearching.asStateFlow()
 
+  /** The last search got no answer from Audius (offline or Audius down), as opposed to no results. */
+  private val _audiusOffline = MutableStateFlow(false)
+  val audiusOffline: StateFlow<Boolean> = _audiusOffline.asStateFlow()
+
   private var audiusSearchJob: Job? = null
 
   init {
@@ -515,6 +577,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     if (query.isBlank()) {
       _audiusResults.value = emptyList()
       _audiusSearching.value = false
+      _audiusOffline.value = false
       return
     }
     audiusSearchJob = viewModelScope.launch {
@@ -523,6 +586,10 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
       _audiusSearching.value = true
       try {
         _audiusResults.value = withContext(Dispatchers.IO) { AudiusApiService.searchTracks(query.trim()) }
+        _audiusOffline.value = false
+      } catch (e: java.io.IOException) {
+        _audiusResults.value = emptyList()
+        _audiusOffline.value = true
       } finally {
         _audiusSearching.value = false
       }
@@ -634,27 +701,125 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     _eqPresets.value = EqPresets.BUILT_IN + list
   }
 
-  fun analyzeCurrentTrack() {
-    val track = musicRepository.currentTrack.value ?: return
-    val cur = curiosityRepository.getCuriosityForTrack(track.id)
-    _activeCuriosity.value = cur
-    updateSystemNotification()
-
-    val msg = AssistantMessage(
-      id = UUID.randomUUID().toString(),
-      sender = MessageSender.ASSISTANT,
-      // Curiosities stay in the player and the notification; the chat only points there.
-      text = "Analisei **${track.title}** (${track.artist}). A curiosidade fica no player: toque no mini player acima da barra e depois na lâmpada."
-    )
-    _assistantMessages.value = _assistantMessages.value + msg
-  }
-
   private val _surfaceStyle = MutableStateFlow(SurfaceStyle.fromKey(preferencesRepository.getSurfaceStyle()))
   val surfaceStyle: StateFlow<SurfaceStyle> = _surfaceStyle.asStateFlow()
 
   fun setSurfaceStyle(style: SurfaceStyle) {
     _surfaceStyle.value = style
     preferencesRepository.saveSurfaceStyle(style.key)
+  }
+
+  private val _accent = MutableStateFlow(com.example.ui.theme.AccentColor.fromKey(preferencesRepository.getAccent()))
+  val accent: StateFlow<com.example.ui.theme.AccentColor> = _accent.asStateFlow()
+
+  fun setAccent(accent: com.example.ui.theme.AccentColor) {
+    _accent.value = accent
+    preferencesRepository.saveAccent(accent.key)
+  }
+
+  // ---- first-run setup and the terms ----
+
+  /** Shown after the opening animation until finished, and again (terms step) when the terms change. */
+  private val _showOnboarding = MutableStateFlow(
+    !preferencesRepository.getOnboardingDone() ||
+      preferencesRepository.getTermsVersionAccepted() < com.example.ui.legal.LegalTexts.TERMS_VERSION
+  )
+  val showOnboarding: StateFlow<Boolean> = _showOnboarding.asStateFlow()
+
+  /** True when the setup was done before and only the terms changed: just the terms step is shown. */
+  val onlyTermsChanged: Boolean
+    get() = preferencesRepository.getOnboardingDone() &&
+      preferencesRepository.getTermsVersionAccepted() < com.example.ui.legal.LegalTexts.TERMS_VERSION
+
+  fun acceptTerms() {
+    preferencesRepository.saveTermsAccepted(com.example.ui.legal.LegalTexts.TERMS_VERSION, System.currentTimeMillis())
+  }
+
+  val termsAcceptedAt: Long get() = preferencesRepository.getTermsAcceptedAt()
+
+  fun finishOnboarding() {
+    preferencesRepository.saveOnboardingDone(true)
+    _showOnboarding.value = false
+  }
+
+  // ---- storage and the user's data (Ajustes > Armazenamento / Privacidade) ----
+
+  /** Cache the user can clear: cover images and the downloaded list of fones. Demo tracks are kept. */
+  private fun clearableCacheFiles(): List<java.io.File> =
+    (context.cacheDir.listFiles()?.filter { it.name != "tarkas_audio" } ?: emptyList()) +
+      listOfNotNull(java.io.File(context.filesDir, "autoeq_index.md").takeIf { it.exists() })
+
+  suspend fun cacheSizeBytes(): Long = withContext(Dispatchers.IO) {
+    clearableCacheFiles().sumOf { f -> if (f.isDirectory) f.walkTopDown().filter { it.isFile }.sumOf { it.length() } else f.length() }
+  }
+
+  fun clearCache(onDone: () -> Unit) {
+    viewModelScope.launch {
+      withContext(Dispatchers.IO) {
+        coil.Coil.imageLoader(context).let { loader ->
+          loader.memoryCache?.clear()
+          loader.diskCache?.clear()
+        }
+        clearableCacheFiles().forEach { it.deleteRecursively() }
+      }
+      showNotice(Notice("Cache limpo. As capas e a lista de fones voltam a ser baixadas quando precisar."))
+      onDone()
+    }
+  }
+
+  /** Everything the app keeps about the user, as JSON (LGPD: access and portability). */
+  fun exportUserDataJson(): String {
+    fun prefsJson(name: String) = org.json.JSONObject().apply {
+      context.getSharedPreferences(name, android.content.Context.MODE_PRIVATE).all.toSortedMap().forEach { (k, v) ->
+        // Lists and objects are stored as JSON text: put them back as JSON, not as quoted strings.
+        val parsed = (v as? String)?.trim()?.let { s ->
+          runCatching { if (s.startsWith("{")) org.json.JSONObject(s) else if (s.startsWith("[")) org.json.JSONArray(s) else null }.getOrNull()
+        }
+        put(k, parsed ?: v)
+      }
+    }
+    return org.json.JSONObject()
+      .put("app", "T.A.R.K.A.S.")
+      .put("version", com.example.BuildConfig.VERSION_NAME)
+      .put("exportedAt", java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.US).format(java.util.Date()))
+      .put("preferences", prefsJson("tarkas_prefs"))
+      .put("library", prefsJson("tarkas_library"))
+      .toString(2)
+  }
+
+  fun writeExport(uri: android.net.Uri) {
+    viewModelScope.launch {
+      val ok = withContext(Dispatchers.IO) {
+        runCatching {
+          context.contentResolver.openOutputStream(uri)?.use { it.write(exportUserDataJson().toByteArray()) } != null
+        }.getOrDefault(false)
+      }
+      showNotice(Notice(if (ok) "Seus dados foram salvos." else "Não foi possível salvar o arquivo."))
+    }
+  }
+
+  /**
+   * Erases everything the app keeps on this device (LGPD art. 18: elimination). Android clears the
+   * app's storage and closes it; the next launch starts from the first-run setup.
+   */
+  fun eraseAllData() {
+    val am = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+    am.clearApplicationUserData()
+  }
+
+  /** "Refazer configuração inicial" in Sobre. */
+  fun restartOnboarding() {
+    preferencesRepository.saveOnboardingDone(false)
+    _showOnboarding.value = true
+  }
+
+  /** "Reduzir transparência" in the app: every glass surface becomes solid. */
+  private val _reduceTransparency = MutableStateFlow(preferencesRepository.getReduceTransparency())
+  val reduceTransparency: StateFlow<Boolean> = _reduceTransparency.asStateFlow()
+
+  fun setReduceTransparency(reduce: Boolean) {
+    _reduceTransparency.value = reduce
+    preferencesRepository.saveReduceTransparency(reduce)
   }
 
   // ---- Fone correction (AutoEq: oratory1990, crinacle, Rtings…) ----
@@ -807,10 +972,6 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     _activeTimers.value = emptyList()
   }
 
-  private fun addReminder(reminder: LocalReminder) {
-    _reminders.value = _reminders.value + reminder
-  }
-
   private fun startTimerTicker() {
     timerTickerJob?.cancel()
     timerTickerJob = viewModelScope.launch {
@@ -836,31 +997,62 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     }
   }
 
+  /** Adds a file picked on the device and plays it like any other track of the library. */
   fun addLocalAudio(title: String, artist: String, uriString: String, durationMs: Long) {
-    musicRepository.addLocalTrack(title, artist, uriString, durationMs)
-    val addedTrack = musicRepository.currentTrack.value
-    addedTrack?.filePath?.let {
-      audioEngineManager.playTrack(it) { playNextTrack() }
-    }
-    updateSystemNotification()
+    playTrack(musicRepository.addLocalTrack(title, artist, uriString, durationMs))
   }
 
-  fun searchAudius(query: String) {
+  // ---- Audius trending, on Início ----
+
+  private val _trending = MutableStateFlow(TrendingState())
+  val trending: StateFlow<TrendingState> = _trending.asStateFlow()
+
+  fun loadTrending() {
+    if (_trending.value.loading) return
+    _trending.value = _trending.value.copy(loading = true, offline = false)
     viewModelScope.launch {
-      val results = musicRepository.searchAudius(query)
-      if (results.isNotEmpty()) {
-        playTrack(results.first())
+      _trending.value = try {
+        TrendingState(tracks = withContext(Dispatchers.IO) { AudiusApiService.getTrendingTracks() })
+      } catch (e: java.io.IOException) {
+        TrendingState(tracks = _trending.value.tracks, offline = true)
       }
     }
   }
 
-  fun loadAudiusTrending() {
+  /** Plays a trending track; Next goes on through the rest of the row. */
+  fun playTrending(track: Track) = playFromList(track, _trending.value.tracks)
+
+  init {
+    loadTrending()
+  }
+
+  // ---- permissions asked when they are needed ----
+
+  private val _askNotifications = MutableStateFlow(false)
+  /** True once something plays and the notification permission was never asked. */
+  val askNotifications: StateFlow<Boolean> = _askNotifications.asStateFlow()
+
+  init {
+    // The first time something plays, the app explains and asks for the notification permission.
     viewModelScope.launch {
-      val results = musicRepository.loadAudiusTrending()
-      if (results.isNotEmpty() && musicRepository.currentTrack.value == null) {
-        playTrack(results.first())
+      musicRepository.currentTrack.collect { track ->
+        if (track != null && !preferencesRepository.getNotificationsAsked()) _askNotifications.value = true
       }
     }
+  }
+
+  fun notificationsAsked() {
+    _askNotifications.value = false
+    preferencesRepository.saveNotificationsAsked()
+  }
+
+  /** The microphone permission was just granted: the live spectrum can attach now. */
+  fun spectrumAllowed() = audioEngineManager.refreshVisualizer()
+
+  /** Turns the level meter off and ends its foreground service and screen capture. */
+  fun stopSystemAudioCapture() {
+    systemAudioCaptureManager.stopCapture()
+    com.example.data.systemaudio.AudioCaptureService.stop(context)
   }
 
   override fun onCleared() {
@@ -869,7 +1061,7 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     curiositySpeechManager.shutdown()
     audioEngineManager.stopPlayback()
     PlaybackService.stop()
-    systemAudioCaptureManager.stopCapture()
+    stopSystemAudioCapture()
     MusicNotificationManager.clearNotification(context)
   }
 }

@@ -73,6 +73,7 @@ import com.example.data.model.Track
 import com.example.ui.components.NamePlaylistDialog
 import com.example.ui.components.GlassChip
 import com.example.ui.theme.SpaceGrotesk
+import com.example.ui.theme.staggeredEntrance
 
 private enum class LibrarySection(val label: String) {
   PLAYLISTS("Playlists"),
@@ -100,12 +101,24 @@ fun LibraryScreen(
   onPlayQueueItem: (Int) -> Unit,
   onRemoveQueueItem: (Int) -> Unit,
   onClearQueue: () -> Unit,
+  openQueue: Boolean = false,
+  onQueueOpened: () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   var section by rememberSaveable { mutableStateOf(LibrarySection.PLAYLISTS) }
   var openPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
   var showNewPlaylist by remember { mutableStateOf(false) }
   var renamingPlaylist by remember { mutableStateOf<Playlist?>(null) }
+  var deletingPlaylist by remember { mutableStateOf<Playlist?>(null) }
+
+  // The player's queue button lands here on Fila, whatever section was open before.
+  androidx.compose.runtime.LaunchedEffect(openQueue) {
+    if (openQueue) {
+      openPlaylistId = null
+      section = LibrarySection.QUEUE
+      onQueueOpened()
+    }
+  }
 
   // Imports an audio file from the device into the local library (system file picker).
   val context = LocalContext.current
@@ -163,7 +176,7 @@ fun LibraryScreen(
         onPlay = { track -> onPlayFromList(track, tracks) },
         onShuffle = { onShuffleList(tracks) },
         onRename = { renamingPlaylist = openPlaylist },
-        onDelete = { onDeletePlaylist(openPlaylist.id); openPlaylistId = null },
+        onDelete = { deletingPlaylist = openPlaylist },
         onRemoveTrack = { trackId -> onRemoveFromPlaylist(openPlaylist.id, trackId) }
       )
     } else {
@@ -236,6 +249,29 @@ fun LibraryScreen(
       initialName = pl.name,
       onConfirm = { name -> onRenamePlaylist(pl.id, name); renamingPlaylist = null },
       onDismiss = { renamingPlaylist = null }
+    )
+  }
+  deletingPlaylist?.let { pl ->
+    androidx.compose.material3.AlertDialog(
+      onDismissRequest = { deletingPlaylist = null },
+      title = { Text("Excluir \"${pl.name}\"?") },
+      text = {
+        Text(
+          if (pl.trackIds.isEmpty()) "A playlist está vazia."
+          else "A playlist e a ordem das ${pl.trackIds.size} faixas serão apagadas. As músicas continuam na biblioteca."
+        )
+      },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            onDeletePlaylist(pl.id)
+            deletingPlaylist = null
+            openPlaylistId = null
+          },
+          modifier = Modifier.testTag("library_confirm_delete")
+        ) { Text("Excluir") }
+      },
+      dismissButton = { TextButton(onClick = { deletingPlaylist = null }) { Text("Cancelar") } }
     )
   }
 }
@@ -354,10 +390,10 @@ private fun PlaylistsList(
         )
       }
     }
-    itemsIndexed(shown) { _, playlist ->
+    itemsIndexed(shown, key = { _, p -> p.id }) { index, playlist ->
       val firstColor = playlist.trackIds.firstNotNullOfOrNull { byId[it] }?.let { Color(it.colorHex) }
         ?: MaterialTheme.colorScheme.surfaceVariant
-      Column {
+      Column(modifier = Modifier.animateItem().staggeredEntrance(index)) {
         Row(
           modifier = Modifier
             .fillMaxWidth()
@@ -470,13 +506,14 @@ private fun TrackList(
   }
   LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + LocalBarInset.current)) {
     item { PlayShuffleRow(onPlay = onHeaderPlay, onShuffle = onHeaderShuffle) }
-    itemsIndexed(tracks) { _, track ->
+    itemsIndexed(tracks, key = { _, t -> t.id }) { index, track ->
       val selected = currentTrack?.id == track.id
       TrackRow(
         track = track,
         highlighted = selected,
         subtitle = "${track.artist} • ${track.album}",
         onClick = { onPlay(track) },
+        modifier = Modifier.animateItem().staggeredEntrance(index),
         trailing = {
           IconButton(onClick = { onTrailing(track) }) {
             Icon(trailingIcon, contentDescription = trailingDescription, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
@@ -523,6 +560,7 @@ private fun QueueList(
         highlighted = false,
         subtitle = track.artist,
         onClick = { onPlay(index) },
+        modifier = Modifier.staggeredEntrance(index),
         trailing = {
           IconButton(onClick = { onRemove(index) }) {
             Icon(Icons.Default.Close, contentDescription = "Remover da fila", modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -539,8 +577,10 @@ private fun TrackRow(
   highlighted: Boolean,
   subtitle: String,
   onClick: () -> Unit,
+  modifier: Modifier = Modifier,
   trailing: @Composable () -> Unit
 ) {
+  Column(modifier = modifier) {
   Row(
     modifier = Modifier
       .fillMaxWidth()
@@ -569,4 +609,5 @@ private fun TrackRow(
     trailing()
   }
   HorizontalDivider(modifier = Modifier.padding(start = 78.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+  }
 }

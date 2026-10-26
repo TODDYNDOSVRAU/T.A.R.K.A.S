@@ -1,5 +1,7 @@
 # Primeiro prompt para Claude Code
 
+> Histórico: este foi o primeiro prompt do projeto, já executado. O app usa Kotlin + Jetpack Compose; as menções a Flutter são do plano original.
+
 Leia integralmente `CLAUDE.md`, `README.md` e os documentos relevantes em `docs/`.
 
 Sua tarefa inicial é SOMENTE auditar o ambiente e o repositório. Não implemente player, DSP, IA ou integração de streaming ainda.

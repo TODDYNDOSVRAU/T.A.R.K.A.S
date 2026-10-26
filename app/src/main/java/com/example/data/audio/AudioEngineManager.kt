@@ -68,6 +68,8 @@ class AudioEngineManager(private val context: Context) {
   // Set by playTrack; consumed when the new item is ready, so focus is asked only once per track.
   private var pendingStart = false
   private var completionCallback: () -> Unit = {}
+  /** Called when the track cannot play; true when the cause is the network. */
+  private var errorCallback: (network: Boolean) -> Unit = {}
 
   private val coroutineScope = CoroutineScope(Dispatchers.Main + Job())
   private var progressJob: Job? = null
@@ -84,14 +86,8 @@ class AudioEngineManager(private val context: Context) {
   private val _eqSettings = MutableStateFlow(EqSettings())
   val eqSettings: StateFlow<EqSettings> = _eqSettings.asStateFlow()
 
-  private val _isEffectEnabled = MutableStateFlow(true)
-  val isEffectEnabled: StateFlow<Boolean> = _isEffectEnabled.asStateFlow()
-
   private val _capabilities = MutableStateFlow(detectCapabilities(0))
   val capabilities: StateFlow<AudioCapabilities> = _capabilities.asStateFlow()
-
-  private val _waveformEnergy = MutableStateFlow(0.15f)
-  val waveformEnergy: StateFlow<Float> = _waveformEnergy.asStateFlow()
 
   private val _spectrumBars = MutableStateFlow<List<Float>>(List(15) { 0.05f })
   val spectrumBars: StateFlow<List<Float>> = _spectrumBars.asStateFlow()
@@ -245,7 +241,6 @@ class AudioEngineManager(private val context: Context) {
           unregisterNoisyReceiver()
           _isPlaying.value = false
           _currentPositionMs.value = 0L
-          _waveformEnergy.value = 0.05f
           _spectrumBars.value = List(15) { 0.05f }
           completionCallback()
         }
@@ -255,7 +250,10 @@ class AudioEngineManager(private val context: Context) {
 
     override fun onPlayerError(error: PlaybackException) {
       Log.e(TAG, "Player error: ${error.errorCodeName}", error)
+      val network = error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+        error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
       stopPlayback()
+      errorCallback(network)
     }
   }
 
@@ -289,7 +287,7 @@ class AudioEngineManager(private val context: Context) {
       }
   }
 
-  fun playTrack(filePathOrUri: String, onCompletion: () -> Unit = {}) {
+  fun playTrack(filePathOrUri: String, onCompletion: () -> Unit = {}, onError: (network: Boolean) -> Unit = {}) {
     try {
       stopPlayback()
 
@@ -298,12 +296,14 @@ class AudioEngineManager(private val context: Context) {
       // Validate before handing it to the player, so a missing file never starts a broken load.
       if (!isRemoteOrContent && !File(filePathOrUri).exists()) {
         Log.e(TAG, "Audio file does not exist: $filePathOrUri")
+        onError(false)
         return
       }
       val uri = if (isRemoteOrContent) Uri.parse(filePathOrUri) else Uri.fromFile(File(filePathOrUri))
 
       val p = ensurePlayer()
       completionCallback = onCompletion
+      errorCallback = onError
       pendingStart = true
       eqDsp.update(_eqSettings.value)
       p.setMediaItem(MediaItem.fromUri(uri))
@@ -311,7 +311,13 @@ class AudioEngineManager(private val context: Context) {
     } catch (e: Exception) {
       Log.e(TAG, "Error playing audio file", e)
       _isPlaying.value = false
+      onError(false)
     }
+  }
+
+  /** Attaches the live spectrum again, after the microphone permission it needs was granted. */
+  fun refreshVisualizer() {
+    if (player != null && _isPlaying.value) attachAudioEffects()
   }
 
   fun togglePlayPause() {
@@ -375,11 +381,6 @@ class AudioEngineManager(private val context: Context) {
               val pos = p.currentPosition
               _currentPositionMs.value = pos
               if (p.duration != C.TIME_UNSET) _durationMs.value = p.duration.coerceAtLeast(1L)
-              // Compute dynamic waveform oscillation from progress and beat
-              val beat = (pos % 600).toFloat() / 600f
-              val pulse = 0.25f + 0.5f * kotlin.math.sin(beat * Math.PI.toFloat())
-              _waveformEnergy.value = pulse.coerceIn(0.1f, 0.95f)
-
               // Without a real FFT (no RECORD_AUDIO or unsupported device) show a flat floor,
               // never a fake animated spectrum.
               if (!isRealFftActive) {
@@ -411,16 +412,7 @@ class AudioEngineManager(private val context: Context) {
         val range = Visualizer.getCaptureSizeRange()
         captureSize = range.getOrNull(1)?.coerceAtMost(1024) ?: 512
         setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
-          override fun onWaveFormDataCapture(v: Visualizer?, waveform: ByteArray?, samplingRate: Int) {
-            waveform?.let { bytes ->
-              var peak = 0
-              for (b in bytes) {
-                val sample = kotlin.math.abs(b.toInt() - 128)
-                if (sample > peak) peak = sample
-              }
-              _waveformEnergy.value = (peak / 128f).coerceIn(0.08f, 1f)
-            }
-          }
+          override fun onWaveFormDataCapture(v: Visualizer?, waveform: ByteArray?, samplingRate: Int) = Unit
 
           override fun onFftDataCapture(v: Visualizer?, fft: ByteArray?, samplingRate: Int) {
             fft?.let { bytes ->
@@ -453,7 +445,7 @@ class AudioEngineManager(private val context: Context) {
               _spectrumBars.value = newBars
             }
           }
-        }, Visualizer.getMaxCaptureRate() / 2, true, true)
+        }, Visualizer.getMaxCaptureRate() / 2, false, true)
         enabled = true
       }
       visualizer = viz
@@ -484,14 +476,10 @@ class AudioEngineManager(private val context: Context) {
   /** Applies the whole equalizer state. Takes effect on the next audio buffer (a few ms). */
   fun applyEqSettings(settings: EqSettings) {
     _eqSettings.value = settings
-    _isEffectEnabled.value = settings.enabled
     eqDsp.update(settings)
     applyVirtualizer()
   }
 
-  fun setEffectsEnabled(enabled: Boolean) {
-    applyEqSettings(_eqSettings.value.copy(enabled = enabled))
-  }
 
   private fun applyVirtualizer() {
     val s = _eqSettings.value

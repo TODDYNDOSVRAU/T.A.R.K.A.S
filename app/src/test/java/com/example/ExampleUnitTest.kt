@@ -2,10 +2,10 @@ package com.example
 
 import com.example.data.model.AudioProfile
 import com.example.data.model.Track
-import com.example.data.model.VerificationStatus
 import com.example.data.repository.CuriosityRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -46,18 +46,16 @@ class TarkasDomainTest {
         "Verified curiosity must cite documented sources",
         cur.sources.isNotEmpty()
       )
-      assertTrue(
-        "Documented facts and musical interpretation must be separated",
-        cur.documentedFacts.isNotBlank() && cur.musicalInterpretation.isNotBlank()
-      )
+      assertTrue("Documented facts must be filled in", cur.documentedFacts.isNotBlank())
     }
   }
 
   @Test
-  fun testUnknownTrackCuriosityFallbackHonesty() {
-    val unknown = curiosityRepository.getCuriosityForTrack("unknown_local_file_xyz")
-    assertEquals("Unknown track must report unverified status honestly", VerificationStatus.UNVERIFIED, unknown.status)
-    assertTrue("Must not fabricate sources", unknown.sources.isEmpty())
+  fun testUnknownTrackHasNoCuriosityInsteadOfAPlaceholder() {
+    val unknown = Track(id = "local_123", title = "Gravação", artist = "Eu", album = "", durationMs = 1000L, genre = "", era = "")
+    assertNull("A track without a verified curiosity gets none, not a placeholder", curiosityRepository.getCuriosityForTrack(unknown))
+    val demo = unknown.copy(id = "track_tarkus")
+    assertNotNull(curiosityRepository.getCuriosityForTrack(demo))
   }
 
   @Test

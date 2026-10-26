@@ -7,7 +7,19 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.media.MediaMetadataRetriever
+import android.net.Uri
+import androidx.core.graphics.drawable.toBitmap
+import coil.Coil
+import coil.request.ImageRequest
+import coil.request.SuccessResult
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import android.graphics.Color
 import android.graphics.Paint
 import android.media.MediaMetadata
@@ -74,6 +86,57 @@ object MusicNotificationManager {
     }
   }
 
+  // The cover of the track in the notification, loaded once per track off the main thread. Until it
+  // arrives (or when the track has none) the coloured square with the title's initial is shown.
+  private val artScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+  @Volatile private var loadedArt: Pair<String, Bitmap>? = null
+  @Volatile private var artLoadingFor: String? = null
+  /** Re-posts the latest notification, so the cover replaces the placeholder once it loads. */
+  private var repost: (() -> Unit)? = null
+
+  private fun artworkFor(context: Context, track: Track): Bitmap {
+    loadedArt?.let { (id, bitmap) -> if (id == track.id) return bitmap }
+    if (artLoadingFor != track.id) {
+      artLoadingFor = track.id
+      artScope.launch {
+        val bitmap = loadArtwork(context.applicationContext, track) ?: return@launch
+        loadedArt = track.id to bitmap
+        withContext(Dispatchers.Main) { repost?.invoke() }
+      }
+    }
+    return createArtworkBitmap(track)
+  }
+
+  /** The streamed cover, or the picture embedded in a local file; null when there is neither. */
+  private suspend fun loadArtwork(context: Context, track: Track): Bitmap? = try {
+    val url = track.artworkUrl
+    val path = track.filePath
+    when {
+      url != null -> {
+        val request = ImageRequest.Builder(context).data(url).size(512).allowHardware(false).build()
+        (Coil.imageLoader(context).execute(request) as? SuccessResult)?.drawable?.toBitmap()
+      }
+      track.isLocalFile && path != null -> {
+        val retriever = MediaMetadataRetriever()
+        try {
+          retriever.setDataSource(context, Uri.parse(path))
+          retriever.embeddedPicture?.let { bytes ->
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            var sample = 1
+            while (bounds.outWidth / (sample * 2) >= 512) sample *= 2
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+          }
+        } finally {
+          retriever.release()
+        }
+      }
+      else -> null
+    }
+  } catch (_: Exception) {
+    null
+  }
+
   private fun createArtworkBitmap(track: Track): Bitmap {
     val size = 256
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
@@ -106,11 +169,12 @@ object MusicNotificationManager {
       clearNotification(context)
       return
     }
+    repost = { updatePlaybackNotification(context, track, isPlaying, curiosity, positionMs) }
 
     try {
       createNotificationChannel(context)
       val session = getOrCreateMediaSession(context)
-      val artworkBitmap = createArtworkBitmap(track)
+      val artworkBitmap = artworkFor(context, track)
 
       // Update MediaSession state so Android native Quick Settings / notification popup displays native controls
       val state = if (isPlaying) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED
@@ -147,9 +211,11 @@ object MusicNotificationManager {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
       )
 
-      val shortCuriositySnippet = curiosity?.shortTrivia?.take(75)?.let {
-        if (curiosity.shortTrivia.length > 75) "$it..." else it
-      } ?: "Curiosidade verificada Tarkas"
+      // A track without a verified curiosity shows just its artist.
+      val contentText = curiosity?.shortTrivia?.let { trivia ->
+        val snippet = if (trivia.length > 75) trivia.take(75) + "..." else trivia
+        "${track.artist} • $snippet"
+      } ?: track.artist
 
       val prevIntent = Intent(context, NotificationActionReceiver::class.java).apply {
         action = NotificationActionReceiver.ACTION_PREV
@@ -199,7 +265,7 @@ object MusicNotificationManager {
         .setSmallIcon(android.R.drawable.ic_media_play)
         .setLargeIcon(artworkBitmap)
         .setContentTitle(track.title)
-        .setContentText("${track.artist} • $shortCuriositySnippet")
+        .setContentText(contentText)
         .setSubText("Tarkas Audio")
         .setContentIntent(pendingOpenApp)
         .setOngoing(isPlaying)
@@ -236,6 +302,7 @@ object MusicNotificationManager {
 
   fun clearNotification(context: Context) {
     lastNotification = null
+    repost = null
     try {
       val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
       notificationManager.cancel(NOTIFICATION_ID)
