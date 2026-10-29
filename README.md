@@ -4,9 +4,12 @@
 
 <h1 align="center">T.A.R.K.A.S.</h1>
 
+<p align="center"><b>TOTTALY ACURRATE REAL-TIME KIND OF AUDIO SISTEM</b></p>
+
 <p align="center">
-  Player de música para Android com equalizador de verdade.<br>
-  Suas músicas, Audius, YouTube Music e Spotify numa busca só, tocando no mesmo player.
+  Uma central inteligente de áudio, música e assistência pessoal para Android.<br>
+  Equalizador de verdade, suas músicas e os serviços de streaming numa busca só,<br>
+  e a história por trás de cada música.
 </p>
 
 <p align="center">
@@ -23,6 +26,18 @@
   &nbsp;
   <img src="docs/screenshots/biblioteca.png" width="250" alt="Biblioteca">
 </p>
+
+## A ideia
+
+O T.A.R.K.A.S. une três experiências num aplicativo só:
+
+- **Controle de áudio:** um equalizador completo, perfis e, no futuro, sistemas multicanal 5.1 e 7.1, com ajustes que podem ser pedidos em linguagem natural.
+- **Música:** as músicas do celular e os serviços de streaming numa busca só, tocando no mesmo player.
+- **Inteligência artificial:** um assistente que entende o que está tocando e executa tarefas no próprio app.
+
+O diferencial é **a história por trás de cada música**: enquanto a faixa toca, o app mostra uma curiosidade curta e verificada sobre a inspiração, os bastidores ou o impacto daquela música. É curta o bastante para não interromper e interessante o bastante para dar vontade de saber mais.
+
+A visão completa do projeto está em [docs/VISAO.md](docs/VISAO.md).
 
 ## Baixar
 
@@ -87,6 +102,24 @@ A política completa fica em Ajustes > Sobre > Política de Privacidade.
 - O equalizador do app não atua no som do YouTube Music e do Spotify.
 - A tela de login do Spotify pode abrir em branco, e a reprodução do Spotify ainda não foi testada com conta.
 - No modo ADB, alguns apps e alguns fabricantes não informam a sessão de áudio, e o equalizador não chega neles.
+
+## Visão e próximos passos
+
+O que a [visão do projeto](docs/VISAO.md) prevê e onde cada parte está hoje:
+
+| Área | Hoje | Próximos passos |
+|---|---|---|
+| **Equalizador** | 15 bandas ou paramétrico, correção por fone, graves e agudos, limitador, pré-amp automático | Perfil que troca sozinho conforme o fone ou a caixa conectada |
+| **Perfis** | Predefinições prontas e do usuário | Perfis por equipamento e por conteúdo (filmes, músicas, jogos) |
+| **Multicanal** | Estéreo, com balanço e largura | Configuração e volume por canal em sistemas 5.1 e 7.1, onde o aparelho e o equipamento permitirem |
+| **Outros apps** | Equalizador aplicado a outros apps nos modos ADB e root | Mais compatibilidade entre fabricantes |
+| **Streaming** | Audius, YouTube Music e Spotify na busca do Início, com selo de origem | Álbuns, artistas e playlists na busca; Apple Music, se houver um meio permitido |
+| **Biblioteca** | Músicas do celular, favoritos, playlists, fila salva, gapless | Páginas de álbum e artista, letras sincronizadas |
+| **História por trás da música** | Curiosidades verificadas no player e na notificação, faladas ou mostradas, para um catálogo pequeno de faixas | Muito mais faixas, com fonte citada e "me conta mais" |
+| **Assistente** | Comandos de voz e texto para o player e o equalizador | IA contextual: "deixe os graves mais fortes sem abafar os vocais", "encontre músicas parecidas com essa" |
+| **Tarefas** | Timer de dormir no player | Timers, lembretes e programações de música pelo assistente |
+
+Tudo o que depende de outros serviços ou do sistema (APIs de streaming, permissões do Android, recursos do aparelho e dos equipamentos) só entra quando há um meio confiável e permitido.
 
 ## Feito com
 
