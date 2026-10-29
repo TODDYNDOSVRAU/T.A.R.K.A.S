@@ -25,11 +25,9 @@ import kotlin.math.roundToInt
 
 /** What the switch row says under its title, for each state of the engine. */
 private fun spatialStatusText(status: SpatialStatus): String = when (status) {
-  SpatialStatus.OFF -> "Abre a música ao redor da cabeça, nos fones"
+  SpatialStatus.OFF -> "Abre a música ao redor da cabeça"
   SpatialStatus.PREPARING -> "Preparando…"
-  SpatialStatus.ACTIVE -> "Ativo nos fones"
-  SpatialStatus.NEEDS_HEADPHONES -> "Conecte fones: no alto-falante o som fica como está"
-  SpatialStatus.SYSTEM_SPATIAL -> "O áudio espacial do Android já está ativo; este fica em pausa"
+  SpatialStatus.ACTIVE -> "Ativo"
   SpatialStatus.NOT_STEREO -> "Esta faixa não é estéreo"
 }
 
@@ -77,6 +75,9 @@ internal fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modi
         }
       }
     }
-    GroupFooter("Funciona com fones. Músicas mono ou multicanal tocam como estão.")
+    GroupFooter(
+      "Funciona em qualquer saída, melhor nos fones. Músicas mono ou multicanal tocam como estão." +
+        (ui.othersNote?.let { "\n" + it } ?: "")
+    )
   }
 }

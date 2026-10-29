@@ -36,7 +36,6 @@ class SpatialAudioProcessorTest {
   @After
   fun off() {
     SpatialControl.configure(false, SpatialPreset.STANDARD, 1.0)
-    SpatialControl.setRoute(headphones = false, systemSpatial = false)
   }
 
   /** A slow two-tone signal, stereo interleaved, panned a little to the left. */
@@ -84,7 +83,6 @@ class SpatialAudioProcessorTest {
   @Test
   fun switchingOnAndOffNeverJumps() {
     SpatialControl.configure(true, SpatialPreset.STANDARD, 1.0)
-    SpatialControl.setRoute(headphones = true, systemSpatial = false)
     waitForEngine()
     val p = processorReady()
     val block = 1000
@@ -92,8 +90,8 @@ class SpatialAudioProcessorTest {
     var pos = 0
     // On for a while, off, then on again, in blocks like the player's.
     repeat(60) { i ->
-      if (i == 25) SpatialControl.setRoute(headphones = false, systemSpatial = false)
-      if (i == 45) SpatialControl.setRoute(headphones = true, systemSpatial = false)
+      if (i == 25) SpatialControl.configure(false, SpatialPreset.STANDARD, 1.0)
+      if (i == 45) SpatialControl.configure(true, SpatialPreset.STANDARD, 1.0)
       run(p, signal(block, pos)).forEach { outputs += it }
       pos += block
     }

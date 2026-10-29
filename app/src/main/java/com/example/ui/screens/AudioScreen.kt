@@ -48,7 +48,9 @@ data class SpatialUi(
   val enabled: Boolean = false,
   val preset: SpatialPreset = SpatialPreset.STANDARD,
   val intensity: Float = 1f,
-  val status: SpatialStatus = SpatialStatus.OFF
+  val status: SpatialStatus = SpatialStatus.OFF,
+  /** What happens to other apps, shown under the panel; null when nothing needs saying. */
+  val othersNote: String? = null
 )
 
 /**
@@ -62,6 +64,15 @@ class SpatialActions(
   val onIntensity: (Float) -> Unit,
   val onIntensityFinished: (Float) -> Unit = {}
 )
+
+/** Says honestly what Tarkas Spatial does to apps other than this one. */
+private fun spatialOthersNote(enabled: Boolean, reach: EqReach, status: GlobalEqStatus): String? = when {
+  !enabled -> null
+  reach == EqReach.APP -> "Outros apps (Spotify, YouTube): ligue o modo ADB ou root em Avançado"
+  status.spatialUnsupported -> "Este aparelho não deixa aplicar o espacial em outros apps"
+  status.spatialApps > 0 -> "Também ativo em outros apps (${status.spatialApps})"
+  else -> "Nos outros apps assim que algum tocar"
+}
 
 /** The two pages of the tab: the console everyone uses, and the technical controls. */
 private enum class AudioPage { MAIN, ADVANCED }
@@ -163,7 +174,7 @@ fun AudioScreen(
             onReset = onReset
           ),
           onOpenAdvanced = { page = AudioPage.ADVANCED },
-          spatial = spatial,
+          spatial = spatial.copy(othersNote = spatialOthersNote(spatial.enabled, eqReach, globalEqStatus)),
           spatialActions = spatialActions
         )
         AudioPage.ADVANCED -> EqAdvancedPage(

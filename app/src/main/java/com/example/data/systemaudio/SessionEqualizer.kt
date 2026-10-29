@@ -1,8 +1,10 @@
 package com.example.data.systemaudio
 
+import android.media.AudioFormat
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.DynamicsProcessing
 import android.media.audiofx.Equalizer
+import android.media.audiofx.Virtualizer
 import android.os.Build
 import android.util.Log
 import com.example.data.audio.dsp.EqDsp
@@ -17,7 +19,14 @@ import kotlin.math.pow
  */
 class SessionEqualizer {
   private val effects = mutableMapOf<Int, AudioEffect>()
+  private val virtualizers = mutableMapOf<Int, Virtualizer>()
   private var settings = EqSettings()
+  private var spatialStrength = 0
+
+  /** True once a device refused the Virtualizer: there is no spatial for other apps here. */
+  var spatialUnsupported = false; private set
+  /** Sessions that carry the spatial effect right now. */
+  val spatialSessions: Int get() = virtualizers.size
 
   val sessions: Set<Int> get() = effects.keys
 
@@ -32,11 +41,13 @@ class SessionEqualizer {
     }
     effects[sessionId] = effect
     apply(effect)
+    applySpatial(sessionId)
     return true
   }
 
   fun detach(sessionId: Int) {
     effects.remove(sessionId)?.let { runCatching { it.release() } }
+    virtualizers.remove(sessionId)?.let { runCatching { it.release() } }
   }
 
   /** Keeps only [alive] attached: sessions that ended are released. */
@@ -49,9 +60,41 @@ class SessionEqualizer {
     effects.values.forEach(::apply)
   }
 
+  /** [strength] 0 turns the spatial effect off on every session; 1..1000 is the Virtualizer strength. */
+  fun setSpatial(strength: Int) {
+    spatialStrength = strength.coerceIn(0, 1000)
+    effects.keys.toList().forEach(::applySpatial)
+  }
+
+  private fun applySpatial(sessionId: Int) {
+    if (spatialStrength == 0) {
+      virtualizers.remove(sessionId)?.let { runCatching { it.release() } }
+      return
+    }
+    try {
+      val virt = virtualizers.getOrPut(sessionId) { Virtualizer(PRIORITY, sessionId) }
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        // Binaural where the device can; otherwise the effect picks its own mode.
+        runCatching {
+          if (virt.canVirtualize(AudioFormat.CHANNEL_OUT_STEREO, Virtualizer.VIRTUALIZATION_MODE_BINAURAL)) {
+            virt.forceVirtualizationMode(Virtualizer.VIRTUALIZATION_MODE_BINAURAL)
+          }
+        }
+      }
+      if (virt.strengthSupported) virt.setStrength(spatialStrength.toShort())
+      virt.enabled = true
+    } catch (e: Exception) {
+      Log.w(TAG, "No spatial effect for session $sessionId: ${e.javaClass.simpleName}")
+      virtualizers.remove(sessionId)?.let { runCatching { it.release() } }
+      spatialUnsupported = true
+    }
+  }
+
   fun releaseAll() {
     effects.values.forEach { runCatching { it.release() } }
     effects.clear()
+    virtualizers.values.forEach { runCatching { it.release() } }
+    virtualizers.clear()
   }
 
   private fun apply(effect: AudioEffect) {

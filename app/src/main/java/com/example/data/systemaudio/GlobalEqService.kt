@@ -125,6 +125,9 @@ class GlobalEqService : Service() {
       }
     }
     scope.launch {
+      com.example.data.audio.spatial.SpatialControl.otherAppsStrength.collect { equalizer.setSpatial(it) }
+    }
+    scope.launch {
       if (GlobalEq.reach.value == EqReach.ROOT) prepareRoot()
       while (isActive) {
         poll()
@@ -175,7 +178,9 @@ class GlobalEqService : Service() {
         apps = names,
         needsDump = reach == EqReach.ADB && !hasDump(),
         rootUnavailable = rootMissing,
-        globalOutput = globalOutput
+        globalOutput = globalOutput,
+        spatialApps = equalizer.spatialSessions,
+        spatialUnsupported = equalizer.spatialUnsupported
       )
     )
   }

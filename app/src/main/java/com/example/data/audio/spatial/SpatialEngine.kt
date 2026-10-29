@@ -42,10 +42,10 @@ data class SpatialParams(
 )
 
 /** The three listening presets of the prototype. */
-enum class SpatialPreset(val key: String, val label: String, val params: SpatialParams) {
-  SUBTLE("sutil", "Sutil", SpatialParams(intensity = 0.7, width = 1.3, height = 12.0, ambienceHeight = 0.3)),
-  STANDARD("padrao", "Padrão", SpatialParams()),
-  WIDE("amplo", "Amplo", SpatialParams(width = 2.4, height = 35.0, ambienceHeight = 0.8));
+enum class SpatialPreset(val key: String, val label: String, val params: SpatialParams, val virtualizerStrength: Int) {
+  SUBTLE("sutil", "Sutil", SpatialParams(intensity = 0.7, width = 1.3, height = 12.0, ambienceHeight = 0.3), 450),
+  STANDARD("padrao", "Padrão", SpatialParams(), 750),
+  WIDE("amplo", "Amplo", SpatialParams(width = 2.4, height = 35.0, ambienceHeight = 0.8), 1000);
 
   companion object {
     fun fromKey(key: String?): SpatialPreset = entries.firstOrNull { it.key == key } ?: STANDARD

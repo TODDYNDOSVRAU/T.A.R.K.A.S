@@ -112,6 +112,10 @@ object LegalTexts {
     title = "Novidades",
     subtitle = "O que mudou em cada versão",
     sections = listOf(
+      "1.12" to
+        "• A tela de Áudio ficou mais curta, com abas: Curva, Predefinições e Espacial.\n" +
+        "• O áudio espacial funciona em qualquer saída, não só nos fones, e não pausa mais quando o áudio espacial do Android está ligado.\n" +
+        "• Com o modo ADB ou root, o áudio espacial também chega aos outros apps (Spotify, YouTube), nos aparelhos que aceitam o efeito.",
       "1.11" to
         "• Visual refeito do zero: tipografia, espaçamentos e listas no padrão dos apps da Apple, com menos vidro e mais clareza.\n" +
         "• Nova animação de abertura.\n" +

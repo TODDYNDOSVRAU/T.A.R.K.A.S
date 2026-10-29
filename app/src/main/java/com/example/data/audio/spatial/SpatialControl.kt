@@ -14,16 +14,12 @@ enum class SpatialStatus {
   PREPARING,
   /** Processing the music. */
   ACTIVE,
-  /** On, but the sound goes to the phone's speaker: binaural only works on headphones. */
-  NEEDS_HEADPHONES,
-  /** On, but Android's own spatial audio already processes this output; not done twice. */
-  SYSTEM_SPATIAL,
   /** The playing track is not stereo (mono or multichannel). */
   NOT_STEREO
 }
 
 /**
- * Shared state between the settings (Áudio screen), the output route (headphones or speaker) and the
+ * Shared state between the settings (Áudio screen) and the
  * audio processor. Builds the HRTF tables and engines off the audio thread, once per sample rate.
  */
 object SpatialControl {
@@ -33,15 +29,20 @@ object SpatialControl {
   @Volatile var preset = SpatialPreset.STANDARD; private set
   /** The user's intensity, 0.2..1, applied on top of the preset's own. */
   @Volatile var userIntensity = 1.0; private set
-  @Volatile private var headphones = false
-  @Volatile private var systemSpatial = false
   @Volatile private var stereoInput = true
 
   private val _status = MutableStateFlow(SpatialStatus.OFF)
   val status: StateFlow<SpatialStatus> = _status.asStateFlow()
 
+  /**
+   * The Virtualizer strength (0 = off, up to 1000) for other apps' audio, which Android's own effect
+   * handles when the global equalizer reaches them. Follows the preset and the intensity.
+   */
+  private val _otherAppsStrength = MutableStateFlow(0)
+  val otherAppsStrength: StateFlow<Int> = _otherAppsStrength.asStateFlow()
+
   /** True when the processor should be rendering (otherwise it glides to the dry sound). */
-  val active: Boolean get() = enabled && headphones && !systemSpatial && stereoInput
+  val active: Boolean get() = enabled && stereoInput
 
   private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "tarkas-spatial").apply { priority = Thread.NORM_PRIORITY - 1 } }
   private val hrtfs = mutableMapOf<Int, SphericalHeadHrtf>()
@@ -85,12 +86,6 @@ object SpatialControl {
     update()
   }
 
-  fun setRoute(headphones: Boolean, systemSpatial: Boolean) {
-    this.headphones = headphones
-    this.systemSpatial = systemSpatial
-    update()
-  }
-
   internal fun setStereoInput(stereo: Boolean) {
     stereoInput = stereo
     update()
@@ -104,11 +99,10 @@ object SpatialControl {
   private fun update() {
     val target = targetIntensity()
     engines.values.forEach { it.targetIntensity = target }
+    _otherAppsStrength.value = if (enabled) (preset.virtualizerStrength * userIntensity).toInt().coerceIn(1, 1000) else 0
     _status.value = when {
       !enabled -> SpatialStatus.OFF
       !stereoInput -> SpatialStatus.NOT_STEREO
-      systemSpatial -> SpatialStatus.SYSTEM_SPATIAL
-      !headphones -> SpatialStatus.NEEDS_HEADPHONES
       preparingRate != 0 -> SpatialStatus.PREPARING
       else -> SpatialStatus.ACTIVE
     }

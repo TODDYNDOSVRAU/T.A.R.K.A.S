@@ -37,7 +37,11 @@ data class GlobalEqStatus(
   /** Root mode, but `su` is missing or the user refused it. */
   val rootUnavailable: Boolean = false,
   /** Root mode reached the global output (sounds without a session of their own). */
-  val globalOutput: Boolean = false
+  val globalOutput: Boolean = false,
+  /** Sessions carrying Tarkas Spatial (Android's Virtualizer) right now. */
+  val spatialApps: Int = 0,
+  /** The device refused the Virtualizer: no spatial for other apps here. */
+  val spatialUnsupported: Boolean = false
 )
 
 /** Shared between the view model (which owns the curve) and [GlobalEqService] (which applies it). */

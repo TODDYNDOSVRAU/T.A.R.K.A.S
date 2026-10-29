@@ -59,6 +59,8 @@ internal class PresetActions(
  * The console: the output line, the on/off switches, the response curve across the full width, the
  * band strip, the preset, bass and treble, Tarkas Spatial and the way into the advanced settings.
  */
+private val ConsoleTabs = listOf("Curva", "Predefinições", "Espacial")
+
 @Composable
 internal fun EqConsolePage(
   capabilities: AudioCapabilities,
@@ -81,6 +83,7 @@ internal fun EqConsolePage(
   val enabled = eqSettings.enabled
   val mode = if (eqSettings.parametric) EqMode.PARAMETRIC else EqMode.GRAPHIC
   var selectedBand by rememberSaveable { mutableIntStateOf(0) }
+  var tab by rememberSaveable { mutableIntStateOf(0) }
   val bandIndex = selectedBand.coerceIn(0, (eqSettings.paramBands.size - 1).coerceAtLeast(0))
   // Each mode keeps its own scroll, so switching back finds the strip where it was.
   val graphicView = remember { StripView(ScrollState(0)) }
@@ -119,6 +122,27 @@ internal fun EqConsolePage(
       }
     }
 
+    // The page is split in three so it fits a screen: the curve, the presets and tone, the spatial scene.
+    item {
+      Row(
+        modifier = Modifier
+          .padding(start = Space.page - Space.xs, end = Space.page, top = Space.l)
+          .semantics { selectableGroup() }
+          .testTag("audio_tabs"),
+        horizontalArrangement = Arrangement.spacedBy(Space.xs)
+      ) {
+        ConsoleTabs.forEachIndexed { i, label ->
+          FilterChip(
+            label = label,
+            selected = tab == i,
+            onClick = { tab = i },
+            modifier = Modifier.testTag("audio_tab_$i")
+          )
+        }
+      }
+    }
+
+    if (tab == 0) {
     // The curve as heard, with the strip's window on it
     item {
       EqGraph(
@@ -187,7 +211,9 @@ internal fun EqConsolePage(
         modifier = Modifier.padding(top = Space.s)
       )
     }
+    }
 
+    if (tab == 1) {
     item { PresetSection(activePreset, eqSettings, eqModified, presetActions) }
 
     item {
@@ -214,7 +240,9 @@ internal fun EqConsolePage(
       }
     }
 
-    if (spatialActions != null) {
+    }
+
+    if (tab == 2 && spatialActions != null) {
       item { Section(null) { SpatialPanel(spatial, spatialActions) } }
     }
 
