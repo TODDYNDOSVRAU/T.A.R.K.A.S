@@ -880,6 +880,45 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     }
   }
 
+  // ---- Tarkas Spatial ----
+
+  private val _spatialEnabled = MutableStateFlow(com.example.data.audio.spatial.SpatialControl.enabled)
+  val spatialEnabled: StateFlow<Boolean> = _spatialEnabled.asStateFlow()
+
+  private val _spatialPreset = MutableStateFlow(com.example.data.audio.spatial.SpatialControl.preset)
+  val spatialPreset: StateFlow<com.example.data.audio.spatial.SpatialPreset> = _spatialPreset.asStateFlow()
+
+  private val _spatialIntensity = MutableStateFlow(com.example.data.audio.spatial.SpatialControl.userIntensity.toFloat())
+  val spatialIntensity: StateFlow<Float> = _spatialIntensity.asStateFlow()
+
+  val spatialStatus: StateFlow<com.example.data.audio.spatial.SpatialStatus> = com.example.data.audio.spatial.SpatialControl.status
+
+  fun setSpatialEnabled(enabled: Boolean) {
+    _spatialEnabled.value = enabled
+    applySpatial()
+  }
+
+  fun setSpatialPreset(preset: com.example.data.audio.spatial.SpatialPreset) {
+    _spatialPreset.value = preset
+    applySpatial()
+  }
+
+  /** A slider drag: only the target moves (no new tables). */
+  fun setSpatialIntensity(intensity: Float) {
+    _spatialIntensity.value = intensity
+    com.example.data.audio.spatial.SpatialControl.setIntensity(intensity.toDouble())
+    saveSpatial()
+  }
+
+  private fun applySpatial() {
+    com.example.data.audio.spatial.SpatialControl.configure(_spatialEnabled.value, _spatialPreset.value, _spatialIntensity.value.toDouble())
+    saveSpatial()
+  }
+
+  private fun saveSpatial() {
+    preferencesRepository.saveSpatial(_spatialEnabled.value, _spatialPreset.value.key, _spatialIntensity.value)
+  }
+
   // ---- the music on the device ----
 
   val deviceTracks: StateFlow<List<Track>> = musicRepository.deviceTracks

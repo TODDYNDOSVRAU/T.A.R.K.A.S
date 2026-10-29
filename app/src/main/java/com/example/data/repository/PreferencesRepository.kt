@@ -123,6 +123,20 @@ class PreferencesRepository(context: Context) {
     prefs.edit().putString("eq_reach", key).apply()
   }
 
+  // ---- Tarkas Spatial (off until the user turns it on) ----
+
+  fun getSpatialEnabled(): Boolean = prefs.getBoolean("spatial_enabled", false)
+  fun getSpatialPreset(): String? = prefs.getString("spatial_preset", null)
+  fun getSpatialIntensity(): Float = prefs.getFloat("spatial_intensity", 1f)
+
+  fun saveSpatial(enabled: Boolean, preset: String, intensity: Float) {
+    prefs.edit()
+      .putBoolean("spatial_enabled", enabled)
+      .putString("spatial_preset", preset)
+      .putFloat("spatial_intensity", intensity)
+      .apply()
+  }
+
   fun getCuriosityConfig(): com.example.data.model.CuriosityConfig {
     val enabled = prefs.getBoolean(KEY_CURIOSITY_ENABLED, true)
     val timingName = prefs.getString(KEY_CURIOSITY_TIMING, com.example.data.model.CuriosityTiming.END_OF_TRACK.name)

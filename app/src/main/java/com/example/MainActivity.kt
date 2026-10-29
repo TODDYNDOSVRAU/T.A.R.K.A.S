@@ -656,7 +656,20 @@ fun TarkasAppContent(
             onRequestSystemAudioCapture = onRequestSystemAudioCapture,
             onStopSystemAudioCapture = { viewModel.stopSystemAudioCapture() },
             spectrumAllowed = spectrumAllowed,
-            onAllowSpectrum = onAllowSpectrum
+            onAllowSpectrum = onAllowSpectrum,
+            spatial = com.example.ui.screens.SpatialUi(
+              enabled = viewModel.spatialEnabled.collectAsState().value,
+              preset = viewModel.spatialPreset.collectAsState().value,
+              intensity = viewModel.spatialIntensity.collectAsState().value,
+              status = viewModel.spatialStatus.collectAsState().value
+            ),
+            spatialActions = remember {
+              com.example.ui.screens.SpatialActions(
+                onEnabled = { viewModel.setSpatialEnabled(it) },
+                onPreset = { viewModel.setSpatialPreset(it) },
+                onIntensity = { viewModel.setSpatialIntensity(it) }
+              )
+            }
           )
         }
 

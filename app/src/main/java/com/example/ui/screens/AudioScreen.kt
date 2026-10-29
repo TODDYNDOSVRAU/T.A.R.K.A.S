@@ -80,6 +80,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.audio.dsp.EqDsp
+import com.example.data.audio.spatial.SpatialPreset
+import com.example.data.audio.spatial.SpatialStatus
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
 import com.example.data.model.AudioCapabilities
@@ -219,6 +221,8 @@ fun AudioScreen(
   onStopSystemAudioCapture: () -> Unit = {},
   spectrumAllowed: Boolean = true,
   onAllowSpectrum: () -> Unit = {},
+  spatial: SpatialUi = SpatialUi(),
+  spatialActions: SpatialActions? = null,
   modifier: Modifier = Modifier
 ) {
   var page by rememberSaveable { mutableStateOf(AudioPage.MAIN) }
@@ -264,7 +268,9 @@ fun AudioScreen(
           onOpenPresets = { showPresets = true; onOpenDevicePicker() },
           onOpenAdvanced = { page = AudioPage.ADVANCED },
           spectrumAllowed = spectrumAllowed,
-          onAllowSpectrum = onAllowSpectrum
+          onAllowSpectrum = onAllowSpectrum,
+          spatial = spatial,
+          spatialActions = spatialActions
         )
         AudioPage.ADVANCED -> EqAdvancedPage(
           capabilities = capabilities,
@@ -379,7 +385,9 @@ private fun EqMainPage(
   onOpenPresets: () -> Unit,
   onOpenAdvanced: () -> Unit,
   spectrumAllowed: Boolean,
-  onAllowSpectrum: () -> Unit
+  onAllowSpectrum: () -> Unit,
+  spatial: SpatialUi = SpatialUi(),
+  spatialActions: SpatialActions? = null
 ) {
   val colors = MaterialTheme.colorScheme
   val enabled = eqSettings.enabled
@@ -556,6 +564,10 @@ private fun EqMainPage(
       }
     }
 
+    if (spatialActions != null) {
+      item { SpatialPanel(spatial, spatialActions, modifier = Modifier.padding(horizontal = 20.dp)) }
+    }
+
     // The way into the technical controls
     item {
       NavRow(
@@ -565,6 +577,79 @@ private fun EqMainPage(
         onClick = onOpenAdvanced,
         modifier = Modifier.padding(horizontal = 20.dp).testTag("eq_open_advanced")
       )
+    }
+  }
+}
+
+/** What the Tarkas Spatial panel shows. */
+data class SpatialUi(
+  val enabled: Boolean = false,
+  val preset: SpatialPreset = SpatialPreset.STANDARD,
+  val intensity: Float = 1f,
+  val status: SpatialStatus = SpatialStatus.OFF
+)
+
+class SpatialActions(
+  val onEnabled: (Boolean) -> Unit,
+  val onPreset: (SpatialPreset) -> Unit,
+  val onIntensity: (Float) -> Unit
+)
+
+/** Tarkas Spatial: stereo turned into a binaural scene for headphones. */
+@Composable
+private fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modifier = Modifier) {
+  val colors = MaterialTheme.colorScheme
+  GlassPanel(modifier) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .toggleable(value = ui.enabled, role = Role.Switch, onValueChange = actions.onEnabled)
+        .testTag("switch_spatial"),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Column(modifier = Modifier.weight(1f)) {
+        Text("Áudio espacial", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
+        Text(
+          when (ui.status) {
+            SpatialStatus.OFF -> "Abre a música ao redor da cabeça, nos fones"
+            SpatialStatus.PREPARING -> "Preparando…"
+            SpatialStatus.ACTIVE -> "Ativo nos fones"
+            SpatialStatus.NEEDS_HEADPHONES -> "Conecte fones: no alto-falante o som fica como está"
+            SpatialStatus.SYSTEM_SPATIAL -> "O áudio espacial do Android já está ativo; este fica em pausa"
+            SpatialStatus.NOT_STEREO -> "Esta faixa não é estéreo"
+          },
+          fontSize = 13.sp,
+          color = if (ui.status == SpatialStatus.ACTIVE) colors.primary else colors.onSurfaceVariant
+        )
+      }
+      Switch(
+        checked = ui.enabled,
+        onCheckedChange = null,
+        colors = SwitchDefaults.colors(checkedTrackColor = colors.primary, checkedThumbColor = colors.onPrimary)
+      )
+    }
+    AnimatedVisibility(visible = ui.enabled, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+      Column(modifier = Modifier.padding(top = 10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          SpatialPreset.entries.forEach { p ->
+            GlassChip(
+              label = p.label,
+              selected = ui.preset == p,
+              onClick = { actions.onPreset(p) },
+              modifier = Modifier.testTag("spatial_preset_${p.key}")
+            )
+          }
+        }
+        Spacer(Modifier.height(8.dp))
+        LabeledSlider(
+          label = "Intensidade",
+          valueText = "${(ui.intensity * 100).toInt()}%",
+          value = ui.intensity,
+          range = 0.2f..1f,
+          onChange = actions.onIntensity,
+          testTag = "spatial_intensity"
+        )
+      }
     }
   }
 }

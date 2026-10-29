@@ -54,11 +54,20 @@ class AudioEngineManager(private val context: Context) {
   private companion object {
     // Volume while another app needs a moment of the audio focus (a navigation prompt, for example).
     const val DUCK_VOLUME = 0.25f
+
+    /** Outputs where a binaural render is heard as intended (26 = TYPE_BLE_HEADSET, API 31). */
+    val HEADPHONE_TYPES = setOf(
+      AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET,
+      AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_USB_HEADSET, 26
+    )
   }
   private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
   private val eqDsp = EqDsp()
   private val eqProcessor = ParametricEqAudioProcessor(eqDsp)
+  // Tarkas Spatial comes first: it turns stereo into binaural, then the equalizer and the fone
+  // correction shape the result.
+  private val spatialProcessor = com.example.data.audio.spatial.SpatialAudioProcessor()
 
   private var player: ExoPlayer? = null
   private var audioSessionId = 0
@@ -290,7 +299,7 @@ class AudioEngineManager(private val context: Context) {
         enableFloatOutput: Boolean,
         enableAudioTrackPlaybackParams: Boolean
       ): AudioSink = DefaultAudioSink.Builder(context)
-        .setAudioProcessors(arrayOf(eqProcessor))
+        .setAudioProcessors(arrayOf(spatialProcessor, eqProcessor))
         .build()
     }
     val media3Attributes = androidx.media3.common.AudioAttributes.Builder()
@@ -631,6 +640,56 @@ class AudioEngineManager(private val context: Context) {
         Log.e(TAG, "Error setting virtualizer strength", e)
       }
     }
+  }
+
+  // ---- output route, for Tarkas Spatial: binaural only makes sense on headphones ----
+
+  private val routeCallback = object : android.media.AudioDeviceCallback() {
+    override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = refreshSpatialRoute()
+    override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = refreshSpatialRoute()
+  }
+
+  private fun watchOutputRoute() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      audioManager.registerAudioDeviceCallback(routeCallback, android.os.Handler(android.os.Looper.getMainLooper()))
+    }
+    if (Build.VERSION.SDK_INT >= 32) {
+      runCatching {
+        audioManager.spatializer.addOnSpatializerStateChangedListener(
+          ContextCompat.getMainExecutor(context),
+          object : android.media.Spatializer.OnSpatializerStateChangedListener {
+            override fun onSpatializerEnabledChanged(spat: android.media.Spatializer, enabled: Boolean) = refreshSpatialRoute()
+            override fun onSpatializerAvailableChanged(spat: android.media.Spatializer, available: Boolean) = refreshSpatialRoute()
+          }
+        )
+      }
+    }
+    refreshSpatialRoute()
+  }
+
+  /** Headphones connected, and whether the system spatializer would already process stereo music. */
+  fun refreshSpatialRoute() {
+    val headphones = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+      audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { it.type in HEADPHONE_TYPES }
+    } else {
+      @Suppress("DEPRECATION")
+      audioManager.isWiredHeadsetOn || audioManager.isBluetoothA2dpOn
+    }
+    val systemSpatial = Build.VERSION.SDK_INT >= 32 && runCatching {
+      val spat = audioManager.spatializer
+      val stereo = android.media.AudioFormat.Builder()
+        .setEncoding(android.media.AudioFormat.ENCODING_PCM_FLOAT)
+        .setChannelMask(android.media.AudioFormat.CHANNEL_OUT_STEREO)
+        .setSampleRate(48000)
+        .build()
+      spat.isAvailable && spat.isEnabled && spat.canBeSpatialized(playbackAttributes, stereo)
+    }.getOrDefault(false)
+    com.example.data.audio.spatial.SpatialControl.setRoute(headphones, systemSpatial)
+  }
+
+  // After the route callback and the attributes exist (properties initialise in order).
+  init {
+    watchOutputRoute()
   }
 
   fun updateCapabilities() {
