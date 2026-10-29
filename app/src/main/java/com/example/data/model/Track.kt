@@ -15,12 +15,15 @@ data class Track(
   /** Cover art or thumbnail; the color gradient shows when it is missing. */
   val artworkUrl: String? = null,
   /** One of the short synthesized tracks that ship with the app, kept apart from the user's music. */
-  val isDemo: Boolean = false,
-  /** "youtube" when the track plays in the hidden web player of that service; [webId] is its video id. */
-  val webSource: String? = null,
-  val webId: String? = null
+  val isDemo: Boolean = false
 ) {
-  val isWeb: Boolean get() = webSource != null
+  /** The online catalogue the track streams from ("Audius", "Jamendo"), or null for the device's own. */
+  val onlineSource: String?
+    get() = when {
+      id.startsWith("audius_") -> "Audius"
+      id.startsWith("jamendo_") -> "Jamendo"
+      else -> null
+    }
 
   fun formattedDuration(): String {
     val totalSeconds = durationMs / 1000

@@ -69,6 +69,7 @@ import com.example.ui.theme.Space
 import com.example.ui.theme.opensPlayer
 import com.example.ui.theme.pressClickable
 import com.example.ui.theme.listEntrance
+import com.example.ui.viewmodel.OnlineSearchState
 import com.example.ui.viewmodel.TrendingState
 import kotlinx.coroutines.delay
 
@@ -100,34 +101,29 @@ fun HomeScreen(
   audiusOffline: Boolean = false,
   onSearchAudiusOnline: (String) -> Unit = {},
   onPlayAudiusResult: (Track) -> Unit = {},
-  youtubeResults: List<Track> = emptyList(),
-  youtubeSearching: Boolean = false,
-  youtubeOffline: Boolean = false,
-  onSearchYouTubeOnline: (String) -> Unit = {},
-  onPlayYouTubeResult: (Track) -> Unit = {},
-  spotifyResults: List<Track> = emptyList(),
-  spotifySearching: Boolean = false,
-  onSearchSpotifyOnline: (String) -> Unit = {},
-  onPlaySpotifyResult: (Track) -> Unit = {},
+  jamendo: OnlineSearchState = OnlineSearchState(),
+  onSearchJamendoOnline: (String) -> Unit = {},
+  onPlayJamendoResult: (Track) -> Unit = {},
+  jamendoPopular: TrendingState = TrendingState(),
+  onRetryJamendoPopular: () -> Unit = {},
+  onPlayJamendoPopular: (Track) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   var searchQuery by rememberSaveable { mutableStateOf("") }
   // The query the services were last asked about. Saved with the query, so coming back to Início
-  // (closing the player, rotating) does not send the same three searches again.
+  // (closing the player, rotating) does not send the same searches again.
   var searchedQuery by rememberSaveable { mutableStateOf("") }
   var showDemos by rememberSaveable { mutableStateOf(false) }
 
   val searchAudius by rememberUpdatedState(onSearchAudiusOnline)
-  val searchYouTube by rememberUpdatedState(onSearchYouTubeOnline)
-  val searchSpotify by rememberUpdatedState(onSearchSpotifyOnline)
+  val searchJamendo by rememberUpdatedState(onSearchJamendoOnline)
   LaunchedEffect(searchQuery) {
     if (searchQuery == searchedQuery) return@LaunchedEffect
     // Clearing the field empties the results at once; a new query waits for a pause in typing.
     if (searchQuery.isNotBlank()) delay(SearchDebounceMs)
     searchedQuery = searchQuery
     searchAudius(searchQuery)
-    searchYouTube(searchQuery)
-    searchSpotify(searchQuery)
+    searchJamendo(searchQuery)
   }
 
   // The user's own music; the synthesized demo tracks sit in their own section at the bottom.
@@ -193,27 +189,28 @@ fun HomeScreen(
 
     if (searchQuery.isBlank()) {
       item(key = "trending") {
-        Column {
-          SectionHeader("Em alta no Audius", modifier = Modifier.padding(top = Space.xl, bottom = Space.m))
-          when {
-            trending.tracks.isEmpty() && trending.loading -> TrendingSkeleton()
-            trending.tracks.isNotEmpty() -> TrendingRow(
-              tracks = trending.tracks,
-              currentTrack = currentTrack,
-              isPlaying = isPlaying,
-              onPlay = onPlayTrending
-            )
-            trending.offline -> EmptyState(
-              icon = Icons.Rounded.CloudOff,
-              title = "Sem conexão com o Audius",
-              message = "Confira a internet e tente de novo. Suas músicas do aparelho continuam tocando.",
-              actionLabel = "Tentar de novo",
-              onAction = onRetryTrending,
-              modifier = Modifier.padding(horizontal = Space.page).testTag("trending_offline")
-            )
-            !trending.loading -> Note("O Audius não mandou nada em alta agora.")
-          }
-        }
+        CatalogSection(
+          title = "Em alta no Audius",
+          service = "Audius",
+          state = trending,
+          onRetry = onRetryTrending,
+          onPlay = onPlayTrending,
+          tagPrefix = "trending",
+          currentTrack = currentTrack,
+          isPlaying = isPlaying
+        )
+      }
+      item(key = "jamendo_popular") {
+        CatalogSection(
+          title = "Popular no Jamendo",
+          service = "Jamendo",
+          state = jamendoPopular,
+          onRetry = onRetryJamendoPopular,
+          onPlay = onPlayJamendoPopular,
+          tagPrefix = "jamendo_popular",
+          currentTrack = currentTrack,
+          isPlaying = isPlaying
+        )
       }
 
       item(key = "mine_header") {
@@ -274,30 +271,69 @@ fun HomeScreen(
         }
       }
 
-      item(key = "youtube_header") { ResultsHeader("YouTube Music", searching = youtubeSearching) }
-      songs(youtubeResults.take(10), "youtube_result", "youtube_result", showSource = false, stagger = true, onClick = onPlayYouTubeResult)
-      if (youtubeResults.isEmpty() && !youtubeSearching) {
-        item(key = "youtube_empty") {
-          if (youtubeOffline) {
-            EmptyState(
+      item(key = "jamendo_header") { ResultsHeader("Jamendo", searching = jamendo.searching) }
+      songs(jamendo.results, "jamendo_result", "jamendo_result", showSource = false, stagger = true, onClick = onPlayJamendoResult)
+      if (jamendo.results.isEmpty() && !jamendo.searching) {
+        item(key = "jamendo_empty") {
+          when {
+            jamendo.notConfigured -> Note(JamendoMissingKey, Modifier.testTag("jamendo_not_configured"))
+            jamendo.offline -> EmptyState(
               icon = Icons.Rounded.CloudOff,
-              title = "Sem conexão com o YouTube Music",
+              title = "Sem conexão com o Jamendo",
               message = "Confira a internet e tente de novo.",
               actionLabel = "Tentar de novo",
-              onAction = { onSearchYouTubeOnline(searchQuery) },
-              modifier = Modifier.padding(horizontal = Space.page).testTag("youtube_empty")
+              onAction = { onSearchJamendoOnline(searchQuery) },
+              modifier = Modifier.padding(horizontal = Space.page).testTag("jamendo_offline")
             )
-          } else {
-            Note("Nada encontrado no YouTube Music.", Modifier.testTag("youtube_empty"))
+            else -> Note("Nada encontrado no Jamendo.", Modifier.testTag("jamendo_empty"))
           }
         }
       }
+    }
+  }
+}
 
-      item(key = "spotify_header") { ResultsHeader("Spotify", searching = spotifySearching) }
-      songs(spotifyResults.take(10), "spotify_result", "spotify_result", showSource = false, stagger = true, onClick = onPlaySpotifyResult)
-      if (spotifyResults.isEmpty() && !spotifySearching) {
-        item(key = "spotify_empty") { Note("Nada encontrado no Spotify.", Modifier.testTag("spotify_empty")) }
-      }
+/** Said where Jamendo results would be, when the build has no client id for it. */
+private const val JamendoMissingKey =
+  "O Jamendo precisa de uma chave do app (client id). Sem ela, a busca usa só o Audius."
+
+/**
+ * A catalogue's row of Início ("Em alta no Audius", "Popular no Jamendo"): the covers, a skeleton
+ * while they load, and what went wrong otherwise. Nothing is shown for a catalogue the build has no
+ * key for, so Início never opens on an error the user cannot fix.
+ */
+@Composable
+private fun CatalogSection(
+  title: String,
+  service: String,
+  state: TrendingState,
+  onRetry: () -> Unit,
+  onPlay: (Track) -> Unit,
+  tagPrefix: String,
+  currentTrack: Track?,
+  isPlaying: Boolean
+) {
+  if (state.notConfigured) return
+  Column {
+    SectionHeader(title, modifier = Modifier.padding(top = Space.xl, bottom = Space.m))
+    when {
+      state.tracks.isEmpty() && state.loading -> TrendingSkeleton()
+      state.tracks.isNotEmpty() -> TrendingRow(
+        tracks = state.tracks,
+        currentTrack = currentTrack,
+        isPlaying = isPlaying,
+        onPlay = onPlay,
+        tagPrefix = tagPrefix
+      )
+      state.offline -> EmptyState(
+        icon = Icons.Rounded.CloudOff,
+        title = "Sem conexão com o $service",
+        message = "Confira a internet e tente de novo. Suas músicas do aparelho continuam tocando.",
+        actionLabel = "Tentar de novo",
+        onAction = onRetry,
+        modifier = Modifier.padding(horizontal = Space.page).testTag("${tagPrefix}_offline")
+      )
+      !state.loading -> Note("O $service não mandou nada agora.")
     }
   }
 }
@@ -374,7 +410,8 @@ private fun TrendingRow(
   tracks: List<Track>,
   currentTrack: Track?,
   isPlaying: Boolean,
-  onPlay: (Track) -> Unit
+  onPlay: (Track) -> Unit,
+  tagPrefix: String = "trending"
 ) {
   val state = rememberLazyListState()
   LazyRow(
@@ -383,7 +420,7 @@ private fun TrendingRow(
     contentPadding = PaddingValues(horizontal = Space.page),
     horizontalArrangement = Arrangement.spacedBy(Space.m)
   ) {
-    itemsIndexed(tracks.take(12), key = { _, t -> "trending_${t.id}" }) { index, track ->
+    itemsIndexed(tracks.take(12), key = { _, t -> "${tagPrefix}_${t.id}" }) { index, track ->
       val isCurrent = currentTrack?.id == track.id
       Column(
         modifier = Modifier
@@ -391,7 +428,7 @@ private fun TrendingRow(
           .listEntrance(index)
           .opensPlayer()
           .pressClickable(pressedScale = 0.97f, onClickLabel = "Tocar ${track.title}") { onPlay(track) }
-          .testTag("trending_track_${track.id}")
+          .testTag("${tagPrefix}_track_${track.id}")
       ) {
         TrackArtwork(
           track = track,

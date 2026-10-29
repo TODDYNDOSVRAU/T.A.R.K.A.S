@@ -138,13 +138,6 @@ class MainActivity : ComponentActivity() {
     super.onStop()
   }
 
-  override fun onDestroy() {
-    // The hidden web views outlive the activity; take them off this window so it can be freed.
-    com.example.data.web.WebSearchHost.release(this)
-    com.example.data.web.WebPlayerHost.release(this)
-    super.onDestroy()
-  }
-
   override fun onCreate(savedInstanceState: Bundle?) {
     AppGraph.init(this)
     AppMotion.readSystem(this)
@@ -152,11 +145,6 @@ class MainActivity : ComponentActivity() {
     installSplashScreen()
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
-    // The hidden web views (search and player) need the window to exist.
-    window.decorView.post {
-      com.example.data.web.WebSearchHost.attach(this)
-      com.example.data.web.WebPlayerHost.attach(this)
-    }
     setContent {
       val viewModel: TarkasViewModel = viewModel()
       val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -197,7 +185,7 @@ class MainActivity : ComponentActivity() {
         LaunchedEffect(Unit) { viewModel.notificationsAsked() }
       }
 
-      // MediaProjection launcher for system audio extraction (Spotify & YouTube Music)
+      // MediaProjection launcher: reads other apps' sound for the spectrum
       val mediaProjectionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
       ) { result ->
@@ -373,11 +361,8 @@ fun TarkasAppContent(
   val globalEqStatus by viewModel.globalEqStatus.collectAsStateWithLifecycle()
   val audiusResults by viewModel.audiusResults.collectAsStateWithLifecycle()
   val audiusSearching by viewModel.audiusSearching.collectAsStateWithLifecycle()
-  val youtubeResults by viewModel.youtubeResults.collectAsStateWithLifecycle()
-  val youtubeSearching by viewModel.youtubeSearching.collectAsStateWithLifecycle()
-  val youtubeOffline by viewModel.youtubeOffline.collectAsStateWithLifecycle()
-  val spotifyResults by viewModel.spotifyResults.collectAsStateWithLifecycle()
-  val spotifySearching by viewModel.spotifySearching.collectAsStateWithLifecycle()
+  val jamendo by viewModel.jamendo.collectAsStateWithLifecycle()
+  val jamendoPopular by viewModel.jamendoPopular.collectAsStateWithLifecycle()
   // Full-screen pages opened from Ajustes, shown over the tabs.
   val overlayOpen = isShowingCuriositySettings
   val curiosityConfig by viewModel.curiosityConfig.collectAsStateWithLifecycle()
@@ -546,19 +531,16 @@ fun TarkasAppContent(
               viewModel.playAudiusResult(track)
               viewModel.setTab(TarkasNavTab.MUSIC)
             },
-            youtubeResults = youtubeResults,
-            youtubeSearching = youtubeSearching,
-            youtubeOffline = youtubeOffline,
-            onSearchYouTubeOnline = { q -> viewModel.searchYouTubeOnline(q) },
-            onPlayYouTubeResult = { track ->
-              viewModel.playYouTubeResult(track)
+            jamendo = jamendo,
+            onSearchJamendoOnline = { q -> viewModel.searchJamendoOnline(q) },
+            onPlayJamendoResult = { track ->
+              viewModel.playJamendoResult(track)
               viewModel.setTab(TarkasNavTab.MUSIC)
             },
-            spotifyResults = spotifyResults,
-            spotifySearching = spotifySearching,
-            onSearchSpotifyOnline = { q -> viewModel.searchSpotifyOnline(q) },
-            onPlaySpotifyResult = { track ->
-              viewModel.playSpotifyResult(track)
+            jamendoPopular = jamendoPopular,
+            onRetryJamendoPopular = { viewModel.loadJamendoPopular() },
+            onPlayJamendoPopular = { track ->
+              viewModel.playJamendoPopular(track)
               viewModel.setTab(TarkasNavTab.MUSIC)
             },
             onPlayTrack = { track ->
@@ -602,6 +584,8 @@ fun TarkasAppContent(
             onSetSleepTimer = { m -> viewModel.setSleepTimer(m) },
             onSleepAtEndOfTrack = { viewModel.setSleepAtEndOfTrack() },
             onCancelSleepTimer = { viewModel.cancelSleepTimer() },
+            trackDetails = viewModel.trackDetails.collectAsStateWithLifecycle().value,
+            onLoadTrackDetails = { track -> viewModel.loadTrackDetails(track) },
             onClose = { viewModel.goBack() }
           )
         }
@@ -732,7 +716,6 @@ fun TarkasAppContent(
             onClearCache = { done -> viewModel.clearCache(done) },
             onExportData = { uri -> viewModel.writeExport(uri) },
             onEraseAllData = { viewModel.eraseAllData() },
-            onSignOutWeb = { viewModel.signOutOfWebServices() },
             onRestartOnboarding = { viewModel.restartOnboarding() },
             termsAcceptedAt = viewModel.termsAcceptedAt
           )

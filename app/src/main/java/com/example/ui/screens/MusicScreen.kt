@@ -111,6 +111,8 @@ import com.example.ui.components.CuriosityDetailDialog
 import com.example.ui.components.PlayPauseIcon
 import com.example.ui.components.SleepTimerDialog
 import com.example.ui.components.TrackActionsMenu
+import com.example.ui.components.TrackDetailsSheet
+import com.example.ui.viewmodel.TrackDetailsState
 import com.example.ui.components.sleepTimerLabel
 import com.example.ui.theme.AppText
 import com.example.ui.theme.LocalBarInset
@@ -173,9 +175,12 @@ fun MusicScreen(
   onSetSleepTimer: (Int) -> Unit = {},
   onSleepAtEndOfTrack: () -> Unit = {},
   onCancelSleepTimer: () -> Unit = {},
+  trackDetails: TrackDetailsState = TrackDetailsState(),
+  onLoadTrackDetails: (Track) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   var showCuriosityDialog by remember { mutableStateOf(false) }
+  var showDetails by remember { mutableStateOf(false) }
   var showSleepTimer by remember { mutableStateOf(false) }
   if (showSleepTimer) {
     SleepTimerDialog(
@@ -287,7 +292,8 @@ fun MusicScreen(
         onAddToQueue = onAddToQueue,
         onAddToPlaylist = onAddToPlaylist,
         onCreatePlaylist = onCreatePlaylist,
-        onSleepTimer = { showSleepTimer = true }
+        onSleepTimer = { showSleepTimer = true },
+        onAbout = { track -> onLoadTrackDetails(track); showDetails = true }
       )
 
       Spacer(Modifier.height(Space.l))
@@ -405,6 +411,17 @@ fun MusicScreen(
       }
       Spacer(Modifier.height(Space.s))
     }
+  }
+
+  if (showDetails && currentTrack != null) {
+    TrackDetailsSheet(
+      track = currentTrack,
+      // Details of another song (the track changed under an open sheet) are not shown as this one's.
+      state = if (trackDetails.trackId == currentTrack.id) trackDetails else TrackDetailsState(loading = true),
+      onRetry = { onLoadTrackDetails(currentTrack) },
+      onDismiss = { showDetails = false }
+    )
+    LaunchedEffect(currentTrack.id) { onLoadTrackDetails(currentTrack) }
   }
 
   if (showCuriosityDialog && activeCuriosity != null) {
@@ -538,7 +555,8 @@ private fun TitleRow(
   onAddToQueue: (Track) -> Unit,
   onAddToPlaylist: (String, Track) -> Unit,
   onCreatePlaylist: (String, Track) -> Unit,
-  onSleepTimer: () -> Unit
+  onSleepTimer: () -> Unit,
+  onAbout: (Track) -> Unit
 ) {
   Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
     Column(modifier = Modifier.weight(1f)) {
@@ -579,7 +597,8 @@ private fun TitleRow(
         iconTint = OnPage,
         icon = Icons.Rounded.MoreHoriz,
         sleepTimerLabel = sleepTimerLabel(sleepTimer),
-        onSleepTimer = onSleepTimer
+        onSleepTimer = onSleepTimer,
+        onAbout = { onAbout(track) }
       )
     }
   }

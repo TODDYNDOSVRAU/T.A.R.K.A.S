@@ -304,7 +304,7 @@ private fun WelcomeStep() {
     mark = true
   )
   SectionGap()
-  FeatureRow(Icons.Rounded.LibraryMusic, "Sua música, de vários lugares", "Do aparelho, do Audius, do YouTube Music e do Spotify, numa biblioteca só.")
+  FeatureRow(Icons.Rounded.LibraryMusic, "Sua música, de vários lugares", "Do aparelho, do Audius e do Jamendo, numa biblioteca só.")
   FeatureRow(Icons.Rounded.Equalizer, "Som ajustado ao seu fone", "Equalizador de 15 bandas ou paramétrico, com correção para mais de 8 mil fones.")
   FeatureRow(Icons.Rounded.Lightbulb, "Curiosidades e assistente", "Fatos verificados sobre a faixa e comandos por voz.")
 }

@@ -127,7 +127,6 @@ fun SettingsScreen(
   onClearCache: (onDone: () -> Unit) -> Unit = {},
   onExportData: (Uri) -> Unit = {},
   onEraseAllData: () -> Unit = {},
-  onSignOutWeb: () -> Unit = {},
   onRestartOnboarding: () -> Unit = {},
   termsAcceptedAt: Long = 0L,
   modifier: Modifier = Modifier,
@@ -165,7 +164,7 @@ fun SettingsScreen(
           if (onSetRepeatMode != null) onSetRepeatMode(target)
           else repeat((target.ordinal - repeatMode.ordinal + RepeatMode.entries.size) % RepeatMode.entries.size) { onCycleRepeat() }
         },
-        onOpenAudio, cacheSizeBytes, onClearCache, onExportData, onEraseAllData, onSignOutWeb,
+        onOpenAudio, cacheSizeBytes, onClearCache, onExportData, onEraseAllData,
         onOpenAbout = { page = SettingsPage.ABOUT },
         onOpenTerms = { openText(SettingsPage.TERMS, SettingsPage.MAIN) },
         onOpenPrivacy = { openText(SettingsPage.PRIVACY, SettingsPage.MAIN) }
@@ -226,7 +225,6 @@ private fun MainSettings(
   onClearCache: (onDone: () -> Unit) -> Unit,
   onExportData: (Uri) -> Unit,
   onEraseAllData: () -> Unit,
-  onSignOutWeb: () -> Unit,
   onOpenAbout: () -> Unit,
   onOpenTerms: () -> Unit,
   onOpenPrivacy: () -> Unit
@@ -234,20 +232,6 @@ private fun MainSettings(
   val colors = MaterialTheme.colorScheme
   val context = LocalContext.current
   var confirmErase by rememberSaveable { mutableStateOf(false) }
-  var confirmSignOut by rememberSaveable { mutableStateOf(false) }
-  var showLogin by rememberSaveable { mutableStateOf(false) }
-  var showSpotifyLogin by rememberSaveable { mutableStateOf(false) }
-  // Read again when a sign-in page closes and after signing out (the cookies go away a moment later).
-  var accountsRefresh by remember { mutableIntStateOf(0) }
-  val youtubeSignedIn = remember(showLogin, accountsRefresh) { com.example.data.web.WebPlayerHost.isSignedIn(spotify = false) }
-  val spotifySignedIn = remember(showSpotifyLogin, accountsRefresh) { com.example.data.web.WebPlayerHost.isSignedIn(spotify = true) }
-  var signOuts by remember { mutableIntStateOf(0) }
-  LaunchedEffect(signOuts) {
-    if (signOuts > 0) {
-      kotlinx.coroutines.delay(800)
-      accountsRefresh++
-    }
-  }
   var cacheSize by remember { mutableStateOf<Long?>(null) }
   var cacheRefresh by remember { mutableIntStateOf(0) }
   LaunchedEffect(cacheRefresh) { cacheSize = cacheSizeBytes() }
@@ -368,32 +352,17 @@ private fun MainSettings(
       )
     }
 
-    // Streaming
+    // Catálogos online
     settingsGroup(
-      "Streaming",
-      footer = "Com o Premium, o YouTube Music toca sem anúncios e com a tela apagada. Sem Premium, o Spotify toca no plano grátis, com anúncios. As senhas ficam só nas páginas dos serviços."
+      "Catálogos online",
+      footer = "A busca do Início procura no Audius e no Jamendo, músicas independentes que tocam inteiras e de graça. " +
+        "O MusicBrainz mostra álbum, ano e gêneros em Sobre a faixa, no menu ⋯ do player."
     ) {
-      ListRow(
-        title = "YouTube Music",
-        value = if (youtubeSignedIn) "Conectado" else "Entrar",
-        onClick = { showLogin = true },
-        modifier = Modifier.testTag("settings_web_login")
-      )
+      InfoRow(title = "Audius", value = "Ativo")
       GroupDivider()
-      ListRow(
-        title = "Spotify",
-        value = if (spotifySignedIn) "Conectado" else "Entrar",
-        onClick = { showSpotifyLogin = true },
-        modifier = Modifier.testTag("settings_spotify_login")
-      )
+      InfoRow(title = "Jamendo", value = if (com.example.data.jamendo.JamendoApiService.isConfigured) "Ativo" else "Sem chave")
       GroupDivider()
-      ListRow(
-        title = "Sair das contas",
-        onClick = { confirmSignOut = true },
-        chevron = false,
-        destructive = true,
-        modifier = Modifier.testTag("settings_web_signout")
-      )
+      InfoRow(title = "MusicBrainz", value = "Ativo")
     }
 
     // Curiosidades e assistente
@@ -481,25 +450,6 @@ private fun MainSettings(
   }
 
   // Outside the list, so a dialog never closes because its row scrolled out of composition.
-  if (showLogin) WebLoginDialog(onClose = { showLogin = false })
-  if (showSpotifyLogin) WebLoginDialog(spotify = true, onClose = { showSpotifyLogin = false })
-
-  if (confirmSignOut) {
-    AlertDialog(
-      onDismissRequest = { confirmSignOut = false },
-      title = { Text("Sair das contas?", style = AppText.Title3) },
-      text = { Text("As sessões do YouTube Music e do Spotify guardadas neste aparelho serão apagadas. Para tocar de novo, entre outra vez.") },
-      confirmButton = {
-        TextButton(onClick = {
-          confirmSignOut = false
-          onSignOutWeb()
-          signOuts++
-        }) { Text("Sair", color = colors.error) }
-      },
-      dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text("Cancelar") } }
-    )
-  }
-
   if (confirmErase) {
     AlertDialog(
       onDismissRequest = { confirmErase = false },

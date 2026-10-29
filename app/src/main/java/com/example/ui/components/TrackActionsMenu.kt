@@ -16,6 +16,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.AlertDialog
@@ -52,7 +53,7 @@ import kotlinx.coroutines.launch
 
 /**
  * The "more" button of a track and the sheet it opens: favourite, play next, queue, add to a playlist
- * (and, in the player, the sleep timer). A bottom sheet rather than a dropdown, so every action is a
+ * (and, in the player, "Sobre a faixa" and the sleep timer). A bottom sheet rather than a dropdown, so every action is a
  * full-width row with a large target, and the playlist list has room to scroll.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,7 +72,9 @@ fun TrackActionsMenu(
   icon: ImageVector = Icons.Rounded.MoreHoriz,
   /** Shown only in the player: the sleep timer entry, with what it is set to (null = off). */
   sleepTimerLabel: String? = null,
-  onSleepTimer: (() -> Unit)? = null
+  onSleepTimer: (() -> Unit)? = null,
+  /** Shown only in the player: "Sobre a faixa" (album, date and genres from MusicBrainz). */
+  onAbout: (() -> Unit)? = null
 ) {
   // Saved, so a rotation keeps the sheet (and the playlist step) where the user left it.
   var expanded by rememberSaveable { mutableStateOf(false) }
@@ -140,6 +143,15 @@ fun TrackActionsMenu(
             icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
             onClick = { showPlaylists = true }
           )
+          if (onAbout != null) {
+            ListRow(
+              title = "Sobre a faixa",
+              icon = Icons.Rounded.Info,
+              chevron = false,
+              onClick = { close(onAbout) },
+              modifier = Modifier.testTag("menu_track_details")
+            )
+          }
           if (onSleepTimer != null) {
             ListRow(
               title = "Timer de dormir",

@@ -49,9 +49,6 @@ object GlobalEq {
   val settings = MutableStateFlow(EqSettings())
   val reach = MutableStateFlow(EqReach.APP)
 
-  /** Audio session of the app's own player, which has its equalizer already (not applied twice). */
-  @Volatile var ownPlayerSession = 0
-
   /**
    * True once the app has put the user's curve and reach here. A service the system restarts on its own
    * (after the process was killed) finds this false and reads them from the saved preferences instead of

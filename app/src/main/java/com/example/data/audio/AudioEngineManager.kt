@@ -324,7 +324,6 @@ class AudioEngineManager(private val context: Context) {
       .build()
     // A fixed session id, so the visualizer and virtualizer can attach before the first sample plays.
     audioSessionId = Util.generateAudioSessionIdV21(context)
-    com.example.data.systemaudio.GlobalEq.ownPlayerSession = audioSessionId
     return ExoPlayer.Builder(context, renderers)
       // Focus is handled here (AudioFocusPolicy), as before, so ExoPlayer must not also handle it.
       .setAudioAttributes(media3Attributes, false)

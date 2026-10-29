@@ -23,7 +23,8 @@
 ## Features
 
 **Playback**
-- On-device music, Audius, YouTube Music and Spotify in one unified search
+- On-device music, [Audius](https://audius.co) and [Jamendo](https://www.jamendo.com) in one unified search, all played in full by the app's own player
+- Album, release date and genres of the playing track from [MusicBrainz](https://musicbrainz.org)
 - Background playback with controls in the notification, lock screen, headphones and Bluetooth
 - Gapless, queue, shuffle, repeat, favorites and playlists
 - Queue and position restored on relaunch
@@ -54,12 +55,11 @@ Then select **ADB** under Áudio > Ajustes avançados > Alcance. On rooted devic
 
 ## Privacy
 
-No account and no backend. Data stays on the device. Searches are sent to the services queried (Audius, YouTube Music, Spotify). The full privacy policy is available in the app.
+No account and no backend. Data stays on the device. Searches are sent to the services queried (Audius, Jamendo); the playing track's title and artist go to MusicBrainz only when "Sobre a faixa" is opened. The full privacy policy is available in the app.
 
 ## Limitations
 
-- The EQ does not apply to YouTube Music and Spotify audio.
-- Spotify: sign-in and playback not yet validated.
+- Jamendo needs a client id from the [Jamendo developer portal](https://developer.jamendo.com/). Put it in `.env` as `JAMENDO_CLIENT_ID=...` before building; without it the app searches Audius only.
 - ADB mode depends on the device manufacturer and the source app.
 
 ## Roadmap

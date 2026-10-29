@@ -12,8 +12,8 @@ data class LegalDoc(val title: String, val subtitle: String, val sections: List<
  * publishing on the Play Store, which also needs the Privacy Policy at a public web address.
  */
 object LegalTexts {
-  const val TERMS_VERSION = 2
-  const val UPDATED = "25 de outubro de 2026"
+  const val TERMS_VERSION = 3
+  const val UPDATED = "29 de outubro de 2026"
 
   const val CONTROLLER = "Roger Moreira"
   const val CONTACT_EMAIL = "roger.moreiraa8@gmail.com"
@@ -24,7 +24,7 @@ object LegalTexts {
   /** The short version shown on the acceptance step. */
   val summary = listOf(
     "Seus ajustes, favoritos e playlists ficam só neste aparelho. O T.A.R.K.A.S. não tem conta nem servidor próprio.",
-    "Quando você busca no Início, o termo da busca vai para o Audius, o YouTube Music e o Spotify, que entregam as músicas.",
+    "Quando você busca no Início, o termo da busca vai para o Audius e o Jamendo, que entregam as músicas. O título e o artista da faixa vão ao MusicBrainz quando você abre Sobre a faixa.",
     "A lista de fones do equalizador é baixada do projeto AutoEq, no GitHub.",
     "O assistente só usa IA online (Gemini) se uma chave for configurada no app.",
     "Você pode exportar ou apagar todos os seus dados em Ajustes > Privacidade, quando quiser."
@@ -43,10 +43,11 @@ object LegalTexts {
         "Com o Modo ADB ou root, que você ativa por conta própria, o equalizador também pode atuar no áudio de outros apps.",
       "3. Uso gratuito e \"como está\"" to
         "O app é oferecido gratuitamente, no estado em que se encontra, sem garantia de funcionamento contínuo ou livre de erros. " +
-        "Serviços de terceiros, como o Audius e o AutoEq, podem mudar ou ficar fora do ar sem aviso.",
+        "Serviços de terceiros, como o Audius, o Jamendo, o MusicBrainz e o AutoEq, podem mudar ou ficar fora do ar sem aviso.",
       "4. Conteúdo de terceiros" to
-        "As músicas do YouTube Music e do Spotify pertencem aos seus titulares e são entregues pelos próprios serviços, segundo os termos e o plano da sua conta; o T.A.R.K.A.S. não baixa nem guarda essas músicas. " +
         "As músicas do Audius pertencem aos seus artistas e são entregues pelo próprio Audius, de acordo com os termos dele. " +
+        "As músicas do Jamendo pertencem aos seus artistas e são distribuídas pelo Jamendo sob licenças Creative Commons, para ouvir; o T.A.R.K.A.S. não baixa nem guarda essas músicas. " +
+        "Os dados de álbum, data e gêneros vêm do MusicBrainz (domínio público, CC0) e as capas do Cover Art Archive. " +
         "As curvas de fones vêm do projeto AutoEq (licença MIT). O T.A.R.K.A.S. não hospeda nem vende músicas.",
       "5. Uso adequado" to
         "Não use o app para infringir direitos autorais, contornar proteções de conteúdo ou violar leis. " +
@@ -78,7 +79,8 @@ object LegalTexts {
         "Esses dados não são enviados para nenhum servidor nosso: o T.A.R.K.A.S. não tem servidor nem conta de usuário.",
       "Dados enviados a terceiros, e para quê" to
         "• Audius: o texto que você busca no Início e os pedidos das faixas que você toca, para listar e transmitir as músicas. O Audius recebe também o endereço IP da conexão, como qualquer site.\n" +
-        "• YouTube Music e Spotify: o texto que você busca no Início e os pedidos das músicas que você toca, feitos pelas páginas web desses serviços dentro do app. Se você entrar na sua conta, o login é feito na página do próprio serviço (o T.A.R.K.A.S. não vê a sua senha) e os cookies de sessão ficam só no aparelho; \"Sair das contas\" em Ajustes os apaga. Esses serviços recebem o IP e seguem as próprias políticas.\n" +
+        "• Jamendo: o texto que você busca no Início, o pedido das músicas populares e os pedidos das faixas que você toca, para listar e transmitir as músicas. O Jamendo recebe o IP da conexão e a identificação do app (não a sua).\n" +
+        "• MusicBrainz e Cover Art Archive: o título e o artista da faixa, só quando você abre Sobre a faixa no player, para mostrar álbum, data, gêneros e capa. Recebem o IP da conexão.\n" +
         "• GitHub (projeto AutoEq): pedidos para baixar a lista de fones e a curva do fone escolhido. Nenhum dado seu vai junto além do IP.\n" +
         "• Google Gemini: só se uma chave de IA estiver configurada no app, as mensagens que você escreve ao assistente que não são comandos locais.\n" +
         "• Reconhecimento de voz e leitura em voz alta: feitos pelos serviços do próprio Android, segundo as regras do fabricante do seu aparelho.",
@@ -112,6 +114,11 @@ object LegalTexts {
     title = "Novidades",
     subtitle = "O que mudou em cada versão",
     sections = listOf(
+      "1.14" to
+        "• Novo: músicas do Jamendo na busca e na linha Popular no Jamendo do Início, tocadas inteiras pelo player do app, com equalizador e áudio espacial.\n" +
+        "• Novo: Sobre a faixa, no menu ⋯ do player: álbum, lançamento e gêneros do MusicBrainz, com a capa do Cover Art Archive.\n" +
+        "• YouTube Music e Spotify saíram do app. As sessões guardadas no aparelho foram apagadas.\n" +
+        "• Termos de Uso e Política de Privacidade atualizados para os novos serviços.",
       "1.13" to
         "• Spotify e YouTube Music: a próxima faixa não fica mais muda nem pausa sozinha.\n" +
         "• O login do Spotify, que abria uma tela preta, voltou a funcionar; os Ajustes mostram quando a conta está conectada.\n" +
@@ -180,7 +187,8 @@ object LegalTexts {
   )
 
   val credits = listOf(
-    "Músicas em streaming" to "Audius, rede aberta de música dos próprios artistas",
+    "Músicas em streaming" to "Audius, rede aberta de música dos próprios artistas, e Jamendo, música independente em Creative Commons",
+    "Dados das músicas" to "MusicBrainz (CC0) e Cover Art Archive",
     "Correção de fones" to "Projeto AutoEq e quem mediu cada fone (oratory1990, crinacle, Rtings e outros)",
     "Desenvolvimento" to "$CONTROLLER · $CONTACT_INSTAGRAM"
   )

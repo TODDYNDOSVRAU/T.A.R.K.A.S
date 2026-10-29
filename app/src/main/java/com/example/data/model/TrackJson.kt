@@ -12,13 +12,14 @@ object TrackJson {
     .put("local", t.isLocalFile).put("path", t.filePath ?: JSONObject.NULL)
     .put("color", t.colorHex)
     .put("art", t.artworkUrl ?: JSONObject.NULL)
-    .put("web", t.webSource ?: JSONObject.NULL).put("webId", t.webId ?: JSONObject.NULL)
     .put("demo", t.isDemo)
 
   /** Null for an entry that can no longer play (from an integration that was removed). */
   fun fromJson(o: JSONObject): Track? {
-    // YouTube songs saved while an older integration existed can no longer play: drop them.
+    // YouTube Music and Spotify songs ("yt" before 1.9, "web" until 1.13) played in web players the
+    // app no longer has: drop them.
     if (o.has("yt") && !o.isNull("yt")) return null
+    if (o.has("web") && !o.isNull("web")) return null
     return Track(
       id = o.getString("id"),
       title = o.getString("title"),
@@ -31,8 +32,6 @@ object TrackJson {
       filePath = if (o.isNull("path")) null else o.getString("path"),
       colorHex = o.optLong("color", 0xFF46C9D3),
       artworkUrl = if (o.isNull("art")) null else o.optString("art").ifBlank { null },
-      webSource = if (o.isNull("web")) null else o.optString("web").ifBlank { null },
-      webId = if (o.isNull("webId")) null else o.optString("webId").ifBlank { null },
       isDemo = o.optBoolean("demo", false)
     )
   }

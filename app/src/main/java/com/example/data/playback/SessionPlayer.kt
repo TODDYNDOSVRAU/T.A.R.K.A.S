@@ -26,8 +26,8 @@ import kotlinx.coroutines.withContext
 
 /**
  * What the media session (notification, lock screen, headphones, car, watch) sees and controls: a
- * player that mirrors [PlaybackController], whatever plays underneath (the local player, the hidden
- * web player, a curiosity narration). Commands go back to the controller.
+ * player that mirrors [PlaybackController], whatever plays underneath (the app's player or a curiosity
+ * narration). Commands go back to the controller.
  *
  * The playlist it shows is [previous, current, next], with placeholders around the current track,
  * so Previous and Next are offered whenever they can do something.

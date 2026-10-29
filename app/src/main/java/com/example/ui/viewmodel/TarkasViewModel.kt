@@ -41,8 +41,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.FlowPreview
-import com.example.data.web.WebPlayerHost
-import com.example.data.web.WebSearchHost
+import com.example.data.jamendo.JamendoApiService
+import com.example.data.jamendo.JamendoNotConfigured
+import com.example.data.musicbrainz.MusicBrainzService
+import com.example.data.musicbrainz.RecordingInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -79,11 +81,33 @@ data class Notice(
   val id: Long = System.nanoTime()
 )
 
-/** The "Em alta no Audius" row of Início. */
+/** A catalogue row of Início ("Em alta no Audius", "Popular no Jamendo"). */
 data class TrendingState(
   val loading: Boolean = false,
   val tracks: List<Track> = emptyList(),
-  /** No Audius server answered: offline, or Audius is down. */
+  /** The service did not answer: offline, or it is down. */
+  val offline: Boolean = false,
+  /** The build has no key for the service, so it is not asked at all. */
+  val notConfigured: Boolean = false
+)
+
+/** One service's answer to the search of Início. */
+data class OnlineSearchState(
+  val results: List<Track> = emptyList(),
+  val searching: Boolean = false,
+  /** No answer (offline or down), as opposed to no results. */
+  val offline: Boolean = false,
+  /** The build has no key for the service. */
+  val notConfigured: Boolean = false
+)
+
+/** "Sobre a faixa": what MusicBrainz says about the playing song. */
+data class TrackDetailsState(
+  val trackId: String? = null,
+  val loading: Boolean = false,
+  val info: RecordingInfo? = null,
+  /** MusicBrainz answered but has nothing it is sure of. */
+  val notFound: Boolean = false,
   val offline: Boolean = false
 )
 
@@ -178,7 +202,7 @@ class TarkasViewModel(
 
   val systemAudioStatus: StateFlow<SystemAudioStatus> = systemAudioCaptureManager.status
 
-  // The player screens read these: they follow the local engine, or the hidden web player for a web track.
+  // The player screens read these, from the app's own engine.
   val isPlaying: StateFlow<Boolean> = playback.isPlaying
   val positionMs: StateFlow<Long> = playback.positionMs
   val durationMs: StateFlow<Long> = playback.durationMs
@@ -445,6 +469,15 @@ class TarkasViewModel(
       }
       prefs.edit().putBoolean(KEY_LEGACY_CLEANED, true).apply()
     }
+    // YouTube Music and Spotify were removed in 1.14: their sign-in cookies and site data, kept by the
+    // WebView the app no longer has, are deleted once, so no session is left behind on the device.
+    viewModelScope.launch(Dispatchers.IO) {
+      val prefs = context.getSharedPreferences("tarkas_prefs", android.content.Context.MODE_PRIVATE)
+      if (prefs.getBoolean(KEY_WEB_CLEANED, false)) return@launch
+      runCatching { java.io.File(context.filesDir.parentFile, "app_webview").deleteRecursively() }
+      runCatching { java.io.File(context.cacheDir, "WebView").deleteRecursively() }
+      prefs.edit().putBoolean(KEY_WEB_CLEANED, true).apply()
+    }
   }
 
   /** Searches Audius as the user types in Início, without adding the results to the library. */
@@ -478,77 +511,64 @@ class TarkasViewModel(
   /** Plays an Audius result; Next goes on through the rest of the results. */
   fun playAudiusResult(track: Track) = playFromList(track, _audiusResults.value)
 
-  // ---- YouTube Music (same search bar; the hidden web player produces the sound) ----
+  // ---- Jamendo (same search bar; Creative Commons music played in full by the app's own player) ----
 
-  private val _youtubeResults = MutableStateFlow<List<Track>>(emptyList())
-  val youtubeResults: StateFlow<List<Track>> = _youtubeResults.asStateFlow()
+  private val _jamendo = MutableStateFlow(OnlineSearchState(notConfigured = !JamendoApiService.isConfigured))
+  val jamendo: StateFlow<OnlineSearchState> = _jamendo.asStateFlow()
 
-  private val _youtubeSearching = MutableStateFlow(false)
-  val youtubeSearching: StateFlow<Boolean> = _youtubeSearching.asStateFlow()
+  private var jamendoSearchJob: Job? = null
 
-  private val _youtubeOffline = MutableStateFlow(false)
-  val youtubeOffline: StateFlow<Boolean> = _youtubeOffline.asStateFlow()
-
-  private var youtubeSearchJob: Job? = null
-
-  fun searchYouTubeOnline(query: String) {
-    youtubeSearchJob?.cancel()
-    if (query.isBlank()) {
-      _youtubeResults.value = emptyList()
-      _youtubeSearching.value = false
-      _youtubeOffline.value = false
+  /** Searches Jamendo as the user types in Início, without adding the results to the library. */
+  fun searchJamendoOnline(query: String) {
+    jamendoSearchJob?.cancel()
+    if (query.isBlank() || !JamendoApiService.isConfigured) {
+      _jamendo.value = OnlineSearchState(notConfigured = !JamendoApiService.isConfigured)
       return
     }
-    youtubeSearchJob = viewModelScope.launch {
-      delay(600)
-      _youtubeSearching.value = true
-      try {
-        val found = WebSearchHost.searchYouTube(query.trim())
-        _youtubeOffline.value = found == null
-        _youtubeResults.value = found.orEmpty()
-      } finally {
-        _youtubeSearching.value = false
+    jamendoSearchJob = viewModelScope.launch {
+      delay(350)
+      _jamendo.value = _jamendo.value.copy(searching = true)
+      _jamendo.value = try {
+        OnlineSearchState(results = JamendoApiService.searchTracks(query.trim()))
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: JamendoNotConfigured) {
+        OnlineSearchState(notConfigured = true)
+      } catch (e: Exception) {
+        OnlineSearchState(offline = true)
       }
     }
   }
 
-  fun playYouTubeResult(track: Track) = playFromList(track, _youtubeResults.value)
+  /** Plays a Jamendo result; Next goes on through the rest of the results. */
+  fun playJamendoResult(track: Track) = playFromList(track, _jamendo.value.results)
 
-  // ---- Spotify (same bar; its web player plays free with ads, or without them on Premium) ----
+  // ---- MusicBrainz: "Sobre a faixa" ----
 
-  private val _spotifyResults = MutableStateFlow<List<Track>>(emptyList())
-  val spotifyResults: StateFlow<List<Track>> = _spotifyResults.asStateFlow()
+  private val _trackDetails = MutableStateFlow(TrackDetailsState())
+  val trackDetails: StateFlow<TrackDetailsState> = _trackDetails.asStateFlow()
 
-  private val _spotifySearching = MutableStateFlow(false)
-  val spotifySearching: StateFlow<Boolean> = _spotifySearching.asStateFlow()
+  private var detailsJob: Job? = null
 
-  private var spotifySearchJob: Job? = null
-
-  fun searchSpotifyOnline(query: String) {
-    spotifySearchJob?.cancel()
-    if (query.isBlank()) {
-      _spotifyResults.value = emptyList()
-      _spotifySearching.value = false
-      return
-    }
-    spotifySearchJob = viewModelScope.launch {
-      delay(900)
-      _spotifySearching.value = true
-      try {
-        val found = WebSearchHost.searchSpotify(query.trim()).orEmpty()
-        _spotifyResults.value = found
-      } finally {
-        _spotifySearching.value = false
+  /** Looks [track] up on MusicBrainz for the "Sobre a faixa" sheet; a repeat for the same track is free. */
+  fun loadTrackDetails(track: Track) {
+    val current = _trackDetails.value
+    if (current.trackId == track.id && (current.loading || current.info != null || current.notFound)) return
+    detailsJob?.cancel()
+    _trackDetails.value = TrackDetailsState(trackId = track.id, loading = true)
+    detailsJob = viewModelScope.launch {
+      _trackDetails.value = try {
+        val info = MusicBrainzService.lookup(track.title, track.artist)
+        TrackDetailsState(trackId = track.id, info = info, notFound = info == null)
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        android.util.Log.w("TarkasViewModel", "MusicBrainz lookup failed", e)
+        TrackDetailsState(trackId = track.id, offline = true)
       }
     }
   }
 
-  fun playSpotifyResult(track: Track) = playFromList(track, _spotifyResults.value)
-
-  /** Forgets the Google and Spotify sessions kept for the web players. */
-  fun signOutOfWebServices() {
-    WebPlayerHost.signOut { showNotice(Notice("Contas desconectadas.")) }
-  }
 
   fun openCuriositySettings() {
     _isShowingCuriositySettings.value = true
@@ -1055,6 +1075,30 @@ class TarkasViewModel(
     playTrack(musicRepository.addLocalTrack(title, artist, uriString, durationMs))
   }
 
+  // ---- Jamendo's popular tracks, on Início ----
+
+  private val _jamendoPopular = MutableStateFlow(TrendingState(notConfigured = !JamendoApiService.isConfigured))
+  val jamendoPopular: StateFlow<TrendingState> = _jamendoPopular.asStateFlow()
+
+  fun loadJamendoPopular() {
+    if (!JamendoApiService.isConfigured || _jamendoPopular.value.loading) return
+    _jamendoPopular.value = _jamendoPopular.value.copy(loading = true, offline = false)
+    viewModelScope.launch {
+      _jamendoPopular.value = try {
+        TrendingState(tracks = JamendoApiService.getPopularTracks())
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: JamendoNotConfigured) {
+        TrendingState(notConfigured = true)
+      } catch (e: Exception) {
+        TrendingState(tracks = _jamendoPopular.value.tracks, offline = true)
+      }
+    }
+  }
+
+  /** Plays a popular Jamendo track; Next goes on through the rest of the row. */
+  fun playJamendoPopular(track: Track) = playFromList(track, _jamendoPopular.value.tracks)
+
   // ---- Audius trending, on Início ----
 
   private val _trending = MutableStateFlow(TrendingState())
@@ -1079,6 +1123,7 @@ class TarkasViewModel(
 
   init {
     loadTrending()
+    loadJamendoPopular()
   }
 
   // ---- permissions asked when they are needed ----
@@ -1123,5 +1168,6 @@ class TarkasViewModel(
     const val KEY_TAB = "nav_tab"
     const val KEY_BACK = "nav_back"
     const val KEY_LEGACY_CLEANED = "legacy_spotify_cleaned"
+    const val KEY_WEB_CLEANED = "legacy_web_players_cleaned"
   }
 }

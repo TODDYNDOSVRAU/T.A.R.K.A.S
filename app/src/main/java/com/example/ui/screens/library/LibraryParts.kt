@@ -24,22 +24,14 @@ import com.example.ui.theme.Space
  * Pieces shared by the track lists of Início and Biblioteca, so a song reads the same in both.
  */
 
-/** Which service a streamed track plays from, said in words ("YouTube Music"); null for local ones. */
-internal fun sourceName(track: Track): String? = when {
-  track.webSource == "spotify" -> "Spotify"
-  track.webSource != null -> "YouTube Music"
-  track.id.startsWith("audius_") -> "Audius"
-  else -> null
-}
-
 /**
  * The line under a track's title. Streamed tracks name their service as a quiet last part of the
- * line ("Artista · YouTube Music") instead of a coloured badge; device tracks show artist and album.
+ * line ("Artista · Jamendo") instead of a coloured badge; device tracks show artist and album.
  * [showSource] is off in search results, where the section header already names the service.
  */
 internal fun trackSubtitle(track: Track, showSource: Boolean = true): String {
-  val source = if (showSource) sourceName(track) else null
-  val main = if (source != null || track.isWeb) track.artist.ifBlank { track.album }
+  val source = if (showSource) track.onlineSource else null
+  val main = if (track.onlineSource != null) track.artist.ifBlank { track.album }
   else listOf(track.artist, track.album).filter { it.isNotBlank() }.joinToString(" · ")
   return listOfNotNull(main.ifBlank { null }, source).joinToString(" · ")
 }

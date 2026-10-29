@@ -12,7 +12,6 @@ import com.example.data.model.TrackJson
 import com.example.data.repository.CuriosityRepository
 import com.example.data.repository.MusicRepository
 import com.example.data.repository.PreferencesRepository
-import com.example.data.web.WebPlayerHost
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -40,7 +39,7 @@ data class SleepTimer(val endsAtMs: Long? = null, val endOfTrack: Boolean = fals
 
 /**
  * Everything about what plays and in what order: the queue, shuffle and repeat, the curiosity
- * narrations between tracks, local and web tracks, gapless moves, the sleep timer and the saved
+ * narrations between tracks, tracks from the device, Audius and Jamendo, gapless moves, the sleep timer and the saved
  * queue. It lives as long as the process (see [com.example.AppGraph]), so music keeps playing after
  * the screen is gone; the media session service and the screens both drive it.
  */
@@ -85,27 +84,18 @@ class PlaybackController(
 
   val isSpeaking: StateFlow<Boolean> get() = speech.isSpeaking
 
-  // They follow the local engine, or the hidden web player for a web track.
-  val isPlaying: StateFlow<Boolean> = combine(
-    musicRepository.currentTrack, audioEngine.isPlaying, WebPlayerHost.state
-  ) { track, local, web -> if (track?.isWeb == true) web.playing else local }
-    .stateIn(scope, SharingStarted.Eagerly, false)
+  // Every track, from the device, Audius or Jamendo, plays in the app's own engine.
+  val isPlaying: StateFlow<Boolean> = audioEngine.isPlaying
 
-  val positionMs: StateFlow<Long> = combine(
-    musicRepository.currentTrack, audioEngine.currentPositionMs, WebPlayerHost.state
-  ) { track, local, web -> if (track?.isWeb == true) web.positionMs else local }
-    .stateIn(scope, SharingStarted.Eagerly, 0L)
+  val positionMs: StateFlow<Long> = audioEngine.currentPositionMs
 
-  val durationMs: StateFlow<Long> = combine(
-    musicRepository.currentTrack, audioEngine.durationMs, WebPlayerHost.state
-  ) { track, local, web ->
-    if (track?.isWeb == true) web.durationMs.takeIf { it > 0 } ?: track.durationMs
-    else local.takeIf { it > 0 } ?: track?.durationMs ?: 0L
+  /** The engine's duration once it knows it, the catalogue's until then. */
+  val durationMs: StateFlow<Long> = combine(musicRepository.currentTrack, audioEngine.durationMs) { track, local ->
+    local.takeIf { it > 0 } ?: track?.durationMs ?: 0L
   }.stateIn(scope, SharingStarted.Eagerly, 0L)
 
   /** Tracks that failed one after another; stops the skipping when nothing in the list plays. */
   private var failuresInARow = 0
-  private var webWatchdog: Job? = null
 
   /**
    * True from the moment a track is asked to start until it plays (or fails, or is paused). Between two
@@ -179,7 +169,6 @@ class PlaybackController(
     if (narratesIntro(track)) {
       // The intro curiosity plays before the music.
       audioEngine.stopPlayback()
-      WebPlayerHost.stop()
       narrate(track, cur!!, isIntro = true) { startTrackAudio(track) }
     } else {
       startTrackAudio(track)
@@ -206,33 +195,10 @@ class PlaybackController(
 
   private fun startTrackAudio(track: Track, startPositionMs: Long = 0L) {
     val path = track.filePath
-    webWatchdog?.cancel()
     _starting.value = true
-    if (track.isWeb) {
-      audioEngine.stopPlayback()
-      val done = { onTrackPlaybackCompleted(track) }
-      val failed = { onTrackFailed(track, network = false) }
-      val started = if (track.webSource == "spotify") WebPlayerHost.playSpotify(context, track.webId.orEmpty(), done, failed)
-      else WebPlayerHost.playYouTube(context, track.webId.orEmpty(), done, failed)
-      // No web player yet (the app was restored without its screen): say so instead of staying silent.
-      if (!started) {
-        onTrackFailed(track, network = false)
-        return
-      }
-      // A page that never starts (no connection, a blocked video) would leave the player silent.
-      webWatchdog = scope.launch {
-        delay(WEB_START_TIMEOUT_MS)
-        // A song the user paused right away is not a failure.
-        if (musicRepository.currentTrack.value?.id == track.id && !isPlaying.value && positionMs.value == 0L &&
-          WebPlayerHost.wantsToPlay
-        ) {
-          onTrackFailed(track, network = false)
-        }
-      }
-    } else if (path == null) {
+    if (path == null) {
       onTrackFailed(track, network = false)
     } else {
-      WebPlayerHost.stop()
       audioEngine.playTrack(
         path,
         onCompletion = { onTrackPlaybackCompleted(track) },
@@ -265,7 +231,6 @@ class PlaybackController(
       _sleepTimer.value = null
       _starting.value = false
       audioEngine.stopPlayback()
-      WebPlayerHost.stop()
       save()
       return
     }
@@ -302,7 +267,7 @@ class PlaybackController(
    */
   private fun refreshUpNext() {
     val current = musicRepository.currentTrack.value
-    if (current == null || current.isWeb || _sleepTimer.value?.endOfTrack == true || narratesOutro(current)) {
+    if (current == null || _sleepTimer.value?.endOfTrack == true || narratesOutro(current)) {
       audioEngine.setUpNext(null) {}
       return
     }
@@ -311,7 +276,7 @@ class PlaybackController(
       shuffle = _shuffle.value, repeat = _repeatMode.value, auto = true
     )
     val track = next.track
-    if (track == null || track.isWeb || track.filePath == null || (!next.loopSameTrack && narratesIntro(track))) {
+    if (track == null || track.filePath == null || (!next.loopSameTrack && narratesIntro(track))) {
       audioEngine.setUpNext(null) {}
       return
     }
@@ -352,8 +317,7 @@ class PlaybackController(
         _starting.value = true
         resume()
       }
-      current.isWeb && WebPlayerHost.state.value.active -> WebPlayerHost.togglePlayPause()
-      !current.isWeb && audioEngine.hasLoadedTrack -> audioEngine.togglePlayPause()
+      audioEngine.hasLoadedTrack -> audioEngine.togglePlayPause()
       // Nothing loaded (the track ended, or failed): start it again.
       else -> playInternal(current, recordHistory = false)
     }
@@ -371,12 +335,12 @@ class PlaybackController(
       return
     }
     if (!isPlaying.value) return
-    if (musicRepository.currentTrack.value?.isWeb == true) WebPlayerHost.pause() else audioEngine.pause()
+    audioEngine.pause()
   }
 
-  /** Moves the playing track, local or web, to [ms]. */
+  /** Moves the playing track to [ms]. */
   fun seekTo(ms: Long) {
-    if (musicRepository.currentTrack.value?.isWeb == true) WebPlayerHost.seekTo(ms) else audioEngine.seekTo(ms)
+    audioEngine.seekTo(ms)
   }
 
   fun playNextTrack() = advance(auto = false)
@@ -511,8 +475,7 @@ class PlaybackController(
     sleepJob = scope.launch {
       delay(endsAt - System.currentTimeMillis())
       speech.stopSpeech()
-      if (musicRepository.currentTrack.value?.isWeb == true) WebPlayerHost.pause()
-      else audioEngine.fadeOutAndPause(SLEEP_FADE_MS)
+      audioEngine.fadeOutAndPause(SLEEP_FADE_MS)
       _sleepTimer.value = null
       _notices.tryEmit(PlaybackNotice("Timer de dormir: música pausada."))
     }
@@ -549,13 +512,13 @@ class PlaybackController(
     contextTracks?.let { o.put("context", TrackJson.listToJson(it)) }
     store.edit()
       .putString(KEY_STATE, o.toString())
-      .putLong(KEY_POSITION, if (current.isWeb) 0L else positionMs.value)
+      .putLong(KEY_POSITION, positionMs.value)
       .apply()
   }
 
   private fun savePosition() {
     val current = musicRepository.currentTrack.value ?: return
-    store.edit().putLong(KEY_POSITION, if (current.isWeb) 0L else positionMs.value).apply()
+    store.edit().putLong(KEY_POSITION, positionMs.value).apply()
   }
 
   /** Puts back the track, its position, the queue and the list it came from, paused. */
@@ -571,7 +534,7 @@ class PlaybackController(
       musicRepository.selectTrack(track)
       _activeCuriosity.value = curiosityRepository.getCuriosityForTrack(track)
       val path = track.filePath
-      if (!track.isWeb && path != null) {
+      if (path != null) {
         audioEngine.playTrack(
           path,
           onCompletion = { onTrackPlaybackCompleted(track) },
@@ -599,11 +562,9 @@ class PlaybackController(
     resumeAfterNarration = null
     _starting.value = false
     audioEngine.stopPlayback()
-    WebPlayerHost.stop()
   }
 
   private companion object {
-    const val WEB_START_TIMEOUT_MS = 25_000L
     const val RESTART_THRESHOLD_MS = 3000L
     const val SAVE_EVERY_MS = 10_000L
     const val SLEEP_FADE_MS = 6000L
