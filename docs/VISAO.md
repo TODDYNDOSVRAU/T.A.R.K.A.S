@@ -1,6 +1,6 @@
 # T.A.R.K.A.S. — Base conceitual do projeto
 
-**TOTTALY ACURRATE REAL-TIME KIND OF AUDIO SISTEM**
+**TOTALLY ACCURATE REAL-TIME AUDIO SYSTEM**
 
 *Uma central inteligente de áudio, música e assistência pessoal.*
 
