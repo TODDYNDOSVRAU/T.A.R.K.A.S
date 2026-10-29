@@ -6,72 +6,74 @@
 
 <p align="center"><b>TOTALLY ACCURATE REAL-TIME KIND OF AUDIO SYSTEM</b></p>
 
-<p align="center">Player de música e central de áudio para Android.</p>
+<p align="center">Music player and audio hub for Android.</p>
 
 <p align="center">
-  <a href="https://github.com/TODDYNDOSVRAU/T.A.R.K.A.S/releases/latest"><img alt="Versão" src="https://img.shields.io/github/v/release/TODDYNDOSVRAU/T.A.R.K.A.S?label=vers%C3%A3o&color=0E7C86"></a>
+  <a href="https://github.com/TODDYNDOSVRAU/T.A.R.K.A.S/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/TODDYNDOSVRAU/T.A.R.K.A.S?label=release&color=0E7C86"></a>
   <img alt="Android 7.0+" src="https://img.shields.io/badge/Android-7.0%2B-7EE3EA">
-  <a href="LICENSE"><img alt="Licença" src="https://img.shields.io/badge/licen%C3%A7a-todos%20os%20direitos%20reservados-555"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-all%20rights%20reserved-555"></a>
 </p>
 
 <p align="center">
   <img src="docs/screenshots/player.png" width="240" alt="Player">
-  <img src="docs/screenshots/equalizador.png" width="240" alt="Equalizador">
-  <img src="docs/screenshots/biblioteca.png" width="240" alt="Biblioteca">
+  <img src="docs/screenshots/equalizador.png" width="240" alt="Equalizer">
+  <img src="docs/screenshots/biblioteca.png" width="240" alt="Library">
 </p>
 
-## Recursos
+## Features
 
-**Reprodução**
-- Músicas do aparelho, Audius, YouTube Music e Spotify em uma busca unificada
-- Reprodução em segundo plano com controles na notificação, tela de bloqueio, fone e Bluetooth
-- Gapless, fila, aleatório, repetir, favoritos e playlists
-- Fila e posição restauradas ao reabrir
-- Timer de dormir
+**Playback**
+- On-device music, Audius, YouTube Music and Spotify in one unified search
+- Background playback with controls in the notification, lock screen, headphones and Bluetooth
+- Gapless, queue, shuffle, repeat, favorites and playlists
+- Queue and position restored on relaunch
+- Sleep timer
 
-**Equalizador**
-- Gráfico de 15 bandas ou paramétrico (frequência, ganho e Q)
-- Correção por modelo de fone ([AutoEq](https://github.com/jaakkopasanen/AutoEq))
-- Graves, agudos, balanço, largura estéreo, limitador e pré-amp automático
-- Aplicação em outros apps via ADB ou root
+**Equalizer**
+- 15-band graphic or parametric (frequency, gain and Q)
+- Headphone correction by model ([AutoEq](https://github.com/jaakkopasanen/AutoEq))
+- Bass, treble, balance, stereo width, limiter and auto preamp
+- System-wide EQ for other apps via ADB or root
 
-**Curiosidades**
-- Fatos verificados sobre a faixa em reprodução, no player e na notificação
+**Song facts**
+- Verified facts about the playing track, in the player and the notification
 
-## Instalação
+## Installation
 
-Baixe o APK da [última versão](https://github.com/TODDYNDOSVRAU/T.A.R.K.A.S/releases/latest) e instale no aparelho. Atualizações instalam sobre a versão anterior sem perda de dados.
+Download the APK from the [latest release](https://github.com/TODDYNDOSVRAU/T.A.R.K.A.S/releases/latest) and install it. Updates install over the previous version without data loss.
 
-**Equalizador em outros apps (ADB)**
+The app interface is in Brazilian Portuguese.
+
+**EQ for other apps (ADB)**
 
 ```bash
 adb shell pm grant com.aistudio.tarkas.app android.permission.DUMP
 ```
 
-Depois, em Áudio > Ajustes avançados > Alcance, selecione **ADB**. Com root, selecione **Root**.
+Then select **ADB** under Áudio > Ajustes avançados > Alcance. On rooted devices, select **Root**.
 
-## Privacidade
+## Privacy
 
-Sem conta e sem servidor próprio. Dados ficam no aparelho. Buscas são enviadas aos serviços consultados (Audius, YouTube Music, Spotify). [Política completa](app/src/main/java/com/example/ui/legal/LegalTexts.kt) também disponível no app.
+No account and no backend. Data stays on the device. Searches are sent to the services queried (Audius, YouTube Music, Spotify). The full privacy policy is available in the app.
 
-## Limitações
+## Limitations
 
-- O equalizador não se aplica ao áudio do YouTube Music e do Spotify.
-- Spotify: login e reprodução ainda não validados.
-- Modo ADB depende do fabricante e do app de origem.
+- The EQ does not apply to YouTube Music and Spotify audio.
+- Spotify: sign-in and playback not yet validated.
+- ADB mode depends on the device manufacturer and the source app.
 
 ## Roadmap
 
-Perfis por dispositivo, multicanal 5.1/7.1, páginas de álbum e artista, letras sincronizadas e assistente com IA contextual. Detalhes em [docs/VISAO.md](docs/VISAO.md).
+Per-device profiles, 5.1/7.1 multichannel, album and artist pages, synced lyrics and a context-aware AI assistant. See [docs/VISAO.md](docs/VISAO.md) (Portuguese).
 
-## Tecnologia
+## Tech
 
-Kotlin · Jetpack Compose · Material 3 · AndroidX Media3 · Coil · OkHttp · DSP próprio (biquad, limitador com lookahead)
+Kotlin · Jetpack Compose · Material 3 · AndroidX Media3 · Coil · OkHttp · custom DSP (biquad filters, lookahead limiter)
 
-## Licença
+## License
 
-Todos os direitos reservados. Uso pessoal dos APKs oficiais permitido; cópia, modificação, redistribuição e uso comercial proibidos sem autorização. Ver [LICENSE](LICENSE).
+All rights reserved. Personal use of the official APKs is permitted; copying, modification, redistribution and commercial use are prohibited without written permission. See [LICENSE](LICENSE) (Portuguese).
 
-## Contato
+## Contact
 
 Roger Moreira · roger.moreiraa8@gmail.com
