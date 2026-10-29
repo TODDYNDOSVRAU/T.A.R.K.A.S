@@ -9,7 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,25 +24,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Brightness1
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.SettingsBrightness
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -50,28 +48,39 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.example.BuildConfig
 import com.example.data.model.AudioCapabilities
 import com.example.data.model.CuriosityConfig
 import com.example.data.model.RepeatMode
+import com.example.ui.components.GroupDivider
+import com.example.ui.components.GroupFooter
+import com.example.ui.components.GroupHeader
+import com.example.ui.components.InfoRow
+import com.example.ui.components.InsetGroup
+import com.example.ui.components.ListRow
+import com.example.ui.components.RadioRow
+import com.example.ui.components.SubPageHeader
+import com.example.ui.components.SwitchRow
 import com.example.ui.components.TarkasMark
-import com.example.ui.components.TarkasSectionTitle
 import com.example.ui.legal.LegalTexts
 import com.example.ui.theme.AccentColor
 import com.example.ui.theme.AppMotion
+import com.example.ui.theme.AppText
 import com.example.ui.theme.LocalBarInset
+import com.example.ui.theme.Shapes
+import com.example.ui.theme.Size
+import com.example.ui.theme.Space
 import com.example.ui.theme.SurfaceStyle
-import com.example.ui.theme.glassContentColor
-import com.example.ui.theme.glassControl
 import com.example.ui.theme.liquidGlassSupported
 import com.example.ui.theme.rememberReducedMotion
 import com.example.ui.theme.subPageTransition
@@ -79,10 +88,17 @@ import com.example.ui.theme.subPageTransition
 /** The pages inside Ajustes: the main list, Sobre, and the texts opened from them. */
 private enum class SettingsPage { MAIN, ABOUT, TERMS, PRIVACY, LICENSES, CHANGELOG }
 
+/** The name a sub-page's back control shows for the page it returns to. */
+private fun SettingsPage.backLabel(): String = if (this == SettingsPage.ABOUT) "Sobre" else "Ajustes"
+
 /**
- * Ajustes, organised like the settings of the big music apps: Aparência, Reprodução, Áudio,
- * Curiosidades e assistente, Notificações, Armazenamento, Privacidade and Sobre. Every row either
- * does something or says plainly that it is information. Sobre and the long texts open as sub-pages.
+ * Ajustes, as a grouped list in the manner of the platform's own settings: Aparência, Reprodução,
+ * Áudio, Streaming, Curiosidades e assistente, Notificações, Armazenamento, Privacidade and Sobre.
+ * Every row either does something or plainly informs. Sobre and the long texts open as sub-pages,
+ * and a text goes back to the page it was opened from (Ajustes or Sobre), named in its back control.
+ *
+ * [onSubPageChange] tells the host whether a sub-page is showing, so it can hide its own large
+ * "Ajustes" title while the sub-page draws its own.
  */
 @Composable
 fun SettingsScreen(
@@ -112,13 +128,24 @@ fun SettingsScreen(
   onSignOutWeb: () -> Unit = {},
   onRestartOnboarding: () -> Unit = {},
   termsAcceptedAt: Long = 0L,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  onSetRepeatMode: ((RepeatMode) -> Unit)? = null,
+  onSubPageChange: (Boolean) -> Unit = {}
 ) {
   var page by rememberSaveable { mutableStateOf(SettingsPage.MAIN) }
+  // Where the open text was reached from, so back returns there (Terms and Privacy open from both).
+  var textOrigin by rememberSaveable { mutableStateOf(SettingsPage.MAIN) }
   val reduced = rememberReducedMotion()
-  BackHandler(enabled = page != SettingsPage.MAIN) {
-    page = if (page == SettingsPage.ABOUT) SettingsPage.MAIN else SettingsPage.ABOUT
+  LaunchedEffect(page) { onSubPageChange(page != SettingsPage.MAIN) }
+
+  fun openText(target: SettingsPage, from: SettingsPage) {
+    textOrigin = from
+    page = target
   }
+  fun back() {
+    page = if (page == SettingsPage.ABOUT) SettingsPage.MAIN else textOrigin
+  }
+  BackHandler(enabled = page != SettingsPage.MAIN) { back() }
 
   AnimatedContent(
     targetState = page,
@@ -130,22 +157,43 @@ fun SettingsScreen(
       SettingsPage.MAIN -> MainSettings(
         themeMode, capabilities, onThemeModeChange, curiosityConfig, onOpenCuriositySettings, hasGeminiKey,
         surfaceStyle, onSurfaceStyleChange, reduceMotion, onReduceMotionChange, reduceTransparency, onReduceTransparencyChange,
-        accent, onAccentChange, isShuffle, repeatMode, onToggleShuffle, onCycleRepeat, onOpenAudio,
-        cacheSizeBytes, onClearCache, onExportData, onEraseAllData, onSignOutWeb,
+        accent, onAccentChange, isShuffle, repeatMode, onToggleShuffle,
+        onSetRepeatMode = { target ->
+          // Without a direct setter, step the cycle (Desligado → Lista → Faixa) until it lands on the choice.
+          if (onSetRepeatMode != null) onSetRepeatMode(target)
+          else repeat((target.ordinal - repeatMode.ordinal + RepeatMode.entries.size) % RepeatMode.entries.size) { onCycleRepeat() }
+        },
+        onOpenAudio, cacheSizeBytes, onClearCache, onExportData, onEraseAllData, onSignOutWeb,
         onOpenAbout = { page = SettingsPage.ABOUT },
-        onOpenTerms = { page = SettingsPage.TERMS },
-        onOpenPrivacy = { page = SettingsPage.PRIVACY }
+        onOpenTerms = { openText(SettingsPage.TERMS, SettingsPage.MAIN) },
+        onOpenPrivacy = { openText(SettingsPage.PRIVACY, SettingsPage.MAIN) }
       )
       SettingsPage.ABOUT -> AboutPage(
         termsAcceptedAt = termsAcceptedAt,
         onBack = { page = SettingsPage.MAIN },
-        onOpen = { page = it },
+        onOpen = { openText(it, SettingsPage.ABOUT) },
         onRestartOnboarding = onRestartOnboarding
       )
-      SettingsPage.TERMS -> LegalScreen(LegalTexts.terms, "Sobre", onBack = { page = SettingsPage.ABOUT })
-      SettingsPage.PRIVACY -> LegalScreen(LegalTexts.privacy, "Sobre", onBack = { page = SettingsPage.ABOUT })
-      SettingsPage.LICENSES -> LegalScreen(LegalTexts.licenses, "Sobre", onBack = { page = SettingsPage.ABOUT })
-      SettingsPage.CHANGELOG -> LegalScreen(LegalTexts.changelog, "Sobre", onBack = { page = SettingsPage.ABOUT })
+      SettingsPage.TERMS -> LegalScreen(LegalTexts.terms, textOrigin.backLabel(), onBack = ::back)
+      SettingsPage.PRIVACY -> LegalScreen(LegalTexts.privacy, textOrigin.backLabel(), onBack = ::back)
+      SettingsPage.LICENSES -> LegalScreen(LegalTexts.licenses, textOrigin.backLabel(), onBack = ::back)
+      SettingsPage.CHANGELOG -> LegalScreen(LegalTexts.changelog, textOrigin.backLabel(), onBack = ::back)
+    }
+  }
+}
+
+/** Adds a group with an optional header and footer, spaced from the group above. */
+internal fun LazyListScope.settingsGroup(
+  header: String?,
+  footer: String? = null,
+  tag: String? = null,
+  content: @Composable () -> Unit
+) {
+  item {
+    Column(Modifier.padding(top = Space.xl)) {
+      if (header != null) GroupHeader(header)
+      InsetGroup(modifier = if (tag != null) Modifier.testTag(tag) else Modifier) { content() }
+      if (footer != null) GroupFooter(footer)
     }
   }
 }
@@ -169,7 +217,7 @@ private fun MainSettings(
   isShuffle: Boolean,
   repeatMode: RepeatMode,
   onToggleShuffle: () -> Unit,
-  onCycleRepeat: () -> Unit,
+  onSetRepeatMode: (RepeatMode) -> Unit,
   onOpenAudio: () -> Unit,
   cacheSizeBytes: suspend () -> Long,
   onClearCache: (onDone: () -> Unit) -> Unit,
@@ -182,12 +230,12 @@ private fun MainSettings(
 ) {
   val colors = MaterialTheme.colorScheme
   val context = LocalContext.current
-  val hairline = colors.outline.copy(alpha = 0.4f)
-  var confirmErase by remember { mutableStateOf(false) }
+  var confirmErase by rememberSaveable { mutableStateOf(false) }
+  var confirmSignOut by rememberSaveable { mutableStateOf(false) }
   var showLogin by rememberSaveable { mutableStateOf(false) }
   var showSpotifyLogin by rememberSaveable { mutableStateOf(false) }
   var cacheSize by remember { mutableStateOf<Long?>(null) }
-  var cacheRefresh by remember { mutableStateOf(0) }
+  var cacheRefresh by remember { mutableIntStateOf(0) }
   LaunchedEffect(cacheRefresh) { cacheSize = cacheSizeBytes() }
   val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
     if (uri != null) onExportData(uri)
@@ -196,284 +244,221 @@ private fun MainSettings(
     runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
   }
   val appDetails = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(Uri.fromParts("package", context.packageName, null))
-  val notificationsOn = NotificationManagerCompat.from(context).areNotificationsEnabled()
+  // Read again every time the app comes back, since the usual way to change it is the system page.
+  var notificationsOn by remember { mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled()) }
+  LifecycleResumeEffect(Unit) {
+    notificationsOn = NotificationManagerCompat.from(context).areNotificationsEnabled()
+    onPauseOrDispose {}
+  }
 
   LazyColumn(
-    modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
-    contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp + LocalBarInset.current),
-    verticalArrangement = Arrangement.spacedBy(6.dp)
+    modifier = Modifier.fillMaxSize(),
+    contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
   ) {
-
     // Aparência
-    item { SectionTitle("Aparência") }
-    item {
-      SettingsGroup(modifier = Modifier.testTag("settings_theme_card")) {
-        Row(
-          modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-          horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-          listOf(
-            Triple("amoled", "AMOLED", Icons.Default.Brightness1),
-            Triple("dark", "Escuro", Icons.Default.DarkMode),
-            Triple("light", "Claro", Icons.Default.LightMode),
-            Triple("system", "Sistema", Icons.Default.SettingsBrightness)
-          ).forEach { (modeKey, label, icon) ->
-            val selected = themeMode == modeKey
-            Column(
-              modifier = Modifier
-                .weight(1f)
-                .glassControl(RoundedCornerShape(18.dp), selected = selected)
-                .clickable { onThemeModeChange(modeKey) }
-                .padding(vertical = 12.dp)
-                .testTag("theme_chip_$modeKey"),
-              horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-              Icon(icon, contentDescription = null, tint = glassContentColor(selected), modifier = Modifier.size(22.dp))
-              Spacer(Modifier.height(6.dp))
-              Text(label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, color = glassContentColor(selected), maxLines = 1)
-            }
-          }
-        }
-        HorizontalDivider(color = hairline)
-        Column(Modifier.padding(vertical = 14.dp)) {
-          Text("Cor de destaque", fontSize = 17.sp, color = colors.onSurface)
-          Spacer(Modifier.height(10.dp))
-          AccentPicker(accent, onAccentChange)
-        }
-        HorizontalDivider(color = hairline)
-        SurfaceStyle.entries.forEach { style ->
-          val selected = surfaceStyle == style
-          val unavailable = style == SurfaceStyle.LIQUID && !liquidGlassSupported
-          SettingsRow(
-            title = style.label,
-            subtitle = if (unavailable) "${style.description} Neste aparelho, aparece como vidro fosco." else style.description,
-            titleColor = if (selected) colors.primary else colors.onSurface,
-            onClick = { onSurfaceStyleChange(style) },
-            modifier = Modifier.testTag("surface_style_${style.key}"),
-            trailing = { if (selected) Icon(Icons.Default.Check, contentDescription = "Selecionado", tint = colors.primary) }
-          )
-          HorizontalDivider(color = hairline)
-        }
-        SwitchRow(
-          title = "Reduzir transparência",
-          subtitle = if (AppMotion.systemBlurOff) "O sistema já pediu menos transparência, e o app segue." else "Barras e cápsulas sólidas, sem vidro. Mais fácil de ler e mais leve.",
-          checked = reduceTransparency || AppMotion.systemBlurOff,
-          enabled = !AppMotion.systemBlurOff,
-          onChange = onReduceTransparencyChange,
-          tag = "settings_reduce_transparency"
-        )
-        HorizontalDivider(color = hairline)
-        SwitchRow(
-          title = "Reduzir animações",
-          subtitle = if (AppMotion.systemReduced) "As animações estão removidas no sistema, e o app segue essa configuração." else "Pula a abertura e troca de tela sem movimento, só no app.",
-          checked = reduceMotion || AppMotion.systemReduced,
-          enabled = !AppMotion.systemReduced,
-          onChange = onReduceMotionChange,
-          tag = "settings_reduce_motion"
-        )
-      }
+    settingsGroup("Tema", tag = "settings_theme_card") {
+      ThemeOptionRows(themeMode, onThemeModeChange, tagPrefix = "theme_chip_")
+    }
+    settingsGroup("Cor de destaque", footer = "Usada em botões, seleções e no que está tocando.") {
+      AccentSwatches(accent, onAccentChange)
+    }
+    settingsGroup(
+      "Barras flutuantes",
+      footer = "Como são desenhadas a barra de abas e o mini player. O conteúdo das páginas é sempre sólido."
+    ) {
+      SurfaceOptionRows(surfaceStyle, onSurfaceStyleChange, tagPrefix = "surface_style_")
+    }
+    settingsGroup("Acessibilidade") {
+      SwitchRow(
+        title = "Reduzir transparência",
+        subtitle = if (AppMotion.systemBlurOff) "Ativado no Android" else "Barras sólidas, sem vidro",
+        checked = reduceTransparency || AppMotion.systemBlurOff,
+        enabled = !AppMotion.systemBlurOff,
+        onCheckedChange = onReduceTransparencyChange,
+        modifier = Modifier.testTag("settings_reduce_transparency")
+      )
+      GroupDivider()
+      SwitchRow(
+        title = "Reduzir animações",
+        subtitle = if (AppMotion.systemReduced) "Ativado no Android" else "Troca de tela sem movimento",
+        checked = reduceMotion || AppMotion.systemReduced,
+        enabled = !AppMotion.systemReduced,
+        onCheckedChange = onReduceMotionChange,
+        modifier = Modifier.testTag("settings_reduce_motion")
+      )
     }
 
     // Reprodução
-    item { SectionTitle("Reprodução") }
-    item {
-      SettingsGroup {
-        SwitchRow(
-          title = "Aleatório",
-          subtitle = "Toca a lista em ordem aleatória. Também no botão do player.",
-          checked = isShuffle,
-          onChange = { onToggleShuffle() },
-          tag = "settings_shuffle"
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Repetir",
-          subtitle = when (repeatMode) {
-            RepeatMode.OFF -> "Desligado. Toque para repetir a lista toda."
-            RepeatMode.ALL -> "Repetindo a lista toda. Toque para repetir só uma faixa."
-            RepeatMode.ONE -> "Repetindo uma faixa. Toque para desligar."
-          },
-          onClick = onCycleRepeat,
-          modifier = Modifier.testTag("settings_repeat")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Ao desconectar o fone",
-          subtitle = "A música pausa sozinha quando o fone com fio ou Bluetooth desconecta, para não tocar no alto-falante."
-        )
+    settingsGroup("Reprodução") {
+      SwitchRow(
+        title = "Aleatório",
+        checked = isShuffle,
+        onCheckedChange = { onToggleShuffle() },
+        modifier = Modifier.testTag("settings_shuffle")
+      )
+    }
+    settingsGroup(
+      "Repetir",
+      footer = "A música pausa sozinha quando o fone com fio ou Bluetooth desconecta, para não sair pelo alto-falante.",
+      tag = "settings_repeat"
+    ) {
+      Column(Modifier.selectableGroup()) {
+        RepeatChoices.forEachIndexed { i, (mode, label) ->
+          if (i > 0) GroupDivider()
+          RadioRow(
+            title = label,
+            selected = repeatMode == mode,
+            onClick = { if (repeatMode != mode) onSetRepeatMode(mode) },
+            modifier = Modifier.testTag("settings_repeat_${mode.name.lowercase()}")
+          )
+        }
       }
     }
 
     // Áudio
-    item { SectionTitle("Áudio") }
-    item {
-      SettingsGroup {
-        SettingsRow(
-          title = "Equalizador",
-          subtitle = "Gráfico de 15 bandas ou paramétrico, com correção para o seu fone. Começa em 0 dB (Flat).",
-          onClick = onOpenAudio,
-          chevron = true,
-          modifier = Modifier.testTag("settings_open_audio")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(title = "Saída atual", subtitle = "${capabilities.activeRouteName} • ${String.format("%.1f", capabilities.sampleRateHz / 1000f)} kHz")
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Áudio de outros apps",
-          subtitle = "Para equalizar Spotify, YouTube e os outros apps, escolha ADB ou Root em Áudio > Ajustes avançados.",
-          onClick = onOpenAudio,
-          chevron = true
-        )
-      }
+    settingsGroup(
+      "Áudio",
+      footer = "Para equalizar o Spotify, o YouTube e os outros apps, abra a aba Áudio, toque em Ajustes avançados e escolha ADB ou Root."
+    ) {
+      ListRow(
+        title = "Equalizador e som",
+        subtitle = "15 bandas ou paramétrico, com correção para o seu fone",
+        onClick = onOpenAudio,
+        modifier = Modifier.testTag("settings_open_audio")
+      )
+      GroupDivider()
+      InfoRow(
+        title = "Saída atual",
+        value = "${capabilities.activeRouteName} · ${String.format("%.1f", capabilities.sampleRateHz / 1000f)} kHz"
+      )
     }
 
-    // Contas
-    item { SectionTitle("Streaming") }
-    item {
-      SettingsGroup {
-        SettingsRow(
-          title = "Entrar no YouTube Music",
-          subtitle = "Com o Premium, as músicas do YouTube tocam sem anúncios e com a tela apagada. Use a busca do Início para achar músicas.",
-          onClick = { showLogin = true },
-          chevron = true,
-          modifier = Modifier.testTag("settings_web_login")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Entrar no Spotify",
-          subtitle = "Sem Premium, toca no plano grátis dele (com anúncios). Precisa da conta para tocar.",
-          onClick = { showSpotifyLogin = true },
-          chevron = true,
-          modifier = Modifier.testTag("settings_spotify_login")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Sair das contas",
-          subtitle = "Apaga neste aparelho as sessões guardadas do YouTube Music e do Spotify.",
-          onClick = onSignOutWeb,
-          modifier = Modifier.testTag("settings_web_signout")
-        )
-      }
-    }
-    item {
-      if (showLogin) WebLoginDialog(onClose = { showLogin = false })
-      if (showSpotifyLogin) WebLoginDialog(spotify = true, onClose = { showSpotifyLogin = false })
+    // Streaming
+    settingsGroup(
+      "Streaming",
+      footer = "Com o Premium, o YouTube Music toca sem anúncios e com a tela apagada. Sem Premium, o Spotify toca no plano grátis, com anúncios. As senhas ficam só nas páginas dos serviços."
+    ) {
+      ListRow(title = "YouTube Music", value = "Entrar", onClick = { showLogin = true }, modifier = Modifier.testTag("settings_web_login"))
+      GroupDivider()
+      ListRow(title = "Spotify", value = "Entrar", onClick = { showSpotifyLogin = true }, modifier = Modifier.testTag("settings_spotify_login"))
+      GroupDivider()
+      ListRow(
+        title = "Sair das contas",
+        onClick = { confirmSignOut = true },
+        chevron = false,
+        destructive = true,
+        modifier = Modifier.testTag("settings_web_signout")
+      )
     }
 
     // Curiosidades e assistente
-    item { SectionTitle("Curiosidades e assistente") }
-    item {
-      SettingsGroup {
-        val enabled = curiosityConfig?.enabled != false
-        SettingsRow(
-          title = "Curiosidades musicais",
-          subtitle = "${if (enabled) "Ativadas" else "Desativadas"} • ${curiosityConfig?.timing?.label ?: "Ao final da música"}",
-          onClick = onOpenCuriositySettings,
-          chevron = true,
-          modifier = Modifier.testTag("settings_curiosidades_musicais_card")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "IA online (Gemini)",
-          subtitle = if (hasGeminiKey) "Conectada. Mensagens que não são comandos locais vão para o Gemini." else "Não configurada. O assistente responde só com comandos locais."
-        )
-      }
+    settingsGroup(
+      "Curiosidades e assistente",
+      footer = if (hasGeminiKey) "Mensagens que não são comandos locais vão para o Gemini."
+      else "Sem uma chave do Gemini, o assistente responde só aos comandos locais."
+    ) {
+      val enabled = curiosityConfig?.enabled != false
+      val timing = curiosityConfig?.timing
+      ListRow(
+        title = "Curiosidades musicais",
+        value = if (!enabled) "Desligadas" else curiosityTimingChoices.firstOrNull { it.timing == timing }?.short ?: "Ligadas",
+        onClick = onOpenCuriositySettings,
+        modifier = Modifier.testTag("settings_curiosidades_musicais_card")
+      )
+      GroupDivider()
+      InfoRow(title = "IA online (Gemini)", value = if (hasGeminiKey) "Conectada" else "Não configurada")
     }
 
     // Notificações
-    item { SectionTitle("Notificações") }
-    item {
-      SettingsGroup {
-        SettingsRow(
-          title = if (notificationsOn) "Notificações ligadas" else "Notificações desligadas",
-          subtitle = if (notificationsOn) "Controles da música na tela bloqueada e na barra, com a curiosidade da faixa quando houver. Toque para ajustar no sistema."
-          else "Sem os controles na tela bloqueada. Toque para ligar nas configurações do Android.",
-          onClick = {
-            openSystem(
-              Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-            )
-          },
-          chevron = true,
-          modifier = Modifier.testTag("settings_notifications")
-        )
-      }
+    settingsGroup(
+      "Notificações",
+      footer = if (notificationsOn) "Controles da música na tela bloqueada e na barra, com a curiosidade da faixa quando houver."
+      else "Sem notificações, os controles não aparecem na tela bloqueada."
+    ) {
+      ListRow(
+        title = "Notificações",
+        value = if (notificationsOn) "Ativadas" else "Desativadas",
+        onClick = {
+          openSystem(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+        },
+        modifier = Modifier.testTag("settings_notifications")
+      )
     }
 
     // Armazenamento
-    item { SectionTitle("Armazenamento") }
-    item {
-      SettingsGroup {
-        SettingsRow(
-          title = "Limpar cache",
-          subtitle = "Capas e lista de fones guardadas: ${cacheSize?.let { formatBytes(it) } ?: "calculando…"}. Elas voltam a ser baixadas quando precisar.",
-          onClick = { onClearCache { cacheRefresh++ } },
-          modifier = Modifier.testTag("settings_clear_cache")
-        )
-      }
+    settingsGroup("Armazenamento", footer = "Capas e a lista de fones guardadas. São baixadas de novo quando precisar.") {
+      ListRow(
+        title = "Limpar cache",
+        value = cacheSize?.let { formatBytes(it) } ?: "Calculando…",
+        onClick = { onClearCache { cacheRefresh++ } },
+        chevron = false,
+        modifier = Modifier.testTag("settings_clear_cache")
+      )
     }
 
     // Privacidade
-    item { SectionTitle("Privacidade") }
-    item {
-      SettingsGroup {
-        SettingsRow(
-          title = "Dados neste aparelho",
-          subtitle = "Favoritos, playlists e ajustes ficam só aqui. O T.A.R.K.A.S. não tem conta nem servidor próprio."
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Permissões",
-          subtitle = "Microfone (espectro ao vivo) e notificações. O app pede cada uma na hora de usar. Toque para revisar.",
-          onClick = { openSystem(appDetails) },
-          chevron = true,
-          modifier = Modifier.testTag("settings_open_permissions")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Exportar meus dados",
-          subtitle = "Salva um arquivo com seus ajustes, favoritos e playlists (LGPD: acesso e portabilidade).",
-          onClick = { exportLauncher.launch("tarkas-meus-dados.json") },
-          chevron = true,
-          modifier = Modifier.testTag("settings_export")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(title = "Política de Privacidade", onClick = onOpenPrivacy, chevron = true, modifier = Modifier.testTag("settings_privacy"))
-        HorizontalDivider(color = hairline)
-        SettingsRow(title = "Termos de Uso", onClick = onOpenTerms, chevron = true)
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Apagar todos os dados",
-          subtitle = "Apaga ajustes, favoritos, playlists e o cache deste aparelho, e fecha o app.",
-          titleColor = colors.error,
-          onClick = { confirmErase = true },
-          modifier = Modifier.testTag("settings_erase")
-        )
-      }
+    settingsGroup(
+      "Privacidade",
+      footer = "Favoritos, playlists e ajustes ficam só neste aparelho. O T.A.R.K.A.S. não tem conta nem servidor próprio. A exportação segue a LGPD (acesso e portabilidade)."
+    ) {
+      ListRow(
+        title = "Permissões",
+        subtitle = "Microfone e notificações, pedidas na hora do uso",
+        onClick = { openSystem(appDetails) },
+        modifier = Modifier.testTag("settings_open_permissions")
+      )
+      GroupDivider()
+      ListRow(title = "Exportar meus dados", onClick = { exportLauncher.launch("tarkas-meus-dados.json") }, modifier = Modifier.testTag("settings_export"))
+      GroupDivider()
+      ListRow(title = "Política de Privacidade", onClick = onOpenPrivacy, modifier = Modifier.testTag("settings_privacy"))
+      GroupDivider()
+      ListRow(title = "Termos de Uso", onClick = onOpenTerms, modifier = Modifier.testTag("settings_terms"))
+    }
+    settingsGroup(header = null, footer = "Apaga ajustes, favoritos, playlists e o cache deste aparelho, e fecha o app.") {
+      ListRow(
+        title = "Apagar todos os dados",
+        onClick = { confirmErase = true },
+        chevron = false,
+        destructive = true,
+        modifier = Modifier.testTag("settings_erase")
+      )
     }
 
     // Sobre
-    item { SectionTitle("Sobre") }
-    item {
-      SettingsGroup {
-        SettingsRow(
-          title = "T.A.R.K.A.S.",
-          subtitle = "Versão ${BuildConfig.VERSION_NAME} • licenças, novidades e contato",
-          onClick = onOpenAbout,
-          chevron = true,
-          modifier = Modifier.testTag("settings_about")
-        )
-      }
+    settingsGroup("Sobre") {
+      ListRow(
+        title = "Sobre o T.A.R.K.A.S.",
+        value = BuildConfig.VERSION_NAME,
+        onClick = onOpenAbout,
+        modifier = Modifier.testTag("settings_about")
+      )
     }
+  }
+
+  // Outside the list, so a dialog never closes because its row scrolled out of composition.
+  if (showLogin) WebLoginDialog(onClose = { showLogin = false })
+  if (showSpotifyLogin) WebLoginDialog(spotify = true, onClose = { showSpotifyLogin = false })
+
+  if (confirmSignOut) {
+    AlertDialog(
+      onDismissRequest = { confirmSignOut = false },
+      title = { Text("Sair das contas?", style = AppText.Title3) },
+      text = { Text("As sessões do YouTube Music e do Spotify guardadas neste aparelho serão apagadas. Para tocar de novo, entre outra vez.") },
+      confirmButton = {
+        TextButton(onClick = { confirmSignOut = false; onSignOutWeb() }) { Text("Sair", color = colors.error) }
+      },
+      dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text("Cancelar") } }
+    )
   }
 
   if (confirmErase) {
     AlertDialog(
       onDismissRequest = { confirmErase = false },
-      title = { Text("Apagar todos os dados?") },
+      title = { Text("Apagar todos os dados?", style = AppText.Title3) },
       text = {
         Text(
           "Favoritos, playlists, predefinições do equalizador, ajustes e o cache serão apagados deste aparelho. " +
-            "Isso não pode ser desfeito. O app vai fechar, e na próxima abertura começa do zero. Se quiser guardar uma cópia, use antes \"Exportar meus dados\"."
+            "Não dá para desfazer. O app fecha e, na próxima abertura, começa do zero. Para guardar uma cópia, use antes \"Exportar meus dados\"."
         )
       },
       confirmButton = {
@@ -486,6 +471,12 @@ private fun MainSettings(
   }
 }
 
+private val RepeatChoices = listOf(
+  RepeatMode.OFF to "Desligado",
+  RepeatMode.ALL to "Repetir a lista",
+  RepeatMode.ONE to "Repetir a faixa"
+)
+
 @Composable
 private fun AboutPage(
   termsAcceptedAt: Long,
@@ -495,119 +486,96 @@ private fun AboutPage(
 ) {
   val colors = MaterialTheme.colorScheme
   val context = LocalContext.current
-  val hairline = colors.outline.copy(alpha = 0.4f)
   var copied by remember { mutableStateOf(false) }
   fun open(url: String) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
   }
 
   LazyColumn(
-    modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp).testTag("settings_about_page"),
-    contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp + LocalBarInset.current),
-    verticalArrangement = Arrangement.spacedBy(6.dp)
+    modifier = Modifier.fillMaxSize().testTag("settings_about_page"),
+    contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
   ) {
+    item { SubPageHeader(title = "Sobre", backLabel = "Ajustes", onBack = onBack, modifier = Modifier.testTag("about_back")) }
     item {
-      Row(
-        modifier = Modifier
-          .heightIn(min = 48.dp)
-          .clip(RoundedCornerShape(12.dp))
-          .clickable(onClick = onBack)
-          .padding(end = 12.dp)
-          .testTag("about_back"),
-        verticalAlignment = Alignment.CenterVertically
+      Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Space.page, vertical = Space.s)
       ) {
-        Icon(Icons.Default.ChevronLeft, contentDescription = "Voltar", tint = colors.primary, modifier = Modifier.size(32.dp))
-        Text("Ajustes", fontSize = 20.sp, color = colors.primary)
+        TarkasMark(modifier = Modifier.size(width = 72.dp, height = 44.dp))
+        Spacer(Modifier.height(Space.m))
+        Text("T.A.R.K.A.S.", style = AppText.Title2, color = colors.onSurface)
+        Text(
+          "Música, equalizador e curiosidades",
+          style = AppText.Subhead,
+          color = colors.onSurfaceVariant,
+          textAlign = TextAlign.Center
+        )
       }
     }
-    item {
-      Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-        Box(
+    settingsGroup(header = null) {
+      ListRow(
+        title = "Versão",
+        value = if (copied) "Copiado" else "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+        chevron = false,
+        onClick = {
+          val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+          cm?.setPrimaryClip(ClipData.newPlainText("Versão do T.A.R.K.A.S.", "T.A.R.K.A.S. ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}), Android ${android.os.Build.VERSION.RELEASE}, ${android.os.Build.MODEL}"))
+          copied = true
+        },
+        modifier = Modifier.testTag("about_version")
+      )
+      GroupDivider()
+      ListRow(title = "Novidades", onClick = { onOpen(SettingsPage.CHANGELOG) }, modifier = Modifier.testTag("about_changelog"))
+      GroupDivider()
+      ListRow(title = "Todas as versões no GitHub", subtitle = "Baixe o APK mais recente", onClick = { open(LegalTexts.RELEASES_URL) })
+    }
+    settingsGroup("Legal") {
+      ListRow(title = "Termos de Uso", onClick = { onOpen(SettingsPage.TERMS) }, modifier = Modifier.testTag("about_terms"))
+      GroupDivider()
+      ListRow(
+        title = "Política de Privacidade",
+        subtitle = if (termsAcceptedAt > 0) "Aceita em ${java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("pt", "BR")).format(java.util.Date(termsAcceptedAt))}" else null,
+        onClick = { onOpen(SettingsPage.PRIVACY) },
+        modifier = Modifier.testTag("about_privacy")
+      )
+      GroupDivider()
+      ListRow(title = "Licenças de código aberto", onClick = { onOpen(SettingsPage.LICENSES) }, modifier = Modifier.testTag("about_licenses"))
+    }
+    settingsGroup("Créditos") {
+      LegalTexts.credits.forEachIndexed { i, (title, body) ->
+        if (i > 0) GroupDivider()
+        Column(
           modifier = Modifier
-            .size(96.dp)
-            .clip(RoundedCornerShape(26.dp))
-            .background(Brush.linearGradient(listOf(colors.primary, colors.primary.copy(alpha = 0.45f)))),
-          contentAlignment = Alignment.Center
+            .fillMaxWidth()
+            .heightIn(min = Size.row)
+            .padding(horizontal = Space.l, vertical = Space.m)
+            .semantics(mergeDescendants = true) {}
         ) {
-          TarkasMark(modifier = Modifier.size(width = 58.dp, height = 35.dp), symbolColor = Color.White, accentColor = Color.White)
-        }
-        Spacer(Modifier.height(14.dp))
-        Text("T.A.R.K.A.S.", fontWeight = FontWeight.Bold, fontSize = 26.sp, color = colors.onBackground)
-        Text("Música, equalizador e curiosidades", fontSize = 15.sp, color = colors.onSurfaceVariant, textAlign = TextAlign.Center)
-      }
-    }
-    item {
-      SettingsGroup {
-        SettingsRow(
-          title = "Versão",
-          subtitle = if (copied) "Copiado" else "${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE}) · toque para copiar",
-          onClick = {
-            val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-            cm?.setPrimaryClip(ClipData.newPlainText("Versão do T.A.R.K.A.S.", "T.A.R.K.A.S. ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}), Android ${android.os.Build.VERSION.RELEASE}, ${android.os.Build.MODEL}"))
-            copied = true
-          },
-          modifier = Modifier.testTag("about_version")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(title = "Novidades", subtitle = "O que mudou em cada versão", onClick = { onOpen(SettingsPage.CHANGELOG) }, chevron = true, modifier = Modifier.testTag("about_changelog"))
-        HorizontalDivider(color = hairline)
-        SettingsRow(title = "Todas as versões no GitHub", subtitle = "Baixe o APK mais recente", onClick = { open(LegalTexts.RELEASES_URL) }, chevron = true)
-      }
-    }
-    item { SectionTitle("Legal") }
-    item {
-      SettingsGroup {
-        SettingsRow(title = "Termos de Uso", onClick = { onOpen(SettingsPage.TERMS) }, chevron = true, modifier = Modifier.testTag("about_terms"))
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Política de Privacidade",
-          subtitle = if (termsAcceptedAt > 0) "Aceita em ${java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("pt", "BR")).format(java.util.Date(termsAcceptedAt))}" else null,
-          onClick = { onOpen(SettingsPage.PRIVACY) },
-          chevron = true,
-          modifier = Modifier.testTag("about_privacy")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(title = "Licenças de código aberto", onClick = { onOpen(SettingsPage.LICENSES) }, chevron = true, modifier = Modifier.testTag("about_licenses"))
-      }
-    }
-    item { SectionTitle("Créditos") }
-    item {
-      SettingsGroup {
-        LegalTexts.credits.forEachIndexed { i, (title, body) ->
-          if (i > 0) HorizontalDivider(color = hairline)
-          SettingsRow(title = title, subtitle = body)
+          Text(title, style = AppText.Body, color = colors.onSurface)
+          Text(body, style = AppText.Footnote, color = colors.onSurfaceVariant)
         }
       }
     }
-    item { SectionTitle("Contato") }
-    item {
-      SettingsGroup {
-        SettingsRow(
-          title = "Enviar e-mail",
-          subtitle = LegalTexts.CONTACT_EMAIL,
-          onClick = {
-            val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${LegalTexts.CONTACT_EMAIL}"))
-              .putExtra(Intent.EXTRA_SUBJECT, "T.A.R.K.A.S. ${BuildConfig.VERSION_NAME}")
-            runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-          },
-          chevron = true,
-          modifier = Modifier.testTag("about_email")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(title = "Instagram", subtitle = LegalTexts.CONTACT_INSTAGRAM, onClick = { open(LegalTexts.INSTAGRAM_URL) }, chevron = true)
-      }
+    settingsGroup("Contato") {
+      ListRow(
+        title = "Enviar e-mail",
+        subtitle = LegalTexts.CONTACT_EMAIL,
+        onClick = {
+          val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${LegalTexts.CONTACT_EMAIL}"))
+            .putExtra(Intent.EXTRA_SUBJECT, "T.A.R.K.A.S. ${BuildConfig.VERSION_NAME}")
+          runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        },
+        modifier = Modifier.testTag("about_email")
+      )
+      GroupDivider()
+      ListRow(title = "Instagram", subtitle = LegalTexts.CONTACT_INSTAGRAM, onClick = { open(LegalTexts.INSTAGRAM_URL) })
     }
-    item { SectionTitle("Configuração") }
-    item {
-      SettingsGroup {
-        SettingsRow(
-          title = "Refazer configuração inicial",
-          subtitle = "Mostra de novo as boas-vindas, a aparência e as curiosidades. Seus dados ficam como estão.",
-          onClick = onRestartOnboarding,
-          chevron = true,
-          modifier = Modifier.testTag("about_restart_onboarding")
-        )
-      }
+    settingsGroup(header = null, footer = "Mostra de novo as boas-vindas, a aparência e as curiosidades. Seus dados ficam como estão.") {
+      ListRow(
+        title = "Refazer configuração inicial",
+        onClick = onRestartOnboarding,
+        modifier = Modifier.testTag("about_restart_onboarding")
+      )
     }
   }
 }
@@ -618,85 +586,113 @@ private fun formatBytes(bytes: Long): String = when {
   else -> "$bytes B"
 }
 
-@Composable
-private fun SectionTitle(text: String) {
-  TarkasSectionTitle(text, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
-}
+// ---- appearance choices, shared with the first-run setup so both look and read the same ----
 
-/** Flat list between hairlines, like an Apple Music list: no card behind the rows. */
+/** The theme options, in the order shown in Ajustes and in the setup. */
+internal val ThemeChoices = listOf(
+  Triple("system", "Automático", "Segue o tema claro ou escuro do Android"),
+  Triple("light", "Claro", null),
+  Triple("dark", "Escuro", null),
+  Triple("amoled", "Preto (AMOLED)", "Preto puro, poupa bateria em telas OLED")
+)
+
+/** The theme as radio rows; put inside an [InsetGroup]. */
 @Composable
-private fun SettingsGroup(
-  modifier: Modifier = Modifier,
-  content: @Composable () -> Unit
-) {
-  Column(modifier = modifier.fillMaxWidth()) {
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-    content()
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+internal fun ThemeOptionRows(themeMode: String, onThemeMode: (String) -> Unit, tagPrefix: String) {
+  Column(Modifier.selectableGroup()) {
+    ThemeChoices.forEachIndexed { i, (key, label, subtitle) ->
+      if (i > 0) GroupDivider()
+      RadioRow(
+        title = label,
+        subtitle = subtitle,
+        selected = themeMode == key,
+        onClick = { onThemeMode(key) },
+        modifier = Modifier.testTag("$tagPrefix$key")
+      )
+    }
   }
 }
 
 /**
- * A row of text. Tappable rows have [onClick] (and a chevron when they open something); rows
- * without it are information and do not react to touch.
+ * One line each, so the three options scan quickly. Liquid glass needs Android 13; on older devices
+ * it says it falls back to frosted glass instead of silently looking the same.
  */
+private fun SurfaceStyle.shortDescription(): String = when (this) {
+  SurfaceStyle.SOLID -> "Sem transparência, o mais leve"
+  SurfaceStyle.FROSTED -> "Desfoca o que passa por trás"
+  SurfaceStyle.LIQUID -> if (liquidGlassSupported) "Vidro que curva o fundo, usa mais a GPU" else "Precisa do Android 13; aqui vira vidro fosco"
+}
+
+/** The floating-surface style as radio rows; put inside an [InsetGroup]. */
 @Composable
-private fun SettingsRow(
-  title: String,
-  subtitle: String? = null,
-  onClick: (() -> Unit)? = null,
-  chevron: Boolean = false,
-  titleColor: Color = MaterialTheme.colorScheme.onSurface,
-  modifier: Modifier = Modifier,
-  trailing: (@Composable () -> Unit)? = null
-) {
-  Row(
-    modifier = modifier
-      .fillMaxWidth()
-      .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
-      .padding(vertical = 14.dp),
-    verticalAlignment = Alignment.CenterVertically
-  ) {
-    Column(modifier = Modifier.weight(1f)) {
-      Text(text = title, fontSize = 17.sp, color = titleColor)
-      if (subtitle != null) {
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(text = subtitle, fontSize = 15.sp, lineHeight = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-      }
-    }
-    if (trailing != null) {
-      Spacer(modifier = Modifier.width(12.dp))
-      trailing()
-    }
-    if (chevron) {
-      Spacer(modifier = Modifier.width(8.dp))
-      Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+internal fun SurfaceOptionRows(surfaceStyle: SurfaceStyle, onSurfaceStyle: (SurfaceStyle) -> Unit, tagPrefix: String) {
+  Column(Modifier.selectableGroup()) {
+    SurfaceStyle.entries.forEachIndexed { i, style ->
+      if (i > 0) GroupDivider()
+      RadioRow(
+        title = style.label,
+        subtitle = style.shortDescription(),
+        selected = surfaceStyle == style,
+        onClick = { onSurfaceStyle(style) },
+        modifier = Modifier.testTag("$tagPrefix${style.key}")
+      )
     }
   }
 }
 
+/**
+ * The accent colours as small labelled swatches. Each one is a radio button with its name, so a
+ * screen reader hears "Gelo, selecionado" and the label stays visible at every font size (it wraps
+ * instead of being cut). The wallpaper colour appears on Android 12 and newer.
+ */
 @Composable
-private fun SwitchRow(
-  title: String,
-  subtitle: String,
-  checked: Boolean,
-  onChange: (Boolean) -> Unit,
-  tag: String,
-  enabled: Boolean = true
-) {
+internal fun AccentSwatches(accent: AccentColor, onAccent: (AccentColor) -> Unit) {
+  val colors = MaterialTheme.colorScheme
+  val isDark = colors.background.luminance() < 0.5f
   Row(
     modifier = Modifier
       .fillMaxWidth()
-      .clickable(enabled = enabled) { onChange(!checked) }
-      .padding(vertical = 14.dp)
-      .testTag(tag),
-    verticalAlignment = Alignment.CenterVertically
+      .horizontalScroll(rememberScrollState())
+      .padding(horizontal = Space.s, vertical = Space.s)
+      .selectableGroup(),
+    horizontalArrangement = Arrangement.spacedBy(Space.xs)
   ) {
-    Column(modifier = Modifier.weight(1f)) {
-      Text(title, fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurface)
-      Text(subtitle, fontSize = 15.sp, lineHeight = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    AccentColor.entries.filter { it != AccentColor.WALLPAPER || AccentColor.wallpaperSupported }.forEach { a ->
+      val selected = a == accent
+      val wallpaper = a == AccentColor.WALLPAPER
+      val swatch = when {
+        wallpaper && selected -> colors.primary
+        wallpaper -> colors.surfaceContainerHigh
+        isDark -> a.dark
+        else -> a.light
+      }
+      Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+          .width(72.dp)
+          .clip(Shapes.s)
+          .selectable(selected = selected, role = Role.RadioButton, onClick = { onAccent(a) })
+          .padding(vertical = Space.s)
+          .testTag("accent_${a.key}")
+      ) {
+        Box(
+          modifier = Modifier.size(36.dp).clip(CircleShape).background(swatch),
+          contentAlignment = Alignment.Center
+        ) {
+          val mark = if (swatch.luminance() > 0.5f) Color.Black else Color.White
+          when {
+            selected -> Icon(Icons.Rounded.Check, contentDescription = null, tint = mark, modifier = Modifier.size(Size.iconSmall))
+            wallpaper -> Icon(Icons.Rounded.Palette, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(Size.iconSmall))
+          }
+        }
+        Spacer(Modifier.height(Space.xs))
+        Text(
+          a.label,
+          style = AppText.Caption1,
+          color = if (selected) colors.onSurface else colors.onSurfaceVariant,
+          textAlign = TextAlign.Center
+        )
+      }
     }
-    Spacer(modifier = Modifier.width(12.dp))
-    Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
   }
 }

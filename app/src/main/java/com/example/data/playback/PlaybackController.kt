@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -106,19 +107,42 @@ class PlaybackController(
   private var failuresInARow = 0
   private var webWatchdog: Job? = null
 
+  /**
+   * True from the moment a track is asked to start until it plays (or fails, or is paused). Between two
+   * tracks neither the engine nor the narration is playing; without this the media session would report
+   * "paused" at every boundary, drop the foreground service, and Android 15+ would then refuse the next
+   * track its audio focus while the screen is off.
+   */
+  private val _starting = MutableStateFlow(false)
+
+  /** What the media session reports: music, a narration, or a track on its way. */
+  val wantsToPlay: StateFlow<Boolean> = combine(isPlaying, speech.isSpeaking, _starting) { p, s, st -> p || s || st }
+    .stateIn(scope, SharingStarted.Eagerly, false)
+
+  /** What runs once the current narration ends (the track after an intro, the next track after an outro). */
+  private var afterNarration: (() -> Unit)? = null
+  /** Set when the user paused during a narration: Play runs it instead of narrating again. */
+  private var resumeAfterNarration: (() -> Unit)? = null
+
   init {
     restore()
     scope.launch {
-      isPlaying.collect { playing ->
-        if (playing) failuresInARow = 0
-        else save()
+      // The first value is the restored, paused state; saving it could store position 0 before the
+      // restored track has even been prepared.
+      isPlaying.drop(1).collect { playing ->
+        if (playing) {
+          failuresInARow = 0
+          _starting.value = false
+        } else {
+          savePosition()
+        }
       }
     }
     // The position is saved every few seconds while playing, so a crash or a kill loses little.
     scope.launch {
       while (isActive) {
         delay(SAVE_EVERY_MS)
-        if (isPlaying.value) save()
+        if (isPlaying.value) savePosition()
       }
     }
   }
@@ -149,28 +173,52 @@ class PlaybackController(
     musicRepository.selectTrack(track)
     val cur = curiosityRepository.getCuriosityForTrack(track)
     _activeCuriosity.value = cur
+    resumeAfterNarration = null
+    _starting.value = true
 
     if (narratesIntro(track)) {
       // The intro curiosity plays before the music.
       audioEngine.stopPlayback()
       WebPlayerHost.stop()
-      speech.speakCuriosity(track, cur!!, isIntro = true, config = _curiosityConfig.value) {
-        startTrackAudio(track)
-      }
+      narrate(track, cur!!, isIntro = true) { startTrackAudio(track) }
     } else {
       startTrackAudio(track)
     }
     save()
   }
 
+  /** Speaks a curiosity, remembering what follows it so a pause in the middle can resume into it. */
+  private fun narrate(track: Track, curiosity: Curiosity, isIntro: Boolean, then: () -> Unit) {
+    afterNarration = then
+    speech.speakCuriosity(track, curiosity, isIntro = isIntro, config = _curiosityConfig.value) {
+      afterNarration = null
+      then()
+    }
+  }
+
+  /** Pauses during a narration: the voice stops and Play later goes straight to what came after it. */
+  private fun pauseNarration() {
+    resumeAfterNarration = afterNarration
+    afterNarration = null
+    speech.stopSpeech(continueAfter = false)
+    _starting.value = false
+  }
+
   private fun startTrackAudio(track: Track, startPositionMs: Long = 0L) {
     val path = track.filePath
     webWatchdog?.cancel()
+    _starting.value = true
     if (track.isWeb) {
       audioEngine.stopPlayback()
       val done = { onTrackPlaybackCompleted(track) }
-      if (track.webSource == "spotify") WebPlayerHost.playSpotify(context, track.webId.orEmpty(), done)
-      else WebPlayerHost.playYouTube(context, track.webId.orEmpty(), done)
+      val failed = { onTrackFailed(track, network = false) }
+      val started = if (track.webSource == "spotify") WebPlayerHost.playSpotify(context, track.webId.orEmpty(), done, failed)
+      else WebPlayerHost.playYouTube(context, track.webId.orEmpty(), done, failed)
+      // No web player yet (the app was restored without its screen): say so instead of staying silent.
+      if (!started) {
+        onTrackFailed(track, network = false)
+        return
+      }
       // A page that never starts (no connection, a blocked video) would leave the player silent.
       webWatchdog = scope.launch {
         delay(WEB_START_TIMEOUT_MS)
@@ -198,6 +246,7 @@ class PlaybackController(
   /** Says what went wrong and moves on, unless several tracks in a row failed (offline, say). */
   private fun onTrackFailed(track: Track, network: Boolean) {
     failuresInARow++
+    _starting.value = false
     val reason = if (network) "Sem conexão para tocar “${track.title}”." else "Não foi possível tocar “${track.title}”."
     val canSkip = failuresInARow < 3 && (contextList().size > 1 || _queue.value.isNotEmpty())
     if (canSkip) {
@@ -214,6 +263,7 @@ class PlaybackController(
     if (_sleepTimer.value?.endOfTrack == true) {
       // The sleep timer was set to the end of this track: stop here.
       _sleepTimer.value = null
+      _starting.value = false
       audioEngine.stopPlayback()
       WebPlayerHost.stop()
       save()
@@ -221,9 +271,8 @@ class PlaybackController(
     }
     val cur = _activeCuriosity.value ?: curiosityRepository.getCuriosityForTrack(completedTrack)
     if (narratesOutro(completedTrack, cur)) {
-      speech.speakCuriosity(completedTrack, cur!!, isIntro = false, config = _curiosityConfig.value) {
-        advance(auto = true)
-      }
+      _starting.value = true
+      narrate(completedTrack, cur!!, isIntro = false) { advance(auto = true) }
     } else {
       advance(auto = true)
     }
@@ -294,8 +343,15 @@ class PlaybackController(
 
   fun togglePlayPause() {
     val current = musicRepository.currentTrack.value ?: return
+    val resume = resumeAfterNarration
     when {
-      speech.isSpeaking.value -> speech.stopSpeech(continueAfter = true)
+      speech.isSpeaking.value -> pauseNarration()
+      // Paused in the middle of a narration: carry on with what followed it.
+      resume != null -> {
+        resumeAfterNarration = null
+        _starting.value = true
+        resume()
+      }
       current.isWeb && WebPlayerHost.state.value.active -> WebPlayerHost.togglePlayPause()
       !current.isWeb && audioEngine.hasLoadedTrack -> audioEngine.togglePlayPause()
       // Nothing loaded (the track ended, or failed): start it again.
@@ -309,6 +365,11 @@ class PlaybackController(
 
   /** Pauses whatever plays; does nothing when already paused (unlike a toggle). */
   fun pause() {
+    _starting.value = false
+    if (speech.isSpeaking.value) {
+      pauseNarration()
+      return
+    }
     if (!isPlaying.value) return
     if (musicRepository.currentTrack.value?.isWeb == true) WebPlayerHost.pause() else audioEngine.pause()
   }
@@ -323,6 +384,8 @@ class PlaybackController(
   /** [auto] is true when the track ended by itself; false for the Next button. */
   private fun advance(auto: Boolean) {
     speech.stopSpeech()
+    afterNarration = null
+    resumeAfterNarration = null
     val next = PlaybackOrder.resolveNext(
       current = musicRepository.currentTrack.value,
       queue = _queue.value,
@@ -332,7 +395,7 @@ class PlaybackController(
       auto = auto
     )
     _queue.value = next.remainingQueue
-    val track = next.track ?: run { save(); return }
+    val track = next.track ?: run { _starting.value = false; save(); return }
     if (next.loopSameTrack) startTrackAudio(track) else playInternal(track, recordHistory = true)
   }
 
@@ -342,6 +405,8 @@ class PlaybackController(
    */
   fun playPreviousTrack(force: Boolean = false) {
     speech.stopSpeech()
+    afterNarration = null
+    resumeAfterNarration = null
     if (!force && positionMs.value > RESTART_THRESHOLD_MS) {
       seekTo(0L)
       return
@@ -362,7 +427,10 @@ class PlaybackController(
 
   val hasPrevious: Boolean get() = playHistory.isNotEmpty() || contextList().size > 1
 
-  fun skipCuriositySpeech() = speech.stopSpeech(continueAfter = true)
+  fun skipCuriositySpeech() {
+    afterNarration = null
+    speech.stopSpeech(continueAfter = true)
+  }
 
   // ---- queue, shuffle, repeat ----
 
@@ -465,6 +533,10 @@ class PlaybackController(
 
   // ---- saved queue: what was playing comes back after the app is closed ----
 
+  /**
+   * Saves the track, the queue and the list it came from. The list can be the whole device library,
+   * so this runs only when one of them changes; the position is saved on its own ([savePosition]).
+   */
   private fun save() {
     val current = musicRepository.currentTrack.value
     if (current == null) {
@@ -473,10 +545,17 @@ class PlaybackController(
     }
     val o = JSONObject()
       .put("current", TrackJson.toJson(current))
-      .put("pos", if (current.isWeb) 0L else positionMs.value)
       .put("queue", TrackJson.listToJson(_queue.value))
     contextTracks?.let { o.put("context", TrackJson.listToJson(it)) }
-    store.edit().putString(KEY_STATE, o.toString()).apply()
+    store.edit()
+      .putString(KEY_STATE, o.toString())
+      .putLong(KEY_POSITION, if (current.isWeb) 0L else positionMs.value)
+      .apply()
+  }
+
+  private fun savePosition() {
+    val current = musicRepository.currentTrack.value ?: return
+    store.edit().putLong(KEY_POSITION, if (current.isWeb) 0L else positionMs.value).apply()
   }
 
   /** Puts back the track, its position, the queue and the list it came from, paused. */
@@ -498,7 +577,8 @@ class PlaybackController(
           onCompletion = { onTrackPlaybackCompleted(track) },
           // A file that is gone since: forget it quietly instead of skipping through the list.
           onError = { audioEngine.stopPlayback() },
-          startPositionMs = o.optLong("pos", 0L),
+          // Older saves kept the position inside the JSON.
+          startPositionMs = store.getLong(KEY_POSITION, o.optLong("pos", 0L)),
           autoStart = false
         )
         refreshUpNext()
@@ -508,12 +588,18 @@ class PlaybackController(
     }
   }
 
-  /** Stops everything and forgets the current track (the app was swiped away while paused). */
+  /**
+   * Stops everything (the app was swiped away while paused). The track and its position stay saved,
+   * so it comes back, paused, the next time the app opens.
+   */
   fun stopAll() {
+    savePosition()
     speech.stopSpeech()
+    afterNarration = null
+    resumeAfterNarration = null
+    _starting.value = false
     audioEngine.stopPlayback()
     WebPlayerHost.stop()
-    save()
   }
 
   private companion object {
@@ -522,5 +608,6 @@ class PlaybackController(
     const val SAVE_EVERY_MS = 10_000L
     const val SLEEP_FADE_MS = 6000L
     const val KEY_STATE = "state"
+    const val KEY_POSITION = "pos"
   }
 }

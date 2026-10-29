@@ -25,6 +25,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import dev.chrisbanes.haze.HazeState
@@ -65,7 +68,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.core.view.WindowCompat
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -156,7 +159,7 @@ class MainActivity : ComponentActivity() {
     }
     setContent {
       val viewModel: TarkasViewModel = viewModel()
-      val themeMode by viewModel.themeMode.collectAsState()
+      val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
 
       // The opening animation plays once per launch (it survives rotation).
       var showBoot by rememberSaveable { mutableStateOf(true) }
@@ -180,17 +183,14 @@ class MainActivity : ComponentActivity() {
             com.example.ui.viewmodel.Notice(
               "Sem o microfone, o equalizador funciona igual, só sem o espectro ao vivo.",
               actionLabel = "Permissões",
-              action = {
-                startActivity(
-                  android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                    .setData(android.net.Uri.fromParts("package", packageName, null))
-                )
-              }
+              // The notice outlives this activity (it sits in the view model across rotation), so its
+              // action holds only the application context, never the activity.
+              action = openAppSettings(applicationContext)
             )
           )
         }
       }
-      val askNotifications by viewModel.askNotifications.collectAsState()
+      val askNotifications by viewModel.askNotifications.collectAsStateWithLifecycle()
       val notificationsMissing = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
         ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
       if (askNotifications && !notificationsMissing) {
@@ -231,12 +231,15 @@ class MainActivity : ComponentActivity() {
         controller.isAppearanceLightNavigationBars = !isDarkApp
       }
 
-      val accent by viewModel.accent.collectAsState()
-      val showOnboarding by viewModel.showOnboarding.collectAsState()
+      val accent by viewModel.accent.collectAsStateWithLifecycle()
+      val showOnboarding by viewModel.showOnboarding.collectAsStateWithLifecycle()
       TarkasTheme(themeMode = themeMode, accent = accent) {
+        CompositionLocalProvider(LocalAccent provides accent) {
         Box(modifier = Modifier.fillMaxSize()) {
         TarkasAppContent(
           viewModel = viewModel,
+          // Under the first-run setup the app is hidden from screen readers, so focus stays on the setup.
+          modifier = if (showOnboarding && !showBoot) Modifier.clearAndSetSemantics {} else Modifier,
           onRequestSystemAudioCapture = {
             val intent = viewModel.systemAudioCaptureManager.createScreenCaptureIntent()
             if (intent != null) {
@@ -248,16 +251,17 @@ class MainActivity : ComponentActivity() {
           spectrumAllowed = micGranted,
           onAllowSpectrum = { permissionLauncher.launch(arrayOf(Manifest.permission.RECORD_AUDIO)) }
         )
-        // First-run setup (and the terms again when they change), right after the opening animation.
+        // First-run setup (and the terms again when they change). It waits under the opening animation,
+        // already opaque, so the opening dissolves straight into it and the app never shows between them.
         androidx.compose.animation.AnimatedVisibility(
-          visible = showOnboarding && !showBoot,
-          enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220)),
+          visible = showOnboarding,
+          enter = androidx.compose.animation.EnterTransition.None,
           exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(260)) +
             androidx.compose.animation.scaleOut(targetScale = 1.04f)
         ) {
-          val reduceMotion by viewModel.reduceMotion.collectAsState()
-          val surfaceStyle by viewModel.surfaceStyle.collectAsState()
-          val curiosityConfig by viewModel.curiosityConfig.collectAsState()
+          val reduceMotion by viewModel.reduceMotion.collectAsStateWithLifecycle()
+          val surfaceStyle by viewModel.surfaceStyle.collectAsStateWithLifecycle()
+          val curiosityConfig by viewModel.curiosityConfig.collectAsStateWithLifecycle()
           val onlyTerms = remember { viewModel.onlyTermsChanged }
           OnboardingScreen(
             onlyTerms = onlyTerms,
@@ -301,71 +305,88 @@ class MainActivity : ComponentActivity() {
           )
         }
         }
+        }
       }
     }
   }
 }
 
+/** The accent the user picked, for the screens that show the choice (it is collected once, at the root). */
+private val LocalAccent = androidx.compose.runtime.staticCompositionLocalOf { com.example.ui.theme.AccentColor.ICE }
+
+/** Opens this app's page in the system settings, from any context (no activity is held). */
+private fun openAppSettings(context: Context): () -> Unit = {
+  context.startActivity(
+    android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+      .setData(android.net.Uri.fromParts("package", context.packageName, null))
+      .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+  )
+}
+
 @Composable
 fun TarkasAppContent(
   viewModel: TarkasViewModel,
+  modifier: Modifier = Modifier,
   onRequestSystemAudioCapture: () -> Unit,
   spectrumAllowed: Boolean = true,
   onAllowSpectrum: () -> Unit = {}
 ) {
-  val currentTab by viewModel.currentTab.collectAsState()
-  val tracks by viewModel.musicRepository.tracks.collectAsState()
-  val currentTrack by viewModel.musicRepository.currentTrack.collectAsState()
-  val isPlaying by viewModel.isPlaying.collectAsState()
+  val currentTab by viewModel.currentTab.collectAsStateWithLifecycle()
+  val tracks by viewModel.musicRepository.tracks.collectAsStateWithLifecycle()
+  val currentTrack by viewModel.musicRepository.currentTrack.collectAsStateWithLifecycle()
+  val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
   // Values that change many times a second are kept as State and read only where they are drawn,
   // so a tick does not recompose the whole app.
-  val currentPosMs = viewModel.positionMs.collectAsState()
-  val durationMs = viewModel.durationMs.collectAsState()
-  val eqSettings by viewModel.eqSettings.collectAsState()
-  val eqPresets by viewModel.eqPresets.collectAsState()
-  val activePresetId by viewModel.activePresetId.collectAsState()
-  val eqModified by viewModel.eqModified.collectAsState()
-  val capabilities by viewModel.audioEngineManager.capabilities.collectAsState()
-  val activeCuriosity by viewModel.activeCuriosity.collectAsState()
-  val assistantMessages by viewModel.assistantMessages.collectAsState()
-  val isAssistantProcessing by viewModel.isAssistantProcessing.collectAsState()
-  val activeTimers by viewModel.activeTimers.collectAsState()
-  val notice by viewModel.notice.collectAsState()
-  val trending by viewModel.trending.collectAsState()
-  val audiusOffline by viewModel.audiusOffline.collectAsState()
-  val openQueueRequest by viewModel.openQueueRequest.collectAsState()
-  val themeMode by viewModel.themeMode.collectAsState()
-  val surfaceStyle by viewModel.surfaceStyle.collectAsState()
-  val reduceMotion by viewModel.reduceMotion.collectAsState()
-  val deviceSearch by viewModel.deviceSearch.collectAsState()
-  val reduceTransparency by viewModel.reduceTransparency.collectAsState()
-  val systemAudioStatus by viewModel.systemAudioStatus.collectAsState()
-  val spectrumBars = viewModel.audioEngineManager.spectrumBars.collectAsState()
-  val activeApps by viewModel.activeApps.collectAsState()
-  val favoriteIds by viewModel.favorites.collectAsState()
-  val playlists by viewModel.playlists.collectAsState()
-  val savedTracks by viewModel.savedTracks.collectAsState()
-  val queue by viewModel.queue.collectAsState()
-  val isShuffle by viewModel.shuffle.collectAsState()
-  val repeatMode by viewModel.repeatMode.collectAsState()
-  val favoriteTracks = favoriteIds.mapNotNull { id -> tracks.firstOrNull { it.id == id } ?: savedTracks[id] }
+  val currentPosMs = viewModel.positionMs.collectAsStateWithLifecycle()
+  val durationMs = viewModel.durationMs.collectAsStateWithLifecycle()
+  val eqSettings by viewModel.eqSettings.collectAsStateWithLifecycle()
+  val eqPresets by viewModel.eqPresets.collectAsStateWithLifecycle()
+  val activePresetId by viewModel.activePresetId.collectAsStateWithLifecycle()
+  val eqModified by viewModel.eqModified.collectAsStateWithLifecycle()
+  val capabilities by viewModel.audioEngineManager.capabilities.collectAsStateWithLifecycle()
+  val activeCuriosity by viewModel.activeCuriosity.collectAsStateWithLifecycle()
+  val assistantMessages by viewModel.assistantMessages.collectAsStateWithLifecycle()
+  val isAssistantProcessing by viewModel.isAssistantProcessing.collectAsStateWithLifecycle()
+  val activeTimers by viewModel.activeTimers.collectAsStateWithLifecycle()
+  val notice by viewModel.notice.collectAsStateWithLifecycle()
+  val trending by viewModel.trending.collectAsStateWithLifecycle()
+  val audiusOffline by viewModel.audiusOffline.collectAsStateWithLifecycle()
+  val openQueueRequest by viewModel.openQueueRequest.collectAsStateWithLifecycle()
+  val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+  val surfaceStyle by viewModel.surfaceStyle.collectAsStateWithLifecycle()
+  val reduceMotion by viewModel.reduceMotion.collectAsStateWithLifecycle()
+  val deviceSearch by viewModel.deviceSearch.collectAsStateWithLifecycle()
+  val reduceTransparency by viewModel.reduceTransparency.collectAsStateWithLifecycle()
+  val systemAudioStatus by viewModel.systemAudioStatus.collectAsStateWithLifecycle()
+  val spectrumBars = viewModel.audioEngineManager.spectrumBars.collectAsStateWithLifecycle()
+  val activeApps by viewModel.activeApps.collectAsStateWithLifecycle()
+  val favoriteIds by viewModel.favorites.collectAsStateWithLifecycle()
+  val playlists by viewModel.playlists.collectAsStateWithLifecycle()
+  val savedTracks by viewModel.savedTracks.collectAsStateWithLifecycle()
+  val queue by viewModel.queue.collectAsStateWithLifecycle()
+  val isShuffle by viewModel.shuffle.collectAsStateWithLifecycle()
+  val repeatMode by viewModel.repeatMode.collectAsStateWithLifecycle()
+  val favoriteTracks by viewModel.favoriteTracks.collectAsStateWithLifecycle()
 
-  val isShowingCuriositySettings by viewModel.isShowingCuriositySettings.collectAsState()
-  val eqReach by viewModel.eqReach.collectAsState()
-  val globalEqStatus by viewModel.globalEqStatus.collectAsState()
-  val audiusResults by viewModel.audiusResults.collectAsState()
-  val audiusSearching by viewModel.audiusSearching.collectAsState()
-  val youtubeResults by viewModel.youtubeResults.collectAsState()
-  val youtubeSearching by viewModel.youtubeSearching.collectAsState()
-  val youtubeOffline by viewModel.youtubeOffline.collectAsState()
-  val spotifyResults by viewModel.spotifyResults.collectAsState()
-  val spotifySearching by viewModel.spotifySearching.collectAsState()
+  val isShowingCuriositySettings by viewModel.isShowingCuriositySettings.collectAsStateWithLifecycle()
+  val eqReach by viewModel.eqReach.collectAsStateWithLifecycle()
+  val globalEqStatus by viewModel.globalEqStatus.collectAsStateWithLifecycle()
+  val audiusResults by viewModel.audiusResults.collectAsStateWithLifecycle()
+  val audiusSearching by viewModel.audiusSearching.collectAsStateWithLifecycle()
+  val youtubeResults by viewModel.youtubeResults.collectAsStateWithLifecycle()
+  val youtubeSearching by viewModel.youtubeSearching.collectAsStateWithLifecycle()
+  val youtubeOffline by viewModel.youtubeOffline.collectAsStateWithLifecycle()
+  val spotifyResults by viewModel.spotifyResults.collectAsStateWithLifecycle()
+  val spotifySearching by viewModel.spotifySearching.collectAsStateWithLifecycle()
   // Full-screen pages opened from Ajustes, shown over the tabs.
   val overlayOpen = isShowingCuriositySettings
-  val curiosityConfig by viewModel.curiosityConfig.collectAsState()
-  val isAiSpeakingCuriosity by viewModel.isAiSpeakingCuriosity.collectAsState()
-  val currentCuriositySpeechText by viewModel.currentCuriositySpeechText.collectAsState()
-  val curiositySpeechStage by viewModel.curiositySpeechStage.collectAsState()
+  val curiosityConfig by viewModel.curiosityConfig.collectAsStateWithLifecycle()
+  val isAiSpeakingCuriosity by viewModel.isAiSpeakingCuriosity.collectAsStateWithLifecycle()
+  val currentCuriositySpeechText by viewModel.currentCuriositySpeechText.collectAsStateWithLifecycle()
+  val curiositySpeechStage by viewModel.curiositySpeechStage.collectAsStateWithLifecycle()
+  val reducedChrome = com.example.ui.theme.rememberReducedMotion()
+  var settingsSubPage by remember { mutableStateOf(false) }
+  LaunchedEffect(currentTab) { if (currentTab != TarkasNavTab.SETTINGS) settingsSubPage = false }
 
   // Status bar icons follow the app theme, except on the Now Playing page, which is always a dark tint.
   val hostView = LocalView.current
@@ -391,7 +412,7 @@ fun TarkasAppContent(
   }
 
   Scaffold(
-    modifier = Modifier.fillMaxSize(),
+    modifier = modifier.fillMaxSize(),
     contentWindowInsets = WindowInsets.safeDrawing
   ) { innerPadding ->
     // The bottom bar floats over the content (so glass styles have something to blur). The content
@@ -471,23 +492,22 @@ fun TarkasAppContent(
           .fillMaxSize()
           .then(
             when (screen) {
-              // The growing shape is filled with the track's colour, darkened like the player's
-              // background, so the page appears to grow out of the card instead of a black hole.
-              TarkasNavTab.MUSIC -> Modifier.expandFromOrigin(
-                this@AnimatedContent,
-                currentTrack?.let { androidx.compose.ui.graphics.lerp(Color(it.colorHex), Color.Black, 0.62f) } ?: Color.Black,
-                reducedMotion
-              )
+              // The growing shape takes the colour read from the artwork (PlayerOrigin.tint, set by the
+              // player); black until a cover was read, never the catalogue colour, which can be wrong.
+              TarkasNavTab.MUSIC -> Modifier.expandFromOrigin(this@AnimatedContent, Color.Black, reducedMotion)
               "curiosity" -> Modifier.statusBarsPadding()
               else -> Modifier
             }
           )
       ) {
-      if (tabPage) {
-        // The title's gear button is a glass control, so it needs the chosen surface style too.
+      // A sub-page of Ajustes (Sobre, the legal texts) draws its own title.
+      if (tabPage && !(screen == TarkasNavTab.SETTINGS && settingsSubPage)) {
+        // Ajustes opens from the title bar of Início only, as an account button does in Apple apps;
+        // the other pages keep their title clean.
         TarkasLargeTitle(
           title = (screen as TarkasNavTab).label,
-          onOpenSettings = { viewModel.setTab(TarkasNavTab.SETTINGS) }
+          onOpenSettings = { viewModel.setTab(TarkasNavTab.SETTINGS) },
+          showSettings = screen == TarkasNavTab.HOME
         )
       }
       Box(modifier = Modifier.weight(1f)) {
@@ -497,7 +517,7 @@ fun TarkasAppContent(
           config = curiosityConfig,
           isSpeaking = isAiSpeakingCuriosity,
           currentSpokenText = currentCuriositySpeechText,
-          speechStage = viewModel.curiositySpeechStage.collectAsState().value,
+          speechStage = curiositySpeechStage,
           onConfigChange = { viewModel.updateCuriosityConfig(it) },
           onTestVoice = { viewModel.testCuriosityVoice() },
           onStopVoice = { viewModel.skipCuriositySpeech() },
@@ -578,7 +598,7 @@ fun TarkasAppContent(
             onAddToPlaylist = { id, track -> viewModel.addToPlaylist(id, track) },
             onCreatePlaylist = { name, track -> viewModel.createPlaylist(name, track) },
             onOpenQueue = { viewModel.openQueue() },
-            sleepTimer = viewModel.sleepTimer.collectAsState().value,
+            sleepTimer = viewModel.sleepTimer.collectAsStateWithLifecycle().value,
             onSetSleepTimer = { m -> viewModel.setSleepTimer(m) },
             onSleepAtEndOfTrack = { viewModel.setSleepAtEndOfTrack() },
             onCancelSleepTimer = { viewModel.cancelSleepTimer() },
@@ -592,8 +612,8 @@ fun TarkasAppContent(
             favoriteTracks = favoriteTracks,
             savedTracks = savedTracks,
             allTracks = tracks,
-            deviceTracks = viewModel.deviceTracks.collectAsState().value,
-            deviceScanning = viewModel.deviceScanning.collectAsState().value,
+            deviceTracks = viewModel.deviceTracks.collectAsStateWithLifecycle().value,
+            deviceScanning = viewModel.deviceScanning.collectAsStateWithLifecycle().value,
             hasMusicPermission = viewModel.hasMusicPermission(),
             onScanDevice = { viewModel.scanDeviceMusic() },
             queue = queue,
@@ -637,7 +657,7 @@ fun TarkasAppContent(
             onRefreshActiveApps = { viewModel.refreshActiveApps() },
             eqReach = eqReach,
             globalEqStatus = globalEqStatus,
-            rootPresent = viewModel.rootPresent,
+            rootPresent = viewModel.rootAvailable.collectAsStateWithLifecycle().value,
             onSetEqReach = { viewModel.setEqReach(it) },
             deviceSearch = deviceSearch,
             onOpenDevicePicker = { viewModel.openDevicePicker() },
@@ -658,10 +678,10 @@ fun TarkasAppContent(
             spectrumAllowed = spectrumAllowed,
             onAllowSpectrum = onAllowSpectrum,
             spatial = com.example.ui.screens.SpatialUi(
-              enabled = viewModel.spatialEnabled.collectAsState().value,
-              preset = viewModel.spatialPreset.collectAsState().value,
-              intensity = viewModel.spatialIntensity.collectAsState().value,
-              status = viewModel.spatialStatus.collectAsState().value
+              enabled = viewModel.spatialEnabled.collectAsStateWithLifecycle().value,
+              preset = viewModel.spatialPreset.collectAsStateWithLifecycle().value,
+              intensity = viewModel.spatialIntensity.collectAsStateWithLifecycle().value,
+              status = viewModel.spatialStatus.collectAsStateWithLifecycle().value
             ),
             spatialActions = remember {
               com.example.ui.screens.SpatialActions(
@@ -698,12 +718,14 @@ fun TarkasAppContent(
             onReduceMotionChange = { viewModel.setReduceMotion(it) },
             reduceTransparency = reduceTransparency,
             onReduceTransparencyChange = { viewModel.setReduceTransparency(it) },
-            accent = viewModel.accent.collectAsState().value,
+            accent = LocalAccent.current,
             onAccentChange = { viewModel.setAccent(it) },
             isShuffle = isShuffle,
             repeatMode = repeatMode,
             onToggleShuffle = { viewModel.toggleShuffle() },
             onCycleRepeat = { viewModel.cycleRepeatMode() },
+            onSetRepeatMode = { viewModel.setRepeatMode(it) },
+            onSubPageChange = { settingsSubPage = it },
             onOpenAudio = { viewModel.setTab(TarkasNavTab.AUDIO) },
             cacheSizeBytes = { viewModel.cacheSizeBytes() },
             onClearCache = { done -> viewModel.clearCache(done) },
@@ -813,16 +835,24 @@ fun TarkasAppContent(
         }
 
         // A short message (a track that could not play, a permission left off), over the mini player.
-        // It goes away by itself after a few seconds, or when its action is used.
+        // It goes away by itself after a few seconds (longer when the user relies on accessibility
+        // services), or when its action is used. Its clock waits while a full-screen page hides it.
         var shownNotice by remember { mutableStateOf(notice) }
         if (notice != null) shownNotice = notice
+        val accessibility = androidx.compose.ui.platform.LocalAccessibilityManager.current
+        val noticeVisible = notice != null && !isShowingCuriositySettings
         notice?.let { n ->
-          LaunchedEffect(n.id) {
-            kotlinx.coroutines.delay(if (n.actionLabel != null) 6000L else 3500L)
+          LaunchedEffect(n.id, noticeVisible) {
+            if (!noticeVisible) return@LaunchedEffect
+            val base = if (n.actionLabel != null) 6000L else 3500L
+            val timeout = accessibility?.calculateRecommendedTimeoutMillis(
+              base, containsIcons = false, containsText = true, containsControls = n.actionLabel != null
+            ) ?: base
+            kotlinx.coroutines.delay(timeout)
             viewModel.dismissNotice(n.id)
           }
         }
-        AnimatedVisibility(visible = notice != null && !isShowingCuriositySettings) {
+        AnimatedVisibility(visible = noticeVisible) {
           val n = shownNotice
           Row(
             modifier = Modifier
@@ -830,6 +860,7 @@ fun TarkasAppContent(
               .glassPill(cornerRadius = 30.dp)
               .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
               .heightIn(min = 40.dp)
+              .semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite }
               .testTag("app_notice"),
             verticalAlignment = Alignment.CenterVertically
           ) {
@@ -883,14 +914,23 @@ fun TarkasAppContent(
           )
         }
 
-        TarkasBottomNav(
-          currentTab = currentTab,
-          onTabSelected = { tab ->
-            if (isShowingCuriositySettings) viewModel.closeCuriositySettings()
-            viewModel.setTab(tab)
-          },
-          collapsed = navCollapsed && currentTab != TarkasNavTab.MUSIC
-        )
+        // The full player covers the tab bar, as in Apple Music; it slides back when the player closes.
+        AnimatedVisibility(
+          visible = currentTab != TarkasNavTab.MUSIC,
+          enter = if (reducedChrome) androidx.compose.animation.EnterTransition.None
+            else androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200, delayMillis = 80)) +
+              androidx.compose.animation.slideInVertically(androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 500f)) { it / 2 },
+          exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120))
+        ) {
+          TarkasBottomNav(
+            currentTab = currentTab,
+            onTabSelected = { tab ->
+              if (isShowingCuriositySettings) viewModel.closeCuriositySettings()
+              viewModel.selectTab(tab)
+            },
+            collapsed = navCollapsed
+          )
+        }
        }
       }
     }

@@ -13,6 +13,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.example.data.model.Track
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
@@ -88,6 +89,20 @@ object WebSearchHost {
         override fun onReceivedError(v: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
           if (request?.isForMainFrame == true) v?.let(failed::add)
         }
+
+        /**
+         * The renderer of a hidden page can be killed for memory at any time; unhandled, that takes the
+         * app down. The view is dropped instead (the next activity makes a new one) and the running
+         * search ends as failed.
+         */
+        override fun onRenderProcessGone(v: WebView, detail: android.webkit.RenderProcessGoneDetail?): Boolean {
+          failed.add(v)
+          (v.parent as? ViewGroup)?.removeView(v)
+          if (view === v) view = null
+          if (spotifyView === v) spotifyView = null
+          v.destroy()
+          return true
+        }
       }
     }
     if (desktop) { web.scaleX = 0.001f; web.scaleY = 0.001f }
@@ -143,8 +158,22 @@ object WebSearchHost {
     web: WebView?, url: String, script: String, parser: (String?) -> List<Track>
   ): List<Track>? = lock.withLock {
     web ?: return null
+    // A callback that never comes back (renderer gone, view detached) must not hold the lock forever.
+    val result = withTimeoutOrNull(SCRAPE_TIMEOUT_MS) { probe(web, url, script, parser) }
+    // The page is a full web app that keeps running scripts; once read, it is unloaded.
+    if (web === view || web === spotifyView) {
+      web.loadUrl("about:blank")
+      web.onPause()
+    }
+    result
+  }
+
+  private suspend fun probe(
+    web: WebView, url: String, script: String, parser: (String?) -> List<Track>
+  ): List<Track>? =
     suspendCancellableCoroutine { cont ->
       failed.remove(web)
+      web.onResume()
       web.loadUrl(url)
       var tries = 0
       var lastCount = -1
@@ -172,7 +201,8 @@ object WebSearchHost {
       main.postDelayed(probe, 1200L)
       cont.invokeOnCancellation { main.removeCallbacks(probe) }
     }
-  }
+
+  private const val SCRAPE_TIMEOUT_MS = 18_000L
 
   private val songTypes = Regex("^(m[úu]sica|song|single|epis[óo]dio)$", RegexOption.IGNORE_CASE)
   private val otherTypes = Regex("^(v[íi]deo|video|[áa]lbum|album|ep|playlist|artista|artist|perfil|profile)$", RegexOption.IGNORE_CASE)

@@ -56,6 +56,16 @@
             </intent-filter>
         </service>
 
+        <!-- Headset and Bluetooth play buttons after the process was killed: restarts the session,
+             which restores the last track paused and plays it. -->
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+
         <!-- ADB and root modes: applies the equalizer to other apps' audio sessions. -->
         <service
             android:name=".data.systemaudio.GlobalEqService"

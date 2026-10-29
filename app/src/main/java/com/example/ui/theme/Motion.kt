@@ -7,7 +7,7 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.example.ui.viewmodel.TarkasNavTab
 
@@ -44,30 +45,39 @@ object Motion {
   /** Fast start, long soft landing: feels like the surface settles into place. */
   val Settle = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
-  // Material 3 Expressive spring tokens. Spatial springs move and resize, and may overshoot a little;
-  // effect springs fade and recolour and never overshoot (a bouncing alpha looks like flicker).
-  const val FastSpatialDamping = 0.6f
+  // Spring tokens. Spatial springs move and resize surfaces; they are damped enough (0.9 and up) that
+  // any overshoot stays below a pixel, so motion reads as precise rather than bouncy. Effect springs
+  // fade and recolour and are critically damped (a bouncing alpha looks like flicker). Presses and
+  // anything that follows the finger use the critically damped spatial spring.
+  const val FastSpatialDamping = 0.9f
   const val FastSpatialStiffness = 800f
-  const val DefaultSpatialDamping = 0.8f
+  const val DefaultSpatialDamping = 0.9f
   const val DefaultSpatialStiffness = 380f
-  const val SlowSpatialDamping = 0.8f
+  const val SlowSpatialDamping = 1f
   const val SlowSpatialStiffness = 200f
   const val DefaultEffectsStiffness = 1600f
+  /** A surface growing out of what was tapped (the full player): spatial, never visibly overshooting. */
+  const val ExpandDamping = 0.88f
+  const val ExpandStiffness = 300f
 
-  /** Taps, toggles, the tab indicator's leading edge: quick with a small bounce. */
+  /** Taps, toggles, small controls moving into place. */
   fun <T> fastSpatial() = spring<T>(dampingRatio = FastSpatialDamping, stiffness = FastSpatialStiffness)
-  /** Most movement: the player, cards settling, a dragged surface going back. */
+  /** Most movement: cards settling, a surface moving into place. */
   fun <T> defaultSpatial() = spring<T>(dampingRatio = DefaultSpatialDamping, stiffness = DefaultSpatialStiffness)
-  /** Large, unhurried movement, and the trailing edge of the tab indicator. */
+  /** Large, unhurried movement. */
   fun <T> slowSpatial() = spring<T>(dampingRatio = SlowSpatialDamping, stiffness = SlowSpatialStiffness)
   /** Fades and colour changes: critically damped, never overshoots. */
   fun <T> defaultEffects() = spring<T>(dampingRatio = 1f, stiffness = DefaultEffectsStiffness)
+  /**
+   * Critically damped movement: what the finger let go of returning (a pulled page, a swiped cover)
+   * and press feedback. Lands exactly, with no wobble.
+   */
+  fun <T> criticalSpatial(stiffness: Float = DefaultSpatialStiffness) = spring<T>(dampingRatio = 1f, stiffness = stiffness)
 
   /** How many items of a list enter one after another, and the gap between them. */
   const val StaggerItems = 8
   const val StaggerStepMs = 30L
 }
-
 /**
  * What the system and the user ask of motion and blur. The app follows the system: with animations
  * removed (animation scale zero, Samsung's "Remove animations") there is no boot sequence and screens
@@ -125,10 +135,11 @@ fun springAt(seconds: Float, damping: Float = 10f, mass: Float = 1f, stiffness: 
 }
 
 /**
- * Transition between screens. Tabs fade through: the old page is gone in 90 ms and the new one fades
- * in while settling from 96% scale. No sideways movement, as Material advises for bottom tabs (a
- * slide suggests the pages can be swiped), and quick, because switching tabs is done all the time:
- * the indicator in the bar carries the motion. Opening the full player grows it out of what was tapped.
+ * Transition between screens. Tabs fade through: the old page is gone in 90 ms, then the new one fades
+ * in over 200 ms while settling from 98% scale (a critically damped spring, so it lands without a
+ * wobble). No sideways movement, as Material advises for bottom tabs (a slide suggests the pages can
+ * be swiped), and quick, because switching tabs is done all the time. Opening the full player grows
+ * it out of what was tapped (see expandFromOrigin).
  */
 fun screenTransition(from: Any, to: Any, reduced: Boolean = false): ContentTransform {
   if (reduced) return EnterTransition.None togetherWith ExitTransition.None
@@ -148,8 +159,8 @@ fun screenTransition(from: Any, to: Any, reduced: Boolean = false): ContentTrans
     }
   }
 
-  val enter = fadeIn(tween(210, delayMillis = 60, easing = Motion.Settle)) +
-    scaleIn(initialScale = 0.96f, animationSpec = spring(dampingRatio = 1f, stiffness = 700f))
+  val enter = fadeIn(tween(200, delayMillis = 90, easing = LinearOutSlowInEasing)) +
+    scaleIn(initialScale = 0.98f, animationSpec = tween(200, delayMillis = 90, easing = Motion.Settle))
   val exit = fadeOut(tween(90, easing = FastOutLinearInEasing))
   return (enter togetherWith exit).apply {
     // The new screen draws over the old one, so it never slips behind the page that is leaving.
@@ -159,26 +170,27 @@ fun screenTransition(from: Any, to: Any, reduced: Boolean = false): ContentTrans
 
 /**
  * A page opened inside a tab (an open playlist, the equalizer's advanced page, the fone list): it
- * pushes in from the right and settles on a spring; going back slides it away to the right.
+ * pushes in from the trailing side on a critically damped spring and lands exactly; going back slides
+ * it away the other way. The page underneath moves a little and fades, so the two never cross.
  */
 fun subPageTransition(forward: Boolean, reduced: Boolean): ContentTransform {
   if (reduced) return EnterTransition.None togetherWith ExitTransition.None
-  val slide = spring<IntOffset>(dampingRatio = 0.86f, stiffness = 420f)
+  val slide = Motion.criticalSpatial<IntOffset>(stiffness = 500f)
   val dir = if (forward) 1 else -1
-  return (slideInHorizontally(slide) { w -> dir * w / 3 } + fadeIn(tween(220, delayMillis = 40))) togetherWith
-    (slideOutHorizontally(slide) { w -> -dir * w / 6 } + fadeOut(tween(120)))
+  return (slideInHorizontally(slide) { w -> dir * w / 3 } + fadeIn(tween(200, delayMillis = 30))) togetherWith
+    (slideOutHorizontally(slide) { w -> -dir * w / 8 } + fadeOut(tween(110)))
 }
 
 /**
  * Switching between sections of one page (chips like Playlists / Favoritos / Fila): a short slide in
- * the direction of the chip that was picked, with a quick crossfade.
+ * the direction of the chip that was picked, with a quick crossfade. Critically damped.
  */
 fun sectionTransition(fromIndex: Int, toIndex: Int, reduced: Boolean): ContentTransform {
   if (reduced) return EnterTransition.None togetherWith ExitTransition.None
   val dir = if (toIndex >= fromIndex) 1 else -1
-  val slide = spring<IntOffset>(dampingRatio = 0.9f, stiffness = 500f)
-  return (slideInHorizontally(slide) { w -> dir * w / 8 } + fadeIn(tween(200, delayMillis = 50))) togetherWith
-    (slideOutHorizontally(slide) { w -> -dir * w / 12 } + fadeOut(tween(90)))
+  val slide = Motion.criticalSpatial<IntOffset>(stiffness = 600f)
+  return (slideInHorizontally(slide) { w -> dir * w / 10 } + fadeIn(tween(180, delayMillis = 40))) togetherWith
+    (slideOutHorizontally(slide) { w -> -dir * w / 14 } + fadeOut(tween(90)))
 }
 
 /**
@@ -194,7 +206,7 @@ fun Modifier.staggeredEntrance(index: Int): Modifier {
   androidx.compose.runtime.LaunchedEffect(Unit) {
     if (progress.value < 1f) {
       kotlinx.coroutines.delay(index * Motion.StaggerStepMs)
-      progress.animateTo(1f, spring(dampingRatio = 1f, stiffness = Motion.DefaultSpatialStiffness))
+      progress.animateTo(1f, Motion.criticalSpatial())
     }
     shown = true
   }
@@ -205,20 +217,23 @@ fun Modifier.staggeredEntrance(index: Int): Modifier {
 }
 
 /**
- * Click with a small springy zoom-out while pressed, like tapping a card in Apple Music.
- * The scale is read inside graphicsLayer, so the press animation does not recompose anything.
+ * Click with a small zoom-out while pressed, like tapping a card in Apple Music. Critically damped:
+ * the press is answered at once and released without a wobble. With reduced motion there is no
+ * zoom. The scale is read inside graphicsLayer, so the press animation does not recompose anything.
  */
 @Composable
 fun Modifier.pressClickable(
-  pressedScale: Float = 0.96f,
+  pressedScale: Float = 0.97f,
   onClickLabel: String? = null,
+  role: Role? = Role.Button,
   onClick: () -> Unit
 ): Modifier {
   val interaction = remember { MutableInteractionSource() }
   val pressed = interaction.collectIsPressedAsState()
+  val reduced = AppMotion.reduced
   val scale = animateFloatAsState(
-    targetValue = if (pressed.value) pressedScale else 1f,
-    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+    targetValue = if (pressed.value && !reduced) pressedScale else 1f,
+    animationSpec = Motion.criticalSpatial(stiffness = 900f),
     label = "pressScale"
   )
   return this
@@ -230,6 +245,7 @@ fun Modifier.pressClickable(
       interactionSource = interaction,
       indication = null,
       onClickLabel = onClickLabel,
+      role = role,
       onClick = onClick
     )
 }

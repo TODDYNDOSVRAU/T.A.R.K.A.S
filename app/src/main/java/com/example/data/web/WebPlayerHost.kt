@@ -67,6 +67,10 @@ object WebPlayerHost {
   private var wantPlaying = false
   private var autoplayTries = 0
   private var polling = false
+  /** False from loadUrl until the new page has committed: reads before that come from the old page. */
+  private var pageReady = false
+  /** Runs when the renderer dies or the song cannot start; the controller moves on. */
+  private var onFailed: (() -> Unit)? = null
   private var clickToPlay: String? = null
   private var defaultUserAgent = ""
 
@@ -110,7 +114,7 @@ object WebPlayerHost {
       }
       alpha = 0.01f
       webChromeClient = WebChromeClient()
-      webViewClient = WebViewClient()
+      webViewClient = PlayerClient()
     }
     defaultUserAgent = web.settings.userAgentString
     CookieManager.getInstance().apply {
@@ -128,6 +132,33 @@ object WebPlayerHost {
     view?.let { if (it.parent === root) root.removeView(it) }
   }
 
+  private class PlayerClient : WebViewClient() {
+    override fun onPageCommitVisible(view: WebView, url: String?) {
+      if (url != null && url != "about:blank") pageReady = true
+    }
+
+    /**
+     * The renderer of a hidden page is often the first thing the system kills under memory pressure.
+     * Left unhandled, that takes the whole app down; instead the view is dropped (the next activity
+     * creates a fresh one) and the current song is reported as failed.
+     */
+    override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail?): Boolean {
+      if (view !== WebPlayerHost.view) return true
+      val failed = onFailed
+      stopPolling()
+      wantPlaying = false
+      onEnded = null
+      onFailed = null
+      releaseAudio()
+      (view.parent as? ViewGroup)?.removeView(view)
+      view.destroy()
+      WebPlayerHost.view = null
+      _state.value = WebNowPlaying()
+      failed?.invoke()
+      return true
+    }
+  }
+
   fun detach() {
     stop()
     (view?.parent as? ViewGroup)?.removeView(view)
@@ -136,21 +167,31 @@ object WebPlayerHost {
   }
 
   /** Plays a Spotify song in its web player (needs the account signed in; free accounts play with ads). */
-  fun playSpotify(context: Context, trackId: String, onEnded: () -> Unit) {
-    start(context, "https://open.spotify.com/track/$trackId", desktop = true, clickToPlay = SPOTIFY_PLAY, onEnded = onEnded)
-  }
+  fun playSpotify(context: Context, trackId: String, onEnded: () -> Unit, onFailed: () -> Unit): Boolean =
+    start(context, "https://open.spotify.com/track/$trackId", desktop = true, clickToPlay = SPOTIFY_PLAY, onEnded, onFailed)
 
-  /** Plays a YouTube Music song. [onEnded] runs when it finishes by itself. */
-  fun playYouTube(context: Context, videoId: String, onEnded: () -> Unit) {
-    start(context, "https://music.youtube.com/watch?v=$videoId", desktop = false, clickToPlay = null, onEnded = onEnded)
-  }
+  /**
+   * Plays a YouTube Music song. [onEnded] runs when it finishes by itself, [onFailed] if the page dies.
+   * Returns false when there is no player to play on (no activity has attached one yet).
+   */
+  fun playYouTube(context: Context, videoId: String, onEnded: () -> Unit, onFailed: () -> Unit): Boolean =
+    start(context, "https://music.youtube.com/watch?v=$videoId", desktop = false, clickToPlay = null, onEnded, onFailed)
 
-  private fun start(context: Context, url: String, desktop: Boolean, clickToPlay: String?, onEnded: () -> Unit) {
-    val web = view ?: return
+  private fun start(
+    context: Context,
+    url: String,
+    desktop: Boolean,
+    clickToPlay: String?,
+    onEnded: () -> Unit,
+    onFailed: () -> Unit
+  ): Boolean {
+    val web = view ?: return false
     web.settings.userAgentString = if (desktop) DESKTOP_UA else defaultUserAgent
     this.clickToPlay = clickToPlay
     this.onEnded = onEnded
+    this.onFailed = onFailed
     endedSeen = 0
+    pageReady = false
     wantPlaying = true
     autoplayTries = 0
     _state.value = WebNowPlaying(active = true)
@@ -159,6 +200,7 @@ object WebPlayerHost {
     web.loadUrl(url)
     takeAudio(context)
     startPolling()
+    return true
   }
 
   /** True while the user wants the song to play (false once they paused it). */
@@ -229,9 +271,11 @@ object WebPlayerHost {
 
   /** Stops the sound and forgets the page. The signed-in cookies stay. */
   fun stop() {
-    polling = false
+    stopPolling()
     wantPlaying = false
     onEnded = null
+    onFailed = null
+    pageReady = false
     view?.let {
       it.evaluateJavascript("(function(){var e=document.querySelector('video,audio');if(e)e.pause()})()", null)
       it.loadUrl("about:blank")
@@ -249,21 +293,32 @@ object WebPlayerHost {
     CookieManager.getInstance().flush()
   }
 
+  /** The one polling loop; removed before every new post, so quick track changes never stack loops. */
+  private val poll = object : Runnable {
+    override fun run() {
+      if (!polling) return
+      read()
+      main.postDelayed(this, 1000L)
+    }
+  }
+
   private fun startPolling() {
-    if (polling) return
     polling = true
-    main.post(object : Runnable {
-      override fun run() {
-        if (!polling) return
-        read()
-        main.postDelayed(this, 1000L)
-      }
-    })
+    main.removeCallbacks(poll)
+    main.post(poll)
+  }
+
+  private fun stopPolling() {
+    polling = false
+    main.removeCallbacks(poll)
   }
 
   private fun read() {
     val web = view ?: return
+    if (!pageReady) return
     web.evaluateJavascript(READ_SCRIPT) { raw ->
+      // A read that started before a new song was loaded belongs to the old page.
+      if (!pageReady || web !== view) return@evaluateJavascript
       try {
         val text = JSONTokener(raw ?: return@evaluateJavascript).nextValue() as? String ?: return@evaluateJavascript
         val json = JSONObject(text)
@@ -282,7 +337,7 @@ object WebPlayerHost {
           web.evaluateJavascript(click ?: "(function(){var e=document.querySelector('video,audio');if(e)e.play()})()", null)
         }
         // Paused by the user: read once more to show it, then stop polling until they resume.
-        if (!wantPlaying && !playing) polling = false
+        if (!wantPlaying && !playing) stopPolling()
         val ended = json.optInt("end")
         if (ended > endedSeen) {
           endedSeen = ended

@@ -29,6 +29,9 @@ private val TarkasAmoledColorScheme = darkColorScheme(
   surfaceVariant = AmoledSurfaceVariant,
   onSurfaceVariant = Color(0xFFA0A0A5),
   outline = AmoledCardBorder,
+  outlineVariant = Color(0xFF17191C),
+  surfaceContainer = Color(0xFF111316),
+  surfaceContainerHigh = Color(0xFF1A1D20),
   error = TarkasError,
   onError = Color.White
 )
@@ -53,6 +56,9 @@ private val TarkasDarkColorScheme = darkColorScheme(
   surfaceVariant = TarkasSurfaceVariantDark,
   onSurfaceVariant = TarkasTextSecondaryDark,
   outline = TarkasOutlineDark,
+  outlineVariant = Color(0xFF1A1E22),
+  surfaceContainer = Color(0xFF14171A),
+  surfaceContainerHigh = Color(0xFF1C2024),
   error = TarkasError,
   onError = Color.White
 )
@@ -77,7 +83,11 @@ private val TarkasLightColorScheme = lightColorScheme(
   surfaceVariant = TarkasSurfaceVariantLight,
   onSurfaceVariant = TarkasTextSecondaryLight,
   outline = TarkasOutlineLight,
-  error = TarkasError,
+  outlineVariant = Color(0xFFE5E7EB),
+  surfaceContainer = Color(0xFFE9EAEE),
+  surfaceContainerHigh = Color(0xFFE1E3E7),
+  // The dark theme's coral is ~2.5:1 on the light page; this red keeps 4.5:1 for text.
+  error = Color(0xFFC62828),
   onError = Color.White
 )
 

@@ -52,6 +52,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -96,7 +97,10 @@ enum class TarkasNavTab(val label: String) {
 }
 
 @OptIn(FlowPreview::class)
-class TarkasViewModel(application: Application) : AndroidViewModel(application) {
+class TarkasViewModel(
+  application: Application,
+  private val savedState: androidx.lifecycle.SavedStateHandle
+) : AndroidViewModel(application) {
 
   private val context = application.applicationContext
   // The player and what feeds it live as long as the process, not as long as this view model.
@@ -127,8 +131,22 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   private val _isShowingCuriositySettings = MutableStateFlow(false)
   val isShowingCuriositySettings: StateFlow<Boolean> = _isShowingCuriositySettings.asStateFlow()
 
-  private val _currentTab = MutableStateFlow(TarkasNavTab.HOME)
+  // The page shown and the pages to go back to, kept across process death.
+  private val _currentTab = MutableStateFlow(
+    savedState.get<String>(KEY_TAB)?.let { name -> TarkasNavTab.entries.firstOrNull { it.name == name } } ?: TarkasNavTab.HOME
+  )
   val currentTab: StateFlow<TarkasNavTab> = _currentTab.asStateFlow()
+  private val backStack = ArrayDeque(
+    savedState.get<ArrayList<String>>(KEY_BACK).orEmpty().mapNotNull { name -> TarkasNavTab.entries.firstOrNull { it.name == name } }
+  )
+
+  /** Favourites as tracks, in the order they were added; worked out here once instead of on every frame. */
+  val favoriteTracks: StateFlow<List<Track>> = kotlinx.coroutines.flow.combine(
+    libraryRepository.favorites, musicRepository.tracks, libraryRepository.savedTracks
+  ) { ids, tracks, saved ->
+    val byId = tracks.associateBy { it.id }
+    ids.mapNotNull { id -> byId[id] ?: saved[id] }
+  }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyList())
 
   // Equalizer presets: the built-in ones followed by the user's own.
   private val _eqPresets = MutableStateFlow(EqPresets.BUILT_IN)
@@ -282,18 +300,43 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     )
   }
 
-  /** The tab the player was opened from, so back returns there instead of to Início. */
-  private var tabBeforePlayer = TarkasNavTab.HOME
-
+  /**
+   * Opens a page on top of the current one (the player, Ajustes, Áudio from Ajustes): back returns to
+   * where it was opened from.
+   */
   fun setTab(tab: TarkasNavTab) {
     val from = _currentTab.value
-    if (tab == TarkasNavTab.MUSIC && from != TarkasNavTab.MUSIC) tabBeforePlayer = from
-    _currentTab.value = tab
+    if (tab == from) return
+    // Opening a page that is already lower in the stack goes back to it instead of piling up copies.
+    val existing = backStack.indexOf(tab)
+    if (existing >= 0) {
+      while (backStack.size > existing) backStack.removeLast()
+    } else {
+      backStack.addLast(from)
+    }
+    show(tab)
   }
 
-  /** Back: the player returns to the tab it was opened from; any other tab returns to Início. */
+  /** A tab picked in the tab bar: a fresh start at that tab, like every tab bar on the platform. */
+  fun selectTab(tab: TarkasNavTab) {
+    backStack.clear()
+    if (tab != TarkasNavTab.HOME) backStack.addLast(TarkasNavTab.HOME)
+    show(tab)
+  }
+
+  /** Back: the page it was opened from; from a tab with nothing under it, Início. */
   fun goBack() {
-    setTab(if (_currentTab.value == TarkasNavTab.MUSIC) tabBeforePlayer else TarkasNavTab.HOME)
+    val previous = backStack.removeLastOrNull() ?: TarkasNavTab.HOME
+    show(previous)
+  }
+
+  /** True while back has somewhere to go inside the app. */
+  val canGoBack: Boolean get() = _currentTab.value != TarkasNavTab.HOME || backStack.isNotEmpty()
+
+  private fun show(tab: TarkasNavTab) {
+    _currentTab.value = tab
+    savedState[KEY_TAB] = tab.name
+    savedState[KEY_BACK] = ArrayList(backStack.map { it.name })
   }
 
   fun playTrack(track: Track) = playback.playTrack(track)
@@ -316,11 +359,19 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
 
   fun cycleRepeatMode() = playback.cycleRepeatMode()
 
+  fun setRepeatMode(mode: RepeatMode) = playback.setRepeatMode(mode)
+
   fun shuffleFrom(list: List<Track>) = playback.shuffleFrom(list)
 
-  fun playNext(track: Track) = playback.playNext(track)
+  fun playNext(track: Track) {
+    playback.playNext(track)
+    showNotice(Notice("“${track.title}” toca em seguida."))
+  }
 
-  fun addToQueue(track: Track) = playback.addToQueue(track)
+  fun addToQueue(track: Track) {
+    playback.addToQueue(track)
+    showNotice(Notice("“${track.title}” adicionada à fila."))
+  }
 
   fun removeFromQueue(index: Int) = playback.removeFromQueue(index)
 
@@ -348,7 +399,21 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
 
   fun deletePlaylist(id: String) = libraryRepository.deletePlaylist(id)
 
-  fun addToPlaylist(playlistId: String, track: Track) = libraryRepository.addToPlaylist(playlistId, track)
+  fun addToPlaylist(playlistId: String, track: Track) {
+    val playlist = playlists.value.firstOrNull { it.id == playlistId } ?: return
+    if (track.id in playlist.trackIds) {
+      showNotice(Notice("“${track.title}” já está em ${playlist.name}."))
+      return
+    }
+    libraryRepository.addToPlaylist(playlistId, track)
+    showNotice(
+      Notice(
+        "Adicionada a ${playlist.name}.",
+        actionLabel = "Desfazer",
+        action = { libraryRepository.removeFromPlaylist(playlistId, track.id) }
+      )
+    )
+  }
 
   fun removeFromPlaylist(playlistId: String, trackId: String) =
     libraryRepository.removeFromPlaylist(playlistId, trackId)
@@ -370,12 +435,15 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   private var audiusSearchJob: Job? = null
 
   init {
-    // The Spotify integration was removed: drop the encrypted store and key it may have left.
+    // The old Spotify integration was removed: drop the encrypted store and key it may have left, once.
     viewModelScope.launch(Dispatchers.IO) {
+      val prefs = context.getSharedPreferences("tarkas_prefs", android.content.Context.MODE_PRIVATE)
+      if (prefs.getBoolean(KEY_LEGACY_CLEANED, false)) return@launch
       runCatching { context.deleteSharedPreferences("tarkas_secure") }
       runCatching {
         java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry("tarkas_spotify_tokens")
       }
+      prefs.edit().putBoolean(KEY_LEGACY_CLEANED, true).apply()
     }
   }
 
@@ -395,7 +463,10 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
       try {
         _audiusResults.value = withContext(Dispatchers.IO) { AudiusApiService.searchTracks(query.trim()) }
         _audiusOffline.value = false
-      } catch (e: java.io.IOException) {
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        // Offline, or an answer that could not be read: never a crash.
         _audiusResults.value = emptyList()
         _audiusOffline.value = true
       } finally {
@@ -614,7 +685,9 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
 
   val termsAcceptedAt: Long get() = preferencesRepository.getTermsAcceptedAt()
 
+  /** Ends the setup, but never while the current terms are not accepted. */
   fun finishOnboarding() {
+    if (preferencesRepository.getTermsVersionAccepted() < com.example.ui.legal.LegalTexts.TERMS_VERSION) return
     preferencesRepository.saveOnboardingDone(true)
     _showOnboarding.value = false
   }
@@ -729,12 +802,14 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   }
 
   fun searchDevices(query: String, source: String?) {
-    _deviceSearch.value = _deviceSearch.value.copy(query = query, source = source)
+    _deviceSearch.update { it.copy(query = query, source = source) }
     deviceSearchJob?.cancel()
-    deviceSearchJob = viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+    deviceSearchJob = viewModelScope.launch {
       kotlinx.coroutines.delay(120)
-      val results = com.example.data.autoeq.AutoEqParser.search(deviceIndex, query, source)
-      _deviceSearch.value = _deviceSearch.value.copy(results = results)
+      val index = deviceIndex
+      // Searched off the main thread, written back on it: the other fields of the state change there too.
+      val results = withContext(Dispatchers.Default) { com.example.data.autoeq.AutoEqParser.search(index, query, source) }
+      _deviceSearch.update { it.copy(results = results) }
     }
   }
 
@@ -812,7 +887,14 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   val globalEqStatus: StateFlow<GlobalEqStatus> = GlobalEq.status
 
   /** Whether this device has `su` at all; root mode is offered either way, with a clear status. */
-  val rootPresent: Boolean = RootShell.suPresent()
+  private val _rootAvailable = MutableStateFlow(false)
+  val rootAvailable: StateFlow<Boolean> = _rootAvailable.asStateFlow()
+  val rootPresent: Boolean get() = _rootAvailable.value
+
+  init {
+    // A file check, kept off the main thread while the first screen is being built.
+    viewModelScope.launch { _rootAvailable.value = withContext(Dispatchers.IO) { RootShell.suPresent() } }
+  }
 
   init {
     // The service applies the same curve the app uses.
@@ -903,11 +985,17 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     applySpatial()
   }
 
-  /** A slider drag: only the target moves (no new tables). */
+  private var spatialSaveJob: Job? = null
+
+  /** A slider drag: only the target moves (no new tables); saved once the drag pauses. */
   fun setSpatialIntensity(intensity: Float) {
     _spatialIntensity.value = intensity
     com.example.data.audio.spatial.SpatialControl.setIntensity(intensity.toDouble())
-    saveSpatial()
+    spatialSaveJob?.cancel()
+    spatialSaveJob = viewModelScope.launch {
+      delay(400)
+      saveSpatial()
+    }
   }
 
   private fun applySpatial() {
@@ -969,7 +1057,9 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
     viewModelScope.launch {
       _trending.value = try {
         TrendingState(tracks = withContext(Dispatchers.IO) { AudiusApiService.getTrendingTracks() })
-      } catch (e: java.io.IOException) {
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: Exception) {
         TrendingState(tracks = _trending.value.tracks, offline = true)
       }
     }
@@ -1014,7 +1104,15 @@ class TarkasViewModel(application: Application) : AndroidViewModel(application) 
   override fun onCleared() {
     super.onCleared()
     timerTickerJob?.cancel()
+    // The static callback held this view model; a new one sets its own when it asks for capture again.
+    com.example.data.systemaudio.AudioCaptureService.onMediaProjectionReady = null
     // The player is not stopped: it belongs to the process and the media session, and keeps playing.
     stopSystemAudioCapture()
+  }
+
+  private companion object {
+    const val KEY_TAB = "nav_tab"
+    const val KEY_BACK = "nav_back"
+    const val KEY_LEGACY_CLEANED = "legacy_spotify_cleaned"
   }
 }

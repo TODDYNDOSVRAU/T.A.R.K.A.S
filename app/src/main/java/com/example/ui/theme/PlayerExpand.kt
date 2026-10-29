@@ -8,7 +8,10 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawBehind
@@ -40,6 +43,12 @@ object PlayerOrigin {
   /** Bounds of the mini player, the shape the player collapses back into. */
   var mini: Rect? = null
 
+  /**
+   * The colour at the top of the full player, written by the player as it reads the artwork. The
+   * growing container is filled with it so the opening has no seam; null until a player has shown.
+   */
+  var tint: Color? by mutableStateOf(null)
+
   internal fun press(bounds: Rect?) {
     pressed = bounds
     pressedAt = SystemClock.uptimeMillis()
@@ -68,12 +77,20 @@ fun Modifier.opensPlayer(): Modifier = composed {
     }
 }
 
-/** Springy enough to feel alive, damped enough that the corners never wobble visibly. */
-private val ExpandSpring = spring<Float>(dampingRatio = 0.86f, stiffness = 280f, visibilityThreshold = 0.001f)
+/**
+ * A spatial spring (damping 0.88): it has the momentum of a real surface, and its overshoot stays
+ * below 0.5%, which is under a pixel at the corners, so it never visibly bounces.
+ */
+private val ExpandSpring = spring<Float>(
+  dampingRatio = Motion.ExpandDamping,
+  stiffness = Motion.ExpandStiffness,
+  visibilityThreshold = 0.001f
+)
 
 /**
  * Container transform for the full player. The page is clipped to a rounded rectangle that grows
- * from the pressed element's bounds to the whole screen, filled with [containerColor] while the
+ * from the pressed element's bounds to the whole screen, filled with the player's tint (or
+ * [containerColor] before any player has shown) while the
  * player fades and settles in; on close it shrinks into the mini player. Driven by the screen
  * transition itself, so AnimatedContent keeps the page until the shape has landed.
  */
@@ -95,7 +112,8 @@ fun Modifier.expandFromOrigin(
   return this
     .onGloballyPositioned { self[0] = it.positionInWindow() }
     .graphicsLayer {
-      val p = progress.value
+      // Clamped, so the spring's sub-pixel overshoot never grows the shape past the screen.
+      val p = progress.value.coerceIn(0f, 1f)
       val full = Rect(Offset.Zero, size)
       val from = ((if (closing) PlayerOrigin.mini ?: origin else origin)?.translate(-self[0]))
         ?: Rect(Offset(size.width * 0.5f, size.height), Offset(size.width * 0.5f, size.height))
@@ -104,13 +122,13 @@ fun Modifier.expandFromOrigin(
       shape = GenericShape { _, _ -> addRoundRect(RoundRect(r, CornerRadius(corner))) }
       clip = true
     }
-    .drawBehind { drawRect(containerColor) }
+    .drawBehind { drawRect(PlayerOrigin.tint ?: containerColor) }
     .graphicsLayer {
       // The page itself fades in once the shape has grown a little, and settles from slightly
       // smaller, anchored where it came from.
-      val p = progress.value
+      val p = progress.value.coerceIn(0f, 1f)
       alpha = ((p - 0.12f) / 0.45f).coerceIn(0f, 1f)
-      val s = 0.9f + 0.1f * p
+      val s = 0.92f + 0.08f * p
       scaleX = s
       scaleY = s
       val from = (if (closing) PlayerOrigin.mini ?: origin else origin)

@@ -156,7 +156,7 @@ class GlobalEqService : Service() {
     val players = dump?.let { DumpsysAudioParser.parsePlayers(it) }
       // The web players (YouTube Music, Spotify) run in this app's own process, so own-uid players
       // count too, except the music player, which carries its equalizer already.
-      ?.filter { it.isLive && it.sessionId > 0 && it.uid != own }
+      ?.filter { it.isLive && it.sessionId > 0 && !(it.uid == own && it.sessionId == GlobalEq.ownPlayerSession) }
       .orEmpty()
 
     val alive = players.map { it.sessionId }.toSet() + announced.keys
@@ -181,20 +181,7 @@ class GlobalEqService : Service() {
   }
 
   private suspend fun readDumpsys(): String? = withContext(Dispatchers.IO) {
-    try {
-      val process = ProcessBuilder("dumpsys", "audio").redirectErrorStream(true).start()
-      try {
-        // readText() blocks and ignores cancellation; destroying the process on timeout unblocks it.
-        withTimeoutOrNull(4000) {
-          kotlinx.coroutines.runInterruptible { process.inputStream.bufferedReader().use { it.readText() } }
-        }
-      } finally {
-        process.destroy()
-      }
-    } catch (e: Exception) {
-      Log.w(TAG, "dumpsys audio failed: ${e.javaClass.simpleName}")
-      null
-    }
+    ShellCommand.run(listOf("dumpsys", "audio"), 4000)
   }
 
   private fun labelFor(uid: Int): String {

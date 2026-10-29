@@ -79,10 +79,7 @@ class ActiveAppsReader(private val context: Context) {
     if (!hasPermission()) return ActiveAppsState.PermissionMissing
     return withContext(Dispatchers.IO) {
       try {
-        val text = withTimeoutOrNull(DUMP_TIMEOUT_MS) {
-          val process = Runtime.getRuntime().exec(arrayOf("dumpsys", "audio"))
-          process.inputStream.bufferedReader().use { it.readText() }
-        } ?: return@withContext ActiveAppsState.Failed("O sistema demorou para responder.")
+        val text = ShellCommand.run(listOf("dumpsys", "audio"), DUMP_TIMEOUT_MS) ?: return@withContext ActiveAppsState.Failed("O sistema demorou para responder.")
 
         val own = context.applicationInfo.uid
         val apps = DumpsysAudioParser.parsePlayers(text)

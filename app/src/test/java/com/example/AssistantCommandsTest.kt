@@ -105,7 +105,9 @@ class AssistantCommandsTest {
       audioEngineManager = AudioEngineManager(context),
       onTimerCreated = {},
       onTimerCancelled = {},
-      onPlayerCommand = onPlayerCommand
+      onPlayerCommand = onPlayerCommand,
+      // The test blocks the main thread with runBlocking, so the callbacks must not wait for it.
+      callbackContext = kotlinx.coroutines.Dispatchers.Unconfined
     )
   }
 

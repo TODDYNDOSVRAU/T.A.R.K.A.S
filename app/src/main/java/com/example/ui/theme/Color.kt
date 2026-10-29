@@ -15,7 +15,7 @@ val TarkasIceText = Color(0xFFBDF4F7)
 val TarkasTeal = Color(0xFF0E7C86)
 val TarkasTealContainer = Color(0xFFD3EDEF)
 
-val TarkasPaper = Color(0xFFF3F4F6)
+val TarkasPaper = Color(0xFFF2F2F7)
 val TarkasPaperRaised = Color(0xFFFFFFFF)
 val TarkasPaperHigh = Color(0xFFE8EAED)
 val TarkasPaperLine = Color(0xFFD5D9DE)

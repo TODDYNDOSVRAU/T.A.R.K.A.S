@@ -1,15 +1,18 @@
 package com.example.ui.components
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,84 +20,87 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.PlayCircleFilled
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Cloud
-import androidx.compose.material.icons.filled.Equalizer
-import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Psychology
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.Speaker
-import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Equalizer
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.Psychology
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.runtime.getValue
-import com.example.ui.theme.glassPill
-import com.example.ui.theme.glassControl
-import com.example.ui.theme.glassContentColor
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
-import kotlinx.coroutines.launch
-import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.example.data.model.Curiosity
+import com.example.data.model.ToolExecutionReport
 import com.example.data.model.Track
-import com.example.ui.theme.SpaceGrotesk
+import com.example.ui.theme.AppText
+import com.example.ui.theme.Motion
+import com.example.ui.theme.Shapes
+import com.example.ui.theme.Space
+import com.example.ui.theme.glassContentColor
+import com.example.ui.theme.glassControl
+import com.example.ui.theme.glassSurface
 import com.example.ui.theme.pressClickable
-import com.example.ui.theme.TarkasCyanPrimary
-import com.example.ui.theme.TarkasSkySecondary
+import com.example.ui.theme.rememberReducedMotion
 import com.example.ui.viewmodel.TarkasNavTab
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import com.example.ui.theme.Size as Sizes
 
 /**
- * The app's one chip/pill: a capsule that follows the chosen surface style (solid, frosted, liquid).
- * Used for section tabs, quick actions and toggles so every balloon in the app looks the same.
+ * The app's chip: a capsule with a flat fill (it sits on the page, so it is not glass), 48 dp tall.
+ *
+ * By default it is a plain button: [selected] only changes how it looks (the accent wash marks the
+ * main action), and TalkBack announces a button, never "selected". When it is one choice of several
+ * (a filter, a preset), pass [selectionRole] (Role.Tab or Role.RadioButton) and it is announced as
+ * selectable with its state.
  */
 @Composable
 fun GlassChip(
@@ -102,51 +108,59 @@ fun GlassChip(
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
   selected: Boolean = false,
-  icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
-  enabled: Boolean = true
+  icon: ImageVector? = null,
+  enabled: Boolean = true,
+  selectionRole: Role? = null
 ) {
-  val content = glassContentColor(selected).copy(alpha = if (enabled) 1f else 0.4f)
-  // A soft springy squeeze while pressed, read in the draw phase so it never recomposes.
-  val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+  val content = glassContentColor(selected)
+  val interaction = remember { MutableInteractionSource() }
   val pressed by interaction.collectIsPressedAsState()
-  val scale = androidx.compose.animation.core.animateFloatAsState(
-    targetValue = if (pressed) 0.95f else 1f,
-    animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.6f, stiffness = 600f),
+  // The quiet press highlight of the design system: in at once, out gently, no ripple, no bounce.
+  val overlay by animateColorAsState(
+    targetValue = if (pressed) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f) else Color.Transparent,
+    animationSpec = tween(if (pressed) 0 else 220),
     label = "chipPress"
   )
+  val interactive = if (selectionRole != null) {
+    Modifier.selectable(
+      selected = selected,
+      enabled = enabled,
+      role = selectionRole,
+      interactionSource = interaction,
+      indication = null,
+      onClick = onClick
+    )
+  } else {
+    Modifier.clickable(
+      enabled = enabled,
+      role = Role.Button,
+      interactionSource = interaction,
+      indication = null,
+      onClick = onClick
+    )
+  }
   Row(
     modifier = modifier
-      .graphicsLayer {
-        scaleX = scale.value
-        scaleY = scale.value
-        // A disabled chip is faded as a whole, so a filled one does not still look tappable.
-        alpha = if (enabled) 1f else 0.45f
-      }
-      .heightIn(min = 44.dp)
-      .glassControl(RoundedCornerShape(22.dp), selected = selected)
-      .selectable(
-        selected = selected,
-        enabled = enabled,
-        role = androidx.compose.ui.semantics.Role.Button,
-        interactionSource = interaction,
-        indication = null,
-        onClick = onClick
-      )
-      .padding(horizontal = 16.dp, vertical = 10.dp),
+      // A disabled chip is faded as a whole, so a filled one does not still look tappable.
+      .graphicsLayer { alpha = if (enabled) 1f else 0.45f }
+      .heightIn(min = Sizes.touch)
+      .glassControl(Shapes.pill, selected = selected)
+      .then(interactive)
+      .background(overlay)
+      .padding(horizontal = Space.l, vertical = Space.s),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.Center
   ) {
     if (icon != null) {
       Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
-      Spacer(modifier = Modifier.width(8.dp))
+      Spacer(modifier = Modifier.width(Space.s))
     }
     Text(
       text = label,
+      style = AppText.Subhead.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
       color = content,
-      fontSize = 15.sp,
-      fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
       maxLines = 1,
-      softWrap = false
+      overflow = TextOverflow.Ellipsis
     )
   }
 }
@@ -157,7 +171,7 @@ fun GlassChip(
  */
 @Composable
 fun EmptyState(
-  icon: androidx.compose.ui.graphics.vector.ImageVector,
+  icon: ImageVector,
   title: String,
   message: String,
   modifier: Modifier = Modifier,
@@ -165,80 +179,76 @@ fun EmptyState(
   onAction: () -> Unit = {}
 ) {
   Column(
-    modifier = modifier.fillMaxWidth().padding(vertical = 20.dp),
+    modifier = modifier
+      .fillMaxWidth()
+      .padding(horizontal = Space.page, vertical = Space.xl),
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
-    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(40.dp))
-    Spacer(modifier = Modifier.height(10.dp))
+    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(36.dp))
+    Spacer(modifier = Modifier.height(Space.m))
     Text(
       text = title,
-      fontSize = 17.sp,
-      fontWeight = FontWeight.SemiBold,
+      style = AppText.Headline,
       color = MaterialTheme.colorScheme.onSurface,
-      textAlign = androidx.compose.ui.text.style.TextAlign.Center
+      textAlign = TextAlign.Center,
+      modifier = Modifier.semantics { heading() }
     )
-    Spacer(modifier = Modifier.height(4.dp))
+    Spacer(modifier = Modifier.height(Space.xs))
     Text(
       text = message,
-      fontSize = 15.sp,
-      lineHeight = 20.sp,
+      style = AppText.Subhead,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
-      textAlign = androidx.compose.ui.text.style.TextAlign.Center
+      textAlign = TextAlign.Center
     )
     if (actionLabel != null) {
-      Spacer(modifier = Modifier.height(14.dp))
-      GlassChip(label = actionLabel, selected = true, onClick = onAction)
+      Spacer(modifier = Modifier.height(Space.l))
+      TonalButton(text = actionLabel, onClick = onAction)
     }
   }
 }
 
-/** Large bold page title with a round gear button opening Ajustes. */
+/**
+ * The large title at the top of a tab page, left-aligned at the page margin. [showSettings] adds the
+ * Ajustes button at the trailing edge (only Início has it); without it the row keeps the same height,
+ * so the title does not jump when switching tabs.
+ */
 @Composable
 fun TarkasLargeTitle(
   title: String,
   onOpenSettings: () -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  showSettings: Boolean = true
 ) {
   Row(
     modifier = modifier
       .background(MaterialTheme.colorScheme.background)
       .statusBarsPadding()
       .fillMaxWidth()
-      .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
+      .heightIn(min = Sizes.touch + Space.m + Space.s)
+      .padding(start = Space.page, end = Space.s, top = Space.m, bottom = Space.s),
     verticalAlignment = Alignment.CenterVertically
   ) {
     Text(
       text = title,
-      modifier = Modifier.weight(1f),
-      fontWeight = FontWeight.Bold,
-      fontSize = 34.sp,
-      letterSpacing = (-0.5).sp,
+      style = AppText.LargeTitle,
+      color = MaterialTheme.colorScheme.onBackground,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
-      color = MaterialTheme.colorScheme.onBackground
-    )
-    Box(
       modifier = Modifier
-        .size(48.dp)
-        .clip(CircleShape)
-        .clickable(onClickLabel = "Abrir ajustes", onClick = onOpenSettings)
-        .testTag("topbar_settings_button"),
-      contentAlignment = Alignment.Center
-    ) {
-      // A gear on a round glass button, like the capsules; the brand mark here read as a logo.
-      Box(
-        modifier = Modifier
-          .size(44.dp)
-          .glassControl(CircleShape),
-        contentAlignment = Alignment.Center
-      ) {
-        Icon(
-          imageVector = Icons.Default.Settings,
-          contentDescription = null,
-          tint = MaterialTheme.colorScheme.onSurface,
-          modifier = Modifier.size(22.dp)
-        )
-      }
+        .weight(1f)
+        .semantics { heading() }
+    )
+    if (showSettings) {
+      IconAction(
+        icon = Icons.Rounded.Settings,
+        contentDescription = "Ajustes",
+        onClick = onOpenSettings,
+        tint = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.testTag("topbar_settings_button")
+      )
+    } else {
+      // Holds the button's height, so every tab's title sits on the same line.
+      Spacer(Modifier.size(Sizes.touch))
     }
   }
 }
@@ -252,22 +262,32 @@ fun TarkasSectionTitle(
 ) {
   Row(
     modifier = modifier
-      .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+      .then(
+        if (onClick != null) {
+          Modifier
+            .heightIn(min = Sizes.touch)
+            .clip(Shapes.s)
+            .clickable(role = Role.Button, onClick = onClick)
+        } else {
+          Modifier
+        }
+      )
+      .semantics(mergeDescendants = true) { heading() },
     verticalAlignment = Alignment.CenterVertically
   ) {
     Text(
       text = text,
-      fontWeight = FontWeight.Bold,
-      fontSize = 22.sp,
-      letterSpacing = (-0.3).sp,
-      color = MaterialTheme.colorScheme.onBackground
+      style = AppText.Title2,
+      color = MaterialTheme.colorScheme.onBackground,
+      maxLines = 2,
+      overflow = TextOverflow.Ellipsis
     )
     if (onClick != null) {
       Icon(
-        imageVector = Icons.Default.ChevronRight,
+        imageVector = Icons.Rounded.ChevronRight,
         contentDescription = null,
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.size(24.dp)
+        modifier = Modifier.size(Sizes.icon)
       )
     }
   }
@@ -289,7 +309,7 @@ fun TarkasMark(
     drawRect(accentColor, topLeft = p(0f, 34f), size = Size(29f * k, 12f * k))
 
     // diamond outline
-    val diamond = androidx.compose.ui.graphics.Path().apply {
+    val diamond = Path().apply {
       moveTo(66f * k, 6f * k)
       lineTo(102f * k, 40f * k)
       lineTo(66f * k, 74f * k)
@@ -309,6 +329,13 @@ fun TarkasMark(
   }
 }
 
+/**
+ * The floating tab bar: a glass capsule (it floats over the content) with four tabs, icon over a
+ * Caption1 label. The selected tab is tinted with the accent and sits on a quiet filled indicator
+ * that glides to it on a critically damped spring. While the page scrolls down the capsule draws back
+ * a little and its labels fade; scrolling up brings them back. Scale and alpha only, so the page layout
+ * never moves.
+ */
 @Composable
 fun TarkasBottomNav(
   currentTab: TarkasNavTab,
@@ -317,126 +344,94 @@ fun TarkasBottomNav(
   collapsed: Boolean = false
 ) {
   val items = listOf(
-    // No "Música" tab: the player opens from the mini player, the only way in.
-    Triple(TarkasNavTab.HOME, "Início", Icons.Default.PlayCircleFilled),
-    Triple(TarkasNavTab.LIBRARY, "Biblioteca", Icons.Default.LibraryMusic),
-    Triple(TarkasNavTab.AUDIO, "Áudio", Icons.Default.Equalizer),
-    Triple(TarkasNavTab.ASSISTANT, "Assistente", Icons.Default.Psychology)
+    // No "Música" tab: the player opens from the mini player.
+    Triple(TarkasNavTab.HOME, "Início", Icons.Rounded.PlayCircle),
+    Triple(TarkasNavTab.LIBRARY, "Biblioteca", Icons.Rounded.LibraryMusic),
+    Triple(TarkasNavTab.AUDIO, "Áudio", Icons.Rounded.Equalizer),
+    Triple(TarkasNavTab.ASSISTANT, "Assistente", Icons.Rounded.Psychology)
   )
-
-  // One lighter capsule marks the selected tab. Its two ends travel on different springs: the end
-  // facing the new tab leaves first and fast, the other follows slower, so the capsule stretches
-  // towards the tab and then snaps back to size, like a drop of glass (the iOS 26 tab bar).
   val selectedIndex = items.indexOfFirst { it.first == currentTab }
-  val reduced = com.example.ui.theme.rememberReducedMotion()
-  val start0 = selectedIndex.coerceAtLeast(0).toFloat()
-  val leftEdge = remember { androidx.compose.animation.core.Animatable(start0) }
-  val rightEdge = remember { androidx.compose.animation.core.Animatable(start0 + 1f) }
-  val indicatorAlpha by androidx.compose.animation.core.animateFloatAsState(
-    targetValue = if (selectedIndex >= 0) 1f else 0f,
-    animationSpec = tween(200),
-    label = "navPillAlpha"
-  )
-  androidx.compose.runtime.LaunchedEffect(selectedIndex, reduced) {
-    if (selectedIndex < 0) return@LaunchedEffect
-    val target = selectedIndex.toFloat()
-    if (reduced) {
-      leftEdge.snapTo(target)
-      rightEdge.snapTo(target + 1f)
-      return@LaunchedEffect
-    }
-    val movingRight = target > leftEdge.value
-    val lead = com.example.ui.theme.Motion.fastSpatial<Float>()
-    val trail = com.example.ui.theme.Motion.slowSpatial<Float>()
-    kotlinx.coroutines.coroutineScope {
-      launch { leftEdge.animateTo(target, if (movingRight) trail else lead) }
-      launch { rightEdge.animateTo(target + 1f, if (movingRight) lead else trail) }
-    }
-  }
-  val pillColor = MaterialTheme.colorScheme.onSurface
+  val reduced = rememberReducedMotion()
 
-  // While the page scrolls down the capsule draws back a little and its labels fade, like the
-  // iOS 26 tab bar; scrolling up brings it back. Scale only, so the page layout never moves.
-  val shrink by androidx.compose.animation.core.animateFloatAsState(
+  val indicator = remember { Animatable(selectedIndex.coerceAtLeast(0).toFloat()) }
+  LaunchedEffect(selectedIndex, reduced) {
+    if (selectedIndex < 0) return@LaunchedEffect
+    if (reduced) indicator.snapTo(selectedIndex.toFloat())
+    else indicator.animateTo(selectedIndex.toFloat(), Motion.criticalSpatial(stiffness = 700f))
+  }
+  val indicatorAlpha by animateFloatAsState(
+    targetValue = if (selectedIndex >= 0) 1f else 0f,
+    animationSpec = tween(150),
+    label = "navIndicatorAlpha"
+  )
+  val shrink by animateFloatAsState(
     targetValue = if (collapsed && !reduced) 1f else 0f,
-    animationSpec = com.example.ui.theme.Motion.defaultSpatial(),
+    animationSpec = Motion.criticalSpatial(stiffness = 400f),
     label = "navShrink"
   )
+  val indicatorColor = MaterialTheme.colorScheme.onSurface
 
   Row(
     modifier = modifier
       .fillMaxWidth()
       .graphicsLayer {
-        val s = 1f - 0.1f * shrink
+        val s = 1f - 0.08f * shrink
         scaleX = s
         scaleY = s
         transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
       }
-      .glassPill(cornerRadius = 32.dp)
-      .padding(horizontal = 6.dp, vertical = 6.dp)
+      .glassSurface(Shapes.pill)
+      .padding(Space.xs + Space.xxs)
       .drawBehind {
         val slot = size.width / items.size
-        val x = leftEdge.value * slot
-        val w = (rightEdge.value - leftEdge.value) * slot
         drawRoundRect(
-          pillColor.copy(alpha = 0.10f * indicatorAlpha),
-          topLeft = androidx.compose.ui.geometry.Offset(x, 0f),
-          size = androidx.compose.ui.geometry.Size(w, size.height),
-          cornerRadius = CornerRadius(26.dp.toPx())
+          indicatorColor.copy(alpha = 0.09f * indicatorAlpha),
+          topLeft = Offset(indicator.value * slot, 0f),
+          size = Size(slot, size.height),
+          cornerRadius = CornerRadius(size.height / 2f)
         )
-      },
-    horizontalArrangement = Arrangement.SpaceBetween
+      }
   ) {
     items.forEach { (tab, label, icon) ->
       val selected = currentTab == tab
-      val tint by androidx.compose.animation.animateColorAsState(
+      val tint by animateColorAsState(
         targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        animationSpec = tween(220),
+        animationSpec = tween(150),
         label = "navTint"
-      )
-      // The selected tab's icon pops up a little with a spring (scale only, no relayout).
-      val pop by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (selected) 1.12f else 1f,
-        animationSpec = androidx.compose.animation.core.spring(
-          dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
-          stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
-        ),
-        label = "navPop"
       )
       Column(
         modifier = Modifier
           .weight(1f)
+          .heightIn(min = Sizes.touch)
           .testTag("nav_tab_${tab.name.lowercase()}")
-          .clip(RoundedCornerShape(26.dp))
+          .clip(Shapes.pill)
           .selectable(
             selected = selected,
-            role = androidx.compose.ui.semantics.Role.Tab,
+            role = Role.Tab,
             onClick = { onTabSelected(tab) }
           )
-          .padding(vertical = 7.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+          .padding(horizontal = Space.xs, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
       ) {
+        // The label below names the tab for TalkBack, so the icon stays silent (no double reading).
         Icon(
           imageVector = icon,
-          contentDescription = label,
+          contentDescription = null,
           tint = tint,
           modifier = Modifier
-            .size(24.dp)
-            .graphicsLayer {
-              scaleX = pop
-              scaleY = pop
-              // With the labels faded, the icons drop to the middle of the capsule.
-              translationY = shrink * 7.dp.toPx()
-            }
+            .size(Sizes.icon)
+            // With the labels faded, the icons drop to the middle of the capsule.
+            .graphicsLayer { translationY = shrink * 7.dp.toPx() }
         )
-        Spacer(modifier = Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(Space.xxs))
         Text(
           text = label,
+          style = AppText.Caption1.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
           color = tint,
-          fontSize = 11.sp,
           maxLines = 1,
-          softWrap = false,
-          fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+          overflow = TextOverflow.Ellipsis,
+          textAlign = TextAlign.Center,
           modifier = Modifier.graphicsLayer { alpha = 1f - shrink }
         )
       }
@@ -444,6 +439,11 @@ fun TarkasBottomNav(
   }
 }
 
+/**
+ * The mini player: a floating glass capsule with the artwork, title and artist, play/pause and next,
+ * and a hairline of progress along its bottom edge. Swiping it sideways changes the track (left: next,
+ * right: previous); TalkBack gets the same as custom actions.
+ */
 @Composable
 fun MiniPlayerBar(
   track: Track?,
@@ -457,51 +457,73 @@ fun MiniPlayerBar(
 ) {
   if (track == null) return
 
-  // Swiping the capsule sideways changes the track (left: next, right: previous) with a tick, like
-  // Apple Music's mini player. The content follows the finger and springs back.
-  val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
-  val scope = androidx.compose.runtime.rememberCoroutineScope()
-  val swipe = remember { androidx.compose.animation.core.Animatable(0f) }
-  val reduced = com.example.ui.theme.rememberReducedMotion()
-  val currentNext by androidx.compose.runtime.rememberUpdatedState(onNext)
-  val currentPrevious by androidx.compose.runtime.rememberUpdatedState(onPrevious)
-  val track0 = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+  val haptics = LocalHapticFeedback.current
+  val scope = rememberCoroutineScope()
+  val reduced = rememberReducedMotion()
+  val currentNext by rememberUpdatedState(onNext)
+  val currentPrevious by rememberUpdatedState(onPrevious)
+  val currentReduced by rememberUpdatedState(reduced)
+  // The finger writes the offset directly; letting go starts one settle job (no coroutine per delta).
+  var swipe by remember { mutableFloatStateOf(0f) }
+  val settleJob = remember { arrayOfNulls<Job>(1) }
+  val rail = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
   val fill = MaterialTheme.colorScheme.primary
 
-  // Its own floating capsule of glass, like the tab bar below it.
   Box(
     modifier = modifier
       .fillMaxWidth()
-      .glassPill(cornerRadius = 30.dp)
+      .glassSurface(Shapes.pill)
+      .clip(Shapes.pill)
       .pointerInput(Unit) {
         val threshold = size.width * 0.22f
-        detectHorizontalDragGestures(
-          onDragEnd = {
-            val offset = swipe.value
-            scope.launch {
-              if (kotlin.math.abs(offset) > threshold) {
-                haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                if (offset < 0) currentNext() else currentPrevious()
-                // The new track slides in from the side the old one left towards.
-                if (!reduced) swipe.snapTo(if (offset < 0) size.width * 0.3f else -size.width * 0.3f)
-              }
-              swipe.animateTo(0f, com.example.ui.theme.Motion.defaultSpatial())
+        fun settle(skipped: Int) {
+          settleJob[0]?.cancel()
+          settleJob[0] = scope.launch {
+            if (currentReduced) {
+              swipe = 0f
+              return@launch
             }
+            // The new track slides in from the side the old one left towards.
+            if (skipped != 0) swipe = skipped * size.width * 0.3f
+            animate(swipe, 0f, animationSpec = Motion.criticalSpatial()) { v, _ -> swipe = v }
+          }
+        }
+        detectHorizontalDragGestures(
+          onDragStart = { settleJob[0]?.cancel() },
+          onDragEnd = {
+            val skipped = when {
+              swipe < -threshold -> 1
+              swipe > threshold -> -1
+              else -> 0
+            }
+            if (skipped != 0) {
+              haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+              if (skipped > 0) currentNext() else currentPrevious()
+            }
+            settle(skipped)
           },
-          onDragCancel = { scope.launch { swipe.animateTo(0f, com.example.ui.theme.Motion.defaultSpatial()) } }
+          onDragCancel = { settle(0) }
         ) { change, dx ->
           change.consume()
-          scope.launch { swipe.snapTo(swipe.value + dx) }
+          swipe += dx
         }
       }
-      .pressClickable(pressedScale = 0.985f, onClick = onClick)
-      // A thin line of progress along the bottom edge.
-      .drawBehind {
-        val h = 2.5.dp.toPx()
-        val inset = 22.dp.toPx()
+      .pressClickable(pressedScale = 0.985f, onClickLabel = "Abrir player", onClick = onClick)
+      .semantics {
+        customActions = listOf(
+          CustomAccessibilityAction("Faixa anterior") { currentPrevious(); true },
+          CustomAccessibilityAction("Próxima faixa") { currentNext(); true }
+        )
+      }
+      // A hairline of progress along the bottom edge, inside the capsule's straight part.
+      .drawWithContent {
+        drawContent()
+        val h = 2.dp.toPx()
+        val inset = size.height / 2f
         val w = size.width - inset * 2
-        drawRoundRect(track0, topLeft = androidx.compose.ui.geometry.Offset(inset, size.height - h - 3.dp.toPx()), size = Size(w, h), cornerRadius = CornerRadius(h))
-        drawRoundRect(fill, topLeft = androidx.compose.ui.geometry.Offset(inset, size.height - h - 3.dp.toPx()), size = Size(w * progress().coerceIn(0f, 1f), h), cornerRadius = CornerRadius(h))
+        val top = size.height - h - 1.dp.toPx()
+        drawRoundRect(rail, topLeft = Offset(inset, top), size = Size(w, h), cornerRadius = CornerRadius(h))
+        drawRoundRect(fill, topLeft = Offset(inset, top), size = Size(w * progress().coerceIn(0f, 1f), h), cornerRadius = CornerRadius(h))
       }
       .testTag("mini_player_bar")
   ) {
@@ -509,212 +531,212 @@ fun MiniPlayerBar(
       modifier = Modifier
         .fillMaxWidth()
         .graphicsLayer {
-          translationX = swipe.value
-          alpha = 1f - (kotlin.math.abs(swipe.value) / size.width.coerceAtLeast(1f)).coerceIn(0f, 0.6f)
+          translationX = swipe
+          alpha = 1f - (kotlin.math.abs(swipe) / size.width.coerceAtLeast(1f)).coerceIn(0f, 0.6f)
         }
-        .padding(start = 10.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        .padding(start = Space.s + Space.xxs, end = Space.xs, top = Space.s, bottom = Space.s),
       verticalAlignment = Alignment.CenterVertically
     ) {
-      TrackArtwork(track = track, shape = RoundedCornerShape(16.dp), iconSize = 24.dp, modifier = Modifier.size(46.dp))
-
-      Spacer(modifier = Modifier.width(14.dp))
-
+      TrackArtwork(track = track, shape = Shapes.xs, iconSize = 20.dp, modifier = Modifier.size(40.dp))
+      Spacer(modifier = Modifier.width(Space.m))
       Column(modifier = Modifier.weight(1f)) {
         Text(
           text = track.title,
-          fontSize = 17.sp,
+          style = AppText.Subhead.copy(fontWeight = FontWeight.SemiBold),
           color = MaterialTheme.colorScheme.onSurface,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis
         )
         Text(
           text = track.artist,
-          fontSize = 13.sp,
+          style = AppText.Footnote,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis
         )
       }
-
-      IconButton(
-        onClick = onTogglePlayPause,
+      Box(
         modifier = Modifier
-          .size(48.dp)
-          .testTag("mini_player_play_pause")
+          .size(Sizes.touch)
+          .clip(Shapes.pill)
+          .clickable(role = Role.Button, onClick = onTogglePlayPause)
+          .testTag("mini_player_play_pause"),
+        contentAlignment = Alignment.Center
       ) {
-        PlayPauseIcon(
-          isPlaying = isPlaying,
-          tint = MaterialTheme.colorScheme.onSurface,
-          modifier = Modifier.size(34.dp)
-        )
+        PlayPauseIcon(isPlaying = isPlaying, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(28.dp))
       }
-
-      IconButton(
+      IconAction(
+        icon = Icons.Rounded.SkipNext,
+        contentDescription = "Próxima faixa",
         onClick = onNext,
-        modifier = Modifier
-          .size(48.dp)
-          .testTag("mini_player_next")
-      ) {
-        Icon(
-          imageVector = Icons.Default.SkipNext,
-          contentDescription = "Próxima Faixa",
-          tint = MaterialTheme.colorScheme.onSurface,
-          modifier = Modifier.size(34.dp)
-        )
-      }
+        tint = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.testTag("mini_player_next")
+      )
     }
   }
 }
 
 /**
- * Play and pause turn into each other: the old symbol spins away and shrinks while the new one
- * springs in, instead of a hard swap. With reduced motion it simply swaps.
+ * Play and pause turn into each other: the two pause bars reshape into the two halves of the play
+ * triangle (and back), on a short critically damped spring, so the glyph morphs precisely with no
+ * overshoot. With reduced motion it swaps. Announced as "Pausar" or "Reproduzir".
  */
 @Composable
 fun PlayPauseIcon(isPlaying: Boolean, tint: Color, modifier: Modifier = Modifier) {
-  val reduced = com.example.ui.theme.rememberReducedMotion()
-  androidx.compose.animation.AnimatedContent(
-    targetState = isPlaying,
-    transitionSpec = {
-      if (reduced) {
-        androidx.compose.animation.EnterTransition.None togetherWith androidx.compose.animation.ExitTransition.None
-      } else {
-        (androidx.compose.animation.scaleIn(com.example.ui.theme.Motion.fastSpatial(), initialScale = 0.4f) +
-          androidx.compose.animation.fadeIn(tween(120))) togetherWith
-          (androidx.compose.animation.scaleOut(tween(120), targetScale = 0.4f) + androidx.compose.animation.fadeOut(tween(90)))
+  val reduced = rememberReducedMotion()
+  // 0 = play triangle, 1 = pause bars.
+  val morph by animateFloatAsState(
+    targetValue = if (isPlaying) 1f else 0f,
+    animationSpec = if (reduced) snap() else spring(dampingRatio = 1f, stiffness = 1100f),
+    label = "playPauseMorph"
+  )
+  val path = remember { Path() }
+  Canvas(
+    modifier = modifier.semantics { contentDescription = if (isPlaying) "Pausar" else "Reproduzir" }
+  ) {
+    val k = size.minDimension / 24f
+    val ox = (size.width - 24f * k) / 2f
+    val oy = (size.height - 24f * k) / 2f
+    val t = morph.coerceIn(0f, 1f)
+    path.reset()
+    for (shape in 0..1) {
+      val play = PlayShape[shape]
+      val pause = PauseShape[shape]
+      for (i in 0 until 4) {
+        val x = ox + (play[i * 2] + (pause[i * 2] - play[i * 2]) * t) * k
+        val y = oy + (play[i * 2 + 1] + (pause[i * 2 + 1] - play[i * 2 + 1]) * t) * k
+        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
       }
-    },
-    label = "playPause",
-    modifier = modifier
-  ) { playing ->
-    Icon(
-      imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
-      contentDescription = if (playing) "Pausar" else "Reproduzir",
-      tint = tint,
-      modifier = Modifier.fillMaxSize()
-    )
+      path.close()
+    }
+    drawPath(path, tint)
   }
 }
 
+// On a 24-unit grid, each shape as four corners (top-left, top-right, bottom-right, bottom-left). The
+// play triangle (8,5) (19,12) (8,19) is cut at x = 13.5 into a quad and a triangle with a doubled
+// point, so both glyphs have the same number of corners and morph point by point.
+private val PlayShape = arrayOf(
+  floatArrayOf(8f, 5f, 13.5f, 8.5f, 13.5f, 15.5f, 8f, 19f),
+  floatArrayOf(13.5f, 8.5f, 19f, 12f, 19f, 12f, 13.5f, 15.5f)
+)
+private val PauseShape = arrayOf(
+  floatArrayOf(6f, 5f, 10f, 5f, 10f, 19f, 6f, 19f),
+  floatArrayOf(14f, 5f, 18f, 5f, 18f, 19f, 14f, 19f)
+)
+
+/**
+ * What the assistant did, in words: a check or an alert, a short human title and the result. The
+ * tool's code name stays out of the interface; unknown tools get a generic title.
+ */
 @Composable
 fun ToolReportCard(
-  report: com.example.data.model.ToolExecutionReport,
+  report: ToolExecutionReport,
   modifier: Modifier = Modifier
 ) {
-  Surface(
-    shape = RoundedCornerShape(8.dp),
-    color = MaterialTheme.colorScheme.background,
+  val colors = MaterialTheme.colorScheme
+  Row(
     modifier = modifier
       .fillMaxWidth()
-      .testTag("tool_report_${report.toolName}")
+      .clip(Shapes.s)
+      .background(colors.surfaceContainer)
+      .padding(horizontal = Space.m, vertical = Space.s)
+      .semantics(mergeDescendants = true) {}
+      .testTag("tool_report_${report.toolName}"),
+    verticalAlignment = Alignment.Top
   ) {
-    Row(
-      modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-      verticalAlignment = Alignment.CenterVertically
-    ) {
-      Icon(
-        imageVector = if (report.success) Icons.Default.CheckCircle else Icons.Default.ErrorOutline,
-        contentDescription = null,
-        tint = if (report.success) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-        modifier = Modifier.size(14.dp)
+    Icon(
+      imageVector = if (report.success) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
+      contentDescription = if (report.success) "Concluído" else "Não concluído",
+      tint = if (report.success) colors.primary else colors.error,
+      modifier = Modifier
+        .padding(top = 1.dp)
+        .size(16.dp)
+    )
+    Spacer(modifier = Modifier.width(Space.s))
+    Column {
+      Text(
+        text = toolTitle(report.toolName, report.success),
+        style = AppText.Footnote.copy(fontWeight = FontWeight.SemiBold),
+        color = colors.onSurface
       )
-      Spacer(modifier = Modifier.width(6.dp))
-      Column {
-        Text(
-          text = "Ação: ${report.toolName}()",
-          fontSize = 10.sp,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.primary
-        )
-        Text(
-          text = report.resultSummary,
-          fontSize = 10.sp,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+      if (report.resultSummary.isNotBlank()) {
+        Text(text = report.resultSummary, style = AppText.Footnote, color = colors.onSurfaceVariant)
       }
     }
   }
 }
 
+/** A person's name for what a tool did. */
+private fun toolTitle(toolName: String, success: Boolean): String = when (toolName) {
+  "analyze_and_research_music" -> "Pesquisa sobre a música"
+  "get_current_track" -> "Faixa atual"
+  "get_audio_capabilities" -> "Recursos de áudio"
+  "apply_audio_profile" -> "Perfil de áudio"
+  "create_timer" -> "Timer criado"
+  "cancel_timer" -> "Timer cancelado"
+  else -> if (success) "Feito" else "Não deu certo"
+}
+
+/**
+ * The track's curiosity (the app's equivalent of lyrics): the short story, the documented facts and
+ * the sources. Scrolls when it is long; text never goes below Footnote.
+ */
 @Composable
 fun CuriosityDetailDialog(
-  curiosity: com.example.data.model.Curiosity,
+  curiosity: Curiosity,
   onDismiss: () -> Unit
 ) {
-  androidx.compose.material3.AlertDialog(
+  val colors = MaterialTheme.colorScheme
+  AlertDialog(
     onDismissRequest = onDismiss,
     title = {
       Column {
+        Text(text = "Curiosidade da faixa", style = AppText.Title3, color = colors.onSurface)
+        Spacer(Modifier.height(Space.xxs))
         Text(
-          text = "💡 Curiosidade da Faixa",
-          fontFamily = SpaceGrotesk,
-          fontWeight = FontWeight.Bold,
-          fontSize = 18.sp,
-          color = MaterialTheme.colorScheme.primary
-        )
-        Text(
-          text = "${curiosity.trackTitle} • ${curiosity.artist}",
-          fontSize = 13.sp,
-          color = MaterialTheme.colorScheme.onSurfaceVariant
+          text = "${curiosity.trackTitle} · ${curiosity.artist}",
+          style = AppText.Footnote,
+          color = colors.onSurfaceVariant
         )
       }
     },
     text = {
       Column(
-        modifier = Modifier.padding(vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        modifier = Modifier.verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(Space.l)
       ) {
-        Text(
-          text = curiosity.shortTrivia,
-          fontSize = 13.sp,
-          color = MaterialTheme.colorScheme.onSurface,
-          lineHeight = 19.sp
-        )
-
-        Surface(
-          shape = RoundedCornerShape(8.dp),
-          color = MaterialTheme.colorScheme.surfaceVariant,
-          modifier = Modifier.fillMaxWidth()
-        ) {
-          Column(modifier = Modifier.padding(10.dp)) {
+        Text(text = curiosity.shortTrivia, style = AppText.Body, color = colors.onSurface)
+        if (curiosity.documentedFacts.isNotBlank()) {
+          Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
             Text(
-              text = "FATOS HISTÓRICOS:",
-              fontSize = 10.sp,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.primary
+              text = "Fatos documentados",
+              style = AppText.Footnote.copy(fontWeight = FontWeight.SemiBold),
+              color = colors.onSurfaceVariant,
+              modifier = Modifier.semantics { heading() }
             )
+            Text(text = curiosity.documentedFacts, style = AppText.Subhead, color = colors.onSurface)
+          }
+        }
+        if (curiosity.sources.isNotEmpty()) {
+          Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
             Text(
-              text = curiosity.documentedFacts,
-              fontSize = 11.sp,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              lineHeight = 15.sp,
-              modifier = Modifier.padding(top = 2.dp, bottom = 6.dp)
-            )
-
-            Text(
-              text = "FONTES DOCUMENTADAS:",
-              fontSize = 10.sp,
-              fontWeight = FontWeight.Bold,
-              color = MaterialTheme.colorScheme.primary
+              text = "Fontes",
+              style = AppText.Footnote.copy(fontWeight = FontWeight.SemiBold),
+              color = colors.onSurfaceVariant,
+              modifier = Modifier.semantics { heading() }
             )
             curiosity.sources.forEach { src ->
-              Text(
-                text = "• $src",
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 14.sp
-              )
+              Text(text = "• $src", style = AppText.Footnote, color = colors.onSurfaceVariant)
             }
           }
         }
       }
     },
     confirmButton = {
-      androidx.compose.material3.Button(onClick = onDismiss) {
-        Text("Fechar")
+      TextButton(onClick = onDismiss) {
+        Text("Fechar", style = AppText.Headline)
       }
     }
   )
 }
-
-

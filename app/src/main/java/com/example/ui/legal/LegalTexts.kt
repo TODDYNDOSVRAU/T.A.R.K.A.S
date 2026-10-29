@@ -112,6 +112,14 @@ object LegalTexts {
     title = "Novidades",
     subtitle = "O que mudou em cada versão",
     sections = listOf(
+      "1.11" to
+        "• Visual refeito do zero: tipografia, espaçamentos e listas no padrão dos apps da Apple, com menos vidro e mais clareza.\n" +
+        "• Nova animação de abertura.\n" +
+        "• Áudio espacial para fones, com intensidade ajustável, na aba Áudio.\n" +
+        "• Animações mais fluidas e precisas; o botão de play se transforma em pause.\n" +
+        "• O botão voltar segue o caminho que você fez, e o app volta para a mesma tela depois de girar ou ser fechado pelo Android.\n" +
+        "• Faders, botões giratórios e barra de progresso funcionam com o TalkBack.\n" +
+        "• Correções: a música parava entre as faixas em alguns aparelhos; o YouTube e o Spotify travavam se a página fechasse sozinha; a curiosidade não pausava; avisos sumiam rápido demais.",
       "1.10" to
         "• A música continua tocando com a tela apagada e com o app fechado, com controles na notificação, na tela de bloqueio, no fone e no Bluetooth.\n" +
         "• Biblioteca > Músicas: todas as músicas do celular, com capa, artista e álbum.\n" +

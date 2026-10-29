@@ -54,6 +54,8 @@ class AudioEngineManager(private val context: Context) {
   private companion object {
     // Volume while another app needs a moment of the audio focus (a navigation prompt, for example).
     const val DUCK_VOLUME = 0.25f
+    /** How long the focus is kept after a track ends or stops, for what comes next. */
+    const val FOCUS_HOLD_MS = 4000L
 
     /** Outputs where a binaural render is heard as intended (26 = TYPE_BLE_HEADSET, API 31). */
     val HEADPHONE_TYPES = setOf(
@@ -133,6 +135,8 @@ class AudioEngineManager(private val context: Context) {
   private var noisyReceiverRegistered = false
 
   private fun requestFocus(): Boolean {
+    focusRelease?.cancel()
+    focusRelease = null
     val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
         .setAudioAttributes(playbackAttributes)
@@ -149,7 +153,24 @@ class AudioEngineManager(private val context: Context) {
     return granted
   }
 
+  /** Pending release of the focus after a track ended; a new track that starts in time keeps it. */
+  private var focusRelease: Job? = null
+
+  /**
+   * Keeps the focus for a few seconds after a track ends. Giving it back at once lets a paused app (a
+   * podcast, a video) resume over the narration or the next track that is about to start.
+   */
+  private fun releaseFocusSoon() {
+    focusRelease?.cancel()
+    focusRelease = coroutineScope.launch {
+      delay(FOCUS_HOLD_MS)
+      if (!_isPlaying.value && !pendingStart) abandonFocus()
+    }
+  }
+
   private fun abandonFocus() {
+    focusRelease?.cancel()
+    focusRelease = null
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
     } else {
@@ -269,8 +290,8 @@ class AudioEngineManager(private val context: Context) {
           }
         }
         Player.STATE_ENDED -> {
-          // Give the focus back between tracks; the next track asks for it again.
-          abandonFocus()
+          // The focus is held a moment longer: the next track or a narration usually follows.
+          releaseFocusSoon()
           unregisterNoisyReceiver()
           _isPlaying.value = false
           _currentPositionMs.value = 0L
@@ -426,12 +447,16 @@ class AudioEngineManager(private val context: Context) {
     val p = player ?: return
     if (!_isPlaying.value) return
     val steps = 30
-    for (i in steps downTo 0) {
-      p.volume = i / steps.toFloat()
-      delay(durationMs / steps)
+    try {
+      for (i in steps downTo 0) {
+        p.volume = i / steps.toFloat()
+        delay(durationMs / steps)
+      }
+      pauseByUser()
+    } finally {
+      // Also when the timer is cancelled halfway through the fade.
+      p.volume = 1f
     }
-    pauseByUser()
-    p.volume = 1f
   }
 
   /** Attaches the live spectrum again, after the microphone permission it needs was granted. */
@@ -488,7 +513,8 @@ class AudioEngineManager(private val context: Context) {
       Log.e(TAG, "Error stopping player", e)
     } finally {
       _isPlaying.value = false
-      abandonFocus()
+      // Stopping is usually a switch to another track, a web track or a narration: hold the focus briefly.
+      releaseFocusSoon()
       unregisterNoisyReceiver()
       _currentPositionMs.value = 0L
       _durationMs.value = 0L
@@ -626,8 +652,23 @@ class AudioEngineManager(private val context: Context) {
     eqDsp.update(processedSettings())
   }
 
-  private fun processedSettings(): EqSettings =
-    if (coveredByOutputMix) _eqSettings.value.copy(enabled = false) else _eqSettings.value
+  /**
+   * With root, the system-wide equalizer already shapes the output mix, so the curve here goes flat to
+   * avoid applying it twice. Balance, width and the limiter stay: the system equalizer has none of them.
+   */
+  private fun processedSettings(): EqSettings {
+    val s = _eqSettings.value
+    if (!coveredByOutputMix || !s.enabled) return s
+    return s.copy(
+      bands = s.bands.map { it.copy(gainDb = 0f) },
+      paramBands = s.paramBands.map { it.copy(gainDb = 0f) },
+      preampDb = 0f,
+      bassDb = 0f,
+      trebleDb = 0f,
+      device = null,
+      autoPreamp = false
+    )
+  }
 
 
   private fun applyVirtualizer() {

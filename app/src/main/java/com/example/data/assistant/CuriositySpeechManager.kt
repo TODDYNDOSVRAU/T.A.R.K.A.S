@@ -39,6 +39,25 @@ class CuriositySpeechManager(
 
   private var activeCompletionCallback: (() -> Unit)? = null
 
+  /**
+   * Ends a narration whose engine never reports back (the TTS service died or was swapped). Without it
+   * the track waiting behind an intro would never start.
+   */
+  private var watchdog: kotlinx.coroutines.Job? = null
+
+  private fun armWatchdog(utteranceId: String, text: String, rate: Float) {
+    watchdog?.cancel()
+    val expectedMs = (text.length * MS_PER_CHAR / rate.coerceIn(0.5f, 2f)).toLong() + WATCHDOG_SLACK_MS
+    watchdog = scope.launch {
+      kotlinx.coroutines.delay(expectedMs)
+      if (activeUtteranceId == utteranceId) {
+        Log.w(TAG, "Narration never reported its end; moving on")
+        try { tts?.stop() } catch (_: Exception) {}
+        finish(utteranceId)
+      }
+    }
+  }
+
   /** The utterance whose end runs [activeCompletionCallback]; the end of an older, replaced one is ignored. */
   private var activeUtteranceId: String? = null
 
@@ -160,6 +179,7 @@ class CuriositySpeechManager(
         val utteranceId = "curiosity_${UUID.randomUUID()}"
         activeUtteranceId = utteranceId
         speak(spokenText, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+        armWatchdog(utteranceId, spokenText, config.speechRate)
       }
     } catch (e: Exception) {
       Log.e(TAG, "Error triggering speak", e)
@@ -189,7 +209,9 @@ class CuriositySpeechManager(
       return
     }
 
-    activeCompletionCallback = onDone
+    // A test during an intro must not lose the track waiting for that intro: it runs after the test.
+    val pending = activeCompletionCallback
+    activeCompletionCallback = if (pending == null) onDone else ({ pending(); onDone() })
 
     try {
       tts?.apply {
@@ -200,6 +222,7 @@ class CuriositySpeechManager(
         val utteranceId = "test_voice_${UUID.randomUUID()}"
         activeUtteranceId = utteranceId
         speak(sampleText, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
+        armWatchdog(utteranceId, sampleText, config.speechRate)
       }
     } catch (e: Exception) {
       Log.e(TAG, "Error playing test voice", e)
@@ -218,6 +241,7 @@ class CuriositySpeechManager(
    */
   fun stopSpeech(continueAfter: Boolean = false) {
     activeUtteranceId = null
+    watchdog?.cancel()
     try {
       tts?.stop()
     } catch (_: Exception) {}
@@ -238,5 +262,11 @@ class CuriositySpeechManager(
     } catch (_: Exception) {}
     tts = null
     isInitialized = false
+  }
+
+  private companion object {
+    /** A generous speaking time per character at rate 1.0, so the watchdog never cuts a real narration. */
+    const val MS_PER_CHAR = 110f
+    const val WATCHDOG_SLACK_MS = 4000L
   }
 }

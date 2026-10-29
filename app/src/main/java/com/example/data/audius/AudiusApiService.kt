@@ -63,19 +63,21 @@ object AudiusApiService {
         .addHeader("Accept", "application/json")
         .build()
 
-      val response = client.newCall(request).execute()
-      if (!response.isSuccessful) {
-        Log.w(TAG, "Audius node returned code ${response.code} for $url")
-        return null
-      }
-
-      val body = response.body?.string() ?: return null
+      // use{} closes the response on every path, so a failed node never leaks its connection.
+      val body = client.newCall(request).execute().use { response ->
+        if (!response.isSuccessful) {
+          Log.w(TAG, "Audius node returned code ${response.code} for $url")
+          return null
+        }
+        response.body?.string()
+      } ?: return null
       val json = JSONObject(body)
       val data = json.optJSONArray("data") ?: return null
 
       val result = mutableListOf<Track>()
       for (i in 0 until data.length()) {
-        val item = data.getJSONObject(i)
+        // One malformed entry is skipped instead of throwing away the whole node's results.
+        val item = data.optJSONObject(i) ?: continue
         val id = item.optString("id").ifBlank { item.optInt("track_id", 0).toString() }
         if (id.isBlank() || id == "0") continue
         // Unstreamable tracks (gated or removed) answer 404 on /stream: leave them out.

@@ -194,9 +194,9 @@ object EqPresets {
 
   /** [maxGainDb]: the user's bands stop at ±15 dB; fone corrections may need up to ±20 dB. */
   fun bandFromJson(o: JSONObject, maxGainDb: Float = EqBand.MAX_GAIN): EqBand = EqBand(
-    freqHz = o.optDouble("f", 1000.0).toFloat().coerceIn(EqBand.MIN_FREQ, EqBand.MAX_FREQ),
-    gainDb = o.optDouble("g", 0.0).toFloat().coerceIn(-maxGainDb, maxGainDb),
-    q = o.optDouble("q", EqBand.DEFAULT_Q.toDouble()).toFloat().coerceIn(EqBand.MIN_Q, EqBand.MAX_Q),
+    freqHz = o.finiteDouble("f", 1000.0).toFloat().coerceIn(EqBand.MIN_FREQ, EqBand.MAX_FREQ),
+    gainDb = o.finiteDouble("g", 0.0).toFloat().coerceIn(-maxGainDb, maxGainDb),
+    q = o.finiteDouble("q", EqBand.DEFAULT_Q.toDouble()).toFloat().coerceIn(EqBand.MIN_Q, EqBand.MAX_Q),
     type = FilterType.fromKey(o.optString("t")),
     enabled = o.optBoolean("on", true)
   )
@@ -233,7 +233,7 @@ object EqPresets {
       name = o.optString("name"),
       source = o.optString("source"),
       rig = o.optString("rig"),
-      preampDb = o.optDouble("preamp", 0.0).toFloat().coerceIn(-30f, 10f),
+      preampDb = o.finiteDouble("preamp", 0.0).toFloat().coerceIn(-30f, 10f),
       bands = (0 until arr.length()).map { bandFromJson(arr.getJSONObject(it), maxGainDb = DEVICE_MAX_GAIN_DB) }
     )
   }
@@ -256,15 +256,15 @@ object EqPresets {
       paramBands = paramBands,
       enabled = o.optBoolean("enabled", true),
       bands = bands,
-      preampDb = o.optDouble("preamp", 0.0).toFloat().coerceIn(-EqSettings.PREAMP_RANGE_DB, EqSettings.PREAMP_RANGE_DB),
-      bassDb = o.optDouble("bass", 0.0).toFloat().coerceIn(-EqSettings.TONE_RANGE_DB, EqSettings.TONE_RANGE_DB),
-      bassFreqHz = o.optDouble("bassF", d.bassFreqHz.toDouble()).toFloat(),
-      trebleDb = o.optDouble("treble", 0.0).toFloat().coerceIn(-EqSettings.TONE_RANGE_DB, EqSettings.TONE_RANGE_DB),
-      trebleFreqHz = o.optDouble("trebleF", d.trebleFreqHz.toDouble()).toFloat(),
-      balance = o.optDouble("balance", 0.0).toFloat().coerceIn(-1f, 1f),
-      stereoWidth = o.optDouble("width", 1.0).toFloat().coerceIn(0f, 2f),
+      preampDb = o.finiteDouble("preamp", 0.0).toFloat().coerceIn(-EqSettings.PREAMP_RANGE_DB, EqSettings.PREAMP_RANGE_DB),
+      bassDb = o.finiteDouble("bass", 0.0).toFloat().coerceIn(-EqSettings.TONE_RANGE_DB, EqSettings.TONE_RANGE_DB),
+      bassFreqHz = o.finiteDouble("bassF", d.bassFreqHz.toDouble()).toFloat(),
+      trebleDb = o.finiteDouble("treble", 0.0).toFloat().coerceIn(-EqSettings.TONE_RANGE_DB, EqSettings.TONE_RANGE_DB),
+      trebleFreqHz = o.finiteDouble("trebleF", d.trebleFreqHz.toDouble()).toFloat(),
+      balance = o.finiteDouble("balance", 0.0).toFloat().coerceIn(-1f, 1f),
+      stereoWidth = o.finiteDouble("width", 1.0).toFloat().coerceIn(0f, 2f),
       limiterEnabled = o.optBoolean("limiter", true),
-      limiterCeilingDb = o.optDouble("ceiling", -0.5).toFloat().coerceIn(-12f, 0f),
+      limiterCeilingDb = o.finiteDouble("ceiling", -0.5).toFloat().coerceIn(-12f, 0f),
       autoPreamp = o.optBoolean("autoPre", true),
       virtualizerStrength = o.optInt("virt", 0).coerceIn(0, 1000),
       device = deviceFromJson(o.optJSONObject("device"))
@@ -295,3 +295,7 @@ object EqPresets {
     }
   }
 }
+
+/** A number from saved or imported JSON; "NaN", "Infinity" or text fall back to [default], so they never reach a filter. */
+private fun org.json.JSONObject.finiteDouble(key: String, default: Double): Double =
+  optDouble(key, default).takeIf { it.isFinite() } ?: default

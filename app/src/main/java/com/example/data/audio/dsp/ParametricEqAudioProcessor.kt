@@ -20,9 +20,9 @@ class ParametricEqAudioProcessor(private val dsp: EqDsp) : BaseAudioProcessor() 
 
   override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
     val enc = inputAudioFormat.encoding
-    if (enc != C.ENCODING_PCM_16BIT && enc != C.ENCODING_PCM_FLOAT) {
-      throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
-    }
+    // Any other encoding passes through untouched (NOT_SET makes this processor inactive) instead of
+    // failing the whole audio sink.
+    if (enc != C.ENCODING_PCM_16BIT && enc != C.ENCODING_PCM_FLOAT) return AudioProcessor.AudioFormat.NOT_SET
     encoding = enc
     channels = inputAudioFormat.channelCount
     dsp.configure(inputAudioFormat.sampleRate, inputAudioFormat.channelCount)

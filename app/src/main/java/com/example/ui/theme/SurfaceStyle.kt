@@ -117,66 +117,37 @@ private fun Modifier.liquidGlass(shape: CornerBasedShape, backdrop: LayerBackdro
 }
 
 /**
- * The same glass look for controls that sit inside the page (search field, round buttons). They sit
- * on the plain page colour, so there is nothing to blur behind them: they keep the tint, reflection and
- * rim of the floating capsules without the cost of a blur. Solid style gives a plain filled control.
+ * Controls inside the page (search field, chips, round buttons). Glass belongs to what floats over the
+ * content (the tab bar, the mini player); a control that sits on the page is a plain, quiet fill, the
+ * way the platform draws its own buttons. Selected, it takes a light wash of the accent. The same in
+ * every surface style, so pages look alike whatever the bars are made of.
  */
 @Composable
 fun Modifier.glassControl(shape: Shape, selected: Boolean = false): Modifier {
-  val style = LocalSurfaceStyle.current
   val colors = MaterialTheme.colorScheme
   val isDark = colors.background.luminance() < 0.5f
-
-  if (style == SurfaceStyle.SOLID) {
-    return this.clip(shape).background(if (selected) colors.primary else colors.surfaceVariant, shape)
-  }
-  val frosted = style == SurfaceStyle.FROSTED
-  val fill = if (isDark) Color.White.copy(alpha = if (frosted) 0.09f else 0.07f)
-  else Color.White.copy(alpha = if (frosted) 0.75f else 0.6f)
-  val base = this
-    .clip(shape)
-    .background(fill, shape)
-  if (selected) {
-    // A selected glass control keeps its glass and takes the accent as a tint and an edge.
-    return base
-      .background(colors.primary.copy(alpha = if (isDark) 0.20f else 0.16f), shape)
-      .border(1.2.dp, colors.primary.copy(alpha = 0.85f), shape)
-  }
-  return base
-    // On a light page a white glass control would vanish, so a very faint dark edge keeps its shape.
-    .then(if (isDark) Modifier else Modifier.border(0.6.dp, Color.Black.copy(alpha = 0.06f), shape))
-    .glassFinish(frosted, isDark)
+  val fill = if (selected) colors.primary.copy(alpha = if (isDark) 0.18f else 0.14f) else colors.surfaceContainer
+  return this.clip(shape).background(fill, shape)
 }
 
-/** Text and icon colour that reads on [glassControl]: on solid, a selected control is an accent fill. */
+/** Text and icon colour that reads on [glassControl]. */
 @Composable
 fun glassContentColor(selected: Boolean = false): Color {
   val colors = MaterialTheme.colorScheme
-  return when {
-    !selected -> colors.onSurface
-    LocalSurfaceStyle.current == SurfaceStyle.SOLID -> colors.onPrimary
-    else -> colors.primary
-  }
+  return if (selected) colors.primary else colors.onSurface
 }
 
 /**
  * Reflection and glow shared by the blurred and in-page glass. No outline: the edge comes from
  * light, not a drawn border. Real liquid glass lights its own rim, so it does not use this.
  */
+@Suppress("UNUSED_PARAMETER")
 private fun Modifier.glassFinish(frosted: Boolean, isDark: Boolean): Modifier {
-  if (frosted) {
-    // Frosted glass: only a faint lift at the top, so the capsule reads without a hard edge.
-    val lift = Color.White.copy(alpha = if (isDark) 0.05f else 0.18f)
-    return this.drawBehind {
-      drawRect(Brush.verticalGradient(listOf(lift, Color.Transparent), endY = size.height * 0.5f))
-    }
-  }
-  val sheen = Color.White.copy(alpha = if (isDark) 0.09f else 0.30f)
-  val glow = Color.White.copy(alpha = if (isDark) 0.06f else 0.20f)
+  // Only a faint lift at the top, so the capsule reads as a surface without a drawn outline or a
+  // glossy reflection.
+  val lift = Color.White.copy(alpha = if (isDark) 0.05f else 0.16f)
   return this.drawBehind {
-    // Reflection on the upper half and a glow along the lower edge, like light through a lens.
-    drawRect(Brush.verticalGradient(listOf(sheen, Color.Transparent), endY = size.height * 0.55f))
-    drawRect(Brush.verticalGradient(listOf(Color.Transparent, glow), startY = size.height * 0.72f, endY = size.height))
+    drawRect(Brush.verticalGradient(listOf(lift, Color.Transparent), endY = size.height * 0.5f))
   }
 }
 

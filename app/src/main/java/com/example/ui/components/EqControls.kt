@@ -25,94 +25,229 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.data.model.FilterType
+import kotlin.math.abs
+
+/*
+ * The equalizer's own controls: a vertical fader and a rotary knob. Both are drawn flat (a quiet
+ * track, the accent only on the part that is not neutral, a plain handle) and both are real
+ * adjustable controls for a screen reader: they say what they set, read out their value with its
+ * unit, and take the swipe-up / swipe-down adjust gestures of TalkBack.
+ */
 
 private const val KNOB_SWEEP = 270f
 private const val KNOB_START = 135f
 
+/** How far a finger travels, in control heights, to sweep the whole range. Keeps fine moves possible. */
+private const val FADER_TRAVEL = 1.4f
+private const val KNOB_TRAVEL = 2.2f
+
 /**
- * A rotary knob like a hardware mixer's: a dark disc with an indicator tick, and an arc of light
- * around it showing the value. [value] runs 0..1; drag up or right to turn it, double-tap to go back
- * to [defaultValue]. A [bipolar] knob draws its arc from the top (centre) instead of from the start.
+ * A vertical fader: [value] runs from -1 (bottom) to +1 (top), 0 is the centre detent. The lit part
+ * runs from the centre to the handle, so a cut and a boost read differently at a glance. A tap jumps
+ * to the finger; a drag moves relative to where it started, so touching the handle never makes it
+ * jump.
+ *
+ * [label] names what it sets ("Banda 1 kHz"); [stateText] is the value as heard ("+3.0 dB").
+ * [steps] is how many stops a screen reader's adjust gesture walks between the ends.
+ * [onHeldChange] reports a finger on the fader, so the caller can enlarge its readout.
+ */
+@Composable
+fun EqFader(
+  value: Float,
+  onChange: (Float) -> Unit,
+  label: String,
+  stateText: String,
+  modifier: Modifier = Modifier,
+  enabled: Boolean = true,
+  steps: Int = 29,
+  onHeldChange: (Boolean) -> Unit = {}
+) {
+  val colors = MaterialTheme.colorScheme
+  val current by rememberUpdatedState(value)
+  val change by rememberUpdatedState(onChange)
+  val held by rememberUpdatedState(onHeldChange)
+  var dragValue by remember { mutableFloatStateOf(value) }
+  val track = colors.onSurface.copy(alpha = 0.12f)
+  val tick = colors.onSurface.copy(alpha = 0.24f)
+  val accent = if (enabled) colors.primary else colors.onSurface.copy(alpha = 0.24f)
+  val handle = if (enabled) colors.onSurface else colors.onSurface.copy(alpha = 0.38f)
+
+  Canvas(
+    modifier = modifier
+      .semantics {
+        contentDescription = label
+        stateDescription = stateText
+        progressBarRangeInfo = ProgressBarRangeInfo(value.coerceIn(-1f, 1f), -1f..1f, steps)
+        if (enabled) {
+          setProgress { target ->
+            change(target.coerceIn(-1f, 1f))
+            true
+          }
+        } else {
+          disabled()
+        }
+      }
+      .pointerInput(enabled) {
+        if (!enabled) return@pointerInput
+        detectTapGestures(
+          onPress = {
+            held(true)
+            tryAwaitRelease()
+            held(false)
+          },
+          onTap = { o -> change(faderPosToValue(o.y, size.height.toFloat(), FADER_HANDLE_H.toPx())) }
+        )
+      }
+      .pointerInput(enabled) {
+        if (!enabled) return@pointerInput
+        detectVerticalDragGestures(
+          onDragStart = {
+            dragValue = current
+            held(true)
+          },
+          onDragEnd = { held(false) },
+          onDragCancel = { held(false) }
+        ) { c, dy ->
+          c.consume()
+          val travel = size.height * FADER_TRAVEL
+          dragValue = (dragValue - 2f * dy / travel).coerceIn(-1f, 1f)
+          change(dragValue)
+        }
+      }
+  ) {
+    val cx = size.width / 2f
+    val handleH = FADER_HANDLE_H.toPx()
+    val handleW = FADER_HANDLE_W.toPx().coerceAtMost(size.width)
+    val top = handleH / 2f
+    val bottom = size.height - handleH / 2f
+    val mid = (top + bottom) / 2f
+    val y = bottom - (value.coerceIn(-1f, 1f) + 1f) / 2f * (bottom - top)
+    val trackW = 4.dp.toPx()
+
+    // The centre detent, printed on both sides of the track like a desk's 0 dB mark.
+    val tickLen = 6.dp.toPx()
+    val gap = 6.dp.toPx()
+    drawLine(tick, Offset(cx - gap - tickLen, mid), Offset(cx - gap, mid), 1.dp.toPx())
+    drawLine(tick, Offset(cx + gap, mid), Offset(cx + gap + tickLen, mid), 1.dp.toPx())
+
+    drawLine(track, Offset(cx, top), Offset(cx, bottom), strokeWidth = trackW, cap = StrokeCap.Round)
+    if (abs(y - mid) > 0.5f) {
+      drawLine(accent, Offset(cx, mid), Offset(cx, y), strokeWidth = trackW, cap = StrokeCap.Round)
+    }
+    drawRoundRect(
+      color = handle,
+      topLeft = Offset(cx - handleW / 2f, y - handleH / 2f),
+      size = Size(handleW, handleH),
+      cornerRadius = CornerRadius(handleH / 2f)
+    )
+  }
+}
+
+/** The handle's size; its travel stops half a handle from each end. */
+private val FADER_HANDLE_H = 14.dp
+private val FADER_HANDLE_W = 30.dp
+
+private fun faderPosToValue(y: Float, h: Float, handle: Float): Float {
+  val top = handle / 2f
+  val bottom = h - handle / 2f
+  return (1f - 2f * ((y - top) / (bottom - top))).coerceIn(-1f, 1f)
+}
+
+/**
+ * A rotary knob: a quiet disc with an indicator, and an arc showing the value. [value] runs 0..1;
+ * drag up to turn it up, double-tap to go back to [defaultValue]. A [bipolar] knob draws its arc
+ * from the top (centre) instead of from the start, for controls whose neutral is the middle.
+ *
+ * [label] names what it sets; [stateText] is the value with its unit, read by screen readers.
  */
 @Composable
 fun EqKnob(
   value: Float,
   onChange: (Float) -> Unit,
+  label: String,
+  stateText: String,
   modifier: Modifier = Modifier,
-  size: Dp = 96.dp,
-  accent: Color = MaterialTheme.colorScheme.primary,
+  size: Dp = 64.dp,
   bipolar: Boolean = false,
   defaultValue: Float = if (bipolar) 0.5f else 0f,
   enabled: Boolean = true,
-  description: String = ""
+  steps: Int = 0
 ) {
   val colors = MaterialTheme.colorScheme
   val current by rememberUpdatedState(value)
   val change by rememberUpdatedState(onChange)
+  val reset by rememberUpdatedState(defaultValue)
   var dragValue by remember { mutableFloatStateOf(value) }
-  val disc = colors.surfaceVariant
-  val rim = colors.onSurface.copy(alpha = 0.18f)
-  val tick = colors.onSurface.copy(alpha = if (enabled) 0.85f else 0.3f)
+  val track = colors.onSurface.copy(alpha = 0.12f)
+  val disc = colors.surfaceContainerHigh
+  val accent = if (enabled) colors.primary else colors.onSurface.copy(alpha = 0.24f)
+  val tick = colors.onSurface.copy(alpha = if (enabled) 0.9f else 0.38f)
 
   Box(
     modifier = modifier
       .size(size)
-      .semantics { contentDescription = description }
-      .pointerInput(enabled) {
-        if (!enabled) return@pointerInput
-        detectTapGestures(onDoubleTap = { change(defaultValue) })
+      .semantics {
+        contentDescription = label
+        stateDescription = stateText
+        progressBarRangeInfo = ProgressBarRangeInfo(value.coerceIn(0f, 1f), 0f..1f, steps)
+        if (enabled) {
+          setProgress { target ->
+            change(target.coerceIn(0f, 1f))
+            true
+          }
+        } else {
+          disabled()
+        }
       }
       .pointerInput(enabled) {
         if (!enabled) return@pointerInput
-        detectVerticalDragGestures(
-          onDragStart = { dragValue = current },
-          onVerticalDrag = { c, dy ->
-            c.consume()
-            // A full turn takes about two knob heights of travel.
-            dragValue = (dragValue - dy / (this.size.height * 2.2f)).coerceIn(0f, 1f)
-            change(dragValue)
-          }
-        )
+        detectTapGestures(onDoubleTap = { change(reset) })
+      }
+      .pointerInput(enabled) {
+        if (!enabled) return@pointerInput
+        detectVerticalDragGestures(onDragStart = { dragValue = current }) { c, dy ->
+          c.consume()
+          dragValue = (dragValue - dy / (this.size.height * KNOB_TRAVEL)).coerceIn(0f, 1f)
+          change(dragValue)
+        }
       }
   ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
-      val stroke = 4.dp.toPx()
-      val arcPad = stroke * 1.6f
-      val r = this.size.minDimension / 2f
-      val discR = r - arcPad - stroke
+      val stroke = 3.dp.toPx()
+      val inset = stroke / 2f
+      val arcTopLeft = Offset(inset, inset)
+      val arcSize = Size(this.size.width - stroke, this.size.height - stroke)
+      val discR = this.size.minDimension / 2f - stroke - 4.dp.toPx()
       val v = value.coerceIn(0f, 1f)
 
-      // Arc track and value arc with a soft glow
-      val arcTopLeft = Offset(arcPad / 2f + stroke / 2f, arcPad / 2f + stroke / 2f)
-      val arcSize = Size(this.size.width - arcPad - stroke, this.size.height - arcPad - stroke)
-      drawArc(rim, KNOB_START, KNOB_SWEEP, false, arcTopLeft, arcSize, style = Stroke(stroke * 0.5f, cap = StrokeCap.Round))
+      drawArc(track, KNOB_START, KNOB_SWEEP, false, arcTopLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
       val (start, sweep) = if (bipolar) {
-        val mid = KNOB_START + KNOB_SWEEP / 2f
-        mid to (v - 0.5f) * KNOB_SWEEP
-      } else KNOB_START to v * KNOB_SWEEP
-      if (enabled && kotlin.math.abs(sweep) > 0.5f) {
-        drawArc(accent.copy(alpha = 0.25f), start, sweep, false, arcTopLeft, arcSize, style = Stroke(stroke * 2.4f, cap = StrokeCap.Round))
+        (KNOB_START + KNOB_SWEEP / 2f) to (v - 0.5f) * KNOB_SWEEP
+      } else {
+        KNOB_START to v * KNOB_SWEEP
+      }
+      if (abs(sweep) > 0.5f) {
         drawArc(accent, start, sweep, false, arcTopLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
       }
 
-      // Disc and rim
       drawCircle(disc, radius = discR, center = center)
-      drawCircle(rim, radius = discR, center = center, style = Stroke(1.5.dp.toPx()))
-
-      // Indicator tick, rotated to the value
-      val angle = KNOB_START + v * KNOB_SWEEP + 90f
-      rotate(angle, center) {
-        val len = discR * 0.22f
+      rotate(KNOB_START + v * KNOB_SWEEP + 90f, center) {
+        val from = center.y - discR + discR * 0.18f
         drawLine(
           tick,
-          Offset(center.x, center.y - discR + discR * 0.14f),
-          Offset(center.x, center.y - discR + discR * 0.14f + len),
-          strokeWidth = 3.5.dp.toPx(),
+          Offset(center.x, from),
+          Offset(center.x, from + discR * 0.3f),
+          strokeWidth = 2.5.dp.toPx(),
           cap = StrokeCap.Round
         )
       }
@@ -164,72 +299,4 @@ private fun DrawScope.drawFilterShape(type: FilterType, color: Color) {
     }
   }
   drawPath(p, color, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
-}
-
-/**
- * A tall fader in a rounded rail, like the preamp and gain faders of a mixing desk: [value] runs
- * from -1 (bottom) to +1 (top); the lit part runs from the centre to the handle. Tap or drag.
- */
-@Composable
-fun EqRailFader(
-  value: Float,
-  onChange: (Float) -> Unit,
-  modifier: Modifier = Modifier,
-  accent: Color = MaterialTheme.colorScheme.primary,
-  enabled: Boolean = true,
-  description: String = ""
-) {
-  val colors = MaterialTheme.colorScheme
-  val change by rememberUpdatedState(onChange)
-  val rail = colors.onSurface.copy(alpha = 0.22f)
-  val handleFill = colors.surfaceVariant
-  val handleEdge = colors.onSurface.copy(alpha = 0.3f)
-  val ink = colors.onSurface
-  Canvas(
-    modifier = modifier
-      .semantics { contentDescription = description }
-      .pointerInput(enabled) {
-        if (!enabled) return@pointerInput
-        detectTapGestures { o -> change(posToValue(o.y, this.size.height.toFloat(), FADER_HANDLE.toPx())) }
-      }
-      .pointerInput(enabled) {
-        if (!enabled) return@pointerInput
-        detectVerticalDragGestures { c, _ ->
-          c.consume()
-          change(posToValue(c.position.y, this.size.height.toFloat(), FADER_HANDLE.toPx()))
-        }
-      }
-  ) {
-    val cx = size.width / 2f
-    val handleH = FADER_HANDLE.toPx()
-    val handleW = (size.width * 0.62f).coerceAtMost(28.dp.toPx())
-    val top = handleH / 2f
-    val bottom = size.height - handleH / 2f
-    val mid = (top + bottom) / 2f
-    val y = bottom - (value.coerceIn(-1f, 1f) + 1f) / 2f * (bottom - top)
-
-    // Ticks at the ends, like a printed scale
-    listOf(top, bottom).forEach { ty ->
-      drawLine(rail, Offset(cx - 10.dp.toPx(), ty), Offset(cx - 5.dp.toPx(), ty), 1.5f)
-      drawLine(rail, Offset(cx + 5.dp.toPx(), ty), Offset(cx + 10.dp.toPx(), ty), 1.5f)
-    }
-    drawLine(rail, Offset(cx, top), Offset(cx, bottom), strokeWidth = 2.5.dp.toPx(), cap = StrokeCap.Round)
-    if (enabled && kotlin.math.abs(y - mid) > 1f) {
-      drawLine(accent.copy(alpha = 0.3f), Offset(cx, mid), Offset(cx, y), strokeWidth = 7.dp.toPx(), cap = StrokeCap.Round)
-      drawLine(accent, Offset(cx, mid), Offset(cx, y), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
-    }
-    val left = cx - handleW / 2f
-    drawRoundRect(handleFill, Offset(left, y - handleH / 2f), Size(handleW, handleH), CornerRadius(handleW / 2f))
-    drawRoundRect(handleEdge, Offset(left, y - handleH / 2f), Size(handleW, handleH), CornerRadius(handleW / 2f), style = Stroke(1.5.dp.toPx()))
-    drawLine(ink.copy(alpha = if (enabled) 0.9f else 0.3f), Offset(cx - handleW * 0.28f, y), Offset(cx + handleW * 0.28f, y), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
-  }
-}
-
-/** Height of the fader handle; its travel stops half a handle from each end. */
-private val FADER_HANDLE = 56.dp
-
-private fun posToValue(y: Float, h: Float, handle: Float): Float {
-  val top = handle / 2f
-  val bottom = h - handle / 2f
-  return (1f - 2f * ((y - top) / (bottom - top))).coerceIn(-1f, 1f)
 }

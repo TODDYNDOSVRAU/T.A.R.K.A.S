@@ -83,10 +83,11 @@ class OnboardingAndDataTest {
   }
 
   @Test
-  fun motionTokensMatchMaterialExpressive() {
-    assertEquals(0.6f, Motion.FastSpatialDamping, 0f)
+  fun motionTokensAreNearlyCriticallyDamped() {
+    // Position and size settle without a visible bounce; stiffness keeps the Material 3 values.
+    assertEquals(0.9f, Motion.FastSpatialDamping, 0f)
     assertEquals(800f, Motion.FastSpatialStiffness, 0f)
-    assertEquals(0.8f, Motion.DefaultSpatialDamping, 0f)
+    assertEquals(0.9f, Motion.DefaultSpatialDamping, 0f)
     assertEquals(380f, Motion.DefaultSpatialStiffness, 0f)
     // Only the first screenful enters one after another, 30 ms apart: under a quarter of a second.
     assertTrue(Motion.StaggerItems * Motion.StaggerStepMs <= 250L)

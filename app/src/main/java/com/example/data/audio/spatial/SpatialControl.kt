@@ -62,6 +62,21 @@ object SpatialControl {
       }
     }
     update()
+    if (!enabled) releaseTablesSoon()
+  }
+
+  /**
+   * The tables take about 16 MB per sample rate. Once the effect is off they are dropped, after the
+   * engine has had time to glide back to the dry sound.
+   */
+  private fun releaseTablesSoon() {
+    worker.execute {
+      Thread.sleep(RELEASE_AFTER_MS)
+      if (!enabled) {
+        engines.clear()
+        synchronized(hrtfs) { hrtfs.clear() }
+      }
+    }
   }
 
   /** Only the intensity changed (a slider drag): no new tables, just a new target. */
@@ -119,6 +134,9 @@ object SpatialControl {
         val engine = SpatialEngine(sampleRate, hrtf, targetParams())
         engine.targetIntensity = targetIntensity()
         engines[sampleRate] = engine
+        // Only the rate in use is kept: a library mixing 44.1, 48 and 96 kHz would otherwise hold them all.
+        engines.keys.filter { it != sampleRate }.forEach { engines.remove(it) }
+        synchronized(hrtfs) { hrtfs.keys.retainAll(setOf(sampleRate)) }
         Log.i(TAG, "Spatial engine ready for $sampleRate Hz in ${(System.nanoTime() - started) / 1_000_000} ms")
       } catch (e: Throwable) {
         // Out of memory or anything else: the effect stays off, the music keeps playing.
@@ -129,4 +147,6 @@ object SpatialControl {
       }
     }
   }
+
+  private const val RELEASE_AFTER_MS = 1500L
 }

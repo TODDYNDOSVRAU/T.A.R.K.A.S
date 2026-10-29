@@ -16,6 +16,7 @@ import com.example.data.repository.CuriosityRepository
 import com.example.data.repository.MusicRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.CoroutineContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -56,7 +57,9 @@ class AssistantEngine(
   // Returns a short description of the result, or null when the command could not run.
   private val onPlayerCommand: suspend (PlayerCommand) -> String? = { null },
   // Loads an equalizer preset through the app, so the choice is saved like a tap on the screen.
-  private val onEqPreset: (EqPreset) -> Unit = { audioEngineManager.applyEqSettings(it.settings) }
+  private val onEqPreset: (EqPreset) -> Unit = { audioEngineManager.applyEqSettings(it.settings) },
+  // Where the callbacks above run: they change screen state, so the app keeps them on the main thread.
+  private val callbackContext: CoroutineContext = Dispatchers.Main.immediate
 ) {
   private val TAG = "AssistantEngine"
   private val okHttpClient = OkHttpClient.Builder()
@@ -146,7 +149,8 @@ class AssistantEngine(
       val track = musicRepository.currentTrack.value
       if (track != null) {
         val curiosity = curiosityRepository.getCuriosityForTrack(track)
-        onCuriosityUpdated(curiosity)
+        // The callbacks touch view-model state and audio effects: they run on the main thread.
+        withContext(callbackContext) { onCuriosityUpdated(curiosity) }
 
         val report = ToolExecutionReport(
           toolName = "analyze_and_research_music",
@@ -237,7 +241,7 @@ class AssistantEngine(
         else -> null
       }
       if (target != null) {
-        onEqPreset(target)
+        withContext(callbackContext) { onEqPreset(target) }
         val report = ToolExecutionReport(
           toolName = "apply_audio_profile",
           arguments = mapOf("profile" to target.name),
@@ -273,7 +277,7 @@ class AssistantEngine(
         remainingSeconds = totalSeconds,
         isRunning = true
       )
-      onTimerCreated(newTimer)
+      withContext(callbackContext) { onTimerCreated(newTimer) }
 
       val report = ToolExecutionReport(
         toolName = "create_timer",

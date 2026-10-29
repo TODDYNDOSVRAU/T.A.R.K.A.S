@@ -1,81 +1,111 @@
 package com.example.ui.screens
 
-import androidx.compose.runtime.saveable.rememberSaveable
-import com.example.ui.theme.opensPlayer
+import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.media.MediaMetadataRetriever
+import android.net.Uri
+import android.os.Build
+import android.provider.OpenableColumns
+import android.provider.Settings
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AudioFile
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.example.data.model.Playlist
-import com.example.ui.theme.LocalBarInset
-import com.example.ui.theme.pressClickable
-import com.example.ui.theme.glassControl
-import android.net.Uri
-import android.provider.OpenableColumns
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.platform.LocalContext
 import com.example.data.model.Track
+import com.example.ui.components.EmptyState
+import com.example.ui.components.FilterChip
+import com.example.ui.components.IconAction
 import com.example.ui.components.NamePlaylistDialog
-import com.example.ui.components.GlassChip
-import com.example.ui.theme.SpaceGrotesk
+import com.example.ui.components.PrimaryButton
+import com.example.ui.components.SearchField
+import com.example.ui.components.SubPageHeader
+import com.example.ui.components.TextAction
+import com.example.ui.components.TrackArtwork
+import com.example.ui.components.TrackRow
+import com.example.ui.components.highlightClickable
+import com.example.ui.screens.library.PlayShuffleRow
+import com.example.ui.screens.library.TrackDivider
+import com.example.ui.screens.library.itemMotion
+import com.example.ui.screens.library.trackSubtitle
+import com.example.ui.screens.library.trailingEdge
+import com.example.ui.theme.AppText
+import com.example.ui.theme.LocalBarInset
+import com.example.ui.theme.Shapes
+import com.example.ui.theme.Size
+import com.example.ui.theme.Space
+import com.example.ui.theme.opensPlayer
+import com.example.ui.theme.rememberReducedMotion
+import com.example.ui.theme.sectionTransition
 import com.example.ui.theme.staggeredEntrance
+import com.example.ui.theme.subPageTransition
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private enum class LibrarySection(val label: String) {
   SONGS("Músicas"),
@@ -83,6 +113,14 @@ private enum class LibrarySection(val label: String) {
   FAVORITES("Favoritos"),
   QUEUE("Fila")
 }
+
+/** Artwork of a playlist row. */
+private val PlaylistArtworkSize = 56.dp
+
+/** The permission that reads the device's music on this Android version. */
+private val MusicPermission: String =
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_AUDIO
+  else Manifest.permission.READ_EXTERNAL_STORAGE
 
 @Composable
 fun LibraryScreen(
@@ -114,12 +152,13 @@ fun LibraryScreen(
 ) {
   var section by rememberSaveable { mutableStateOf(LibrarySection.SONGS) }
   var openPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
-  var showNewPlaylist by remember { mutableStateOf(false) }
-  var renamingPlaylist by remember { mutableStateOf<Playlist?>(null) }
-  var deletingPlaylist by remember { mutableStateOf<Playlist?>(null) }
+  // Dialogs are saved by id, so a rotation keeps them open on the same playlist.
+  var showNewPlaylist by rememberSaveable { mutableStateOf(false) }
+  var renamingId by rememberSaveable { mutableStateOf<String?>(null) }
+  var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
 
   // The player's queue button lands here on Fila, whatever section was open before.
-  androidx.compose.runtime.LaunchedEffect(openQueue) {
+  LaunchedEffect(openQueue) {
     if (openQueue) {
       openPlaylistId = null
       section = LibrarySection.QUEUE
@@ -127,156 +166,180 @@ fun LibraryScreen(
     }
   }
 
-  // Imports an audio file from the device into the local library (system file picker).
+  // Imports an audio file from the device into the local library (system file picker). Reading the
+  // name and the duration touches the provider and decodes the file header, so it runs off the main
+  // thread.
   val context = LocalContext.current
-  val audioPickerLauncher = rememberLauncherForActivityResult(
-    contract = ActivityResultContracts.OpenDocument()
-  ) { uri: Uri? ->
-    uri?.let {
-      runCatching {
-        context.contentResolver.takePersistableUriPermission(it, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+  val scope = rememberCoroutineScope()
+  val audioPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+    if (uri != null) {
+      val appContext = context.applicationContext
+      scope.launch {
+        val (name, durationMs) = withContext(Dispatchers.IO) { readAudioFile(appContext, uri) }
+        // Falls back to 3 min only when the file has no duration in its metadata.
+        onAddLocalTrack(name, "Biblioteca Local", uri.toString(), if (durationMs > 0) durationMs else 180_000L)
       }
-      var displayName = "Áudio Local"
-      try {
-        context.contentResolver.query(it, null, null, null, null)?.use { cursor ->
-          val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-          if (nameIndex != -1 && cursor.moveToFirst()) {
-            displayName = cursor.getString(nameIndex)
-          }
-        }
-      } catch (_: Exception) {}
-      // Read the real duration; fall back to 3 min only if the file has no metadata.
-      var realDurationMs = 0L
-      try {
-        val retriever = android.media.MediaMetadataRetriever()
-        retriever.setDataSource(context, it)
-        realDurationMs = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-        retriever.release()
-      } catch (_: Exception) {}
-      onAddLocalTrack(displayName, "Biblioteca Local", it.toString(), if (realDurationMs > 0) realDurationMs else 180000L)
     }
   }
 
-  // The device's music: asked for when the user opens it, read again each time Biblioteca opens.
-  var musicAllowed by remember { mutableStateOf(hasMusicPermission) }
+  // The device's music: asked for when the user opens it, read again each time Biblioteca opens, and
+  // checked again on every resume, since it can be granted or revoked in the system settings.
+  fun musicGranted() = ContextCompat.checkSelfPermission(context, MusicPermission) == PackageManager.PERMISSION_GRANTED
+  var musicAllowed by remember { mutableStateOf(hasMusicPermission || musicGranted()) }
+  // After a denial with "don't ask again" the system answers at once without a dialog, so the only
+  // way left is the app's page in the system settings.
+  var musicBlocked by rememberSaveable { mutableStateOf(false) }
   val musicPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
     musicAllowed = granted
-    if (granted) onScanDevice()
+    if (granted) {
+      musicBlocked = false
+      onScanDevice()
+    } else {
+      musicBlocked = context.findActivity()?.let { !ActivityCompat.shouldShowRequestPermissionRationale(it, MusicPermission) } ?: false
+    }
   }
-  androidx.compose.runtime.LaunchedEffect(Unit) { if (musicAllowed) onScanDevice() }
+  LaunchedEffect(Unit) { if (musicAllowed) onScanDevice() }
+  LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+    val granted = musicGranted()
+    if (granted && !musicAllowed) onScanDevice()
+    musicAllowed = granted
+    if (granted) musicBlocked = false
+  }
+  val openAppSettings = {
+    runCatching {
+      context.startActivity(
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      )
+    }
+    Unit
+  }
 
   // Tracks of the current catalog win over the saved snapshot (fresher data).
   val byId = savedTracks + allTracks.associateBy { it.id }
   val openPlaylist = playlists.firstOrNull { it.id == openPlaylistId }
 
-  val reduced = com.example.ui.theme.rememberReducedMotion()
+  val reduced = rememberReducedMotion()
   // Back closes an open playlist before it leaves the tab.
-  androidx.activity.compose.BackHandler(enabled = openPlaylist != null) { openPlaylistId = null }
+  BackHandler(enabled = openPlaylist != null) { openPlaylistId = null }
 
   // An open playlist pushes in over the sections like a sub-page; the sections slide between them.
-  androidx.compose.animation.AnimatedContent(
-    targetState = openPlaylist,
-    contentKey = { it?.id },
-    transitionSpec = { com.example.ui.theme.subPageTransition(forward = targetState != null, reduced = reduced) },
+  AnimatedContent(
+    targetState = openPlaylist?.id,
+    transitionSpec = { subPageTransition(forward = targetState != null, reduced = reduced) },
     label = "playlistOpen",
-    modifier = modifier.fillMaxSize().padding(horizontal = 20.dp)
-  ) { shownPlaylist ->
-  Column(modifier = Modifier.fillMaxSize()) {
+    modifier = modifier.fillMaxSize()
+  ) { shownId ->
+    val shownPlaylist = playlists.firstOrNull { it.id == shownId }
     if (shownPlaylist != null) {
-      val openPlaylist = shownPlaylist
-      val tracks = openPlaylist.trackIds.mapNotNull { byId[it] }
+      val tracks = shownPlaylist.trackIds.mapNotNull { byId[it] }
       PlaylistDetail(
-        playlist = openPlaylist,
+        playlist = shownPlaylist,
         tracks = tracks,
         currentTrack = currentTrack,
         isPlaying = isPlaying,
         onBack = { openPlaylistId = null },
         onPlay = { track -> onPlayFromList(track, tracks) },
         onShuffle = { onShuffleList(tracks) },
-        onRename = { renamingPlaylist = openPlaylist },
-        onDelete = { deletingPlaylist = openPlaylist },
-        onRemoveTrack = { trackId -> onRemoveFromPlaylist(openPlaylist.id, trackId) }
+        onRename = { renamingId = shownPlaylist.id },
+        onDelete = { deletingId = shownPlaylist.id },
+        onRemoveTrack = { trackId -> onRemoveFromPlaylist(shownPlaylist.id, trackId) }
       )
     } else {
-      Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-      ) {
-        LibrarySection.values().forEach { s ->
-          GlassChip(
-            label = if (s == LibrarySection.QUEUE && queue.isNotEmpty()) "${s.label} (${queue.size})" else s.label,
-            selected = section == s,
-            onClick = { section = s },
-            modifier = Modifier.testTag("library_chip_${s.name.lowercase()}")
-          )
-        }
-      }
-
-      androidx.compose.animation.AnimatedContent(
-        targetState = section,
-        transitionSpec = { com.example.ui.theme.sectionTransition(initialState.ordinal, targetState.ordinal, reduced) },
-        label = "librarySection"
-      ) { shownSection ->
-      when (shownSection) {
-        LibrarySection.SONGS -> if (!musicAllowed) {
-          com.example.ui.components.EmptyState(
-            icon = Icons.Default.LibraryMusic,
-            title = "Suas músicas do aparelho",
-            message = "Permita o acesso às músicas para ver aqui tudo o que está no celular, com capa, artista e álbum.",
-            actionLabel = "Permitir acesso",
-            onAction = {
-              musicPermissionLauncher.launch(
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) android.Manifest.permission.READ_MEDIA_AUDIO
-                else android.Manifest.permission.READ_EXTERNAL_STORAGE
-              )
-            }
-          )
-        } else {
-          TrackList(
-            emptyText = if (deviceScanning) "Procurando músicas no aparelho…" else "Nenhuma música encontrada no aparelho.",
-            tracks = deviceTracks,
-            onHeaderPlay = { onPlayFromList(deviceTracks.first(), deviceTracks) },
-            onHeaderShuffle = { onShuffleList(deviceTracks) },
-            currentTrack = currentTrack,
-            isPlaying = isPlaying,
-            onPlay = { track -> onPlayFromList(track, deviceTracks) },
-            trailingIcon = null,
-            trailingDescription = "",
-            onTrailing = {}
-          )
+      Column(modifier = Modifier.fillMaxSize()) {
+        // Scrolls sideways, so the last chip is never cut by the screen edge at large font sizes.
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = Space.page)
+            .selectableGroup(),
+          horizontalArrangement = Arrangement.spacedBy(Space.s)
+        ) {
+          LibrarySection.entries.forEach { s ->
+            FilterChip(
+              label = if (s == LibrarySection.QUEUE && queue.isNotEmpty()) "${s.label} (${queue.size})" else s.label,
+              selected = section == s,
+              onClick = { section = s },
+              modifier = Modifier.testTag("library_chip_${s.name.lowercase()}")
+            )
+          }
         }
 
-        LibrarySection.PLAYLISTS -> PlaylistsList(
-          playlists = playlists,
-          byId = byId,
-          onOpen = { openPlaylistId = it.id },
-          onNew = { showNewPlaylist = true },
-          onImportAudio = { audioPickerLauncher.launch(arrayOf("audio/*")) }
-        )
+        AnimatedContent(
+          targetState = section,
+          transitionSpec = { sectionTransition(initialState.ordinal, targetState.ordinal, reduced) },
+          label = "librarySection",
+          modifier = Modifier.weight(1f)
+        ) { shownSection ->
+          when (shownSection) {
+            LibrarySection.SONGS -> TrackList(
+              tracks = if (musicAllowed) deviceTracks else emptyList(),
+              currentTrack = currentTrack,
+              isPlaying = isPlaying,
+              onPlay = { track -> onPlayFromList(track, deviceTracks) },
+              onShuffle = { onShuffleList(deviceTracks) },
+              empty = {
+                when {
+                  !musicAllowed -> MusicPermissionPrompt(
+                    blocked = musicBlocked,
+                    onAllow = { musicPermissionLauncher.launch(MusicPermission) },
+                    onOpenSettings = openAppSettings
+                  )
+                  deviceScanning -> Loading("Procurando músicas no aparelho…")
+                  else -> EmptyState(
+                    icon = Icons.Rounded.LibraryMusic,
+                    title = "Nenhuma música no aparelho",
+                    message = "Não achamos arquivos de áudio no celular. Você pode importar um arquivo em Playlists.",
+                    modifier = Modifier.padding(horizontal = Space.page)
+                  )
+                }
+              }
+            )
 
-        LibrarySection.FAVORITES -> TrackList(
-          emptyText = "Nenhum favorito ainda. Toque no coração de uma faixa para guardá-la aqui.",
-          tracks = favoriteTracks,
-          onHeaderPlay = { onPlayFromList(favoriteTracks.first(), favoriteTracks) },
-          onHeaderShuffle = { onShuffleList(favoriteTracks) },
-          currentTrack = currentTrack,
-          isPlaying = isPlaying,
-          onPlay = { track -> onPlayFromList(track, favoriteTracks) },
-          trailingIcon = Icons.Default.Favorite,
-          trailingDescription = "Remover dos favoritos",
-          onTrailing = onToggleFavorite
-        )
+            LibrarySection.PLAYLISTS -> PlaylistsList(
+              playlists = playlists,
+              byId = byId,
+              onOpen = { openPlaylistId = it.id },
+              onNew = { showNewPlaylist = true },
+              onImportAudio = { audioPickerLauncher.launch(arrayOf("audio/*")) }
+            )
 
-        LibrarySection.QUEUE -> QueueList(
-          queue = queue,
-          onPlay = onPlayQueueItem,
-          onRemove = onRemoveQueueItem,
-          onClear = onClearQueue
-        )
-      }
+            LibrarySection.FAVORITES -> TrackList(
+              tracks = favoriteTracks,
+              currentTrack = currentTrack,
+              isPlaying = isPlaying,
+              onPlay = { track -> onPlayFromList(track, favoriteTracks) },
+              onShuffle = { onShuffleList(favoriteTracks) },
+              empty = {
+                EmptyState(
+                  icon = Icons.Rounded.FavoriteBorder,
+                  title = "Nenhum favorito ainda",
+                  message = "Toque em “Favoritar” no menu de uma música para guardá-la aqui.",
+                  modifier = Modifier.padding(horizontal = Space.page)
+                )
+              },
+              trailing = { track ->
+                IconAction(
+                  icon = Icons.Rounded.Favorite,
+                  contentDescription = "Remover ${track.title} dos favoritos",
+                  onClick = { onToggleFavorite(track) },
+                  tint = MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.trailingEdge()
+                )
+              }
+            )
+
+            LibrarySection.QUEUE -> QueueList(
+              queue = queue,
+              onPlay = onPlayQueueItem,
+              onRemove = onRemoveQueueItem,
+              onClear = onClearQueue
+            )
+          }
+        }
       }
     }
-  }
   }
 
   if (showNewPlaylist) {
@@ -288,69 +351,178 @@ fun LibraryScreen(
       onDismiss = { showNewPlaylist = false }
     )
   }
-  renamingPlaylist?.let { pl ->
+  playlists.firstOrNull { it.id == renamingId }?.let { pl ->
     NamePlaylistDialog(
       title = "Renomear playlist",
       confirmLabel = "Salvar",
       initialName = pl.name,
-      onConfirm = { name -> onRenamePlaylist(pl.id, name); renamingPlaylist = null },
-      onDismiss = { renamingPlaylist = null }
+      onConfirm = { name -> onRenamePlaylist(pl.id, name); renamingId = null },
+      onDismiss = { renamingId = null }
     )
   }
-  deletingPlaylist?.let { pl ->
-    androidx.compose.material3.AlertDialog(
-      onDismissRequest = { deletingPlaylist = null },
-      title = { Text("Excluir \"${pl.name}\"?") },
+  playlists.firstOrNull { it.id == deletingId }?.let { pl ->
+    AlertDialog(
+      onDismissRequest = { deletingId = null },
+      title = { Text("Excluir “${pl.name}”?", style = AppText.Title3) },
       text = {
         Text(
           if (pl.trackIds.isEmpty()) "A playlist está vazia."
-          else "A playlist e a ordem das ${pl.trackIds.size} faixas serão apagadas. As músicas continuam na biblioteca."
+          else "A playlist e a ordem das ${pl.trackIds.size} faixas serão apagadas. As músicas continuam na biblioteca.",
+          style = AppText.Subhead
         )
       },
       confirmButton = {
         TextButton(
           onClick = {
             onDeletePlaylist(pl.id)
-            deletingPlaylist = null
+            deletingId = null
             openPlaylistId = null
           },
           modifier = Modifier.testTag("library_confirm_delete")
-        ) { Text("Excluir") }
+        ) { Text("Excluir", color = MaterialTheme.colorScheme.error) }
       },
-      dismissButton = { TextButton(onClick = { deletingPlaylist = null }) { Text("Cancelar") } }
+      dismissButton = { TextButton(onClick = { deletingId = null }) { Text("Cancelar") } }
     )
   }
 }
 
+/** Name and duration of a picked audio file. Blocking: call it on [Dispatchers.IO]. */
+private fun readAudioFile(context: Context, uri: Uri): Pair<String, Long> {
+  runCatching {
+    context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+  }
+  var displayName = "Áudio Local"
+  runCatching {
+    context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+      val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+      if (nameIndex != -1 && cursor.moveToFirst()) {
+        cursor.getString(nameIndex)?.takeIf { it.isNotBlank() }?.let { displayName = it }
+      }
+    }
+  }
+  var durationMs = 0L
+  val retriever = MediaMetadataRetriever()
+  try {
+    retriever.setDataSource(context, uri)
+    durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+  } catch (_: Exception) {
+  } finally {
+    // Always released: the retriever holds a native decoder and the file open until then.
+    runCatching { retriever.release() }
+  }
+  return displayName to durationMs
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+  is Activity -> this
+  is ContextWrapper -> baseContext.findActivity()
+  else -> null
+}
+
+/** Asks for the device's music in plain words, with the one action that can still grant it. */
 @Composable
-private fun PlayShuffleRow(onPlay: () -> Unit, onShuffle: () -> Unit) {
-  Row(
-    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-    horizontalArrangement = Arrangement.spacedBy(12.dp)
+private fun MusicPermissionPrompt(blocked: Boolean, onAllow: () -> Unit, onOpenSettings: () -> Unit) {
+  Column(
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(horizontal = Space.page, vertical = Space.xl),
+    horizontalAlignment = Alignment.CenterHorizontally
   ) {
-    ActionPill("Tocar", Icons.Default.PlayArrow, onPlay, Modifier.weight(1f).testTag("library_btn_play"))
-    ActionPill("Aleatório", Icons.Default.Shuffle, onShuffle, Modifier.weight(1f).testTag("library_btn_shuffle"))
+    Text(
+      "Suas músicas do aparelho",
+      style = AppText.Title3,
+      color = MaterialTheme.colorScheme.onSurface,
+      modifier = Modifier.semantics { heading() }
+    )
+    Spacer(Modifier.size(Space.s))
+    Text(
+      if (blocked) "O acesso às músicas está bloqueado. Libere em Ajustes › Permissões › Música e áudio para ver aqui tudo o que está no celular."
+      else "Permita o acesso às músicas para ver aqui tudo o que está no celular, com capa, artista e álbum.",
+      style = AppText.Subhead,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      textAlign = androidx.compose.ui.text.style.TextAlign.Center
+    )
+    Spacer(Modifier.size(Space.l))
+    if (blocked) {
+      PrimaryButton("Abrir Ajustes do app", onClick = onOpenSettings, modifier = Modifier.fillMaxWidth().testTag("library_open_settings"))
+      // The detection cannot tell "don't ask again" from a dismissed dialog, so asking stays possible.
+      TextAction("Pedir de novo", onClick = onAllow)
+    } else {
+      PrimaryButton("Permitir acesso", onClick = onAllow, modifier = Modifier.fillMaxWidth().testTag("library_allow_music"))
+    }
   }
 }
 
+/** A spinner with what is being waited for. */
 @Composable
-private fun ActionPill(
-  label: String,
-  icon: androidx.compose.ui.graphics.vector.ImageVector,
-  onClick: () -> Unit,
-  modifier: Modifier = Modifier
-) {
+private fun Loading(text: String) {
   Row(
-    modifier = modifier
-      .glassControl(RoundedCornerShape(22.dp))
-      .clickable(onClick = onClick)
-      .padding(vertical = 12.dp),
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(horizontal = Space.page, vertical = Space.xl),
     horizontalArrangement = Arrangement.Center,
     verticalAlignment = Alignment.CenterVertically
   ) {
-    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-    Spacer(Modifier.width(8.dp))
-    Text(label, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+    CircularProgressIndicator(
+      modifier = Modifier.size(Size.iconSmall),
+      strokeWidth = 2.dp,
+      color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Spacer(Modifier.width(Space.m))
+    Text(text, style = AppText.Subhead, color = MaterialTheme.colorScheme.onSurfaceVariant)
+  }
+}
+
+/** One line of secondary text inside a list. */
+@Composable
+private fun Note(text: String) {
+  Text(
+    text,
+    style = AppText.Subhead,
+    color = MaterialTheme.colorScheme.onSurfaceVariant,
+    modifier = Modifier.padding(horizontal = Space.page, vertical = Space.l)
+  )
+}
+
+/**
+ * A list of songs with Play and Shuffle above it. [header] goes before them (a sub-page title),
+ * [empty] replaces the list when there are no songs, [trailing] adds a button to each row.
+ */
+@Composable
+private fun TrackList(
+  tracks: List<Track>,
+  currentTrack: Track?,
+  isPlaying: Boolean,
+  onPlay: (Track) -> Unit,
+  onShuffle: () -> Unit,
+  empty: @Composable () -> Unit,
+  header: LazyListScope.() -> Unit = {},
+  trailing: (@Composable RowScope.(Track) -> Unit)? = null
+) {
+  LazyColumn(
+    modifier = Modifier.fillMaxSize(),
+    contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
+  ) {
+    header()
+    if (tracks.isEmpty()) {
+      item(key = "empty") { empty() }
+    } else {
+      item(key = "play_shuffle") { PlayShuffleRow(onPlay = { onPlay(tracks.first()) }, onShuffle = onShuffle) }
+      itemsIndexed(tracks, key = { _, t -> t.id }) { index, track ->
+        Column(modifier = itemMotion(index)) {
+          if (index > 0) TrackDivider()
+          TrackRow(
+            track = track,
+            subtitle = trackSubtitle(track),
+            onClick = { onPlay(track) },
+            isCurrent = currentTrack?.id == track.id,
+            isPlaying = isPlaying,
+            modifier = Modifier.opensPlayer(),
+            trailing = { trailing?.invoke(this, track) }
+          )
+        }
+      }
+    }
   }
 }
 
@@ -364,117 +536,136 @@ private fun PlaylistsList(
 ) {
   var query by rememberSaveable { mutableStateOf("") }
   val shown = playlists.filter { query.isBlank() || it.name.contains(query, ignoreCase = true) }
-  LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + LocalBarInset.current)) {
-    item {
-      // Glass search capsule with the round "add music" button beside it (imports a device file).
-      Row(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-      ) {
-        TextField(
-          value = query,
-          onValueChange = { query = it },
-          placeholder = { Text("Buscar nas playlists", fontSize = 17.sp) },
-          leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-          singleLine = true,
-          shape = RoundedCornerShape(28.dp),
-          colors = TextFieldDefaults.colors(
-            unfocusedContainerColor = Color.Transparent,
-            focusedContainerColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-            focusedIndicatorColor = Color.Transparent
-          ),
-          modifier = Modifier
-            .weight(1f)
-            .glassControl(RoundedCornerShape(28.dp))
-            .testTag("library_search_input")
-        )
-        IconButton(
-          onClick = onImportAudio,
-          modifier = Modifier
-            .size(56.dp)
-            .glassControl(CircleShape)
-            .testTag("library_add_local_audio")
-        ) {
-          Icon(
-            imageVector = Icons.Default.Add,
-            contentDescription = "Adicionar música do aparelho",
-            tint = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.size(26.dp)
-          )
-        }
-      }
-    }
-    item {
-      Row(
+  LazyColumn(
+    modifier = Modifier.fillMaxSize(),
+    contentPadding = PaddingValues(top = Space.s, bottom = LocalBarInset.current + Space.l)
+  ) {
+    item(key = "search") {
+      SearchField(
+        value = query,
+        onValueChange = { query = it },
+        placeholder = "Buscar nas playlists",
         modifier = Modifier
-          .fillMaxWidth()
-          .pressClickable(pressedScale = 0.98f, onClick = onNew)
-          .padding(vertical = 4.dp)
-          .testTag("library_new_playlist"),
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Box(
-          modifier = Modifier.size(80.dp).glassControl(RoundedCornerShape(16.dp)),
-          contentAlignment = Alignment.Center
-        ) {
-          Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
-        }
-        Spacer(Modifier.width(16.dp))
-        Text("Nova playlist…", fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
-      }
-      HorizontalDivider(modifier = Modifier.padding(top = 4.dp, start = 96.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+          .padding(horizontal = Space.page)
+          .padding(bottom = Space.s)
+          .testTag("library_search_input")
+      )
     }
-    if (playlists.isEmpty()) {
-      item {
-        Text(
-          "Crie uma playlist e adicione faixas pelo menu ⋮ de qualquer música.",
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          fontSize = 15.sp,
-          modifier = Modifier.padding(vertical = 16.dp)
-        )
+    item(key = "new") {
+      ActionRow("Nova playlist…", Icons.Rounded.Add, onNew, Modifier.testTag("library_new_playlist"))
+    }
+    item(key = "import") {
+      TrackDivider()
+      ActionRow("Importar arquivo de áudio…", Icons.Rounded.AudioFile, onImportAudio, Modifier.testTag("library_add_local_audio"))
+    }
+    when {
+      playlists.isEmpty() -> item(key = "empty") {
+        Note("Crie uma playlist e adicione músicas pelo menu de qualquer faixa.")
       }
+      shown.isEmpty() -> item(key = "no_match") { Note("Nenhuma playlist com “$query”.") }
     }
     itemsIndexed(shown, key = { _, p -> p.id }) { index, playlist ->
-      val firstColor = playlist.trackIds.firstNotNullOfOrNull { byId[it] }?.let { Color(it.colorHex) }
-        ?: MaterialTheme.colorScheme.surfaceVariant
-      Column(modifier = Modifier.animateItem().staggeredEntrance(index)) {
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .pressClickable(pressedScale = 0.98f) { onOpen(playlist) }
-            .padding(vertical = 4.dp)
-            .testTag("playlist_row_${playlist.id}"),
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Box(
-            modifier = Modifier
-              .size(80.dp)
-              .clip(RoundedCornerShape(6.dp))
-              .background(Brush.verticalGradient(listOf(firstColor, firstColor.copy(alpha = 0.6f)))),
-            contentAlignment = Alignment.Center
-          ) {
-            Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp))
-            // The playlist shows the cover of its first track that has one.
-            playlist.trackIds.firstNotNullOfOrNull { byId[it]?.artworkUrl }?.let { url ->
-              coil.compose.AsyncImage(
-                model = url,
-                contentDescription = null,
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                modifier = Modifier.matchParentSize()
-              )
+      Column(modifier = itemMotion(index)) {
+        TrackDivider()
+        PlaylistRow(
+          playlist = playlist,
+          tracks = playlist.trackIds.mapNotNull { byId[it] },
+          onClick = { onOpen(playlist) }
+        )
+      }
+    }
+  }
+}
+
+/** A row that creates something, in the accent: a tinted square with the glyph, then the label. */
+@Composable
+private fun ActionRow(title: String, icon: ImageVector, onClick: () -> Unit, modifier: Modifier = Modifier) {
+  Row(
+    modifier = modifier
+      .fillMaxWidth()
+      .highlightClickable(onClick = onClick)
+      .padding(horizontal = Space.page, vertical = 6.dp),
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    Box(
+      modifier = Modifier
+        .size(Size.rowArtwork)
+        .clip(Shapes.xs)
+        .background(MaterialTheme.colorScheme.surfaceContainer),
+      contentAlignment = Alignment.Center
+    ) {
+      Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(Size.icon))
+    }
+    Spacer(Modifier.width(Space.m))
+    Text(title, style = AppText.Body, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+  }
+}
+
+@Composable
+private fun PlaylistRow(playlist: Playlist, tracks: List<Track>, onClick: () -> Unit) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .highlightClickable(onClickLabel = "Abrir ${playlist.name}", onClick = onClick)
+      .padding(horizontal = Space.page, vertical = 6.dp)
+      .testTag("playlist_row_${playlist.id}"),
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    PlaylistArtwork(tracks)
+    Spacer(Modifier.width(Space.m))
+    Column(modifier = Modifier.weight(1f)) {
+      Text(playlist.name, style = AppText.Body, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+      Text(
+        if (playlist.trackIds.size == 1) "1 faixa" else "${playlist.trackIds.size} faixas",
+        style = AppText.Subhead,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+    }
+    Icon(
+      Icons.Rounded.ChevronRight,
+      contentDescription = null,
+      tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+      modifier = Modifier.size(Size.iconSmall)
+    )
+  }
+}
+
+/**
+ * A playlist's cover: four covers in a grid once it has four songs with artwork, else the first
+ * song's cover, else a quiet tile with the playlist glyph.
+ */
+@Composable
+private fun PlaylistArtwork(tracks: List<Track>) {
+  val covers = tracks.filter { it.artworkUrl != null }.take(4)
+  Box(
+    modifier = Modifier
+      .size(PlaylistArtworkSize)
+      .clip(Shapes.xs)
+      .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+    contentAlignment = Alignment.Center
+  ) {
+    when {
+      covers.size == 4 -> Column {
+        covers.chunked(2).forEach { pair ->
+          Row {
+            pair.forEach { t ->
+              TrackArtwork(track = t, shape = RectangleShape, iconSize = 14.dp, modifier = Modifier.size(PlaylistArtworkSize / 2))
             }
           }
-          Spacer(Modifier.width(16.dp))
-          Column(modifier = Modifier.weight(1f)) {
-            Text(playlist.name, fontSize = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onBackground)
-            Text(if (playlist.trackIds.size == 1) "1 faixa" else "${playlist.trackIds.size} faixas", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-          }
-          Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        HorizontalDivider(modifier = Modifier.padding(top = 4.dp, start = 96.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
       }
+      tracks.isNotEmpty() -> TrackArtwork(
+        track = covers.firstOrNull() ?: tracks.first(),
+        shape = RectangleShape,
+        iconSize = Size.icon,
+        modifier = Modifier.size(PlaylistArtworkSize)
+      )
+      else -> Icon(
+        Icons.AutoMirrored.Rounded.QueueMusic,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.size(Size.icon)
+      )
     }
   }
 }
@@ -492,82 +683,44 @@ private fun PlaylistDetail(
   onDelete: () -> Unit,
   onRemoveTrack: (String) -> Unit
 ) {
-  Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-    Row(
-      modifier = Modifier
-        .heightIn(min = 48.dp)
-        .clip(RoundedCornerShape(12.dp))
-        .clickable(onClick = onBack)
-        .padding(end = 12.dp)
-        .testTag("library_back"),
-      verticalAlignment = Alignment.CenterVertically
-    ) {
-      Icon(Icons.Default.ChevronLeft, contentDescription = "Voltar", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
-      Text("Biblioteca", fontSize = 20.sp, color = MaterialTheme.colorScheme.primary)
-    }
-    Spacer(Modifier.weight(1f))
-    IconButton(onClick = onRename) { Icon(Icons.Default.Edit, contentDescription = "Renomear", tint = MaterialTheme.colorScheme.primary) }
-    IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "Excluir playlist", tint = MaterialTheme.colorScheme.primary) }
-  }
-  Text(
-    playlist.name,
-    fontWeight = FontWeight.Bold,
-    fontSize = 34.sp,
-    letterSpacing = (-0.5).sp,
-    maxLines = 2,
-    overflow = TextOverflow.Ellipsis,
-    color = MaterialTheme.colorScheme.onBackground,
-    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
-  )
   TrackList(
-    emptyText = "Playlist vazia. Use o menu ⋮ de uma faixa para adicioná-la.",
     tracks = tracks,
-    onHeaderPlay = { onPlay(tracks.first()) },
-    onHeaderShuffle = onShuffle,
     currentTrack = currentTrack,
     isPlaying = isPlaying,
     onPlay = onPlay,
-    trailingIcon = Icons.Default.Close,
-    trailingDescription = "Remover da playlist",
-    onTrailing = { track -> onRemoveTrack(track.id) }
-  )
-}
-
-@Composable
-private fun TrackList(
-  emptyText: String,
-  tracks: List<Track>,
-  onHeaderPlay: () -> Unit,
-  onHeaderShuffle: () -> Unit,
-  currentTrack: Track?,
-  isPlaying: Boolean,
-  onPlay: (Track) -> Unit,
-  trailingIcon: androidx.compose.ui.graphics.vector.ImageVector?,
-  trailingDescription: String,
-  onTrailing: (Track) -> Unit
-) {
-  if (tracks.isEmpty()) {
-    Text(emptyText, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(vertical = 16.dp))
-    return
-  }
-  LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + LocalBarInset.current)) {
-    item { PlayShuffleRow(onPlay = onHeaderPlay, onShuffle = onHeaderShuffle) }
-    itemsIndexed(tracks, key = { _, t -> t.id }) { index, track ->
-      val selected = currentTrack?.id == track.id
-      TrackRow(
-        track = track,
-        highlighted = selected,
-        subtitle = "${track.artist} • ${track.album}",
-        onClick = { onPlay(track) },
-        modifier = Modifier.animateItem().staggeredEntrance(index),
-        trailing = {
-          if (trailingIcon != null) IconButton(onClick = { onTrailing(track) }) {
-            Icon(trailingIcon, contentDescription = trailingDescription, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+    onShuffle = onShuffle,
+    header = {
+      item(key = "header") {
+        SubPageHeader(
+          title = playlist.name,
+          backLabel = "Biblioteca",
+          onBack = onBack,
+          modifier = Modifier.testTag("library_back"),
+          trailing = {
+            IconAction(Icons.Rounded.Edit, contentDescription = "Renomear playlist", onClick = onRename, tint = MaterialTheme.colorScheme.primary)
+            IconAction(Icons.Rounded.Delete, contentDescription = "Excluir playlist", onClick = onDelete, tint = MaterialTheme.colorScheme.error)
           }
-        }
+        )
+      }
+    },
+    empty = {
+      EmptyState(
+        icon = Icons.AutoMirrored.Rounded.QueueMusic,
+        title = "Playlist vazia",
+        message = "Use “Adicionar a uma playlist” no menu de uma música para colocá-la aqui.",
+        modifier = Modifier.padding(horizontal = Space.page)
+      )
+    },
+    trailing = { track ->
+      IconAction(
+        icon = Icons.Rounded.Close,
+        contentDescription = "Remover ${track.title} da playlist",
+        onClick = { onRemoveTrack(track.id) },
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.trailingEdge()
       )
     }
-  }
+  )
 }
 
 @Composable
@@ -577,83 +730,61 @@ private fun QueueList(
   onRemove: (Int) -> Unit,
   onClear: () -> Unit
 ) {
-  if (queue.isEmpty()) {
-    Text(
-      "A fila está vazia. Use \"Tocar em seguida\" ou \"Adicionar à fila\" no menu ⋮ de uma faixa.",
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-      fontSize = 13.sp,
-      modifier = Modifier.padding(vertical = 16.dp)
-    )
-    return
-  }
-  LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + LocalBarInset.current)) {
-    item {
-      Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+  LazyColumn(
+    modifier = Modifier.fillMaxSize(),
+    contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
+  ) {
+    if (queue.isEmpty()) {
+      item(key = "empty") {
+        EmptyState(
+          icon = Icons.AutoMirrored.Rounded.QueueMusic,
+          title = "A fila está vazia",
+          message = "Use “Tocar em seguida” ou “Adicionar à fila” no menu de uma música.",
+          modifier = Modifier.padding(horizontal = Space.page)
+        )
+      }
+      return@LazyColumn
+    }
+    item(key = "header") {
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .heightIn(min = Size.touch)
+          .padding(start = Space.page, end = Space.page - Space.s, top = Space.s),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
         Text(
           "A seguir",
-          fontFamily = SpaceGrotesk,
-          fontWeight = FontWeight.Bold,
-          fontSize = 18.sp,
-          color = MaterialTheme.colorScheme.onBackground,
-          modifier = Modifier.weight(1f)
+          style = AppText.Title2,
+          color = MaterialTheme.colorScheme.onSurface,
+          modifier = Modifier
+            .weight(1f)
+            .semantics { heading() }
         )
-        TextButton(onClick = onClear, modifier = Modifier.testTag("library_clear_queue")) { Text("Limpar") }
+        TextAction("Limpar", onClick = onClear, modifier = Modifier.testTag("library_clear_queue"))
       }
     }
-    itemsIndexed(queue) { index, track ->
-      TrackRow(
-        track = track,
-        highlighted = false,
-        subtitle = track.artist,
-        onClick = { onPlay(index) },
-        modifier = Modifier.staggeredEntrance(index),
-        trailing = {
-          IconButton(onClick = { onRemove(index) }) {
-            Icon(Icons.Default.Close, contentDescription = "Remover da fila", modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    // The queue may hold the same song twice, so the key pairs the position with the id. Removal goes
+    // by position, as the ViewModel's queue does.
+    itemsIndexed(queue, key = { index, track -> "$index-${track.id}" }) { index, track ->
+      Column(modifier = Modifier.staggeredEntrance(index)) {
+        if (index > 0) TrackDivider()
+        TrackRow(
+          track = track,
+          subtitle = trackSubtitle(track),
+          onClick = { onPlay(index) },
+          modifier = Modifier.opensPlayer(),
+          trailing = {
+            IconAction(
+              icon = Icons.Rounded.Close,
+              contentDescription = "Remover ${track.title} da fila",
+              onClick = { onRemove(index) },
+              tint = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.trailingEdge()
+            )
           }
-        }
-      )
+        )
+      }
     }
-  }
-}
-
-@Composable
-private fun TrackRow(
-  track: Track,
-  highlighted: Boolean,
-  subtitle: String,
-  onClick: () -> Unit,
-  modifier: Modifier = Modifier,
-  trailing: @Composable () -> Unit
-) {
-  Column(modifier = modifier) {
-  Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .opensPlayer()
-      .clickable(onClick = onClick)
-      .padding(vertical = 6.dp),
-    verticalAlignment = Alignment.CenterVertically
-  ) {
-    com.example.ui.components.TrackArtwork(
-      track = track,
-      shape = RoundedCornerShape(6.dp),
-      iconSize = 26.dp,
-      modifier = Modifier.size(64.dp)
-    )
-    Spacer(Modifier.width(14.dp))
-    Column(modifier = Modifier.weight(1f)) {
-      Text(
-        track.title,
-        fontSize = 17.sp,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        color = if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
-      )
-      Text(subtitle, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    trailing()
-  }
-  HorizontalDivider(modifier = Modifier.padding(start = 78.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
   }
 }

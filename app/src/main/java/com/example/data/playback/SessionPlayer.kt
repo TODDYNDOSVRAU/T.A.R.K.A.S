@@ -40,13 +40,18 @@ class SessionPlayer(
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-  /** Covers embedded in local files, by track id, loaded once off the main thread. */
-  private val embeddedArt = mutableMapOf<String, ByteArray?>()
+  /**
+   * Covers embedded in local files, by track id, loaded once off the main thread and scaled down: a
+   * full-size cover would ride every update to every controller. Only the last few are kept.
+   */
+  private val embeddedArt = object : LinkedHashMap<String, ByteArray?>(16, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray?>?) = size > ART_CACHE_SIZE
+  }
 
   init {
     scope.launch {
       merge(
-        controller.currentTrack, controller.isPlaying, controller.isSpeaking, controller.durationMs,
+        controller.currentTrack, controller.wantsToPlay, controller.durationMs,
         controller.activeCuriosity, controller.queue, controller.shuffle, controller.repeatMode
       ).collect { invalidateState() }
     }
@@ -85,8 +90,9 @@ class SessionPlayer(
       return builder.setPlaybackState(STATE_IDLE).setPlaylist(emptyList()).build()
     }
 
-    // A narration counts as playing: the notification stays and the service stays in the foreground.
-    val playing = controller.isPlaying.value || controller.isSpeaking.value
+    // A narration, and the moment between two tracks, count as playing: the notification stays and the
+    // service stays in the foreground, so the next track is never refused its audio focus.
+    val playing = controller.wantsToPlay.value
     val playlist = mutableListOf<MediaItemData>()
     if (controller.hasPrevious) playlist += placeholder(PREVIOUS_UID)
     val currentIndex = playlist.size
@@ -140,7 +146,7 @@ class SessionPlayer(
           val retriever = MediaMetadataRetriever()
           try {
             retriever.setDataSource(context, Uri.parse(path))
-            retriever.embeddedPicture
+            retriever.embeddedPicture?.let(::scaledCover)
           } finally {
             retriever.release()
           }
@@ -202,5 +208,24 @@ class SessionPlayer(
     const val NEXT_UID = "tarkas:next"
     const val RESTART_THRESHOLD_MS = 3000L
     const val POSITION_JUMP_MS = 2500L
+    const val ART_CACHE_SIZE = 6
+    const val ART_MAX_PX = 512
+
+    /** The cover re-encoded as a JPEG no larger than [ART_MAX_PX] on its long side. */
+    fun scaledCover(bytes: ByteArray): ByteArray? {
+      val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+      android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+      val longSide = maxOf(bounds.outWidth, bounds.outHeight)
+      if (longSide <= 0) return null
+      var sample = 1
+      while (longSide / (sample * 2) >= ART_MAX_PX) sample *= 2
+      val bitmap = android.graphics.BitmapFactory.decodeByteArray(
+        bytes, 0, bytes.size, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample }
+      ) ?: return null
+      val out = java.io.ByteArrayOutputStream()
+      bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 88, out)
+      bitmap.recycle()
+      return out.toByteArray()
+    }
   }
 }
