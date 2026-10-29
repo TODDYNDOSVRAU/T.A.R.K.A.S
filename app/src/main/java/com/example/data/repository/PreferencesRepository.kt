@@ -79,6 +79,13 @@ class PreferencesRepository(context: Context) {
     prefs.edit().putBoolean("reduce_motion", reduce).apply()
   }
 
+  /** "Animação das listas": the key of a [com.example.ui.theme.ListAnimation]. */
+  fun getListAnimation(): String? = prefs.getString("list_animation", null)
+
+  fun saveListAnimation(key: String) {
+    prefs.edit().putString("list_animation", key).apply()
+  }
+
   /** "Reduzir transparência": glass surfaces drawn solid. */
   fun getReduceTransparency(): Boolean = prefs.getBoolean("reduce_transparency", false)
 

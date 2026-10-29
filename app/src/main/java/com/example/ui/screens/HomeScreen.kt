@@ -68,7 +68,7 @@ import com.example.ui.theme.Size
 import com.example.ui.theme.Space
 import com.example.ui.theme.opensPlayer
 import com.example.ui.theme.pressClickable
-import com.example.ui.theme.staggeredEntrance
+import com.example.ui.theme.listEntrance
 import com.example.ui.viewmodel.TrendingState
 import kotlinx.coroutines.delay
 
@@ -388,7 +388,7 @@ private fun TrendingRow(
       Column(
         modifier = Modifier
           .width(TileWidth)
-          .staggeredEntrance(index)
+          .listEntrance(index)
           .opensPlayer()
           .pressClickable(pressedScale = 0.97f, onClickLabel = "Tocar ${track.title}") { onPlay(track) }
           .testTag("trending_track_${track.id}")

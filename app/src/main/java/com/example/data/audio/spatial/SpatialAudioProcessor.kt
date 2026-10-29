@@ -50,19 +50,29 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
   /** Output frames still taken from the delay line after a start. */
   private var fromRing = 0
 
+  /**
+   * Only checks the new format. It takes effect at the next flush: until then the previous track's
+   * audio is still coming through (a gapless change drains it first), in the previous format.
+   */
   override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
     val supported = inputAudioFormat.channelCount == 2 &&
       (inputAudioFormat.encoding == C.ENCODING_PCM_16BIT || inputAudioFormat.encoding == C.ENCODING_PCM_FLOAT)
-    SpatialControl.setStereoInput(supported)
     if (!supported) return AudioProcessor.AudioFormat.NOT_SET // inactive: passed through untouched
-    encoding = inputAudioFormat.encoding
-    if (sampleRate != inputAudioFormat.sampleRate) {
+    return inputAudioFormat
+  }
+
+  /** The format the audio now coming in has (set by the flush that made it current). */
+  private fun adoptActiveFormat() {
+    val format = inputAudioFormat
+    SpatialControl.setStereoInput(format != AudioProcessor.AudioFormat.NOT_SET)
+    if (format == AudioProcessor.AudioFormat.NOT_SET) return
+    encoding = format.encoding
+    if (sampleRate != format.sampleRate) {
       // Another rate needs its own engine (the HRTF tables depend on it).
       engine = null
       running = false
     }
-    sampleRate = inputAudioFormat.sampleRate
-    return inputAudioFormat
+    sampleRate = format.sampleRate
   }
 
   override fun queueInput(inputBuffer: ByteBuffer) {
@@ -216,6 +226,7 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
     fifoStart = 0; fifoCount = 0
     running = false
     engine?.reset()
+    adoptActiveFormat()
   }
 
   override fun onReset() {

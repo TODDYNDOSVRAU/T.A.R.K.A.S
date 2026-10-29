@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.data.web.WebPlayerHost
 import com.example.ui.components.Hairline
 import com.example.ui.components.TextAction
 import com.example.ui.theme.AppText
@@ -45,6 +46,8 @@ private const val LOGIN_URL =
   "https://accounts.google.com/ServiceLogin?service=youtube&continue=https%3A%2F%2Fmusic.youtube.com%2F"
 
 private const val SPOTIFY_LOGIN_URL = "https://accounts.spotify.com/login?continue=https%3A%2F%2Fopen.spotify.com%2F"
+private const val SPOTIFY_HOME = "https://open.spotify.com/"
+private const val YOUTUBE_HOME = "https://music.youtube.com/"
 
 /**
  * One-time sign-in to the account that the hidden YouTube Music (or Spotify) player uses. The page is
@@ -59,7 +62,7 @@ private const val SPOTIFY_LOGIN_URL = "https://accounts.spotify.com/login?contin
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun WebLoginDialog(spotify: Boolean = false, onClose: () -> Unit) {
+fun WebLoginDialog(spotify: Boolean = false, onClose: () -> Unit, onSignedIn: () -> Unit = onClose) {
   var canGoBack by remember { mutableStateOf(false) }
   var webView by remember { mutableStateOf<WebView?>(null) }
   // A Bundle is Parcelable, so it survives rotation and process death with the dialog's saved state.
@@ -103,8 +106,24 @@ fun WebLoginDialog(spotify: Boolean = false, onClose: () -> Unit) {
           modifier = Modifier.fillMaxSize(),
           factory = { context ->
             val web = WebView(context)
-            web.settings.javaScriptEnabled = true
-            web.settings.domStorageEnabled = true
+            // AndroidView gives its view WRAP_CONTENT, and a WebView that wraps its content lays the page
+            // out on a zero-height viewport (100vh = 0). Spotify's sign-in sits in a box sized to the
+            // viewport, so it was clipped to nothing and the page stayed blank. The view fills the dialog.
+            web.layoutParams = android.view.ViewGroup.LayoutParams(
+              android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+              android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            web.settings.apply {
+              javaScriptEnabled = true
+              domStorageEnabled = true
+              databaseEnabled = true
+              // "Continue with Google / Apple / Facebook" open a pop-up; with one window it loads here.
+              javaScriptCanOpenWindowsAutomatically = true
+              setSupportMultipleWindows(false)
+              // Spotify and Google treat the embedded-browser agent ("; wv", "Version/4.0") as an app
+              // they may refuse; without those marks it is the plain Chrome of this phone.
+              userAgentString = userAgentString.replace("; wv)", ")").replace(Regex("Version/[\\d.]+ "), "")
+            }
             CookieManager.getInstance().apply {
               setAcceptCookie(true)
               setAcceptThirdPartyCookies(web, true)
@@ -114,6 +133,25 @@ fun WebLoginDialog(spotify: Boolean = false, onClose: () -> Unit) {
               override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
                 canGoBack = view.canGoBack()
                 view.saveState(webState)
+              }
+
+              /**
+               * After signing in, Spotify and Google try to open their apps (spotify:, intent:), which a
+               * WebView cannot load; the sign-in then seemed to fail. Such links are dropped and the
+               * player's home page is loaded instead.
+               */
+              override fun shouldOverrideUrlLoading(view: WebView, request: android.webkit.WebResourceRequest): Boolean {
+                val scheme = request.url.scheme?.lowercase()
+                if (scheme == "http" || scheme == "https") return false
+                view.loadUrl(if (spotify) SPOTIFY_HOME else YOUTUBE_HOME)
+                return true
+              }
+
+              override fun onPageFinished(view: WebView, url: String?) {
+                CookieManager.getInstance().flush()
+                val home = if (spotify) SPOTIFY_HOME else YOUTUBE_HOME
+                // Back on the player's own page with the session cookie: the sign-in is done.
+                if (url?.startsWith(home) == true && WebPlayerHost.isSignedIn(spotify)) onSignedIn()
               }
             }
             if (webState.isEmpty || web.restoreState(webState) == null) {

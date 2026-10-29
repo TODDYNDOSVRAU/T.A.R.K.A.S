@@ -112,6 +112,11 @@ object LegalTexts {
     title = "Novidades",
     subtitle = "O que mudou em cada versão",
     sections = listOf(
+      "1.13" to
+        "• Spotify e YouTube Music: a próxima faixa não fica mais muda nem pausa sozinha.\n" +
+        "• O login do Spotify, que abria uma tela preta, voltou a funcionar; os Ajustes mostram quando a conta está conectada.\n" +
+        "• Animação das listas, em Ajustes: Deslizar, Esmaecer, Zoom, Lateral, Virar ou Quicar ao rolar as músicas.\n" +
+        "• Correção no áudio ao passar de uma faixa para outra com formato diferente.",
       "1.12" to
         "• A tela de Áudio ficou mais curta, com abas: Curva, Predefinições e Espacial.\n" +
         "• O áudio espacial funciona em qualquer saída, não só nos fones, e não pausa mais quando o áudio espacial do Android está ligado.\n" +

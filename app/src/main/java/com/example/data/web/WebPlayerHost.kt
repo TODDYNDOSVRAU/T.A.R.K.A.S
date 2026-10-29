@@ -48,10 +48,10 @@ private class KeepAliveWebView(context: Context) : WebView(context) {
 }
 
 /**
- * The hidden web player that plays songs found on YouTube Music. The app's own search shows the results and
- * its own player shows the controls; this WebView only produces the sound. It is attached to the window at a
- * size of one pixel, because Chromium throttles pages that are not attached. The position and the end of the
- * song are read from the page's media element once a second.
+ * The hidden web player that plays songs found on YouTube Music and Spotify. The app's own search shows the
+ * results and its own player shows the controls; this WebView only produces the sound. It is attached to the
+ * window, under the app's content (Chromium throttles pages that are not attached). The position and the end
+ * of the song are read once a second: from the media element on YouTube, from the player's controls on Spotify.
  */
 object WebPlayerHost {
   private val main = Handler(Looper.getMainLooper())
@@ -74,12 +74,64 @@ object WebPlayerHost {
   private var clickToPlay: String? = null
   private var defaultUserAgent = ""
 
-  private const val DESKTOP_UA =
+  /** Also used by the sign-in page, so the Spotify session is made for the same browser that plays. */
+  const val DESKTOP_UA =
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
-  private const val SPOTIFY_PLAY = """
-    (function(){var b=document.querySelector('[data-testid="play-button"]')||document.querySelector('button[aria-label="Play"],button[aria-label="Reproduzir"]');if(b)b.click()})()
+  /**
+   * Spotify keeps its media element out of the page, so the state is read from its own controls: the
+   * play/pause button of the bottom bar (its label says "Pause" while playing), the position and length
+   * texts beside the progress bar, and the now-playing widget, which links to the track that plays.
+   * The script defines window.__tkSp once per page; the other Spotify scripts call it.
+   */
+  private const val SPOTIFY_LIB = """
+    if(!window.__tkSp){window.__tkSp={
+      bar:function(){return document.querySelector('[data-testid="control-button-playpause"]')},
+      paused:function(b){var l=(b&&b.getAttribute('aria-label'))||'';return !/paus/i.test(l)},
+      secs:function(s){if(!s)return 0;var p=s.trim().split(':'),v=0;for(var i=0;i<p.length;i++)v=v*60+(parseInt(p[i],10)||0);return v},
+      mine:function(id){var w=document.querySelector('[data-testid="now-playing-widget"]');return !!w&&w.innerHTML.indexOf(id)>=0},
+      big:function(){return document.querySelector('[data-testid="action-bar-row"] [data-testid="play-button"]')||document.querySelector('main [data-testid="play-button"]')}
+    }}
   """
+
+  /** Starts the track of this page, only if it is not playing yet: a click on a playing button would pause it. */
+  private fun spotifyPlayScript(id: String) = SPOTIFY_LIB + """
+    (function(){var s=window.__tkSp,b=s.bar();
+      if(s.mine('$id')){if(s.paused(b)&&b)b.click();return}
+      var g=s.big();if(g&&s.paused(g))g.click()})()
+  """
+
+  private fun spotifyReadScript(id: String) = SPOTIFY_LIB + """
+    (function(){var s=window.__tkSp,b=s.bar(),mine=s.mine('$id'),playing=!!b&&!s.paused(b);
+      var pos=s.secs((document.querySelector('[data-testid="playback-position"]')||{}).textContent);
+      var dur=s.secs((document.querySelector('[data-testid="playback-duration"]')||{}).textContent);
+      if(mine&&playing)window.__tkSeen=1;
+      var last=window.__tkLast||0;
+      if(mine)window.__tkLast=pos;
+      // Ended: Spotify moved on to another song, or ours jumped back from its last seconds, or stopped there.
+      if(window.__tkSeen&&!window.__tkDone&&((!mine&&b)||(dur>0&&last>=dur-3&&pos<last-5)||(dur>0&&!playing&&pos>=dur-2))){
+        window.__tkDone=1;window.__tkEnded=(window.__tkEnded||0)+1;
+        if(!mine&&playing)b.click();
+      }
+      return JSON.stringify({p:mine&&playing,pos:mine?pos:0,dur:mine?dur:0,end:window.__tkEnded||0,has:!!b});
+    })()
+  """
+
+  private const val SPOTIFY_PAUSE = SPOTIFY_LIB + """
+    (function(){var s=window.__tkSp,b=s.bar();if(b&&!s.paused(b))b.click()})()
+  """
+
+  private const val SPOTIFY_RESUME = SPOTIFY_LIB + """
+    (function(){var s=window.__tkSp,b=s.bar();if(b&&s.paused(b))b.click()})()
+  """
+
+  private const val MEDIA_PAUSE = "(function(){var e=document.querySelector('video,audio');if(e)e.pause()})()"
+  private const val MEDIA_PLAY = "(function(){var e=document.querySelector('video,audio');if(e)e.play()})()"
+
+  /** The script that reads the page's state (Spotify's controls, or the media element elsewhere). */
+  private var readScript: String = ""
+  private var pauseScript: String = MEDIA_PAUSE
+  private var resumeScript: String = MEDIA_PLAY
 
   private const val READ_SCRIPT = """
     (function(){
@@ -100,7 +152,7 @@ object WebPlayerHost {
     view?.let { existing ->
       if (existing.parent !== root) {
         (existing.parent as? ViewGroup)?.removeView(existing)
-        root.addView(existing, ViewGroup.LayoutParams(1, 1))
+        root.addView(existing, 0, playerLayoutParams())
       }
       return
     }
@@ -113,7 +165,11 @@ object WebPlayerHost {
         cacheMode = WebSettings.LOAD_DEFAULT
       }
       alpha = 0.01f
-      webChromeClient = WebChromeClient()
+      // Under the app's content and never meant to be read or focused (TalkBack, keyboard).
+      importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+      isFocusable = false
+      isFocusableInTouchMode = false
+      webChromeClient = PlayerChromeClient()
       webViewClient = PlayerClient()
     }
     defaultUserAgent = web.settings.userAgentString
@@ -121,15 +177,39 @@ object WebPlayerHost {
       setAcceptCookie(true)
       setAcceptThirdPartyCookies(web, true)
     }
-    root.addView(web, ViewGroup.LayoutParams(1, 1))
+    root.addView(web, 0, playerLayoutParams())
     view = web
     appContext = activity.applicationContext
   }
+
+  /**
+   * A page laid out on a one-pixel viewport drops what does not fit: Spotify's player then has no
+   * play/pause bar, which is what the app reads and presses. So the view has a small desktop size, and
+   * sits first in the window, under the app's own (opaque) content, where it is never seen or touched.
+   */
+  private fun playerLayoutParams() = android.widget.FrameLayout.LayoutParams(PLAYER_WIDTH_PX, PLAYER_HEIGHT_PX)
+
+  private const val PLAYER_WIDTH_PX = 1024
+  private const val PLAYER_HEIGHT_PX = 720
 
   /** The activity is going away: take the player off its window so it does not keep it in memory. */
   fun release(activity: Activity) {
     val root = activity.window.decorView as ViewGroup
     view?.let { if (it.parent === root) root.removeView(it) }
+  }
+
+  /**
+   * Spotify's songs are DRM-protected (Widevine). The page asks for "protected media" first, and the
+   * default client refuses it, which leaves the song silent. Only that, and only for the two services.
+   */
+  private class PlayerChromeClient : WebChromeClient() {
+    override fun onPermissionRequest(request: android.webkit.PermissionRequest) {
+      val host = request.origin?.host.orEmpty()
+      val trusted = host == "open.spotify.com" || host.endsWith(".spotify.com") || host == "music.youtube.com" ||
+        host.endsWith(".youtube.com")
+      val drm = android.webkit.PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID
+      if (trusted && drm in request.resources) request.grant(arrayOf(drm)) else request.deny()
+    }
   }
 
   private class PlayerClient : WebViewClient() {
@@ -167,15 +247,26 @@ object WebPlayerHost {
   }
 
   /** Plays a Spotify song in its web player (needs the account signed in; free accounts play with ads). */
-  fun playSpotify(context: Context, trackId: String, onEnded: () -> Unit, onFailed: () -> Unit): Boolean =
-    start(context, "https://open.spotify.com/track/$trackId", desktop = true, clickToPlay = SPOTIFY_PLAY, onEnded, onFailed)
+  fun playSpotify(context: Context, trackId: String, onEnded: () -> Unit, onFailed: () -> Unit): Boolean {
+    // Spotify ids are base62; anything else never reaches the scripts.
+    val id = trackId.filter { it.isLetterOrDigit() }
+    if (id.isEmpty()) return false
+    readScript = spotifyReadScript(id)
+    pauseScript = SPOTIFY_PAUSE
+    resumeScript = SPOTIFY_RESUME
+    return start(context, "https://open.spotify.com/track/$id", desktop = true, clickToPlay = spotifyPlayScript(id), onEnded, onFailed)
+  }
 
   /**
    * Plays a YouTube Music song. [onEnded] runs when it finishes by itself, [onFailed] if the page dies.
    * Returns false when there is no player to play on (no activity has attached one yet).
    */
-  fun playYouTube(context: Context, videoId: String, onEnded: () -> Unit, onFailed: () -> Unit): Boolean =
-    start(context, "https://music.youtube.com/watch?v=$videoId", desktop = false, clickToPlay = null, onEnded, onFailed)
+  fun playYouTube(context: Context, videoId: String, onEnded: () -> Unit, onFailed: () -> Unit): Boolean {
+    readScript = READ_SCRIPT
+    pauseScript = MEDIA_PAUSE
+    resumeScript = MEDIA_PLAY
+    return start(context, "https://music.youtube.com/watch?v=$videoId", desktop = false, clickToPlay = null, onEnded, onFailed)
+  }
 
   private fun start(
     context: Context,
@@ -214,7 +305,7 @@ object WebPlayerHost {
   fun pause() {
     val web = view ?: return
     wantPlaying = false
-    web.evaluateJavascript("(function(){var e=document.querySelector('video,audio');if(e)e.pause()})()", null)
+    web.evaluateJavascript(pauseScript, null)
     releaseAudio()
   }
 
@@ -225,7 +316,7 @@ object WebPlayerHost {
     wantPlaying = true
     autoplayTries = 0
     takeAudio(context)
-    web.evaluateJavascript("(function(){var e=document.querySelector('video,audio');if(e)e.play()})()", null)
+    web.evaluateJavascript(resumeScript, null)
     startPolling()
   }
 
@@ -277,11 +368,23 @@ object WebPlayerHost {
     onFailed = null
     pageReady = false
     view?.let {
-      it.evaluateJavascript("(function(){var e=document.querySelector('video,audio');if(e)e.pause()})()", null)
+      it.evaluateJavascript(pauseScript, null)
       it.loadUrl("about:blank")
     }
     releaseAudio()
     _state.value = WebNowPlaying()
+  }
+
+  /**
+   * True when the service's sign-in cookie is on this device (sp_dc for Spotify, SAPISID for Google).
+   * Only its presence is read; the value never leaves the cookie store.
+   */
+  fun isSignedIn(spotify: Boolean): Boolean {
+    val cookies = runCatching {
+      CookieManager.getInstance().getCookie(if (spotify) "https://open.spotify.com" else "https://music.youtube.com")
+    }.getOrNull().orEmpty()
+    val name = if (spotify) "sp_dc=" else "SAPISID="
+    return cookies.split(';').any { it.trim().startsWith(name) }
   }
 
   /** Signs out of every service: removes the cookies and the site data. */
@@ -316,7 +419,7 @@ object WebPlayerHost {
   private fun read() {
     val web = view ?: return
     if (!pageReady) return
-    web.evaluateJavascript(READ_SCRIPT) { raw ->
+    web.evaluateJavascript(readScript.ifEmpty { READ_SCRIPT }) { raw ->
       // A read that started before a new song was loaded belongs to the old page.
       if (!pageReady || web !== view) return@evaluateJavascript
       try {
@@ -333,8 +436,9 @@ object WebPlayerHost {
         val click = clickToPlay
         if (wantPlaying && !playing && autoplayTries < 12 && (json.optBoolean("has") || click != null)) {
           autoplayTries++
-          // Spotify only starts from its own play button; YouTube accepts the media element's play().
-          web.evaluateJavascript(click ?: "(function(){var e=document.querySelector('video,audio');if(e)e.play()})()", null)
+          // Spotify only starts from its own play button (the script clicks it only while it shows
+          // "play", so a retry never pauses a song that just started); YouTube accepts play().
+          web.evaluateJavascript(click ?: MEDIA_PLAY, null)
         }
         // Paused by the user: read once more to show it, then stop polling until they resume.
         if (!wantPlaying && !playing) stopPolling()

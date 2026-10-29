@@ -716,6 +716,7 @@ fun TarkasAppContent(
             onSurfaceStyleChange = { style -> viewModel.setSurfaceStyle(style) },
             reduceMotion = reduceMotion,
             onReduceMotionChange = { viewModel.setReduceMotion(it) },
+            onListAnimationChange = { viewModel.setListAnimation(it) },
             reduceTransparency = reduceTransparency,
             onReduceTransparencyChange = { viewModel.setReduceTransparency(it) },
             accent = LocalAccent.current,

@@ -101,7 +101,7 @@ import com.example.ui.theme.Space
 import com.example.ui.theme.opensPlayer
 import com.example.ui.theme.rememberReducedMotion
 import com.example.ui.theme.sectionTransition
-import com.example.ui.theme.staggeredEntrance
+import com.example.ui.theme.listEntrance
 import com.example.ui.theme.subPageTransition
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -767,7 +767,7 @@ private fun QueueList(
     // The queue may hold the same song twice, so the key pairs the position with the id. Removal goes
     // by position, as the ViewModel's queue does.
     itemsIndexed(queue, key = { index, track -> "$index-${track.id}" }) { index, track ->
-      Column(modifier = Modifier.staggeredEntrance(index)) {
+      Column(modifier = Modifier.listEntrance(index)) {
         if (index > 0) TrackDivider()
         TrackRow(
           track = track,

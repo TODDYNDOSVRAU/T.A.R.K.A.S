@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyItemScope
 import com.example.ui.theme.rememberReducedMotion
-import com.example.ui.theme.staggeredEntrance
+import com.example.ui.theme.listEntrance
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Shuffle
@@ -58,14 +58,14 @@ internal fun TrackDivider() {
 internal fun Modifier.trailingEdge(): Modifier = offset(x = Space.page - Space.xs)
 
 /**
- * How a list row arrives and moves: the subtle rise of the first rows ([stagger]) and the slide when
+ * How a list row arrives and moves: the list animation chosen in Ajustes ([stagger]) and the slide when
  * rows above it come and go. Neither runs with reduced motion; the rows then just appear in place.
  */
 @Composable
 internal fun LazyItemScope.itemMotion(index: Int, stagger: Boolean = true): Modifier {
   if (rememberReducedMotion()) return Modifier
   val placed = Modifier.animateItem()
-  return if (stagger) placed.staggeredEntrance(index) else placed
+  return if (stagger) placed.listEntrance(index) else placed
 }
 
 /** Play and Shuffle above a list, side by side, as in the platform's music app. */

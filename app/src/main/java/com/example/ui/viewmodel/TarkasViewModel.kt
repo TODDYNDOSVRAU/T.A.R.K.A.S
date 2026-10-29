@@ -839,6 +839,15 @@ class TarkasViewModel(
     preferencesRepository.saveReduceMotion(reduce)
   }
 
+  init {
+    AppMotion.listAnimation = com.example.ui.theme.ListAnimation.fromKey(preferencesRepository.getListAnimation())
+  }
+
+  fun setListAnimation(style: com.example.ui.theme.ListAnimation) {
+    AppMotion.listAnimation = style
+    preferencesRepository.saveListAnimation(style.key)
+  }
+
   fun setThemeMode(mode: String) {
     _themeMode.value = mode
     preferencesRepository.saveThemeMode(mode)

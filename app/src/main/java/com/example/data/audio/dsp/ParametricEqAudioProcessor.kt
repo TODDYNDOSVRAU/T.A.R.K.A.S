@@ -17,16 +17,15 @@ class ParametricEqAudioProcessor(private val dsp: EqDsp) : BaseAudioProcessor() 
   private var scratch = FloatArray(0)
   private var encoding = C.ENCODING_INVALID
   private var channels = 2
+  private var sampleRate = 0
 
   override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
     val enc = inputAudioFormat.encoding
     // Any other encoding passes through untouched (NOT_SET makes this processor inactive) instead of
     // failing the whole audio sink.
     if (enc != C.ENCODING_PCM_16BIT && enc != C.ENCODING_PCM_FLOAT) return AudioProcessor.AudioFormat.NOT_SET
-    encoding = enc
-    channels = inputAudioFormat.channelCount
-    dsp.configure(inputAudioFormat.sampleRate, inputAudioFormat.channelCount)
-    // Same format out as in: the chain only changes sample values.
+    // Same format out as in: the chain only changes sample values. The new format is applied at the
+    // next flush, when it becomes the format of the audio coming in (see onFlush).
     return inputAudioFormat
   }
 
@@ -54,12 +53,23 @@ class ParametricEqAudioProcessor(private val dsp: EqDsp) : BaseAudioProcessor() 
   }
 
   override fun onFlush() {
+    val format = inputAudioFormat
+    if (format != AudioProcessor.AudioFormat.NOT_SET &&
+      (format.encoding != encoding || format.channelCount != channels || format.sampleRate != sampleRate)
+    ) {
+      // Configured before the previous track's audio had drained; it takes effect now.
+      encoding = format.encoding
+      channels = format.channelCount
+      sampleRate = format.sampleRate
+      dsp.configure(format.sampleRate, format.channelCount)
+    }
     dsp.reset()
   }
 
   override fun onReset() {
     scratch = FloatArray(0)
     encoding = C.ENCODING_INVALID
+    sampleRate = 0
   }
 
   private fun ensureScratch(samples: Int) {

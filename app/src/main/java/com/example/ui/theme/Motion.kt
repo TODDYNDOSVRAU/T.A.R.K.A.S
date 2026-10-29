@@ -95,6 +95,9 @@ object AppMotion {
 
   val reduced: Boolean get() = userReduced || systemReduced
 
+  /** How the rows of the lists arrive while scrolling ("Animação das listas" in Ajustes). */
+  var listAnimation by mutableStateOf(ListAnimation.SLIDE)
+
   fun readSystem(context: Context) {
     val resolver = context.contentResolver
     systemReduced = try {
@@ -194,25 +197,68 @@ fun sectionTransition(fromIndex: Int, toIndex: Int, reduced: Boolean): ContentTr
 }
 
 /**
- * The first items of a list fade in and rise 12 dp one after another (30 ms apart) the first time
- * they appear. Only the first [Motion.StaggerItems] items, only once per item (coming back to the
- * screen shows them in place), and never with reduced motion.
+ * The ways a row can arrive as it scrolls into view, like the list animations of the WhatsApp mods
+ * (GB, WA Enhancer). Each one moves and fades the row in; none changes its layout.
+ */
+enum class ListAnimation(val key: String, val label: String) {
+  NONE("none", "Nenhuma"),
+  SLIDE("slide", "Deslizar"),
+  FADE("fade", "Esmaecer"),
+  ZOOM("zoom", "Zoom"),
+  SIDE("side", "Lateral"),
+  FLIP("flip", "Virar"),
+  BOUNCE("bounce", "Quicar");
+
+  companion object {
+    fun fromKey(key: String?): ListAnimation = entries.firstOrNull { it.key == key } ?: SLIDE
+  }
+}
+
+/**
+ * A row of a scrolling list arrives with [AppMotion.listAnimation] every time it scrolls into view
+ * (a lazy list composes it afresh then). The first [Motion.StaggerItems] rows of a list that just
+ * opened come one after another; a row scrolled in later starts at once, so it never lags the finger.
+ * Nothing moves with reduced motion or with "Nenhuma". The animation runs in graphicsLayer only, so
+ * the scroll itself never recomposes.
  */
 @Composable
-fun Modifier.staggeredEntrance(index: Int): Modifier {
-  if (index >= Motion.StaggerItems || AppMotion.reduced) return this
-  var shown by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
-  val progress = remember { androidx.compose.animation.core.Animatable(if (shown) 1f else 0f) }
-  androidx.compose.runtime.LaunchedEffect(Unit) {
-    if (progress.value < 1f) {
-      kotlinx.coroutines.delay(index * Motion.StaggerStepMs)
-      progress.animateTo(1f, Motion.criticalSpatial())
-    }
-    shown = true
+fun Modifier.listEntrance(index: Int): Modifier {
+  val style = AppMotion.listAnimation
+  if (AppMotion.reduced || style == ListAnimation.NONE) return this
+  // Saved with the row, so a row coming back into view is not delayed again; the animation itself
+  // (below, not saved) plays on every entry.
+  var staggered by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+  val progress = remember(style) { androidx.compose.animation.core.Animatable(0f) }
+  androidx.compose.runtime.LaunchedEffect(style) {
+    if (!staggered && index < Motion.StaggerItems) kotlinx.coroutines.delay(index * Motion.StaggerStepMs)
+    staggered = true
+    progress.animateTo(
+      1f,
+      if (style == ListAnimation.BOUNCE) spring(dampingRatio = 0.45f, stiffness = 420f)
+      else Motion.criticalSpatial(stiffness = 520f)
+    )
   }
   return this.graphicsLayer {
-    alpha = progress.value
-    translationY = (1f - progress.value) * 12.dp.toPx()
+    val p = progress.value
+    val rest = 1f - p
+    // A bounce overshoots past 1; the fade never does.
+    alpha = p.coerceIn(0f, 1f)
+    when (style) {
+      ListAnimation.SLIDE -> translationY = rest * 32.dp.toPx()
+      ListAnimation.FADE -> Unit
+      ListAnimation.ZOOM -> {
+        scaleX = 0.86f + 0.14f * p
+        scaleY = 0.86f + 0.14f * p
+      }
+      ListAnimation.SIDE -> translationX = -rest * 48.dp.toPx()
+      ListAnimation.FLIP -> {
+        cameraDistance = 12f * density
+        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
+        rotationX = -70f * rest
+      }
+      ListAnimation.BOUNCE -> translationY = rest * 56.dp.toPx()
+      ListAnimation.NONE -> Unit
+    }
   }
 }
 

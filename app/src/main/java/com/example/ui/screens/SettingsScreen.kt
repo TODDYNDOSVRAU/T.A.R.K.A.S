@@ -75,6 +75,7 @@ import com.example.ui.components.TarkasMark
 import com.example.ui.legal.LegalTexts
 import com.example.ui.theme.AccentColor
 import com.example.ui.theme.AppMotion
+import com.example.ui.theme.ListAnimation
 import com.example.ui.theme.AppText
 import com.example.ui.theme.LocalBarInset
 import com.example.ui.theme.Shapes
@@ -112,6 +113,7 @@ fun SettingsScreen(
   onSurfaceStyleChange: (SurfaceStyle) -> Unit = {},
   reduceMotion: Boolean = false,
   onReduceMotionChange: (Boolean) -> Unit = {},
+  onListAnimationChange: (com.example.ui.theme.ListAnimation) -> Unit = {},
   reduceTransparency: Boolean = false,
   onReduceTransparencyChange: (Boolean) -> Unit = {},
   accent: AccentColor = AccentColor.ICE,
@@ -156,7 +158,7 @@ fun SettingsScreen(
     when (shown) {
       SettingsPage.MAIN -> MainSettings(
         themeMode, capabilities, onThemeModeChange, curiosityConfig, onOpenCuriositySettings, hasGeminiKey,
-        surfaceStyle, onSurfaceStyleChange, reduceMotion, onReduceMotionChange, reduceTransparency, onReduceTransparencyChange,
+        surfaceStyle, onSurfaceStyleChange, reduceMotion, onReduceMotionChange, onListAnimationChange, reduceTransparency, onReduceTransparencyChange,
         accent, onAccentChange, isShuffle, repeatMode, onToggleShuffle,
         onSetRepeatMode = { target ->
           // Without a direct setter, step the cycle (Desligado → Lista → Faixa) until it lands on the choice.
@@ -210,6 +212,7 @@ private fun MainSettings(
   onSurfaceStyleChange: (SurfaceStyle) -> Unit,
   reduceMotion: Boolean,
   onReduceMotionChange: (Boolean) -> Unit,
+  onListAnimationChange: (ListAnimation) -> Unit,
   reduceTransparency: Boolean,
   onReduceTransparencyChange: (Boolean) -> Unit,
   accent: AccentColor,
@@ -234,6 +237,17 @@ private fun MainSettings(
   var confirmSignOut by rememberSaveable { mutableStateOf(false) }
   var showLogin by rememberSaveable { mutableStateOf(false) }
   var showSpotifyLogin by rememberSaveable { mutableStateOf(false) }
+  // Read again when a sign-in page closes and after signing out (the cookies go away a moment later).
+  var accountsRefresh by remember { mutableIntStateOf(0) }
+  val youtubeSignedIn = remember(showLogin, accountsRefresh) { com.example.data.web.WebPlayerHost.isSignedIn(spotify = false) }
+  val spotifySignedIn = remember(showSpotifyLogin, accountsRefresh) { com.example.data.web.WebPlayerHost.isSignedIn(spotify = true) }
+  var signOuts by remember { mutableIntStateOf(0) }
+  LaunchedEffect(signOuts) {
+    if (signOuts > 0) {
+      kotlinx.coroutines.delay(800)
+      accountsRefresh++
+    }
+  }
   var cacheSize by remember { mutableStateOf<Long?>(null) }
   var cacheRefresh by remember { mutableIntStateOf(0) }
   LaunchedEffect(cacheRefresh) { cacheSize = cacheSizeBytes() }
@@ -267,6 +281,27 @@ private fun MainSettings(
       footer = "Como são desenhadas a barra de abas e o mini player. O conteúdo das páginas é sempre sólido."
     ) {
       SurfaceOptionRows(surfaceStyle, onSurfaceStyleChange, tagPrefix = "surface_style_")
+    }
+    settingsGroup(
+      "Animação das listas",
+      footer = "Como as músicas entram na tela ao rolar as listas. Com Reduzir animações, nenhuma."
+    ) {
+      Row(
+        modifier = Modifier
+          .horizontalScroll(rememberScrollState())
+          .padding(horizontal = Space.s, vertical = Space.s)
+          .selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(Space.xs)
+      ) {
+        ListAnimation.entries.forEach { style ->
+          com.example.ui.components.FilterChip(
+            label = style.label,
+            selected = AppMotion.listAnimation == style,
+            onClick = { onListAnimationChange(style) },
+            modifier = Modifier.testTag("list_animation_${style.key}")
+          )
+        }
+      }
     }
     settingsGroup("Acessibilidade") {
       SwitchRow(
@@ -338,9 +373,19 @@ private fun MainSettings(
       "Streaming",
       footer = "Com o Premium, o YouTube Music toca sem anúncios e com a tela apagada. Sem Premium, o Spotify toca no plano grátis, com anúncios. As senhas ficam só nas páginas dos serviços."
     ) {
-      ListRow(title = "YouTube Music", value = "Entrar", onClick = { showLogin = true }, modifier = Modifier.testTag("settings_web_login"))
+      ListRow(
+        title = "YouTube Music",
+        value = if (youtubeSignedIn) "Conectado" else "Entrar",
+        onClick = { showLogin = true },
+        modifier = Modifier.testTag("settings_web_login")
+      )
       GroupDivider()
-      ListRow(title = "Spotify", value = "Entrar", onClick = { showSpotifyLogin = true }, modifier = Modifier.testTag("settings_spotify_login"))
+      ListRow(
+        title = "Spotify",
+        value = if (spotifySignedIn) "Conectado" else "Entrar",
+        onClick = { showSpotifyLogin = true },
+        modifier = Modifier.testTag("settings_spotify_login")
+      )
       GroupDivider()
       ListRow(
         title = "Sair das contas",
@@ -445,7 +490,11 @@ private fun MainSettings(
       title = { Text("Sair das contas?", style = AppText.Title3) },
       text = { Text("As sessões do YouTube Music e do Spotify guardadas neste aparelho serão apagadas. Para tocar de novo, entre outra vez.") },
       confirmButton = {
-        TextButton(onClick = { confirmSignOut = false; onSignOutWeb() }) { Text("Sair", color = colors.error) }
+        TextButton(onClick = {
+          confirmSignOut = false
+          onSignOutWeb()
+          signOuts++
+        }) { Text("Sair", color = colors.error) }
       },
       dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text("Cancelar") } }
     )
