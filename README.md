@@ -4,7 +4,7 @@
 
 <h1 align="center">T.A.R.K.A.S.</h1>
 
-<p align="center"><b>TOTALLY ACCURATE REAL-TIME AUDIO SYSTEM</b></p>
+<p align="center"><b>TOTALLY ACCURATE REAL-TIME KIND OF AUDIO SYSTEM</b></p>
 
 <p align="center">
   Uma central inteligente de áudio, música e assistência pessoal para Android.<br>
