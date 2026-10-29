@@ -1,0 +1,98 @@
+T.A.R.K.A.S. — LICENÇA DE CÓDIGO VISÍVEL, TODOS OS DIREITOS RESERVADOS
+Versão 1.0 — 29 de outubro de 2026
+
+Copyright (c) 2026 Roger Moreira. Todos os direitos reservados.
+Contato: roger.moreiraa8@gmail.com · Instagram @o.rogermoreira
+
+O T.A.R.K.A.S. (o "Software") — código-fonte, arquivos de compilação, textos,
+ícones, nome, marca, telas e demais materiais deste repositório — é obra protegida
+pela Lei de Direitos Autorais (Lei nº 9.610/1998), pela Lei do Software
+(Lei nº 9.609/1998) e por tratados internacionais. O código está publicado para
+que as pessoas possam LÊ-LO e conferir o que o aplicativo faz. Publicar o código
+NÃO o torna livre nem de código aberto.
+
+1. O QUE É PERMITIDO
+
+   a) Ver e ler o código-fonte neste repositório, no GitHub.
+   b) Baixar os APKs publicados oficialmente na página de Releases deste
+      repositório e instalá-los nos seus próprios aparelhos, para uso pessoal e
+      não comercial.
+   c) Citar trechos curtos do código em análises, críticas, aulas ou relatos de
+      problemas, com crédito ao autor e link para este repositório.
+   d) Abrir issues para relatar problemas ou sugerir melhorias.
+
+2. O QUE É PROIBIDO
+
+   Sem autorização prévia e por escrito do titular, é proibido:
+
+   a) Copiar, reproduzir ou baixar o código-fonte, no todo ou em parte, para
+      qualquer fim que não seja a leitura prevista no item 1.
+   b) Modificar, adaptar, traduzir ou criar obras derivadas do Software.
+   c) Fazer "fork" do repositório para desenvolver, alterar, compilar,
+      redistribuir ou publicar o Software, dentro ou fora do GitHub.
+   d) Compilar o Software e distribuir o resultado, ou distribuir APKs
+      modificados, reempacotados ou assinados por outra pessoa.
+   e) Redistribuir, sublicenciar, vender, alugar ou publicar o Software, seus
+      arquivos ou seus APKs em lojas de aplicativos, sites ou outros
+      repositórios.
+   f) Usar o Software, ou partes dele, em qualquer produto, serviço ou atividade
+      comercial.
+   g) Usar o nome "T.A.R.K.A.S.", "Tarkas", o ícone, a identidade visual ou
+      qualquer sinal capaz de causar confusão com o Software.
+   h) Remover ou alterar avisos de direitos autorais, desta licença ou de
+      terceiros.
+   i) Usar o código-fonte para treinar, ajustar ou avaliar modelos de
+      inteligência artificial.
+   j) Contornar, remover ou desativar qualquer proteção, verificação ou
+      assinatura do Software.
+
+3. FORKS NO GITHUB
+
+   Os Termos de Serviço do GitHub permitem que qualquer usuário veja e faça
+   "fork" de um repositório público dentro do próprio GitHub. Esse direito se
+   limita ao que a plataforma oferece: ver o código. Ele não autoriza nenhum dos
+   usos proibidos no item 2. Quem fizer fork não recebe nenhuma licença para
+   alterar, compilar, distribuir ou usar o código, e deve apagar o fork se o
+   titular pedir.
+
+4. CONTRIBUIÇÕES
+
+   Pull requests não são aceitos sem acordo prévio. Ao enviar qualquer
+   contribuição (código, texto, ideia em issue), você cede ao titular, sem
+   custo e de forma definitiva, os direitos patrimoniais sobre ela, para que
+   ele possa usá-la, modificá-la e distribuí-la livremente, e declara que a
+   contribuição é sua.
+
+5. COMPONENTES DE TERCEIROS
+
+   O Software usa bibliotecas de terceiros (por exemplo Jetpack Compose,
+   AndroidX Media3, Coil, OkHttp, Haze e Backdrop) e dados do projeto AutoEq.
+   Esses componentes continuam sob as licenças dos seus autores, listadas no
+   aplicativo em Ajustes > Sobre > Licenças de código aberto. Esta licença
+   cobre apenas o que foi criado pelo titular.
+
+   As músicas tocadas pelo aplicativo pertencem aos seus artistas e titulares e
+   são entregues pelos próprios serviços (Audius, YouTube Music, Spotify),
+   segundo os termos de cada um.
+
+6. SEM GARANTIA
+
+   O Software é oferecido "no estado em que se encontra", sem garantia de
+   qualquer tipo. Na máxima extensão permitida por lei, o titular não responde
+   por danos decorrentes do uso ou da impossibilidade de uso do Software,
+   inclusive pelo uso dos modos ADB e root. Nada aqui afasta direitos
+   garantidos pelo Código de Defesa do Consumidor.
+
+7. FIM DA PERMISSÃO
+
+   Qualquer violação encerra automaticamente as permissões do item 1. O titular
+   pode exigir a remoção de cópias, forks e publicações não autorizadas, por
+   exemplo por notificação DMCA ao GitHub ou a lojas de aplicativos, e buscar as
+   medidas civis e criminais cabíveis (art. 12 da Lei nº 9.609/1998 e
+   art. 184 do Código Penal).
+
+8. AUTORIZAÇÕES E LEI APLICÁVEL
+
+   Para qualquer uso não previsto no item 1, peça autorização por escrito pelo
+   contato acima. Esta licença é regida pelas leis da República Federativa do
+   Brasil.
