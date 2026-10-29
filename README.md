@@ -1,107 +1,79 @@
 <p align="center">
-  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png" width="112" alt="Ícone do T.A.R.K.A.S.">
+  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png" width="96" alt="T.A.R.K.A.S.">
 </p>
 
 <h1 align="center">T.A.R.K.A.S.</h1>
 
+<p align="center"><b>TOTALLY ACCURATE REAL-TIME KIND OF AUDIO SYSTEM</b></p>
+
+<p align="center">Music player and audio hub for Android.</p>
+
 <p align="center">
-  Player de música para Android com equalizador de verdade.<br>
-  Suas músicas, Audius, YouTube Music e Spotify numa busca só, tocando no mesmo player.
+  <a href="https://github.com/TODDYNDOSVRAU/T.A.R.K.A.S/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/TODDYNDOSVRAU/T.A.R.K.A.S?label=release&color=0E7C86"></a>
+  <img alt="Android 7.0+" src="https://img.shields.io/badge/Android-7.0%2B-7EE3EA">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-all%20rights%20reserved-555"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/TODDYNDOSVRAU/T.A.R.K.A.S/releases/latest"><img alt="Última versão" src="https://img.shields.io/github/v/release/TODDYNDOSVRAU/T.A.R.K.A.S?label=vers%C3%A3o&color=0E7C86"></a>
-  <img alt="Android 7.0 ou mais novo" src="https://img.shields.io/badge/Android-7.0%2B-7EE3EA">
-  <img alt="Kotlin e Jetpack Compose" src="https://img.shields.io/badge/Kotlin-Jetpack%20Compose-0E7C86">
-  <a href="LICENSE"><img alt="Licença: todos os direitos reservados" src="https://img.shields.io/badge/licen%C3%A7a-todos%20os%20direitos%20reservados-555"></a>
+  <img src="docs/screenshots/player.png" width="240" alt="Player">
+  <img src="docs/screenshots/equalizador.png" width="240" alt="Equalizer">
+  <img src="docs/screenshots/biblioteca.png" width="240" alt="Library">
 </p>
 
-<p align="center">
-  <img src="docs/screenshots/player.png" width="250" alt="Player">
-  &nbsp;
-  <img src="docs/screenshots/equalizador.png" width="250" alt="Equalizador">
-  &nbsp;
-  <img src="docs/screenshots/biblioteca.png" width="250" alt="Biblioteca">
-</p>
+## Features
 
-## Baixar
+**Playback**
+- On-device music, Audius, YouTube Music and Spotify in one unified search
+- Background playback with controls in the notification, lock screen, headphones and Bluetooth
+- Gapless, queue, shuffle, repeat, favorites and playlists
+- Queue and position restored on relaunch
+- Sleep timer
 
-Baixe o `TARKAS-x.y.apk` da **[última versão](https://github.com/TODDYNDOSVRAU/T.A.R.K.A.S/releases/latest)** e abra o arquivo no celular. O Android vai pedir para permitir a instalação de apps fora da loja.
+**Equalizer**
+- 15-band graphic or parametric (frequency, gain and Q)
+- Headphone correction by model ([AutoEq](https://github.com/jaakkopasanen/AutoEq))
+- Bass, treble, balance, stereo width, limiter and auto preamp
+- System-wide EQ for other apps via ADB or root
 
-Cada versão instala por cima da anterior, sem perder favoritos, playlists e ajustes. O app ainda não está na Play Store.
+**Song facts**
+- Verified facts about the playing track, in the player and the notification
 
-## O que ele faz
+## Installation
 
-**Player**
-- Toca as músicas do celular, com capa, artista e álbum (Biblioteca > Músicas).
-- Busca no Audius, no YouTube Music e no Spotify direto do Início. Cada resultado mostra de onde vem e toca no próprio player do app.
-- Continua tocando com a tela apagada e com o app fechado. Os controles ficam na notificação, na tela de bloqueio, no fone e no Bluetooth.
-- Sem pausa entre as faixas (gapless).
-- Fila, aleatório e repetir.
-- Lembra a música, a posição e a fila quando você reabre o app.
-- Timer de dormir de 5 a 90 minutos ou no fim da faixa, com o volume baixando aos poucos.
-- Favoritos e playlists.
+Download the APK from the [latest release](https://github.com/TODDYNDOSVRAU/T.A.R.K.A.S/releases/latest) and install it. Updates install over the previous version without data loss.
 
-**Equalizador**
-- Gráfico de 15 bandas ou paramétrico, com frequência, ganho e Q de cada banda.
-- Correção para o seu fone, com milhares de modelos do projeto [AutoEq](https://github.com/jaakkopasanen/AutoEq).
-- Graves e agudos, balanço, largura estéreo e limitador.
-- Pré-amp automático, que baixa o volume o quanto a curva reforça para o som não distorcer.
-- Predefinições prontas e as suas próprias.
-- Equaliza também os outros apps (Spotify, YouTube, jogos) no modo ADB ou root, como o Poweramp Equalizer.
+The app interface is in Brazilian Portuguese.
 
-**Extras**
-- Curiosidades sobre as músicas, faladas ou mostradas no player.
-- Liquid glass nas barras e no mini player (Android 13 ou mais novo). Respeita "reduzir movimento" e "reduzir transparência" do sistema.
-- Tema escuro, AMOLED ou claro, e cor de destaque.
-
-## Equalizar os outros apps (modo ADB)
-
-O Android só deixa um app aplicar efeitos ao som de outros apps com uma permissão que precisa ser liberada uma vez por um computador:
-
-1. Ative a depuração USB no celular (Opções do desenvolvedor).
-2. Ligue o celular no computador e rode:
+**EQ for other apps (ADB)**
 
 ```bash
 adb shell pm grant com.aistudio.tarkas.app android.permission.DUMP
 ```
 
-3. No app, vá em Áudio > Ajustes avançados > Alcance e escolha **ADB**.
+Then select **ADB** under Áudio > Ajustes avançados > Alcance. On rooted devices, select **Root**.
 
-Com root, escolha **Root** e o app libera a permissão sozinho.
+## Privacy
 
-## Privacidade
+No account and no backend. Data stays on the device. Searches are sent to the services queried (Audius, YouTube Music, Spotify). The full privacy policy is available in the app.
 
-O T.A.R.K.A.S. não tem servidor nem conta. Ajustes, favoritos, playlists e equalizador ficam só no seu aparelho.
+## Limitations
 
-O que sai do aparelho:
-- o que você busca vai para o Audius, o YouTube Music e o Spotify;
-- a lista de fones é baixada do AutoEq, no GitHub.
+- The EQ does not apply to YouTube Music and Spotify audio.
+- Spotify: sign-in and playback not yet validated.
+- ADB mode depends on the device manufacturer and the source app.
 
-Se você entrar no YouTube Music ou no Spotify, o login é feito na página do próprio serviço. O app não vê a sua senha.
+## Roadmap
 
-A política completa fica em Ajustes > Sobre > Política de Privacidade.
+Per-device profiles, 5.1/7.1 multichannel, album and artist pages, synced lyrics and a context-aware AI assistant. See [docs/VISAO.md](docs/VISAO.md) (Portuguese).
 
-## Limitações conhecidas
+## Tech
 
-- O equalizador do app não atua no som do YouTube Music e do Spotify.
-- A tela de login do Spotify pode abrir em branco, e a reprodução do Spotify ainda não foi testada com conta.
-- No modo ADB, alguns apps e alguns fabricantes não informam a sessão de áudio, e o equalizador não chega neles.
+Kotlin · Jetpack Compose · Material 3 · AndroidX Media3 · Coil · OkHttp · custom DSP (biquad filters, lookahead limiter)
 
-## Feito com
+## License
 
-Kotlin, Jetpack Compose, Material 3, AndroidX Media3 (ExoPlayer e MediaSession), Coil, OkHttp, [Haze](https://github.com/chrisbanes/haze) e [Backdrop](https://github.com/Kyant0/AndroidLiquidGlass). O processamento do equalizador (filtros biquad, limitador com antecipação e pré-amp automático) é próprio.
+All rights reserved. Personal use of the official APKs is permitted; copying, modification, redistribution and commercial use are prohibited without written permission. See [LICENSE](LICENSE) (Portuguese).
 
-As licenças das bibliotecas usadas estão no app, em Ajustes > Sobre > Licenças de código aberto.
+## Contact
 
-## Licença
-
-**Todos os direitos reservados.** O código está aqui para ser lido, não reaproveitado.
-
-Você pode ler o código e instalar os APKs oficiais para uso pessoal. Sem autorização por escrito, é proibido copiar, modificar, fazer fork para desenvolver ou publicar, compilar e distribuir, usar comercialmente ou usar o nome e a marca. Os detalhes estão em [LICENSE](LICENSE).
-
-Pull requests não são aceitos sem acordo prévio. Problemas e sugestões são bem-vindos nas [issues](https://github.com/TODDYNDOSVRAU/T.A.R.K.A.S/issues).
-
-## Contato
-
-Roger Moreira · roger.moreiraa8@gmail.com · Instagram [@o.rogermoreira](https://instagram.com/o.rogermoreira)
+Roger Moreira · roger.moreiraa8@gmail.com
