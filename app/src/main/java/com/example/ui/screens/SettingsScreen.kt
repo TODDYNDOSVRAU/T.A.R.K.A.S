@@ -73,7 +73,6 @@ import com.example.ui.components.SubPageHeader
 import com.example.ui.components.SwitchRow
 import com.example.ui.components.TarkasMark
 import com.example.ui.legal.LegalTexts
-import com.example.ui.theme.AccentColor
 import com.example.ui.theme.AppMotion
 import com.example.ui.theme.ListAnimation
 import com.example.ui.theme.AppText
@@ -116,8 +115,6 @@ fun SettingsScreen(
   onListAnimationChange: (com.example.ui.theme.ListAnimation) -> Unit = {},
   reduceTransparency: Boolean = false,
   onReduceTransparencyChange: (Boolean) -> Unit = {},
-  accent: AccentColor = AccentColor.ICE,
-  onAccentChange: (AccentColor) -> Unit = {},
   isShuffle: Boolean = false,
   repeatMode: RepeatMode = RepeatMode.OFF,
   onToggleShuffle: () -> Unit = {},
@@ -158,7 +155,7 @@ fun SettingsScreen(
       SettingsPage.MAIN -> MainSettings(
         themeMode, capabilities, onThemeModeChange, curiosityConfig, onOpenCuriositySettings, hasGeminiKey,
         surfaceStyle, onSurfaceStyleChange, reduceMotion, onReduceMotionChange, onListAnimationChange, reduceTransparency, onReduceTransparencyChange,
-        accent, onAccentChange, isShuffle, repeatMode, onToggleShuffle,
+        isShuffle, repeatMode, onToggleShuffle,
         onSetRepeatMode = { target ->
           // Without a direct setter, step the cycle (Desligado → Lista → Faixa) until it lands on the choice.
           if (onSetRepeatMode != null) onSetRepeatMode(target)
@@ -214,8 +211,6 @@ private fun MainSettings(
   onListAnimationChange: (ListAnimation) -> Unit,
   reduceTransparency: Boolean,
   onReduceTransparencyChange: (Boolean) -> Unit,
-  accent: AccentColor,
-  onAccentChange: (AccentColor) -> Unit,
   isShuffle: Boolean,
   repeatMode: RepeatMode,
   onToggleShuffle: () -> Unit,
@@ -256,9 +251,6 @@ private fun MainSettings(
     // Aparência
     settingsGroup("Tema", tag = "settings_theme_card") {
       ThemeOptionRows(themeMode, onThemeModeChange, tagPrefix = "theme_chip_")
-    }
-    settingsGroup("Cor de destaque", footer = "Usada em botões, seleções e no que está tocando.") {
-      AccentSwatches(accent, onAccentChange)
     }
     settingsGroup(
       "Barras flutuantes",
@@ -509,6 +501,15 @@ private fun AboutPage(
           color = colors.onSurfaceVariant,
           textAlign = TextAlign.Center
         )
+        Spacer(Modifier.height(Space.xs))
+        // Authorship line, in English as the T.A.L. identity asks for every product's About page.
+        Text(
+          "Developed by Totally Accurate Labs.",
+          style = AppText.Footnote,
+          color = colors.onSurfaceVariant,
+          textAlign = TextAlign.Center,
+          modifier = Modifier.testTag("about_developer")
+        )
       }
     }
     settingsGroup(header = null) {
@@ -576,6 +577,15 @@ private fun AboutPage(
         modifier = Modifier.testTag("about_restart_onboarding")
       )
     }
+    item {
+      Text(
+        "© 2026 Totally Accurate Labs · MADE BY T.A.L.",
+        style = AppText.Caption1.copy(fontFamily = com.example.ui.theme.JetBrainsMono),
+        color = colors.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Space.page, vertical = Space.xl).testTag("about_seal")
+      )
+    }
   }
 }
 
@@ -639,59 +649,3 @@ internal fun SurfaceOptionRows(surfaceStyle: SurfaceStyle, onSurfaceStyle: (Surf
   }
 }
 
-/**
- * The accent colours as small labelled swatches. Each one is a radio button with its name, so a
- * screen reader hears "Gelo, selecionado" and the label stays visible at every font size (it wraps
- * instead of being cut). The wallpaper colour appears on Android 12 and newer.
- */
-@Composable
-internal fun AccentSwatches(accent: AccentColor, onAccent: (AccentColor) -> Unit) {
-  val colors = MaterialTheme.colorScheme
-  val isDark = colors.background.luminance() < 0.5f
-  Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .horizontalScroll(rememberScrollState())
-      .padding(horizontal = Space.s, vertical = Space.s)
-      .selectableGroup(),
-    horizontalArrangement = Arrangement.spacedBy(Space.xs)
-  ) {
-    AccentColor.entries.filter { it != AccentColor.WALLPAPER || AccentColor.wallpaperSupported }.forEach { a ->
-      val selected = a == accent
-      val wallpaper = a == AccentColor.WALLPAPER
-      val swatch = when {
-        wallpaper && selected -> colors.primary
-        wallpaper -> colors.surfaceContainerHigh
-        isDark -> a.dark
-        else -> a.light
-      }
-      Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-          .width(72.dp)
-          .clip(Shapes.s)
-          .selectable(selected = selected, role = Role.RadioButton, onClick = { onAccent(a) })
-          .padding(vertical = Space.s)
-          .testTag("accent_${a.key}")
-      ) {
-        Box(
-          modifier = Modifier.size(36.dp).clip(CircleShape).background(swatch),
-          contentAlignment = Alignment.Center
-        ) {
-          val mark = if (swatch.luminance() > 0.5f) Color.Black else Color.White
-          when {
-            selected -> Icon(Icons.Rounded.Check, contentDescription = null, tint = mark, modifier = Modifier.size(Size.iconSmall))
-            wallpaper -> Icon(Icons.Rounded.Palette, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(Size.iconSmall))
-          }
-        }
-        Spacer(Modifier.height(Space.xs))
-        Text(
-          a.label,
-          style = AppText.Caption1,
-          color = if (selected) colors.onSurface else colors.onSurfaceVariant,
-          textAlign = TextAlign.Center
-        )
-      }
-    }
-  }
-}

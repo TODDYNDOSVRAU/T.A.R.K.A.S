@@ -93,11 +93,10 @@ class PreferencesRepository(context: Context) {
     prefs.edit().putBoolean("reduce_transparency", reduce).apply()
   }
 
-  /** Accent colour key (see AccentColor); "ice" is the brand default. */
-  fun getAccent(): String = prefs.getString("accent", "ice") ?: "ice"
-
-  fun saveAccent(key: String) {
-    prefs.edit().putString("accent", key).apply()
+  init {
+    // The accent picker is gone (the colours follow the T.A.L. palette); drop the old choice so it
+    // does not linger in the settings export.
+    if (prefs.contains("accent")) prefs.edit().remove("accent").apply()
   }
 
   /** First-run setup finished, and which version of the terms the user accepted, and when. */

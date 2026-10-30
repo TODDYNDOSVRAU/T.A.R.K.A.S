@@ -99,8 +99,6 @@ import com.example.ui.screens.MusicScreen
 import com.example.ui.screens.MusicalCuriositySettingsScreen
 import com.example.ui.screens.OnboardingScreen
 import com.example.ui.screens.SettingsScreen
-import com.example.ui.theme.AppleMusicPink
-import com.example.ui.theme.AppleMusicPurple
 import com.example.ui.theme.TarkasTheme
 import com.example.ui.viewmodel.TarkasNavTab
 import com.example.ui.viewmodel.TarkasViewModel
@@ -219,10 +217,8 @@ class MainActivity : ComponentActivity() {
         controller.isAppearanceLightNavigationBars = !isDarkApp
       }
 
-      val accent by viewModel.accent.collectAsStateWithLifecycle()
       val showOnboarding by viewModel.showOnboarding.collectAsStateWithLifecycle()
-      TarkasTheme(themeMode = themeMode, accent = accent) {
-        CompositionLocalProvider(LocalAccent provides accent) {
+      TarkasTheme(themeMode = themeMode) {
         Box(modifier = Modifier.fillMaxSize()) {
         TarkasAppContent(
           viewModel = viewModel,
@@ -257,8 +253,6 @@ class MainActivity : ComponentActivity() {
             onThemeMode = { viewModel.setThemeMode(it) },
             surfaceStyle = surfaceStyle,
             onSurfaceStyle = { viewModel.setSurfaceStyle(it) },
-            accent = accent,
-            onAccent = { viewModel.setAccent(it) },
             reduceMotion = reduceMotion,
             onReduceMotion = { viewModel.setReduceMotion(it) },
             curiosityConfig = curiosityConfig,
@@ -293,14 +287,10 @@ class MainActivity : ComponentActivity() {
           )
         }
         }
-        }
       }
     }
   }
 }
-
-/** The accent the user picked, for the screens that show the choice (it is collected once, at the root). */
-private val LocalAccent = androidx.compose.runtime.staticCompositionLocalOf { com.example.ui.theme.AccentColor.ICE }
 
 /** Opens this app's page in the system settings, from any context (no activity is held). */
 private fun openAppSettings(context: Context): () -> Unit = {
@@ -703,8 +693,6 @@ fun TarkasAppContent(
             onListAnimationChange = { viewModel.setListAnimation(it) },
             reduceTransparency = reduceTransparency,
             onReduceTransparencyChange = { viewModel.setReduceTransparency(it) },
-            accent = LocalAccent.current,
-            onAccentChange = { viewModel.setAccent(it) },
             isShuffle = isShuffle,
             repeatMode = repeatMode,
             onToggleShuffle = { viewModel.toggleShuffle() },

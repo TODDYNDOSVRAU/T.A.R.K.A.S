@@ -677,14 +677,6 @@ class TarkasViewModel(
     preferencesRepository.saveSurfaceStyle(style.key)
   }
 
-  private val _accent = MutableStateFlow(com.example.ui.theme.AccentColor.fromKey(preferencesRepository.getAccent()))
-  val accent: StateFlow<com.example.ui.theme.AccentColor> = _accent.asStateFlow()
-
-  fun setAccent(accent: com.example.ui.theme.AccentColor) {
-    _accent.value = accent
-    preferencesRepository.saveAccent(accent.key)
-  }
-
   // ---- first-run setup and the terms ----
 
   /** Shown after the opening animation until finished, and again (terms step) when the terms change. */

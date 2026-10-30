@@ -1,21 +1,36 @@
 package com.example.ui.theme
 
 import androidx.compose.material3.Typography
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.example.R
 
 /**
- * One system sans family with real weights (the bundled single-weight files could not render bold).
- * The names are kept so older references compile.
+ * A variable font file declared once per weight, each pinned to that weight on the wght axis. Android 8
+ * and newer render every weight from the one file; on Android 7 the axis is ignored and text shows at
+ * the file's default (regular) weight.
  */
-val SpaceGrotesk: FontFamily = FontFamily.SansSerif
-val Inter: FontFamily = FontFamily.SansSerif
+@OptIn(ExperimentalTextApi::class)
+private fun variableFamily(res: Int, vararg weights: FontWeight) = FontFamily(
+  weights.map { w -> Font(res, weight = w, variationSettings = FontVariation.Settings(FontVariation.weight(w.weight))) }
+)
 
-private fun style(size: Int, line: Int, weight: FontWeight, tracking: Float = 0f) = TextStyle(
-  fontFamily = FontFamily.SansSerif,
+// The T.A.L. typefaces (licences in docs/licenses/fonts).
+/** Titles and identity. */
+val SpaceGrotesk: FontFamily = variableFamily(R.font.space_grotesk, FontWeight.Normal, FontWeight.Medium, FontWeight.SemiBold, FontWeight.Bold)
+/** Interface and running text. */
+val Inter: FontFamily = variableFamily(R.font.inter, FontWeight.Normal, FontWeight.Medium, FontWeight.SemiBold, FontWeight.Bold)
+/** Code, metrics and technical data. */
+val JetBrainsMono: FontFamily = variableFamily(R.font.jetbrains_mono, FontWeight.Normal, FontWeight.Medium, FontWeight.Bold)
+
+private fun style(size: Int, line: Int, weight: FontWeight, tracking: Float = 0f, family: FontFamily = Inter) = TextStyle(
+  fontFamily = family,
   fontWeight = weight,
   fontSize = size.sp,
   lineHeight = line.sp,
@@ -30,13 +45,13 @@ private fun style(size: Int, line: Int, weight: FontWeight, tracking: Float = 0f
  */
 object AppText {
   /** Page titles: Início, Biblioteca, Áudio. */
-  val LargeTitle = style(34, 41, FontWeight.Bold, -0.011f)
+  val LargeTitle = style(34, 41, FontWeight.Bold, -0.011f, SpaceGrotesk)
   /** The track title on the player, big numbers. */
-  val Title1 = style(28, 34, FontWeight.Bold, -0.008f)
+  val Title1 = style(28, 34, FontWeight.Bold, -0.008f, SpaceGrotesk)
   /** Section titles inside a page. */
-  val Title2 = style(22, 28, FontWeight.Bold, -0.005f)
+  val Title2 = style(22, 28, FontWeight.Bold, -0.005f, SpaceGrotesk)
   /** Sub-page titles, dialog titles. */
-  val Title3 = style(20, 25, FontWeight.SemiBold, -0.003f)
+  val Title3 = style(20, 25, FontWeight.SemiBold, -0.003f, SpaceGrotesk)
   /** Row titles that need emphasis, buttons. */
   val Headline = style(17, 22, FontWeight.SemiBold, -0.002f)
   /** Row titles, running text. */

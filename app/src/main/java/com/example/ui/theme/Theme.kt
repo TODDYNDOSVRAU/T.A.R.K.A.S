@@ -5,115 +5,95 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.compositeOver
 
+// Dark themes: T.A.L. base (Precision White and Technical Gray on Absolute Black) with the T.A.R.K.A.S.
+// ice as the accent: selected tab, switch on, the playing track, the main action.
 private val TarkasAmoledColorScheme = darkColorScheme(
   primary = TarkasIce,
-  onPrimary = TarkasSymbolDark,
+  onPrimary = TalBlack,
   primaryContainer = TarkasIceContainer,
-  onPrimaryContainer = TarkasIceText,
-  secondary = TarkasSkySecondary,
-  onSecondary = TarkasSymbolDark,
-  secondaryContainer = TarkasSecondaryContainer,
-  onSecondaryContainer = Color(0xFFCBEFFA),
-  tertiary = TarkasAmberTertiary,
-  onTertiary = Color(0xFF452B00),
-  tertiaryContainer = TarkasAmberContainer,
-  onTertiaryContainer = Color(0xFFFFDDB3),
+  onPrimaryContainer = TarkasIce,
+  secondary = TalGrayDark,
+  onSecondary = TalBlack,
+  secondaryContainer = TalInkHigh,
+  onSecondaryContainer = TalWhite,
+  tertiary = TarkasIce,
+  onTertiary = TalBlack,
+  tertiaryContainer = TarkasIceContainer,
+  onTertiaryContainer = TarkasIce,
   background = AmoledBlack,
-  onBackground = Color.White,
-  surface = AmoledSurface,
-  onSurface = Color.White,
-  surfaceVariant = AmoledSurfaceVariant,
-  onSurfaceVariant = Color(0xFFA0A0A5),
-  outline = AmoledCardBorder,
-  outlineVariant = Color(0xFF17191C),
-  surfaceContainer = Color(0xFF111316),
-  surfaceContainerHigh = Color(0xFF1A1D20),
-  error = TarkasError,
-  onError = Color.White
+  onBackground = TalWhite,
+  surface = TalBlack,
+  onSurface = TalWhite,
+  surfaceVariant = TalInkRaised,
+  onSurfaceVariant = TalGrayDark,
+  outline = TalInkLine,
+  outlineVariant = TalInkHigh,
+  surfaceContainer = TalInkRaised,
+  surfaceContainerHigh = TalInkHigh,
+  error = TalErrorDark,
+  onError = TalBlack
 )
 
 private val TarkasDarkColorScheme = darkColorScheme(
-  primary = TarkasCyanPrimary,
-  onPrimary = TarkasSymbolDark,
-  primaryContainer = TarkasCyanContainer,
-  onPrimaryContainer = TarkasCyanText,
-  secondary = TarkasSkySecondary,
-  onSecondary = TarkasSymbolDark,
-  secondaryContainer = TarkasSecondaryContainer,
-  onSecondaryContainer = Color(0xFFCBE6FF),
-  tertiary = TarkasAmberTertiary,
-  onTertiary = Color(0xFF452B00),
-  tertiaryContainer = TarkasAmberContainer,
-  onTertiaryContainer = Color(0xFFFFDDB3),
-  background = TarkasBackgroundDark,
-  onBackground = TarkasTextPrimaryDark,
-  surface = TarkasSurfaceDark,
-  onSurface = TarkasTextPrimaryDark,
-  surfaceVariant = TarkasSurfaceVariantDark,
-  onSurfaceVariant = TarkasTextSecondaryDark,
-  outline = TarkasOutlineDark,
-  outlineVariant = Color(0xFF1A1E22),
-  surfaceContainer = Color(0xFF14171A),
-  surfaceContainerHigh = Color(0xFF1C2024),
-  error = TarkasError,
-  onError = Color.White
+  primary = TarkasIce,
+  onPrimary = TalBlack,
+  primaryContainer = TarkasIceContainer,
+  onPrimaryContainer = TarkasIce,
+  secondary = TalGrayDark,
+  onSecondary = TalBlack,
+  secondaryContainer = TalInkHigh,
+  onSecondaryContainer = TalWhite,
+  tertiary = TarkasIce,
+  onTertiary = TalBlack,
+  tertiaryContainer = TarkasIceContainer,
+  onTertiaryContainer = TarkasIce,
+  background = TalBlack,
+  onBackground = TalWhite,
+  surface = TalInkRaised,
+  onSurface = TalWhite,
+  surfaceVariant = TalInkHigh,
+  onSurfaceVariant = TalGrayDark,
+  outline = TalInkLine,
+  outlineVariant = TalInkHigh,
+  surfaceContainer = TalInkContainer,
+  surfaceContainerHigh = TalInkContainerHigh,
+  error = TalErrorDark,
+  onError = TalBlack
 )
 
+// Light theme: the same base inverted, with the deep teal as the accent.
 private val TarkasLightColorScheme = lightColorScheme(
-  primary = TarkasCyanPrimaryLight,
-  onPrimary = Color.White,
-  primaryContainer = TarkasCyanContainerLight,
-  onPrimaryContainer = Color(0xFF053A40),
-  secondary = TarkasSkySecondaryLight,
-  onSecondary = Color.White,
-  secondaryContainer = Color(0xFFD9ECF3),
-  onSecondaryContainer = Color(0xFF0D3F52),
-  tertiary = TarkasAmberTertiaryLight,
-  onTertiary = Color.White,
-  tertiaryContainer = Color(0xFFFEF3C7),
-  onTertiaryContainer = Color(0xFF92400E),
-  background = TarkasBackgroundLight,
-  onBackground = TarkasTextPrimaryLight,
-  surface = TarkasSurfaceLight,
-  onSurface = TarkasTextPrimaryLight,
-  surfaceVariant = TarkasSurfaceVariantLight,
-  onSurfaceVariant = TarkasTextSecondaryLight,
-  outline = TarkasOutlineLight,
-  outlineVariant = Color(0xFFE5E7EB),
-  surfaceContainer = Color(0xFFE9EAEE),
-  surfaceContainerHigh = Color(0xFFE1E3E7),
-  // The dark theme's coral is ~2.5:1 on the light page; this red keeps 4.5:1 for text.
-  error = Color(0xFFC62828),
-  onError = Color.White
+  primary = TarkasTealDeep,
+  onPrimary = TalWhite,
+  primaryContainer = TarkasTealContainer,
+  onPrimaryContainer = TarkasTealDeep,
+  secondary = TalGrayOnPaper,
+  onSecondary = TalWhite,
+  secondaryContainer = TalPaperHigh,
+  onSecondaryContainer = TalBlack,
+  tertiary = TarkasTealDeep,
+  onTertiary = TalWhite,
+  tertiaryContainer = TarkasTealContainer,
+  onTertiaryContainer = TarkasTealDeep,
+  background = TalPaper,
+  onBackground = TalBlack,
+  surface = TalWhite,
+  onSurface = TalBlack,
+  surfaceVariant = TalPaperHigh,
+  onSurfaceVariant = TalGrayOnPaper,
+  outline = TalPaperLine,
+  outlineVariant = TalPaperHigh,
+  surfaceContainer = TalPaperContainer,
+  surfaceContainerHigh = TalPaperContainerHigh,
+  error = TalErrorLight,
+  onError = TalWhite
 )
-
-/**
- * The accent the user picks in Ajustes (and in the first-run setup). Each has a light tone for the
- * dark themes and a deeper one that keeps contrast on the light theme. [WALLPAPER] takes the
- * system's colour (Material You), on Android 12 and newer.
- */
-enum class AccentColor(val key: String, val label: String, val dark: Color, val light: Color) {
-  ICE("ice", "Gelo", TarkasIce, TarkasCyanPrimaryLight),
-  TEAL("teal", "Verde-água", Color(0xFF5FD4B5), Color(0xFF00796B)),
-  AMBER("amber", "Âmbar", Color(0xFFF2B84B), Color(0xFF9A5B00)),
-  LILAC("lilac", "Lilás", Color(0xFFC3A6FF), Color(0xFF6741C4)),
-  WALLPAPER("wallpaper", "Do sistema", TarkasIce, TarkasCyanPrimaryLight);
-
-  companion object {
-    fun fromKey(key: String?): AccentColor = entries.firstOrNull { it.key == key } ?: ICE
-    /** Material You needs Android 12. */
-    val wallpaperSupported: Boolean get() = android.os.Build.VERSION.SDK_INT >= 31
-  }
-}
 
 @Composable
 fun TarkasTheme(
   themeMode: String = "system",
-  accent: AccentColor = AccentColor.ICE,
   content: @Composable () -> Unit
 ) {
   val isDark = when (themeMode) {
@@ -123,28 +103,11 @@ fun TarkasTheme(
     else -> isSystemInDarkTheme()
   }
 
-  val base = when {
+  val colorScheme = when {
     themeMode == "amoled" -> TarkasAmoledColorScheme
     isDark -> TarkasDarkColorScheme
     else -> TarkasLightColorScheme
   }
-  val context = androidx.compose.ui.platform.LocalContext.current
-  val primary = when {
-    accent == AccentColor.ICE -> null
-    accent == AccentColor.WALLPAPER && AccentColor.wallpaperSupported ->
-      if (isDark) androidx.compose.material3.dynamicDarkColorScheme(context).primary
-      else androidx.compose.material3.dynamicLightColorScheme(context).primary
-    accent == AccentColor.WALLPAPER -> null
-    isDark -> accent.dark
-    else -> accent.light
-  }
-  val colorScheme = if (primary == null) base else base.copy(
-    primary = primary,
-    // Text on the accent: dark ink on the light accents of the dark themes, white on the deep ones.
-    onPrimary = if (primary.luminance() > 0.45f) TarkasSymbolDark else Color.White,
-    primaryContainer = primary.copy(alpha = 0.24f).compositeOver(base.surface),
-    onPrimaryContainer = if (isDark) primary else base.onSurface
-  )
 
   MaterialTheme(
     colorScheme = colorScheme,

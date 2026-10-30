@@ -64,7 +64,6 @@ import com.example.ui.components.TarkasMark
 import com.example.ui.components.TextAction
 import com.example.ui.legal.LegalDoc
 import com.example.ui.legal.LegalTexts
-import com.example.ui.theme.AccentColor
 import com.example.ui.theme.AppText
 import com.example.ui.theme.Size
 import com.example.ui.theme.Space
@@ -102,8 +101,6 @@ fun OnboardingScreen(
   onThemeMode: (String) -> Unit,
   surfaceStyle: SurfaceStyle,
   onSurfaceStyle: (SurfaceStyle) -> Unit,
-  accent: AccentColor,
-  onAccent: (AccentColor) -> Unit,
   reduceMotion: Boolean,
   onReduceMotion: (Boolean) -> Unit,
   curiosityConfig: CuriosityConfig,
@@ -211,7 +208,7 @@ fun OnboardingScreen(
                     onRead = { reading = it },
                     changed = onlyTerms
                   )
-                  Step.LOOK -> LookStep(themeMode, onThemeMode, surfaceStyle, onSurfaceStyle, accent, onAccent, reduceMotion, onReduceMotion)
+                  Step.LOOK -> LookStep(themeMode, onThemeMode, surfaceStyle, onSurfaceStyle, reduceMotion, onReduceMotion)
                   Step.CURIOSITY -> CuriosityStep(curiosityConfig, onCuriosityConfig)
                   Step.DONE -> DoneStep()
                 }
@@ -385,8 +382,6 @@ private fun LookStep(
   onThemeMode: (String) -> Unit,
   surfaceStyle: SurfaceStyle,
   onSurfaceStyle: (SurfaceStyle) -> Unit,
-  accent: AccentColor,
-  onAccent: (AccentColor) -> Unit,
   reduceMotion: Boolean,
   onReduceMotion: (Boolean) -> Unit
 ) {
@@ -394,9 +389,6 @@ private fun LookStep(
   SectionGap()
   GroupHeader("Tema")
   InsetGroup { ThemeOptionRows(themeMode, onThemeMode, tagPrefix = "onboarding_theme_") }
-  SectionGap()
-  GroupHeader("Cor de destaque")
-  InsetGroup { AccentSwatches(accent, onAccent) }
   SectionGap()
   GroupHeader("Barras flutuantes")
   InsetGroup { SurfaceOptionRows(surfaceStyle, onSurfaceStyle, tagPrefix = "onboarding_surface_") }

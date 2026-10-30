@@ -181,6 +181,11 @@ object LegalTexts {
       "Backdrop (AndroidLiquidGlass)" to "Kyant · Apache License 2.0",
       "OkHttp" to "Square · Apache License 2.0",
       "AutoEq" to "Jaakko Pasanen · MIT License · curvas de correção de fones",
+      "Inter" to "The Inter Project Authors · SIL Open Font License 1.1",
+      "Space Grotesk" to "The Space Grotesk Project Authors · SIL Open Font License 1.1",
+      "JetBrains Mono" to "The JetBrains Mono Project Authors · SIL Open Font License 1.1",
+      "SIL Open Font License 1.1" to "As fontes podem ser usadas, estudadas, modificadas e redistribuídas livremente, inclusive embutidas em software, " +
+        "desde que não sejam vendidas sozinhas. Texto completo em https://openfontlicense.org.",
       "Apache License 2.0" to "Licenciado sob a Apache License, Versão 2.0. Você pode obter uma cópia em https://www.apache.org/licenses/LICENSE-2.0. " +
         "O software é distribuído \"como está\", sem garantias ou condições de qualquer tipo."
     )

@@ -116,7 +116,7 @@ internal fun CommandRow(command: String) {
       }
       .padding(horizontal = Space.l, vertical = Space.m)
   ) {
-    Text(command, style = AppText.Footnote.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace), color = colors.onSurface)
+    Text(command, style = AppText.Footnote.copy(fontFamily = com.example.ui.theme.JetBrainsMono), color = colors.onSurface)
     Text(
       if (copied) "Copiado" else "Toque para copiar",
       style = AppText.Footnote,

@@ -33,7 +33,7 @@ import com.example.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.delay
 
 /** Same value as @color/tarkas_ink and the video's background, so nothing shows a seam. */
-private val BootInk = Color(0xFF07090B)
+private val BootInk = Color(0xFF080808)
 
 /** The video's own size (boot-animation/, rendered with Remotion). */
 private const val VIDEO_W = 1080f

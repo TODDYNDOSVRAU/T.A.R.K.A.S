@@ -5,10 +5,11 @@ export const FPS = 60;
 /** 2.5 s. The last frames hold the finished mark, which the app then dissolves into its first screen. */
 export const BOOT_FRAMES = 150;
 
-/** Same value as @color/tarkas_ink, so the window, the video and the app meet without a seam. */
-const INK = "#07090B";
-const ICE = "#7EE3EA";
-const WHITE = "#EAF7F8";
+/** T.A.L. base with the T.A.R.K.A.S. ice accent. INK is @color/tarkas_ink too, so the window, the video and the app meet without a seam. */
+const INK = "#080808"; // Absolute Black
+const ICE = "#7EE3EA"; // T.A.R.K.A.S. accent: the symbol's bar and the seal's square
+const WHITE = "#F2F2F0"; // Precision White
+const GRAY = "#8C8C8C"; // Technical Gray, on dark
 
 /** Starts and ends gently: a pen that accelerates through the stroke and lands softly. */
 const DRAW = Easing.bezier(0.65, 0, 0.35, 1);
@@ -30,13 +31,15 @@ const PARTS: { d: string; from: number; to: number; color: string }[] = [
 const MARK_W = 380;
 const K = MARK_W / 132;
 
-const fontFace = `@font-face { font-family: "Inter"; src: url("${staticFile("inter.ttf")}"); font-weight: 100 900; }`;
+const fontFace = `@font-face { font-family: "Space Grotesk"; src: url("${staticFile("space_grotesk.ttf")}"); font-weight: 300 700; }
+@font-face { font-family: "JetBrains Mono"; src: url("${staticFile("jetbrains_mono.ttf")}"); font-weight: 100 800; }`;
 
 /**
  * The opening of T.A.R.K.A.S.:
  * 1. a thin line of light draws the mark, the ice bar first, as a pen would;
  * 2. the line gains its full weight, and a soft bloom answers it once;
- * 3. one glint crosses the finished mark while the name resolves under it, its spacing closing in;
+ * 3. one glint crosses the finished mark while the name resolves under it, its spacing closing in,
+ *    and the MADE BY T.A.L. seal settles at the foot of the screen;
  * 4. the camera has drifted in by a few percent the whole time, so nothing is ever quite still.
  */
 export const Boot: React.FC = () => {
@@ -49,6 +52,7 @@ export const Boot: React.FC = () => {
   const bloom = interpolate(f, [84, 106, 145], [0, 0.42, 0.12], clamp);
   const sweep = ramp(f, 100, 134, Easing.bezier(0.45, 0, 0.2, 1));
   const name = ramp(f, 98, 136, SETTLE);
+  const seal = ramp(f, 112, 140, SETTLE);
 
   const strokes = (color: (c: string) => string, width: number) =>
     PARTS.map((p, i) => {
@@ -78,7 +82,7 @@ export const Boot: React.FC = () => {
     const t = ramp(f, p.from, p.to);
     if (t <= 0 || t >= 1) return null;
     const fade = Math.min(1, t * 6, (1 - t) * 6);
-    return <circle key={i} r={weight * 0.9} fill="#FFFFFF" opacity={0.85 * fade} style={{ offsetPath: `path("${p.d}")`, offsetDistance: `${t * 100}%` } as React.CSSProperties} />;
+    return <circle key={i} r={weight * 0.9} fill={WHITE} opacity={0.85 * fade} style={{ offsetPath: `path("${p.d}")`, offsetDistance: `${t * 100}%` } as React.CSSProperties} />;
   });
 
   return (
@@ -102,21 +106,21 @@ export const Boot: React.FC = () => {
             </defs>
             {/* Bloom: the same strokes, blurred, answering once when the line gains weight. */}
             <g filter="url(#bloom)" opacity={bloom}>
-              {strokes(() => ICE, weight * 1.6)}
+              {strokes(() => WHITE, weight * 1.6)}
             </g>
             <g>{strokes((c) => c, weight)}</g>
             <g>{heads}</g>
             {sweep > 0 && sweep < 1 && (
               <g mask="url(#glint)" opacity={0.9}>
-                {strokes(() => "#FFFFFF", weight)}
+                {strokes(() => WHITE, weight)}
               </g>
             )}
           </svg>
           <div
             style={{
               marginTop: 70,
-              fontFamily: "Inter",
-              fontWeight: 600,
+              fontFamily: "Space Grotesk",
+              fontWeight: 700,
               fontSize: 44,
               color: WHITE,
               letterSpacing: `${interpolate(name, [0, 1], [0.62, 0.3])}em`,
@@ -129,6 +133,27 @@ export const Boot: React.FC = () => {
           >
             T.A.R.K.A.S.
           </div>
+        </div>
+      </AbsoluteFill>
+      {/* The author's seal, as the T.A.L. identity asks of every opening screen. */}
+      <AbsoluteFill style={{ alignItems: "center", justifyContent: "flex-end", paddingBottom: 190 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            fontFamily: "JetBrains Mono",
+            fontWeight: 500,
+            fontSize: 26,
+            letterSpacing: "0.18em",
+            marginRight: "-0.18em",
+            color: GRAY,
+            opacity: seal,
+            transform: `translateY(${interpolate(seal, [0, 1], [10, 0])}px)`,
+          }}
+        >
+          <div style={{ width: 14, height: 14, background: ICE }} />
+          MADE BY T.A.L.
         </div>
       </AbsoluteFill>
     </AbsoluteFill>

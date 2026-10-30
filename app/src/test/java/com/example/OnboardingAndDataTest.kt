@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.repository.PreferencesRepository
 import com.example.ui.legal.LegalTexts
-import com.example.ui.theme.AccentColor
 import com.example.ui.theme.Motion
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -54,23 +53,22 @@ class OnboardingAndDataTest {
   @Test
   fun exportHasTheSettingsAndEraseLeavesNothing() {
     prefs.saveThemeMode("amoled")
-    prefs.saveAccent(AccentColor.LILAC.key)
     prefs.saveReduceTransparency(true)
     val exported = prefs.exportAll()
     assertEquals("amoled", exported["theme_mode"])
-    assertEquals("lilac", exported["accent"])
     assertEquals(true, exported["reduce_transparency"])
 
     prefs.clearAll()
     assertTrue(prefs.exportAll().isEmpty())
     assertEquals("system", prefs.getThemeMode())
-    assertEquals(AccentColor.ICE, AccentColor.fromKey(prefs.getAccent()))
   }
 
   @Test
-  fun unknownAccentFallsBackToTheBrandColour() {
-    assertEquals(AccentColor.ICE, AccentColor.fromKey("neon"))
-    assertEquals(AccentColor.AMBER, AccentColor.fromKey("amber"))
+  fun theOldAccentChoiceIsDropped() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    context.getSharedPreferences("tarkas_prefs", Context.MODE_PRIVATE).edit().putString("accent", "lilac").commit()
+    val exported = PreferencesRepository(context).exportAll()
+    assertFalse(exported.containsKey("accent"))
   }
 
   @Test
