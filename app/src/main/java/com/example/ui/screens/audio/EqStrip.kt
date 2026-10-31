@@ -134,7 +134,7 @@ internal fun BandStrip(
       targetState = mode,
       transitionSpec = {
         if (reduced) EnterTransition.None togetherWith ExitTransition.None
-        else fadeIn(tween(200, 60)) togetherWith fadeOut(tween(120))
+        else fadeIn(tween(200, 60)) togetherWith fadeOut(tween(150))
       },
       label = "eqMode",
       modifier = Modifier.weight(1f).fillMaxHeight()

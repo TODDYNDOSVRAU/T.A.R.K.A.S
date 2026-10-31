@@ -867,7 +867,7 @@ fun TarkasAppContent(
           enter = if (com.example.ui.theme.rememberReducedMotion()) androidx.compose.animation.EnterTransition.None
             else androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220, delayMillis = 140)) +
               androidx.compose.animation.scaleIn(initialScale = 0.94f, animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = 500f)),
-          exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(90))
+          exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150))
         ) {
           MiniPlayerBar(
             track = lastTrack,
@@ -892,7 +892,7 @@ fun TarkasAppContent(
           enter = if (reducedChrome) androidx.compose.animation.EnterTransition.None
             else androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200, delayMillis = 80)) +
               androidx.compose.animation.slideInVertically(androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 500f)) { it / 2 },
-          exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120))
+          exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150))
         ) {
           TarkasBottomNav(
             currentTab = currentTab,

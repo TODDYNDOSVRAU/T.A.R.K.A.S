@@ -578,12 +578,23 @@ private fun AboutPage(
       )
     }
     item {
+      // The official T.A.L. logo, single colour: white on the dark pages, black on the light one.
+      val onDark = colors.background.luminance() < 0.5f
+      androidx.compose.foundation.Image(
+        painter = androidx.compose.ui.res.painterResource(
+          if (onDark) com.example.R.drawable.tal_logo_negative else com.example.R.drawable.tal_logo_positive
+        ),
+        contentDescription = "Totally Accurate Labs",
+        modifier = Modifier.fillMaxWidth().padding(top = Space.xl).size(64.dp).testTag("about_tal_logo")
+      )
+    }
+    item {
       Text(
         "© 2026 Totally Accurate Labs · MADE BY T.A.L.",
         style = AppText.Caption1.copy(fontFamily = com.example.ui.theme.JetBrainsMono),
         color = colors.onSurfaceVariant,
         textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = Space.page, vertical = Space.xl).testTag("about_seal")
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Space.page, vertical = Space.m).testTag("about_seal")
       )
     }
   }

@@ -164,7 +164,7 @@ fun screenTransition(from: Any, to: Any, reduced: Boolean = false): ContentTrans
 
   val enter = fadeIn(tween(200, delayMillis = 90, easing = LinearOutSlowInEasing)) +
     scaleIn(initialScale = 0.98f, animationSpec = tween(200, delayMillis = 90, easing = Motion.Settle))
-  val exit = fadeOut(tween(90, easing = FastOutLinearInEasing))
+  val exit = fadeOut(tween(150, easing = FastOutLinearInEasing))
   return (enter togetherWith exit).apply {
     // The new screen draws over the old one, so it never slips behind the page that is leaving.
     targetContentZIndex = 1f
@@ -181,7 +181,7 @@ fun subPageTransition(forward: Boolean, reduced: Boolean): ContentTransform {
   val slide = Motion.criticalSpatial<IntOffset>(stiffness = 500f)
   val dir = if (forward) 1 else -1
   return (slideInHorizontally(slide) { w -> dir * w / 3 } + fadeIn(tween(200, delayMillis = 30))) togetherWith
-    (slideOutHorizontally(slide) { w -> -dir * w / 8 } + fadeOut(tween(110)))
+    (slideOutHorizontally(slide) { w -> -dir * w / 8 } + fadeOut(tween(150)))
 }
 
 /**
@@ -193,7 +193,7 @@ fun sectionTransition(fromIndex: Int, toIndex: Int, reduced: Boolean): ContentTr
   val dir = if (toIndex >= fromIndex) 1 else -1
   val slide = Motion.criticalSpatial<IntOffset>(stiffness = 600f)
   return (slideInHorizontally(slide) { w -> dir * w / 10 } + fadeIn(tween(180, delayMillis = 40))) togetherWith
-    (slideOutHorizontally(slide) { w -> -dir * w / 14 } + fadeOut(tween(90)))
+    (slideOutHorizontally(slide) { w -> -dir * w / 14 } + fadeOut(tween(150)))
 }
 
 /**
