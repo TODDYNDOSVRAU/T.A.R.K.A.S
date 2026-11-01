@@ -158,4 +158,37 @@ class AssistantCommandsTest {
     assertTrue(reply.text.contains("aleatório"))
     assertTrue(reply.text.contains("favoritar"))
   }
+
+  @Test
+  fun toneRequestsMoveBassOrTrebleBy3dBAndStopAtTheLimit() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val audio = AudioEngineManager(context)
+    val engine = AssistantEngine(
+      musicRepository = MusicRepository(context),
+      curiosityRepository = CuriosityRepository(),
+      audioEngineManager = audio,
+      onTimerCreated = {},
+      onTimerCancelled = {},
+      callbackContext = kotlinx.coroutines.Dispatchers.Unconfined
+    )
+    runBlocking {
+      val up = engine.processUserMessage("aumentar graves")
+      assertEquals(3f, audio.eqSettings.value.bassDb, 0f)
+      assertEquals("adjust_tone", up.toolReport?.toolName)
+      engine.processUserMessage("menos agudos")
+      assertEquals(-3f, audio.eqSettings.value.trebleDb, 0f)
+      repeat(6) { engine.processUserMessage("mais grave") }
+      assertEquals(12f, audio.eqSettings.value.bassDb, 0f)
+      assertTrue(engine.processUserMessage("mais graves").text.contains("limite"))
+      // A preset request without a verb is still a preset, not a tone change.
+      engine.processUserMessage("equalizador agudos")
+    }
+  }
+
+  @Test
+  fun anUnknownRequestSaysSoAndPointsToAjuda() {
+    val reply = runBlocking { engine { "ok" }.processUserMessage("blablabla") }
+    assertTrue(reply.text, reply.text.contains("ajuda"))
+    assertFalse(reply.text.contains("help"))
+  }
 }

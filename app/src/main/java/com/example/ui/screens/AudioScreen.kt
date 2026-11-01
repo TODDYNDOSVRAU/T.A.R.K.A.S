@@ -22,6 +22,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import com.example.data.audio.spatial.SpatialKnob
 import com.example.data.audio.spatial.SpatialPreset
 import com.example.data.audio.spatial.SpatialStatus
 import com.example.data.autoeq.AutoEqEntry
@@ -50,7 +51,9 @@ data class SpatialUi(
   val intensity: Float = 1f,
   val status: SpatialStatus = SpatialStatus.OFF,
   /** What happens to other apps, shown under the panel; null when nothing needs saying. */
-  val othersNote: String? = null
+  val othersNote: String? = null,
+  /** What the listener set by hand on each preset (only the values that differ from the preset). */
+  val tuning: Map<SpatialPreset, Map<SpatialKnob, Double>> = emptyMap()
 )
 
 /**
@@ -62,7 +65,9 @@ class SpatialActions(
   val onEnabled: (Boolean) -> Unit,
   val onPreset: (SpatialPreset) -> Unit,
   val onIntensity: (Float) -> Unit,
-  val onIntensityFinished: (Float) -> Unit = {}
+  val onIntensityFinished: (Float) -> Unit = {},
+  val onKnob: (SpatialPreset, SpatialKnob, Double) -> Unit = { _, _, _ -> },
+  val onResetTuning: (SpatialPreset) -> Unit = {}
 )
 
 /** Says honestly what Tarkas Spatial does to apps other than this one. */
@@ -118,6 +123,7 @@ fun AudioScreen(
   onAllowSpectrum: () -> Unit = {},
   spatial: SpatialUi = SpatialUi(),
   spatialActions: SpatialActions? = null,
+  onCompare: (Boolean) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   var page by rememberSaveable { mutableStateOf(AudioPage.MAIN) }
@@ -175,7 +181,8 @@ fun AudioScreen(
           ),
           onOpenAdvanced = { page = AudioPage.ADVANCED },
           spatial = spatial.copy(othersNote = spatialOthersNote(spatial.enabled, eqReach, globalEqStatus)),
-          spatialActions = spatialActions
+          spatialActions = spatialActions,
+          onCompare = onCompare
         )
         AudioPage.ADVANCED -> EqAdvancedPage(
           capabilities = capabilities,

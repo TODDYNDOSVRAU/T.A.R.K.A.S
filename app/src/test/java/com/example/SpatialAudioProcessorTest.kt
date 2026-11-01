@@ -113,4 +113,35 @@ class SpatialAudioProcessorTest {
       assertEquals(ref[2 * (i - DELAY)], out[2 * i], 1e-6f)
     }
   }
+
+  @Test
+  fun switchingOnAgainAfterTheEnginesWereDroppedStillWorks() {
+    SpatialControl.configure(true, SpatialPreset.STANDARD, 1.0)
+    val p = processorReady()
+    waitForEngine()
+    var pos = 0
+    fun chunk(): Pair<FloatArray, FloatArray> {
+      val input = signal(4096, pos)
+      pos += 4096
+      return input to run(p, input)
+    }
+    repeat(40) { chunk() }
+    SpatialControl.configure(false, SpatialPreset.STANDARD, 1.0)
+    repeat(10) { chunk() }
+    // The control drops its engines 1.5 s after the switch-off.
+    Thread.sleep(2000)
+    SpatialControl.configure(true, SpatialPreset.STANDARD, 1.0)
+    var differs = 0.0
+    val deadline = System.currentTimeMillis() + 20_000
+    while (System.currentTimeMillis() < deadline && differs < 0.01) {
+      val (input, out) = chunk()
+      // The dry sound is the input DELAY frames earlier; the effect moves away from it.
+      var d = 0.0
+      var count = 0
+      for (i in DELAY * 2 until out.size) { d += abs(out[i] - input[i - DELAY * 2]); count++ }
+      differs = d / count
+      Thread.sleep(5)
+    }
+    assertTrue("the effect never came back, mean difference $differs", differs >= 0.01)
+  }
 }

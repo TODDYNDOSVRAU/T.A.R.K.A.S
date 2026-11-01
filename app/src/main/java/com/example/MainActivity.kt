@@ -16,6 +16,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -360,6 +361,10 @@ fun TarkasAppContent(
   val currentCuriositySpeechText by viewModel.currentCuriositySpeechText.collectAsStateWithLifecycle()
   val curiositySpeechStage by viewModel.curiositySpeechStage.collectAsStateWithLifecycle()
   val reducedChrome = com.example.ui.theme.rememberReducedMotion()
+  // While the keyboard is up the mini player and the tab bar step aside, as in Apple Music: they would
+  // otherwise ride on the keyboard and leave the page (the assistant's chat) almost no room.
+  @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+  val imeVisible = WindowInsets.isImeVisible
   var settingsSubPage by remember { mutableStateOf(false) }
   LaunchedEffect(currentTab) { if (currentTab != TarkasNavTab.SETTINGS) settingsSubPage = false }
 
@@ -655,13 +660,17 @@ fun TarkasAppContent(
               enabled = viewModel.spatialEnabled.collectAsStateWithLifecycle().value,
               preset = viewModel.spatialPreset.collectAsStateWithLifecycle().value,
               intensity = viewModel.spatialIntensity.collectAsStateWithLifecycle().value,
-              status = viewModel.spatialStatus.collectAsStateWithLifecycle().value
+              status = viewModel.spatialStatus.collectAsStateWithLifecycle().value,
+              tuning = viewModel.spatialTuning.collectAsStateWithLifecycle().value
             ),
+            onCompare = { viewModel.compareWithoutEq(it) },
             spatialActions = remember {
               com.example.ui.screens.SpatialActions(
                 onEnabled = { viewModel.setSpatialEnabled(it) },
                 onPreset = { viewModel.setSpatialPreset(it) },
-                onIntensity = { viewModel.setSpatialIntensity(it) }
+                onIntensity = { viewModel.setSpatialIntensity(it) },
+                onKnob = { preset, knob, value -> viewModel.setSpatialKnob(preset, knob, value) },
+                onResetTuning = { viewModel.resetSpatialTuning(it) }
               )
             }
           )
@@ -863,7 +872,7 @@ fun TarkasAppContent(
         var lastTrack by remember { mutableStateOf(currentTrack) }
         if (currentTrack != null) lastTrack = currentTrack
         AnimatedVisibility(
-          visible = currentTab != TarkasNavTab.MUSIC && currentTrack != null,
+          visible = currentTab != TarkasNavTab.MUSIC && currentTrack != null && !imeVisible,
           enter = if (com.example.ui.theme.rememberReducedMotion()) androidx.compose.animation.EnterTransition.None
             else androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220, delayMillis = 140)) +
               androidx.compose.animation.scaleIn(initialScale = 0.94f, animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = 500f)),
@@ -888,7 +897,7 @@ fun TarkasAppContent(
 
         // The full player covers the tab bar, as in Apple Music; it slides back when the player closes.
         AnimatedVisibility(
-          visible = currentTab != TarkasNavTab.MUSIC,
+          visible = currentTab != TarkasNavTab.MUSIC && !imeVisible,
           enter = if (reducedChrome) androidx.compose.animation.EnterTransition.None
             else androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200, delayMillis = 80)) +
               androidx.compose.animation.slideInVertically(androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 500f)) { it / 2 },

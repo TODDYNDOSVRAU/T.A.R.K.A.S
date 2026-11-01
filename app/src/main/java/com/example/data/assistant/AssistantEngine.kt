@@ -58,6 +58,14 @@ class AssistantEngine(
   private val onPlayerCommand: suspend (PlayerCommand) -> String? = { null },
   // Loads an equalizer preset through the app, so the choice is saved like a tap on the screen.
   private val onEqPreset: (EqPreset) -> Unit = { audioEngineManager.applyEqSettings(it.settings) },
+  // Moves the bass or treble tone control by a number of dB; returns the new value, clamped.
+  private val onTone: (bass: Boolean, deltaDb: Float) -> Float = { bass, delta ->
+    val s = audioEngineManager.eqSettings.value
+    val r = com.example.data.model.EqSettings.TONE_RANGE_DB
+    val next = if (bass) s.copy(bassDb = (s.bassDb + delta).coerceIn(-r, r)) else s.copy(trebleDb = (s.trebleDb + delta).coerceIn(-r, r))
+    audioEngineManager.applyEqSettings(next)
+    if (bass) next.bassDb else next.trebleDb
+  },
   // Where the callbacks above run: they change screen state, so the app keeps them on the main thread.
   private val callbackContext: CoroutineContext = Dispatchers.Main.immediate
 ) {
@@ -116,6 +124,7 @@ class AssistantEngine(
         • **"analisar música"**: pesquisa curiosidades e fatos da faixa em execução
         • **"diagnóstico"**: inspeciona rotas e hardware de áudio
         • **"equalizador flat"** (ou rock, pop, jazz, vocal, graves, agudos…): aplica um preset
+        • **"mais graves"**, **"menos agudos"**…: move o controle de graves ou agudos em 3 dB
         • **"timer de [X] minutos"**: inicia temporizador local
         • **"que música toca?"**: exibe a faixa atual
         • **"próxima"**, **"anterior"**, **"pausar"**, **"tocar"**: controlam o player
@@ -222,6 +231,29 @@ class AssistantEngine(
       )
     }
 
+    // Tool: adjust_tone. "aumentar graves", "mais agudos", "menos grave", "abaixar os agudos".
+    val toneMatch = Regex("""\b(aumentar|aumenta|mais|subir|sobe|diminuir|diminui|menos|abaixar|abaixa|reduzir|reduz|tirar)\b.*\b(graves?|agudos?)\b""").find(lower)
+    if (toneMatch != null) {
+      val up = toneMatch.groupValues[1] in setOf("aumentar", "aumenta", "mais", "subir", "sobe")
+      val bass = toneMatch.groupValues[2].startsWith("grave")
+      val now = withContext(callbackContext) { onTone(bass, if (up) 3f else -3f) }
+      val name = if (bass) "Graves" else "Agudos"
+      val value = (if (now > 0) "+" else "") + String.format(java.util.Locale.US, "%.1f", now)
+      val limit = com.example.data.model.EqSettings.TONE_RANGE_DB
+      val atLimit = kotlin.math.abs(now) >= limit
+      return AssistantMessage(
+        id = UUID.randomUUID().toString(),
+        sender = MessageSender.ASSISTANT,
+        text = "$name em **$value dB**." + if (atLimit) " Esse é o limite do controle." else "",
+        toolReport = ToolExecutionReport(
+          toolName = "adjust_tone",
+          arguments = mapOf("band" to name, "delta" to if (up) "+3" else "-3"),
+          success = true,
+          resultSummary = "$name $value dB"
+        )
+      )
+    }
+
     // Tool: apply_audio_profile
     if (lower.contains("perfil") || lower.contains("equalizador") || lower.contains("preset") || Regex("\\bsom\\b").containsMatchIn(lower)) {
       fun preset(id: String) = EqPresets.BUILT_IN.firstOrNull { it.id == id }
@@ -321,7 +353,7 @@ class AssistantEngine(
         "Olá! Em que posso ajudar com sua música ou áudio hoje?"
       }
       else -> {
-        "Comando recebido. Diga ou digite **help** para ver o que posso fazer."
+        "Não entendi esse pedido. Digite **ajuda** para ver o que posso fazer."
       }
     }
 

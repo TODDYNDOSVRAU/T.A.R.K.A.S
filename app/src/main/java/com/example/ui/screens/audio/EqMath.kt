@@ -38,6 +38,9 @@ internal fun xToFreq(x: Float): Float = MIN_F * (MAX_F / MIN_F).pow(x)
 /** Height in a graph [h] pixels tall where [db] is drawn; 0 dB is the middle. */
 internal fun dbToY(db: Float, h: Float): Float = h / 2f - db / GRAPH_DB_RANGE * (h / 2f - GRAPH_PAD_PX)
 
+/** The gain drawn at height [y] of a graph [h] pixels tall: the inverse of [dbToY]. */
+internal fun yToDb(y: Float, h: Float): Float = (h / 2f - y) / (h / 2f - GRAPH_PAD_PX) * GRAPH_DB_RANGE
+
 /** Q is heard as a ratio, so its knob turns on a log scale: 0..1 over MIN_Q..MAX_Q. */
 internal fun qToKnob(q: Float): Float =
   log10(q.coerceIn(EqBand.MIN_Q, EqBand.MAX_Q) / EqBand.MIN_Q) / log10(EqBand.MAX_Q / EqBand.MIN_Q)

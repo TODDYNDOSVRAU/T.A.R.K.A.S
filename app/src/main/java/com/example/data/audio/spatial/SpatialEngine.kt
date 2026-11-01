@@ -38,14 +38,57 @@ data class SpatialParams(
   /** Limiter ceiling (sample peak). */
   val ceilingDb: Double = -1.0,
   /** Keeps the loudness of the original. */
-  val loudnessMatch: Boolean = true
+  val loudnessMatch: Boolean = true,
+  /** Level of the virtual room (reflections and tail), times the intensity. 0 = no room. */
+  val room: Double = 1.0,
+  /** How much of the centred voice is kept out of the room: 0 = the room hears everything, 1 = none of it. */
+  val voiceFocus: Double = 0.85,
+  /** The room's early reflections and its tail, each times its calibrated level. */
+  val roomEarly: Double = 1.0,
+  val roomTail: Double = 1.0,
+  /** Reverberation time of the tail, seconds. */
+  val roomDecay: Double = 0.38,
+  /** Gap between the direct sound and the start of the tail, milliseconds. */
+  val roomPreDelayMs: Double = 10.0,
+  /** Feedback of the diffusers that blur the reflections into a smooth wash (0.2-0.8). */
+  val roomDiffusion: Double = 0.6
 )
+
+/**
+ * The settings the listener can move by hand, each with its range. Read and written on [SpatialParams],
+ * so a preset is a set of values and a tweak is a copy with one of them changed.
+ */
+enum class SpatialKnob(
+  val key: String, val label: String, val min: Double, val max: Double, val decimals: Int, val unit: String,
+  val read: (SpatialParams) -> Double, val write: (SpatialParams, Double) -> SpatialParams
+) {
+  ROOM("room", "Sala, nível geral", 0.0, 2.0, 2, "", { it.room }, { p, v -> p.copy(room = v) }),
+  EARLY("early", "Reflexões iniciais", 0.0, 2.0, 2, "", { it.roomEarly }, { p, v -> p.copy(roomEarly = v) }),
+  TAIL("tail", "Cauda de reverb", 0.0, 2.0, 2, "", { it.roomTail }, { p, v -> p.copy(roomTail = v) }),
+  DECAY("decay", "Duração da cauda", 0.1, 1.2, 2, " s", { it.roomDecay }, { p, v -> p.copy(roomDecay = v) }),
+  PREDELAY("predelay", "Pré-atraso da cauda", 0.0, 60.0, 0, " ms", { it.roomPreDelayMs }, { p, v -> p.copy(roomPreDelayMs = v) }),
+  DIFFUSION("diffusion", "Difusão", 0.2, 0.8, 2, "", { it.roomDiffusion }, { p, v -> p.copy(roomDiffusion = v) }),
+  VOICE("voice", "Foco na voz", 0.0, 1.0, 2, "", { it.voiceFocus }, { p, v -> p.copy(voiceFocus = v) }),
+  WIDTH("width", "Abertura", 1.0, 3.0, 2, "", { it.width }, { p, v -> p.copy(width = v) }),
+  HEIGHT("height", "Altura dos agudos", 0.0, 45.0, 0, "°", { it.height }, { p, v -> p.copy(height = v) }),
+  AMBIENCE("ambience", "Ambiência no teto", 0.0, 1.0, 2, "", { it.ambienceHeight }, { p, v -> p.copy(ambienceHeight = v) });
+
+  fun clamp(v: Double) = v.coerceIn(min, max)
+
+  companion object {
+    fun fromKey(key: String): SpatialKnob? = entries.firstOrNull { it.key == key }
+  }
+}
+
+/** [this] with the hand-set values applied. */
+fun SpatialParams.tuned(values: Map<SpatialKnob, Double>): SpatialParams =
+  values.entries.fold(this) { p, (k, v) -> k.write(p, k.clamp(v)) }
 
 /** The three listening presets of the prototype. */
 enum class SpatialPreset(val key: String, val label: String, val params: SpatialParams, val virtualizerStrength: Int) {
-  SUBTLE("sutil", "Sutil", SpatialParams(intensity = 0.7, width = 1.3, height = 12.0, ambienceHeight = 0.3), 450),
+  SUBTLE("sutil", "Sutil", SpatialParams(intensity = 0.7, width = 1.3, height = 12.0, ambienceHeight = 0.3, room = 0.6, voiceFocus = 0.9), 450),
   STANDARD("padrao", "Padrão", SpatialParams(), 750),
-  WIDE("amplo", "Amplo", SpatialParams(width = 2.4, height = 35.0, ambienceHeight = 0.8), 1000);
+  WIDE("amplo", "Amplo", SpatialParams(width = 2.4, height = 35.0, ambienceHeight = 0.8, room = 1.4, voiceFocus = 0.8), 1000);
 
   companion object {
     fun fromKey(key: String?): SpatialPreset = entries.firstOrNull { it.key == key } ?: STANDARD
@@ -104,7 +147,14 @@ class SpatialEngine(
   @Volatile private var config: Config = buildConfig(params)
 
   fun setParams(p: SpatialParams) {
-    config = buildConfig(p)
+    val old = config.p
+    // The per-bin tables depend only on these three; a room slider must not rebuild them.
+    config = if (p.bassHz == old.bassHz && p.height == old.height && p.ambienceHeight == old.ambienceHeight) {
+      val c = config
+      Config(p, c.bassXf, c.elev, c.ambLL, c.ambLR, c.ambRL, c.ambRR)
+    } else {
+      buildConfig(p)
+    }
     targetIntensity = p.intensity
   }
 
@@ -138,6 +188,20 @@ class SpatialEngine(
   private val limChunkL = DoubleArray(LIM_CHUNK)
   private val limChunkR = DoubleArray(LIM_CHUNK)
   private var resetStats = false
+  private val room = SpatialRoom(sampleRate, WIN - HOP + HRTF_DELAY)
+  private var roomLevel = 0.0
+  /** How much of the current sound is a centred voice (0..1), smoothed: fast to rise, slower to fall. */
+  private var voicePresence = 0.0
+  /** 1 across the range of a singing voice (about 300 Hz-4.5 kHz), easing to 0 at 150 Hz and 7 kHz. */
+  private val voiceW = DoubleArray(BINS) {
+    val f = freqs[it]
+    when {
+      f < 150 || f > 7000 -> 0.0
+      f < 300 -> 0.5 - 0.5 * cos(PI * (f - 150) / 150)
+      f <= 4500 -> 1.0
+      else -> 0.5 + 0.5 * cos(PI * (f - 4500) / 2500)
+    }
+  }
 
   // ---- scratch ----
   private val fRe = DoubleArray(NFFT)
@@ -170,6 +234,9 @@ class SpatialEngine(
     limGain = 1.0; limNeed = 1.0
     limChunkL.fill(0.0); limChunkR.fill(0.0)
     resetStats = false
+    room.clear()
+    roomLevel = 0.0
+    voicePresence = 0.0
   }
 
   /** The intensity heard now (it glides towards the settings' one). */
@@ -355,6 +422,33 @@ class SpatialEngine(
     System.arraycopy(accR, HOP, accR, 0, NFFT - HOP)
     accL.fill(0.0, NFFT - HOP, NFFT)
     accR.fill(0.0, NFFT - HOP, NFFT)
+
+    // The virtual room, scaled by the intensity that is heard now. The centred voice is taken out of
+    // what the room hears, by an amount that follows how much voice there is: the singer stays dry and
+    // close while the rest gets the space. A slowly changing gain on a filtered mid signal, in the time
+    // domain, so it cannot smear the sound the way a per-bin mask would.
+    val level = p.room * intensity
+    if (level > 1e-4 || roomLevel > 1e-4) {
+      var num = 0.0
+      var den = 1e-20
+      for (k in 0 until BINS) {
+        val c = thetaArr[k] / 8.0
+        num += voiceW[k] * eArr[k] * exp(-0.5 * c * c) * dArr[k]
+        den += voiceW[k] * eArr[k]
+      }
+      val before = voicePresence
+      val now = num / den
+      voicePresence += (now - voicePresence) * (if (now > voicePresence) 0.5 else 0.15)
+      room.tune(p.roomEarly, p.roomTail, p.roomDecay, p.roomPreDelayMs, p.roomDiffusion)
+      room.process(
+        pendL, pendR, frameL, frameR, HOP, roomLevel, level,
+        p.voiceFocus * before, p.voiceFocus * voicePresence
+      )
+    } else {
+      room.clear()
+      voicePresence = 0.0
+    }
+    roomLevel = level
   }
 
   private var blendRe = 0.0

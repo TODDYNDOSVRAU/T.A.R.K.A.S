@@ -24,7 +24,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import com.example.data.model.EqBand
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,21 +92,31 @@ internal fun EqGraph(
   spectrumBars: () -> List<Float>,
   isPlaying: Boolean,
   modifier: Modifier = Modifier,
-  window: StripView? = null
+  window: StripView? = null,
+  onSelectBand: (Int) -> Unit = {},
+  onUpdateBand: ((Int, (EqBand) -> EqBand) -> Unit)? = null
 ) {
   val colors = MaterialTheme.colorScheme
   val scope = rememberCoroutineScope()
+  val haptics = LocalHapticFeedback.current
   val curveKey = settings.responseKey()
+  val latestSettings by rememberUpdatedState(settings)
+  val latestSelect by rememberUpdatedState(onSelectBand)
+  val latestUpdate by rememberUpdatedState(onUpdateBand)
+  var grabbed by remember { mutableIntStateOf(-1) }
   // Computed only when something that shapes the response changes. EqDsp designs the filters once per
   // settings value, so each point costs a handful of multiplications.
+  // The shape as set: the level the app lowers on its own (fone headroom, automatic preamp) is left
+  // out, so each band's point sits on the curve under the finger; that reduction is printed below.
   val target = remember(curveKey) {
-    FloatArray(CURVE_POINTS) { i -> EqDsp.responseDb(curveKey, xToFreq(i / (CURVE_POINTS - 1f)).toDouble()).toFloat() }
+    val automatic = EqDsp.totalPreampDb(curveKey) - curveKey.preampDb
+    FloatArray(CURVE_POINTS) { i -> EqDsp.responseDb(curveKey, xToFreq(i / (CURVE_POINTS - 1f)).toDouble()).toFloat() - automatic }
   }
   // The fone correction alone, drawn as a dashed guide under the curve.
   val deviceCurve = remember(settings.device) {
     settings.device?.let { d ->
-      val alone = EqSettings(bands = emptyList(), device = d)
-      FloatArray(CURVE_POINTS) { i -> EqDsp.responseDb(alone, xToFreq(i / (CURVE_POINTS - 1f)).toDouble()).toFloat() }
+      val alone = EqSettings(bands = emptyList(), device = d, autoPreamp = false)
+      FloatArray(CURVE_POINTS) { i -> EqDsp.responseDb(alone, xToFreq(i / (CURVE_POINTS - 1f)).toDouble()).toFloat() - d.preampDb }
     }
   }
 
@@ -139,8 +153,32 @@ internal fun EqGraph(
     modifier = modifier
       .clip(Shapes.m)
       .background(colors.surface)
-      .then(if (window != null) Modifier.overviewGestures(window, scope) else Modifier)
-      .semantics { contentDescription = "Curva do equalizador. Arraste para o lado para rolar as bandas." }
+      .then(
+        if (onUpdateBand != null && settings.enabled) {
+          Modifier.curveGestures(
+            settings = { latestSettings },
+            window = window,
+            scope = scope,
+            onGrab = { i ->
+              grabbed = i
+              if (i >= 0) {
+                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                latestSelect(i)
+              }
+            },
+            onTick = { haptics.performHapticFeedback(HapticFeedbackType.SegmentTick) },
+            onEdit = { i, t -> latestUpdate?.invoke(i, t) }
+          )
+        } else if (window != null) {
+          Modifier.overviewGestures(window, scope)
+        } else {
+          Modifier
+        }
+      )
+      .semantics {
+        contentDescription = "Curva do equalizador. Arraste um ponto para mudar a banda, toque duas vezes nele para voltar a 0 dB. " +
+          "Arraste fora dos pontos para rolar as bandas."
+      }
   ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
       val w = size.width
@@ -203,8 +241,17 @@ internal fun EqGraph(
       // Band nodes: the selected one filled with the accent
       settings.activeBands.forEachIndexed { i, band ->
         val pos = nodePosition(curveKey, i, w, h)
-        val isSel = i == selectedBand
-        val r = if (isSel) 6.dp.toPx() else 4.dp.toPx()
+        val isSel = i == selectedBand || i == grabbed
+        // The grabbed point grows under the finger so it stays visible past the fingertip.
+        val r = when {
+          i == grabbed -> 9.dp.toPx()
+          isSel -> 6.dp.toPx()
+          else -> 4.dp.toPx()
+        }
+        if (i == grabbed) {
+          // A guide down to the frequency axis; the values are printed at the top of the graph.
+          drawLine(accent.copy(alpha = 0.35f), Offset(pos.x, 0f), Offset(pos.x, h), 1.dp.toPx())
+        }
         val c = (if (band.enabled) accent else label).copy(alpha = dim)
         if (isSel) {
           drawCircle(c, radius = r, center = pos)
@@ -250,6 +297,117 @@ internal fun EqGraph(
         .align(Alignment.TopStart)
         .padding(start = Space.s, top = Space.xxs)
     )
+    settings.activeBands.getOrNull(grabbed)?.let { b ->
+      Text(
+        spokenHz(b.freqHz) + if (b.type.usesGain) " · ${formatDb(b.gainDb)} dB" else "",
+        style = AppText.Caption1.copy(fontFeatureSettings = "tnum"),
+        color = accent,
+        modifier = Modifier
+          .align(Alignment.TopCenter)
+          .padding(top = Space.xxs)
+      )
+    }
+  }
+}
+
+/** How close, in dp, a finger must land to a band's point to grab it instead of scrolling. */
+private const val GRAB_RADIUS_DP = 24f
+private const val DOUBLE_TAP_MS = 300L
+
+/**
+ * Direct editing on the curve. A finger that lands on a band's point grabs it: graphic bands move up
+ * and down (gain), parametric bands move anywhere (frequency and gain). A double tap on a point
+ * returns it to 0 dB. A finger anywhere else keeps the overview gestures (slide the strip's window).
+ * Crossing 0 dB gives a haptic tick.
+ */
+private fun Modifier.curveGestures(
+  settings: () -> EqSettings,
+  window: StripView?,
+  scope: CoroutineScope,
+  onGrab: (Int) -> Unit,
+  onTick: () -> Unit,
+  onEdit: (Int, (EqBand) -> EqBand) -> Unit
+): Modifier = pointerInput(window) {
+  var lastTapBand = -1
+  var lastTapAt = 0L
+  awaitEachGesture {
+    val down = awaitFirstDown(requireUnconsumed = false)
+    val w = size.width.toFloat()
+    val h = size.height.toFloat()
+    val s = settings()
+    val key = s.responseKey()
+    val radius = GRAB_RADIUS_DP.dp.toPx()
+    val hit = s.activeBands.indices
+      .map { it to (nodePosition(key, it, w, h) - down.position).getDistance() }
+      .filter { it.second <= radius }
+      .minByOrNull { it.second }?.first
+
+    if (hit == null) {
+      // Not on a point: the overview gesture, sideways only, so the page still scrolls over the graph.
+      if (window == null) return@awaitEachGesture
+      fun stripPerPx() = window.total / w
+      val slop = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
+        change.consume()
+        window.scroll.dispatchRawDelta(over * stripPerPx())
+      }
+      if (slop == null) {
+        val up = currentEvent.changes.firstOrNull { it.id == down.id }
+        if (up != null && !up.pressed && !up.isConsumed) {
+          val target = (down.position.x * stripPerPx() - window.viewport / 2f).roundToInt().coerceIn(0, window.scroll.maxValue)
+          scope.launch { window.scroll.animateScrollTo(target, spring(dampingRatio = 1f, stiffness = 320f)) }
+        }
+        return@awaitEachGesture
+      }
+      horizontalDrag(slop.id) { change ->
+        val dx = change.positionChange().x
+        change.consume()
+        window.scroll.dispatchRawDelta(dx * stripPerPx())
+      }
+      return@awaitEachGesture
+    }
+
+    // On a point: it is ours from the first touch, so the page does not scroll under the finger.
+    down.consume()
+    onGrab(hit)
+    val band = s.activeBands[hit]
+    val parametric = s.parametric
+    // The grab offset is kept, so the point never jumps to the fingertip.
+    val start = nodePosition(key, hit, w, h)
+    val grabDx = start.x - down.position.x
+    val grabDy = start.y - down.position.y
+    var lastGain = band.gainDb
+    var moved = false
+    while (true) {
+      val event = awaitPointerEvent()
+      val change = event.changes.firstOrNull { it.id == down.id } ?: break
+      if (!change.pressed) break
+      if (!moved && (change.position - down.position).getDistance() < viewConfiguration.touchSlop) continue
+      moved = true
+      change.consume()
+      val gain = if (band.type.usesGain) {
+        snap(yToDb(change.position.y + grabDy, h).coerceIn(-EqBand.MAX_GAIN, EqBand.MAX_GAIN))
+      } else band.gainDb
+      if ((lastGain > 0f && gain <= 0f) || (lastGain < 0f && gain >= 0f)) onTick()
+      lastGain = gain
+      if (parametric) {
+        val f = xToFreq(((change.position.x + grabDx) / w).coerceIn(0f, 1f))
+        onEdit(hit) { it.copy(freqHz = f, gainDb = gain) }
+      } else {
+        onEdit(hit) { it.copy(gainDb = gain) }
+      }
+    }
+    onGrab(-1)
+    if (!moved) {
+      val now = android.os.SystemClock.uptimeMillis()
+      if (hit == lastTapBand && now - lastTapAt < DOUBLE_TAP_MS) {
+        if (band.gainDb != 0f) onTick()
+        onEdit(hit) { it.copy(gainDb = 0f) }
+        lastTapBand = -1
+      } else {
+        lastTapBand = hit
+        lastTapAt = now
+      }
+    }
   }
 }
 
@@ -286,6 +444,7 @@ private fun Modifier.overviewGestures(view: StripView, scope: CoroutineScope): M
 private fun nodePosition(s: EqSettings, i: Int, w: Float, h: Float): Offset {
   val b = s.activeBands[i]
   val x = freqToX(b.freqHz) * w
-  val db = if (b.type.usesGain) b.gainDb else EqDsp.responseDb(s, b.freqHz.toDouble()).toFloat()
+  val db = if (b.type.usesGain) b.gainDb
+    else EqDsp.responseDb(s, b.freqHz.toDouble()).toFloat() - (EqDsp.totalPreampDb(s) - s.preampDb)
   return Offset(x, dbToY(db.coerceIn(-GRAPH_DB_RANGE, GRAPH_DB_RANGE), h))
 }

@@ -241,7 +241,13 @@ class TarkasViewModel(
     onTimerCancelled = { cancelAllTimers() },
     onCuriosityUpdated = { cur -> playback.setActiveCuriosity(cur) },
     onPlayerCommand = { command -> runPlayerCommand(command) },
-    onEqPreset = { preset -> selectEqPreset(preset) }
+    onEqPreset = { preset -> selectEqPreset(preset) },
+    // Through updateEq, so the change is saved and marks the preset as edited like a turn of the knob.
+    onTone = { bass, delta ->
+      val r = EqSettings.TONE_RANGE_DB
+      updateEq { s -> if (bass) s.copy(bassDb = (s.bassDb + delta).coerceIn(-r, r)) else s.copy(trebleDb = (s.trebleDb + delta).coerceIn(-r, r)) }
+      audioEngineManager.eqSettings.value.let { if (bass) it.bassDb else it.trebleDb }
+    }
   )
 
   // The assistant runs on a background dispatcher; the player must be driven from the main thread.
@@ -310,7 +316,7 @@ class TarkasViewModel(
       val preset = _eqPresets.value.find { it.id == savedId } ?: EqPresets.FLAT
       val settings = preferencesRepository.getEqSettings() ?: preset.settings
       _activePresetId.value = preset.id
-      _eqModified.value = settings.userCurve != preset.settings.userCurve
+      _eqModified.value = com.example.data.model.EqCompare.edited(settings, preset.settings)
       audioEngineManager.applyEqSettings(settings)
     }
 
@@ -591,7 +597,7 @@ class TarkasViewModel(
     val next = transform(audioEngineManager.eqSettings.value)
     audioEngineManager.applyEqSettings(next)
     val preset = _eqPresets.value.find { it.id == _activePresetId.value }
-    _eqModified.value = preset == null || next.userCurve != preset.settings.userCurve
+    _eqModified.value = preset == null || com.example.data.model.EqCompare.edited(next, preset.settings)
     eqSaveJob?.cancel()
     eqSaveJob = viewModelScope.launch {
       kotlinx.coroutines.delay(400)
@@ -600,6 +606,9 @@ class TarkasViewModel(
   }
 
   fun setEqEnabled(enabled: Boolean) = updateEq { it.copy(enabled = enabled) }
+
+  /** Hold-to-compare: the player without the equalizer while [on]; nothing is saved. */
+  fun compareWithoutEq(on: Boolean) = audioEngineManager.setBypass(on)
 
   /** Edits a band of the mode in use (graphic or parametric). */
   fun updateEqBand(index: Int, transform: (EqBand) -> EqBand) = updateEq { s ->
@@ -1016,6 +1025,37 @@ class TarkasViewModel(
     spatialSaveJob = viewModelScope.launch {
       delay(400)
       saveSpatial()
+    }
+  }
+
+  private val _spatialTuning = MutableStateFlow(
+    com.example.data.audio.spatial.SpatialPreset.entries.associateWith { preferencesRepository.getSpatialTuning(it.key) }
+  )
+  /** The hand-set values of each preset (only the ones that differ from the preset). */
+  val spatialTuning: StateFlow<Map<com.example.data.audio.spatial.SpatialPreset, Map<com.example.data.audio.spatial.SpatialKnob, Double>>> =
+    _spatialTuning.asStateFlow()
+
+  private var tuningSaveJob: Job? = null
+
+  /** A tuning slider: the sound follows at once, the value is saved once the drag pauses. */
+  fun setSpatialKnob(preset: com.example.data.audio.spatial.SpatialPreset, knob: com.example.data.audio.spatial.SpatialKnob, value: Double) {
+    val v = knob.clamp(value)
+    val current = _spatialTuning.value[preset].orEmpty()
+    // A value equal to the preset's own is not an override.
+    val next = if (kotlin.math.abs(knob.read(preset.params) - v) < 1e-6) current - knob else current + (knob to v)
+    updateSpatialTuning(preset, next)
+  }
+
+  /** Back to the preset's own values. */
+  fun resetSpatialTuning(preset: com.example.data.audio.spatial.SpatialPreset) = updateSpatialTuning(preset, emptyMap())
+
+  private fun updateSpatialTuning(preset: com.example.data.audio.spatial.SpatialPreset, values: Map<com.example.data.audio.spatial.SpatialKnob, Double>) {
+    _spatialTuning.value = _spatialTuning.value + (preset to values)
+    com.example.data.audio.spatial.SpatialControl.setTuning(preset, values)
+    tuningSaveJob?.cancel()
+    tuningSaveJob = viewModelScope.launch {
+      delay(400)
+      _spatialTuning.value.forEach { (p, v) -> preferencesRepository.saveSpatialTuning(p.key, v) }
     }
   }
 

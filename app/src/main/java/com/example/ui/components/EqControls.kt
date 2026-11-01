@@ -24,7 +24,13 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.verticalDrag
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
@@ -53,9 +59,9 @@ private const val KNOB_TRAVEL = 2.2f
 
 /**
  * A vertical fader: [value] runs from -1 (bottom) to +1 (top), 0 is the centre detent. The lit part
- * runs from the centre to the handle, so a cut and a boost read differently at a glance. A tap jumps
- * to the finger; a drag moves relative to where it started, so touching the handle never makes it
- * jump.
+ * runs from the centre to the handle, so a cut and a boost read differently at a glance. A drag moves
+ * relative to where it started, so touching the handle never makes it jump; a double tap returns to
+ * the centre. Crossing the centre or reaching an end gives a haptic tick.
  *
  * [label] names what it sets ("Banda 1 kHz"); [stateText] is the value as heard ("+3.0 dB").
  * [steps] is how many stops a screen reader's adjust gesture walks between the ends.
@@ -77,6 +83,7 @@ fun EqFader(
   val change by rememberUpdatedState(onChange)
   val held by rememberUpdatedState(onHeldChange)
   var dragValue by remember { mutableFloatStateOf(value) }
+  val haptics = LocalHapticFeedback.current
   val track = colors.onSurface.copy(alpha = 0.12f)
   val tick = colors.onSurface.copy(alpha = 0.24f)
   val accent = if (enabled) colors.primary else colors.onSurface.copy(alpha = 0.24f)
@@ -99,29 +106,47 @@ fun EqFader(
       }
       .pointerInput(enabled) {
         if (!enabled) return@pointerInput
+        // A single tap changes nothing, so a finger that lands on a fader while scrolling never moves
+        // it. A double tap goes back to 0 dB.
         detectTapGestures(
-          onPress = {
-            held(true)
-            tryAwaitRelease()
-            held(false)
-          },
-          onTap = { o -> change(faderPosToValue(o.y, size.height.toFloat(), FADER_HANDLE_H.toPx())) }
+          onDoubleTap = {
+            if (current != 0f) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+            change(0f)
+          }
         )
       }
       .pointerInput(enabled) {
         if (!enabled) return@pointerInput
-        detectVerticalDragGestures(
-          onDragStart = {
-            dragValue = current
-            held(true)
-          },
-          onDragEnd = { held(false) },
-          onDragCancel = { held(false) }
-        ) { c, dy ->
-          c.consume()
-          val travel = size.height * FADER_TRAVEL
-          dragValue = (dragValue - 2f * dy / travel).coerceIn(-1f, 1f)
-          change(dragValue)
+        // Only a finger that lands on the handle moves it, as with a slider's thumb. Anywhere else on
+        // the track the drag is left to the page, so scrolling over the strip never changes a band.
+        awaitEachGesture {
+          val down = awaitFirstDown(requireUnconsumed = false)
+          val handleH = FADER_HANDLE_H.toPx()
+          val top = handleH / 2f
+          val bottom = size.height - handleH / 2f
+          val handleY = bottom - (current.coerceIn(-1f, 1f) + 1f) / 2f * (bottom - top)
+          if (abs(down.position.y - handleY) > FADER_GRAB.toPx()) return@awaitEachGesture
+          // Every move is consumed as it arrives, so the page never starts scrolling under a held
+          // handle; the down itself is left alone so a double tap still reaches the tap detector.
+          dragValue = current
+          held(true)
+          try {
+            verticalDrag(down.id) { c ->
+              val dy = c.positionChange().y
+              c.consume()
+              val travel = size.height * FADER_TRAVEL
+              val before = dragValue
+              dragValue = (dragValue - 2f * dy / travel).coerceIn(-1f, 1f)
+              // A tick when the handle crosses or lands on the centre, and at the two ends: the detent
+              // a desk fader has, felt without looking.
+              val crossed = (before > 0f && dragValue <= 0f) || (before < 0f && dragValue >= 0f)
+              val hitEnd = abs(dragValue) == 1f && abs(before) < 1f
+              if (crossed || hitEnd) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+              if (dragValue != before) change(dragValue)
+            }
+          } finally {
+            held(false)
+          }
         }
       }
   ) {
@@ -153,15 +178,12 @@ fun EqFader(
   }
 }
 
+/** How far above or below the handle's centre a finger still grabs it: a 48 dp touch target. */
+private val FADER_GRAB = 24.dp
+
 /** The handle's size; its travel stops half a handle from each end. */
 private val FADER_HANDLE_H = 14.dp
 private val FADER_HANDLE_W = 30.dp
-
-private fun faderPosToValue(y: Float, h: Float, handle: Float): Float {
-  val top = handle / 2f
-  val bottom = h - handle / 2f
-  return (1f - 2f * ((y - top) / (bottom - top))).coerceIn(-1f, 1f)
-}
 
 /**
  * A rotary knob: a quiet disc with an indicator, and an arc showing the value. [value] runs 0..1;

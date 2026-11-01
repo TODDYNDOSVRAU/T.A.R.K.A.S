@@ -30,6 +30,8 @@ object SpatialControl {
   /** The user's intensity, 0.2..1, applied on top of the preset's own. */
   @Volatile var userIntensity = 1.0; private set
   @Volatile private var stereoInput = true
+  /** Values the listener set by hand on top of each preset (only the ones that differ). */
+  @Volatile private var tunings: Map<SpatialPreset, Map<SpatialKnob, Double>> = emptyMap()
 
   private val _status = MutableStateFlow(SpatialStatus.OFF)
   val status: StateFlow<SpatialStatus> = _status.asStateFlow()
@@ -50,7 +52,11 @@ object SpatialControl {
   /** Engines built for the processor, by sample rate. */
   private val engines = java.util.concurrent.ConcurrentHashMap<Int, SpatialEngine>()
 
-  fun configure(enabled: Boolean, preset: SpatialPreset, intensity: Double) {
+  fun configure(
+    enabled: Boolean, preset: SpatialPreset, intensity: Double,
+    tunings: Map<SpatialPreset, Map<SpatialKnob, Double>> = this.tunings
+  ) {
+    this.tunings = tunings
     this.enabled = enabled
     this.preset = preset
     this.userIntensity = intensity.coerceIn(0.0, 1.0)
@@ -91,7 +97,24 @@ object SpatialControl {
     update()
   }
 
-  private fun targetParams(): SpatialParams = preset.params.copy(intensity = preset.params.intensity * userIntensity)
+  /** A hand-set value moved: the engines take the new parameters; their tables are rebuilt only if they must. */
+  fun setTuning(preset: SpatialPreset, values: Map<SpatialKnob, Double>) {
+    tunings = tunings + (preset to values)
+    if (preset != this.preset) return
+    val params = targetParams()
+    worker.execute {
+      engines.values.forEach {
+        it.setParams(params)
+        it.targetIntensity = targetIntensity()
+      }
+    }
+  }
+
+  /** The preset's parameters with the listener's values applied: what the sliders show. */
+  fun paramsFor(preset: SpatialPreset, values: Map<SpatialKnob, Double>): SpatialParams = preset.params.tuned(values)
+
+  private fun targetParams(): SpatialParams =
+    paramsFor(preset, tunings[preset].orEmpty()).let { it.copy(intensity = it.intensity * userIntensity) }
 
   /** What the engines glide to now: the preset's intensity when active, 0 (dry) otherwise. */
   private fun targetIntensity(): Double = if (active) targetParams().intensity else 0.0

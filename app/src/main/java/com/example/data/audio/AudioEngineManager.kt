@@ -650,8 +650,22 @@ class AudioEngineManager(private val context: Context) {
    * With root, the system-wide equalizer already shapes the output mix, so the curve here goes flat to
    * avoid applying it twice. Balance, width and the limiter stay: the system equalizer has none of them.
    */
+  /**
+   * A/B comparison: while true the player is heard without the equalizer. Not saved, and the settings
+   * the screen shows do not change, so letting go returns exactly to the curve that was on.
+   */
+  private var bypass = false
+
+  fun setBypass(on: Boolean) {
+    if (bypass == on) return
+    bypass = on
+    eqDsp.update(processedSettings())
+    applyVirtualizer()
+  }
+
   private fun processedSettings(): EqSettings {
     val s = _eqSettings.value
+    if (bypass) return s.copy(enabled = false)
     if (!coveredByOutputMix || !s.enabled) return s
     return s.copy(
       bands = s.bands.map { it.copy(gainDb = 0f) },
@@ -669,7 +683,7 @@ class AudioEngineManager(private val context: Context) {
     val s = _eqSettings.value
     virtualizer?.let { virt ->
       try {
-        virt.enabled = s.enabled && s.virtualizerStrength > 0
+        virt.enabled = s.enabled && !bypass && s.virtualizerStrength > 0
         if (virt.strengthSupported) virt.setStrength(s.virtualizerStrength.coerceIn(0, 1000).toShort())
       } catch (e: Exception) {
         Log.e(TAG, "Error setting virtualizer strength", e)
@@ -696,13 +710,22 @@ class AudioEngineManager(private val context: Context) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
       try {
         val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-        val activeDevice = devices.firstOrNull { d ->
+        // Android 13+ says where music actually goes. Before that, an external output wins, then the
+        // loudspeaker: the earpiece is listed first on many phones but only carries calls.
+        val routed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          val media = android.media.AudioAttributes.Builder()
+            .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+            .build()
+          audioManager.getAudioDevicesForAttributes(media).firstOrNull()
+        } else null
+        val activeDevice = routed ?: devices.firstOrNull { d ->
           d.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
               d.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
               d.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
               d.type == AudioDeviceInfo.TYPE_USB_DEVICE ||
               d.type == AudioDeviceInfo.TYPE_USB_HEADSET
-        } ?: devices.firstOrNull()
+        } ?: devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER } ?: devices.firstOrNull()
 
         activeDevice?.let { dev ->
           routeType = when (dev.type) {

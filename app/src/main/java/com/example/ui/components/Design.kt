@@ -406,7 +406,9 @@ fun RadioRow(
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
   subtitle: String? = null,
-  icon: ImageVector? = null
+  icon: ImageVector? = null,
+  /** Something of its own beside the check mark (a button that opens more settings of this choice). */
+  accessory: (@Composable () -> Unit)? = null
 ) {
   val colors = MaterialTheme.colorScheme
   RowLayout(
@@ -418,6 +420,7 @@ fun RadioRow(
     modifier = modifier
       .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
   ) {
+    accessory?.invoke()
     Box(Modifier.size(Size.icon), contentAlignment = Alignment.Center) {
       if (selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = colors.primary, modifier = Modifier.size(22.dp))
     }

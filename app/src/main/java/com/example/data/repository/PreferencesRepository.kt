@@ -143,6 +143,20 @@ class PreferencesRepository(context: Context) {
       .apply()
   }
 
+  /** What the listener set by hand on one preset, as "key=value;key=value" (only the values that differ). */
+  fun getSpatialTuning(preset: String): Map<com.example.data.audio.spatial.SpatialKnob, Double> =
+    (prefs.getString("spatial_tuning_$preset", null) ?: "").split(';').mapNotNull { pair ->
+      val (k, v) = pair.split('=').takeIf { it.size == 2 } ?: return@mapNotNull null
+      val knob = com.example.data.audio.spatial.SpatialKnob.fromKey(k) ?: return@mapNotNull null
+      val value = v.toDoubleOrNull()?.takeIf { it.isFinite() } ?: return@mapNotNull null
+      knob to knob.clamp(value)
+    }.toMap()
+
+  fun saveSpatialTuning(preset: String, values: Map<com.example.data.audio.spatial.SpatialKnob, Double>) {
+    val text = values.entries.joinToString(";") { "${it.key.key}=${it.value}" }
+    prefs.edit().apply { if (text.isEmpty()) remove("spatial_tuning_$preset") else putString("spatial_tuning_$preset", text) }.apply()
+  }
+
   fun getCuriosityConfig(): com.example.data.model.CuriosityConfig {
     val enabled = prefs.getBoolean(KEY_CURIOSITY_ENABLED, true)
     val timingName = prefs.getString(KEY_CURIOSITY_TIMING, com.example.data.model.CuriosityTiming.END_OF_TRACK.name)

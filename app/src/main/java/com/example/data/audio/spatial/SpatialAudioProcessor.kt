@@ -98,7 +98,21 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
   /** Turns [frames] frames of [input] into [frames] frames of [output], [DELAY] frames later. */
   private fun render(frames: Int) {
     try {
-      val e = engine ?: SpatialControl.engineFor(sampleRate)?.also { engine = it }
+      // Always ask the control: it drops its engines a moment after the effect is switched off and builds
+      // new ones on demand, so an engine kept from before would never hear a later switch-on again.
+      val current = SpatialControl.engineFor(sampleRate)
+      if (current !== engine && (current != null || !running)) {
+        engine = current
+        running = false
+      }
+      // An engine the control no longer holds (it dropped them while the music was paused) hears none of
+      // the later changes. Once it has glided back to the dry sound, let go of it; the next block starts
+      // the new one from the dry sound too.
+      if (current == null && engine != null && running && SpatialControl.active && engine?.currentIntensity?.let { it <= 0.0 } == true) {
+        engine = null
+        running = false
+      }
+      val e = engine
       if (e != null && !running && SpatialControl.active) {
         // Start from the dry sound and glide in.
         e.reset(startIntensity = 0.0)

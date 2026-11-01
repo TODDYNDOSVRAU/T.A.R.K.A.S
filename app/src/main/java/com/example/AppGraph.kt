@@ -35,7 +35,8 @@ object AppGraph {
     com.example.data.audio.spatial.SpatialControl.configure(
       enabled = preferencesRepository.getSpatialEnabled(),
       preset = com.example.data.audio.spatial.SpatialPreset.fromKey(preferencesRepository.getSpatialPreset()),
-      intensity = preferencesRepository.getSpatialIntensity().toDouble()
+      intensity = preferencesRepository.getSpatialIntensity().toDouble(),
+      tunings = com.example.data.audio.spatial.SpatialPreset.entries.associateWith { preferencesRepository.getSpatialTuning(it.key) }
     )
     curiositySpeechManager = CuriositySpeechManager(app)
     libraryRepository = LibraryRepository(app)

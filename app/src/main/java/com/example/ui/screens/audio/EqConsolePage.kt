@@ -1,6 +1,23 @@
 package com.example.ui.screens.audio
 
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.stateDescription
+import com.example.data.audio.dsp.EqDsp
+import com.example.ui.theme.Shapes
+import com.example.ui.theme.Size
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -77,7 +94,8 @@ internal fun EqConsolePage(
   presetActions: PresetActions,
   onOpenAdvanced: () -> Unit,
   spatial: SpatialUi,
-  spatialActions: SpatialActions?
+  spatialActions: SpatialActions?,
+  onCompare: (Boolean) -> Unit = {}
 ) {
   val colors = MaterialTheme.colorScheme
   val enabled = eqSettings.enabled
@@ -151,13 +169,16 @@ internal fun EqConsolePage(
         spectrumBars = spectrumBars,
         isPlaying = isPlaying,
         window = if (mode == EqMode.GRAPHIC) graphicView else paramView,
+        onSelectBand = { selectedBand = it },
+        onUpdateBand = onUpdateBand,
         modifier = Modifier
           .padding(start = Space.page, end = Space.page, top = Space.xl)
           .fillMaxWidth()
-          .height(160.dp)
+          .height(200.dp)
           .testTag("audio_spectrum_graph_card")
       )
     }
+    item { CurveStatusRow(eqSettings, capabilities, onCompare = onCompare) }
     // The spectrum behind the curve needs the microphone permission, asked only from here.
     if (!spectrumAllowed) {
       item {
@@ -325,5 +346,84 @@ private fun ToneKnob(label: String, db: Float, enabled: Boolean, testTag: String
       style = AppText.Footnote.copy(fontFeatureSettings = "tnum"),
       color = if (db == 0f) colors.onSurfaceVariant else colors.primary
     )
+  }
+}
+
+/**
+ * Under the curve: how much the level is lowered so boosts never distort, a warning when a fone's
+ * correction is on while the sound leaves through the loudspeaker, and a hold-to-compare button that
+ * plays the music without the equalizer for as long as the finger stays down (A/B).
+ */
+@Composable
+private fun CurveStatusRow(settings: EqSettings, capabilities: AudioCapabilities, onCompare: (Boolean) -> Unit) {
+  val colors = MaterialTheme.colorScheme
+  val headroom = EqDsp.totalPreampDb(settings)
+  val onSpeaker = capabilities.activeRouteType == "ALTO-FALANTE INTEGRADO"
+  var comparing by remember { mutableStateOf(false) }
+  val latestCompare by rememberUpdatedState(onCompare)
+  // Leaving the page mid-hold must not leave the equalizer off.
+  DisposableEffect(Unit) { onDispose { if (comparing) latestCompare(false) } }
+
+  Row(
+    modifier = Modifier.fillMaxWidth().padding(start = Space.page, end = Space.page, top = Space.s),
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    Column(modifier = Modifier.weight(1f)) {
+      Text(
+        text = if (headroom < -0.05f) "Nível baixado ${formatDb(-headroom).removePrefix("+")} dB para não distorcer" else "Sem redução de nível",
+        style = AppText.Footnote.copy(fontFeatureSettings = "tnum"),
+        color = colors.onSurfaceVariant
+      )
+      if (settings.device != null && onSpeaker) {
+        Text(
+          text = "A correção do fone está ligada, mas o som sai pelo alto-falante.",
+          style = AppText.Footnote,
+          color = colors.primary
+        )
+      }
+    }
+    Spacer(Modifier.width(Space.s))
+    val fill = if (comparing) colors.primary else colors.surfaceContainer
+    Box(
+      modifier = Modifier
+        .heightIn(min = Size.touch)
+        .clip(Shapes.pill)
+        .background(fill)
+        .pointerInput(settings.enabled) {
+          if (!settings.enabled) return@pointerInput
+          detectTapGestures(onPress = {
+            comparing = true
+            latestCompare(true)
+            tryAwaitRelease()
+            comparing = false
+            latestCompare(false)
+          })
+        }
+        .semantics {
+          role = Role.Button
+          contentDescription = if (comparing) "Ouvindo sem equalizador" else "Comparar sem equalizador"
+          stateDescription = if (comparing) "Sem equalizador" else "Com equalizador"
+          // A screen reader cannot hold: a double tap switches the comparison on and off.
+          onClick {
+            comparing = !comparing
+            latestCompare(comparing)
+            true
+          }
+        }
+        .padding(horizontal = Space.m)
+        .testTag("eq_compare"),
+      contentAlignment = Alignment.Center
+    ) {
+      Text(
+        if (comparing) "Sem EQ" else "Segure: sem EQ",
+        style = AppText.Subhead,
+        color = when {
+          !settings.enabled -> colors.onSurface.copy(alpha = 0.38f)
+          comparing -> colors.onPrimary
+          else -> colors.onSurface
+        },
+        maxLines = 1
+      )
+    }
   }
 }
