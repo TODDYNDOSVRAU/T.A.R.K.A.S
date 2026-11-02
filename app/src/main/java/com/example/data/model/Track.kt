@@ -15,7 +15,14 @@ data class Track(
   /** Cover art or thumbnail; the color gradient shows when it is missing. */
   val artworkUrl: String? = null,
   /** One of the short synthesized tracks that ship with the app, kept apart from the user's music. */
-  val isDemo: Boolean = false
+  val isDemo: Boolean = false,
+  /** The media library's album id (device music); null when unknown. */
+  val albumId: Long? = null,
+  /** Disc and track number from the file's tags; 0 when the file does not say. */
+  val discNumber: Int = 0,
+  val trackNumber: Int = 0,
+  /** When the file reached the device (seconds since 1970); 0 when unknown. */
+  val dateAddedSec: Long = 0L
 ) {
   /** The online catalogue the track streams from ("Audius", "Jamendo"), or null for the device's own. */
   val onlineSource: String?

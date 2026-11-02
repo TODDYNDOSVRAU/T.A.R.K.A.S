@@ -67,6 +67,12 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -147,6 +153,8 @@ fun LibraryScreen(
   onRemoveQueueItem: (Int) -> Unit,
   onClearQueue: () -> Unit,
   upcoming: List<Track> = emptyList(),
+  initialSongOrder: com.example.data.playback.SongOrder = com.example.data.playback.SongOrder.TITLE,
+  onSongOrderChange: (com.example.data.playback.SongOrder) -> Unit = {},
   onMoveQueueItem: (Int, Int) -> Unit = { _, _ -> },
   onPlayUpcoming: (Track) -> Unit = {},
   openQueue: Boolean = false,
@@ -154,6 +162,9 @@ fun LibraryScreen(
   modifier: Modifier = Modifier
 ) {
   var section by rememberSaveable { mutableStateOf(LibrarySection.SONGS) }
+  var songOrder by remember { mutableStateOf(initialSongOrder) }
+  // Sorted off the main thread would need a loading state; collation keys make this fast enough.
+  val sortedSongs = remember(deviceTracks, songOrder) { com.example.data.playback.LibrarySort.sorted(deviceTracks, songOrder) }
   var openPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
   // Dialogs are saved by id, so a rotation keeps them open on the same playlist.
   var showNewPlaylist by rememberSaveable { mutableStateOf(false) }
@@ -277,11 +288,17 @@ fun LibraryScreen(
         ) { shownSection ->
           when (shownSection) {
             LibrarySection.SONGS -> TrackList(
-              tracks = if (musicAllowed) deviceTracks else emptyList(),
+              tracks = if (musicAllowed) sortedSongs else emptyList(),
               currentTrack = currentTrack,
               isPlaying = isPlaying,
-              onPlay = { track -> onPlayFromList(track, deviceTracks) },
-              onShuffle = { onShuffleList(deviceTracks) },
+              onPlay = { track -> onPlayFromList(track, sortedSongs) },
+              onShuffle = { onShuffleList(sortedSongs) },
+              header = {
+                if (musicAllowed && deviceTracks.isNotEmpty()) item(key = "song_order") {
+                  SongOrderRow(songOrder, onChange = { songOrder = it; onSongOrderChange(it) })
+                }
+              },
+              index = { com.example.data.playback.LibrarySort.section(it, songOrder) },
               empty = {
                 when {
                   !musicAllowed -> MusicPermissionPrompt(
@@ -503,9 +520,22 @@ private fun TrackList(
   onShuffle: () -> Unit,
   empty: @Composable () -> Unit,
   header: LazyListScope.() -> Unit = {},
+  /** The A–Z letter of a track; with it, a letter strip on the right jumps through the list. */
+  index: ((Track) -> String?)? = null,
   trailing: (@Composable RowScope.(Track) -> Unit)? = null
 ) {
+  val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+  val letters = remember(tracks, index) {
+    if (index == null) emptyList() else {
+      // Each letter's first track, in list order.
+      val firsts = LinkedHashMap<String, Int>()
+      tracks.forEachIndexed { i, t -> index(t)?.let { firsts.putIfAbsent(it, i) } }
+      firsts.entries.map { it.key to it.value }
+    }
+  }
+  Box(modifier = Modifier.fillMaxSize()) {
   LazyColumn(
+    state = listState,
     modifier = Modifier.fillMaxSize(),
     contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
   ) {
@@ -527,6 +557,108 @@ private fun TrackList(
             trailing = { trailing?.invoke(this, track) }
           )
         }
+      }
+    }
+  }
+  // Only worth it for a long list with several letters.
+  if (letters.size >= 3 && tracks.size >= 30) {
+    // The tracks are the list's last items: header rows and the play row come before them.
+    LetterStrip(
+      letters = letters.map { it.first },
+      onLetter = { letter ->
+        val first = letters.firstOrNull { it.first == letter }?.second ?: return@LetterStrip
+        val offset = listState.layoutInfo.totalItemsCount - tracks.size
+        listState.requestScrollToItem(offset + first)
+      },
+      modifier = Modifier
+        .align(Alignment.CenterEnd)
+        .padding(bottom = LocalBarInset.current)
+    )
+  }
+  }
+}
+
+/** The order of the device's songs: title, artist, album or newest first. */
+@Composable
+private fun SongOrderRow(order: com.example.data.playback.SongOrder, onChange: (com.example.data.playback.SongOrder) -> Unit) {
+  androidx.compose.foundation.lazy.LazyRow(
+    horizontalArrangement = Arrangement.spacedBy(Space.xs),
+    contentPadding = PaddingValues(horizontal = Space.page - Space.xs, vertical = Space.xs)
+  ) {
+    items(com.example.data.playback.SongOrder.entries.size) { i ->
+      val o = com.example.data.playback.SongOrder.entries[i]
+      FilterChip(
+        label = o.label,
+        selected = o == order,
+        onClick = { onChange(o) },
+        modifier = Modifier.testTag("song_order_${o.key}")
+      )
+    }
+  }
+}
+
+/**
+ * A–Z strip on the list's right edge: touching or sliding along it jumps to the first track of the
+ * letter under the finger, with a tick per letter and the letter shown large beside it.
+ * TalkBack users scroll the list itself, so the strip is hidden from it.
+ */
+@Composable
+private fun LetterStrip(letters: List<String>, onLetter: (String) -> Unit, modifier: Modifier = Modifier) {
+  val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+  var active by remember { mutableStateOf<String?>(null) }
+  var height by remember { mutableStateOf(1) }
+  fun pick(y: Float) {
+    val i = ((y / height) * letters.size).toInt().coerceIn(0, letters.lastIndex)
+    val l = letters[i]
+    if (l != active) {
+      active = l
+      haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.SegmentTick)
+      onLetter(l)
+    }
+  }
+  Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+    active?.let { l ->
+      Box(
+        modifier = Modifier
+          .size(56.dp)
+          .clip(CircleShape)
+          .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+        contentAlignment = Alignment.Center
+      ) {
+        Text(l, style = AppText.Title2, color = MaterialTheme.colorScheme.onSurface)
+      }
+      Spacer(Modifier.width(Space.s))
+    }
+    Column(
+      modifier = Modifier
+        .padding(end = Space.xxs)
+        .onSizeChanged { height = it.height.coerceAtLeast(1) }
+        .pointerInput(letters) {
+          awaitEachGesture {
+            val down = awaitFirstDown()
+            down.consume()
+            pick(down.position.y)
+            while (true) {
+              val e = awaitPointerEvent()
+              val c = e.changes.firstOrNull() ?: break
+              if (!c.pressed) break
+              c.consume()
+              pick(c.position.y)
+            }
+            active = null
+          }
+        }
+        .clearAndSetSemantics {}
+        .testTag("letter_strip"),
+      horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+      letters.forEach { l ->
+        Text(
+          l,
+          style = AppText.Caption2,
+          color = if (l == active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.padding(horizontal = Space.xs, vertical = 1.dp)
+        )
       }
     }
   }

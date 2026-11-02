@@ -410,6 +410,12 @@ class TarkasViewModel(
 
   fun playFromCurrentList(track: Track) = playback.playFromCurrentList(track)
 
+  /** How Biblioteca lists the device's songs, kept between launches. */
+  val songOrder: com.example.data.playback.SongOrder
+    get() = com.example.data.playback.SongOrder.fromKey(preferencesRepository.getSongOrder())
+
+  fun setSongOrder(order: com.example.data.playback.SongOrder) = preferencesRepository.saveSongOrder(order.key)
+
   fun togglePlayPause() = playback.togglePlayPause()
 
   fun pause() = playback.pause()

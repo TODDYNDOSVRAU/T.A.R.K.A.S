@@ -13,6 +13,12 @@ object TrackJson {
     .put("color", t.colorHex)
     .put("art", t.artworkUrl ?: JSONObject.NULL)
     .put("demo", t.isDemo)
+    .apply {
+      t.albumId?.let { put("albumId", it) }
+      if (t.discNumber > 0) put("disc", t.discNumber)
+      if (t.trackNumber > 0) put("trk", t.trackNumber)
+      if (t.dateAddedSec > 0) put("added", t.dateAddedSec)
+    }
 
   /** Null for an entry that can no longer play (from an integration that was removed). */
   fun fromJson(o: JSONObject): Track? {
@@ -32,7 +38,11 @@ object TrackJson {
       filePath = if (o.isNull("path")) null else o.getString("path"),
       colorHex = o.optLong("color", 0xFF46C9D3),
       artworkUrl = if (o.isNull("art")) null else o.optString("art").ifBlank { null },
-      isDemo = o.optBoolean("demo", false)
+      isDemo = o.optBoolean("demo", false),
+      albumId = if (o.has("albumId")) o.optLong("albumId") else null,
+      discNumber = o.optInt("disc", 0),
+      trackNumber = o.optInt("trk", 0),
+      dateAddedSec = o.optLong("added", 0L)
     )
   }
 

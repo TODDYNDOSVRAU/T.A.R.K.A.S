@@ -617,6 +617,8 @@ fun TarkasAppContent(
             onRemoveQueueItem = { index -> viewModel.removeFromQueue(index) },
             onClearQueue = { viewModel.clearQueue() },
             upcoming = viewModel.upcoming.collectAsStateWithLifecycle().value,
+            initialSongOrder = viewModel.songOrder,
+            onSongOrderChange = { viewModel.setSongOrder(it) },
             onMoveQueueItem = { from, to -> viewModel.moveInQueue(from, to) },
             onPlayUpcoming = { track ->
               viewModel.playFromCurrentList(track)

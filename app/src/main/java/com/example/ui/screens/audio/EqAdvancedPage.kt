@@ -359,6 +359,13 @@ private fun LoudnessSection(loudness: LoudnessUi, onSetMode: (NormalizationMode)
       )
       GroupDivider()
       RadioRow(
+        title = "Automático",
+        subtitle = "Por álbum quando um álbum toca em ordem; por faixa no resto",
+        selected = loudness.mode == NormalizationMode.AUTO,
+        onClick = { onSetMode(NormalizationMode.AUTO) }
+      )
+      GroupDivider()
+      RadioRow(
         title = "Por faixa",
         subtitle = "Todas as músicas no mesmo volume",
         selected = loudness.mode == NormalizationMode.TRACK,

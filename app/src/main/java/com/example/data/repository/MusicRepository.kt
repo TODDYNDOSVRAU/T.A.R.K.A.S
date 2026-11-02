@@ -124,7 +124,9 @@ class MusicRepository(private val context: Context) {
       MediaStore.Audio.Media.ALBUM,
       MediaStore.Audio.Media.ALBUM_ID,
       MediaStore.Audio.Media.DURATION,
-      MediaStore.Audio.Media.YEAR
+      MediaStore.Audio.Media.YEAR,
+      MediaStore.Audio.Media.TRACK,
+      MediaStore.Audio.Media.DATE_ADDED
     )
     val found = ArrayList<Track>()
     try {
@@ -141,9 +143,12 @@ class MusicRepository(private val context: Context) {
         val albumId = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
         val duration = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
         val year = c.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
+        val trackNo = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
+        val added = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
         while (c.moveToNext()) {
           val mediaId = c.getLong(id)
           val artistName = c.getString(artist)?.takeUnless { it == MediaStore.UNKNOWN_STRING } ?: "Artista desconhecido"
+          val (disc, number) = com.example.data.playback.AlbumOrder.discAndTrack(c.getInt(trackNo))
           found += Track(
             id = "ms:$mediaId",
             title = c.getString(title) ?: "Sem título",
@@ -155,7 +160,11 @@ class MusicRepository(private val context: Context) {
             isLocalFile = true,
             filePath = ContentUris.withAppendedId(collection, mediaId).toString(),
             artworkUrl = ContentUris.withAppendedId(ALBUM_ART, c.getLong(albumId)).toString(),
-            colorHex = 0xFF2F8FA8
+            colorHex = 0xFF2F8FA8,
+            albumId = c.getLong(albumId).takeIf { it > 0 },
+            discNumber = disc,
+            trackNumber = number,
+            dateAddedSec = c.getLong(added)
           )
         }
       }

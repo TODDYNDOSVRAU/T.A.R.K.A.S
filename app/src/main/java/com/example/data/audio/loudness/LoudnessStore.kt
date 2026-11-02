@@ -17,7 +17,8 @@ class LoudnessStore(context: Context) {
   var mode: NormalizationMode
     get() = prefs.getString(KEY_MODE, null)
       ?.let { name -> NormalizationMode.entries.firstOrNull { it.name == name } }
-      ?: NormalizationMode.TRACK
+      // Automatic is per track except for an album played in order, so it suits anyone who never chose.
+      ?: NormalizationMode.AUTO
     set(value) = prefs.edit().putString(KEY_MODE, value.name).apply()
 
   fun measured(trackId: String): Double? =

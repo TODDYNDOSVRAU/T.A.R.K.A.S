@@ -9,7 +9,12 @@ enum class NormalizationMode {
   /** Every track at the same loudness. */
   TRACK,
   /** The album's own value when the file has it, so quiet and loud songs of one album keep their difference. */
-  ALBUM
+  ALBUM,
+  /**
+   * The album's value while an album plays in order (same album, next track number), each track's
+   * own otherwise: an album keeps its dynamics, a mixed list sounds even.
+   */
+  AUTO
 }
 
 /** Where the loudness of the playing track came from. */
@@ -92,10 +97,17 @@ object LoudnessNormalization {
    * Picks the loudness to use and the gain. Tags beat a measurement (they cover the whole file,
    * measured off-line); in [NormalizationMode.ALBUM] the album value wins when there is one.
    */
-  fun decide(mode: NormalizationMode, tags: TaggedLoudness, measuredLufs: Double?): NormalizationDecision {
+  fun decide(
+    mode: NormalizationMode,
+    tags: TaggedLoudness,
+    measuredLufs: Double?,
+    /** For [NormalizationMode.AUTO]: the track plays as part of its album, in order. */
+    albumInOrder: Boolean = false
+  ): NormalizationDecision {
     if (mode == NormalizationMode.OFF) return NormalizationDecision(LoudnessSource.NONE, null, 0.0)
+    val useAlbum = mode == NormalizationMode.ALBUM || (mode == NormalizationMode.AUTO && albumInOrder)
     val (source, lufs) = when {
-      mode == NormalizationMode.ALBUM && tags.albumLufs != null -> LoudnessSource.TAG_ALBUM to tags.albumLufs
+      useAlbum && tags.albumLufs != null -> LoudnessSource.TAG_ALBUM to tags.albumLufs
       tags.trackLufs != null -> LoudnessSource.TAG_TRACK to tags.trackLufs
       measuredLufs != null -> LoudnessSource.MEASURED to measuredLufs
       else -> return NormalizationDecision(LoudnessSource.NONE, null, 0.0)

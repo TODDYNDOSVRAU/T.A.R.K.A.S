@@ -129,6 +129,13 @@ class PreferencesRepository(context: Context) {
     prefs.edit().putString("eq_reach", key).apply()
   }
 
+  /** How Biblioteca lists the device's songs (SongOrder key). */
+  fun getSongOrder(): String? = prefs.getString("song_order", null)
+
+  fun saveSongOrder(key: String) {
+    prefs.edit().putString("song_order", key).apply()
+  }
+
   // ---- Fone correction per output ----
 
   /**

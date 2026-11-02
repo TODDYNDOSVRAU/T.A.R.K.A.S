@@ -210,6 +210,11 @@ class PlaybackController(
     if (path == null) {
       onTrackFailed(track, network = false)
     } else {
+      // The automatic volume mode keeps an album's own levels while it plays in order.
+      audioEngine.markAlbumInOrder(
+        track.id,
+        AlbumOrder.inAlbumSequence(playHistory.lastOrNull(), track, resolveNext(auto = true).track)
+      )
       audioEngine.playTrack(
         path,
         onCompletion = { onTrackPlaybackCompleted(track) },
@@ -325,6 +330,7 @@ class PlaybackController(
       audioEngine.setUpNext(null) {}
       return
     }
+    audioEngine.markAlbumInOrder(track.id, AlbumOrder.follows(current, track))
     audioEngine.setUpNext(track.filePath, loudnessKey = track.id) { onGaplessAdvance(next, track) }
   }
 

@@ -775,11 +775,24 @@ class AudioEngineManager(private val context: Context) {
     measuringDurationMs = 0L
   }
 
+  /** Tracks (by id) that play as part of their album, in order: the automatic mode uses the album's value. */
+  private val albumInOrderKeys = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
+
+  /** Says whether [key] plays as part of its album, in order; set before the track is loaded or queued. */
+  fun markAlbumInOrder(key: String, inOrder: Boolean) {
+    if (inOrder) albumInOrderKeys += key else albumInOrderKeys -= key
+    // Only the latest few matter: the playing track and the one queued after it.
+    while (albumInOrderKeys.size > 8) albumInOrderKeys.remove(albumInOrderKeys.first())
+    if (player?.currentMediaItem?.mediaId == key) applyNormalization()
+  }
+
   /** Decides the gain of the playing track from its tags, or an earlier measurement, and applies it. */
   private fun applyNormalization() {
     val key = player?.currentMediaItem?.mediaId?.takeIf { it.isNotEmpty() }
     val mode = loudnessStore.mode
-    val decision = LoudnessNormalization.decide(mode, currentTags, key?.let(loudnessStore::measured))
+    val decision = LoudnessNormalization.decide(
+      mode, currentTags, key?.let(loudnessStore::measured), albumInOrder = key != null && key in albumInOrderKeys
+    )
     normalizationGain = decision.linearGain
     setLevel(levelVolume)
     _loudness.value = LoudnessUi(mode, decision.source, decision.loudnessLufs, decision.gainDb, hasTrack = true)
