@@ -49,6 +49,8 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
   private var skipEngine = 0
   /** Output frames still taken from the delay line after a start. */
   private var fromRing = 0
+  /** The tail of this stream was already pushed out; cleared by the flush that starts the next one. */
+  private var tailQueued = false
 
   /**
    * Only checks the new format. It takes effect at the next flush: until then the previous track's
@@ -218,6 +220,11 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
   }
 
   override fun onQueueEndOfStream() {
+    // Media3's chain calls this again on every pass while it drains, whenever a processor sits before
+    // this one (the sink always puts its own there). Pushing the tail each time made an endless stream:
+    // the drain never finished and the player stayed on the ended track. The tail goes out once.
+    if (tailQueued) return
+    tailQueued = true
     // The last DELAY frames are still inside: push them out with silence behind them.
     val frames = DELAY
     ensureCapacity(frames)
@@ -239,6 +246,7 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
     ringPos = 0
     fifoStart = 0; fifoCount = 0
     running = false
+    tailQueued = false
     engine?.reset()
     adoptActiveFormat()
   }
