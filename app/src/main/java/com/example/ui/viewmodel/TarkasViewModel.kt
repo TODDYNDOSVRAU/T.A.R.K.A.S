@@ -421,6 +421,11 @@ class TarkasViewModel(
 
   fun loadPlayCounts() = playback.loadPlayCounts()
 
+  /** Crossfade between tracks in seconds; 0 is off. */
+  val crossfadeSeconds: StateFlow<Int> get() = playback.crossfadeSeconds
+
+  fun setCrossfadeSeconds(seconds: Int) = playback.setCrossfadeSeconds(seconds)
+
   fun togglePlayPause() = playback.togglePlayPause()
 
   fun pause() = playback.pause()

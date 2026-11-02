@@ -69,6 +69,10 @@ class AudioEngineManager(private val context: Context) {
     const val FOCUS_HOLD_MS = 4000L
     /** How long the route is left to settle after a fone connects or disconnects. */
     const val OUTPUT_SETTLE_MS = 400L
+    /** Volume steps of the crossfade: small enough that no step is heard. */
+    const val CROSSFADE_STEP_MS = 25L
+    const val CROSSFADE_MIN_MS = 500L
+    const val CROSSFADE_MAX_MS = 12_000L
     val EXTERNAL_KINDS = setOf(OutputKind.WIRED, OutputKind.BLUETOOTH, OutputKind.USB)
   }
   private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -85,6 +89,8 @@ class AudioEngineManager(private val context: Context) {
   /** Volume from focus ducking and fades; the player gets it times [normalizationGain]. */
   private var levelVolume = 1f
   private var normalizationGain = 1f
+  /** The incoming track's level during a crossfade (1 otherwise). */
+  private var fadeInGain = 1f
 
   /** Id of the track whose audio the meter is measuring, and its length once known. */
   private var measuringKey: String? = null
@@ -260,12 +266,14 @@ class AudioEngineManager(private val context: Context) {
     try {
       when (focusPolicy.onChange(change, _isPlaying.value)) {
         AudioFocusPolicy.Action.PAUSE_AND_ABANDON -> {
+          cancelCrossfade()
           p.pause()
           _isPlaying.value = false
           abandonFocus()
           unregisterNoisyReceiver()
         }
         AudioFocusPolicy.Action.PAUSE -> {
+          cancelCrossfade()
           p.pause()
           _isPlaying.value = false
         }
@@ -286,6 +294,8 @@ class AudioEngineManager(private val context: Context) {
   /** Pause that the user (or a noisy-output event) asked for: give the focus back too. */
   private fun pauseByUser() {
     val p = player ?: return
+    // A pause during a crossfade ends it: play resumes the incoming track alone, at full level.
+    cancelCrossfade()
     try {
       p.pause()
     } catch (e: Exception) {
@@ -470,6 +480,15 @@ class AudioEngineManager(private val context: Context) {
     loudnessKey: String? = null
   ) {
     try {
+      // The incoming side of a crossfade starts silent; any other load ends a crossfade in progress.
+      armCrossfade(null)
+      if (crossfadeHandoff) {
+        crossfadeHandoff = false
+        fadeInPending = true
+        fadeInGain = 0f
+      } else {
+        cancelCrossfade()
+      }
       // Closes the measurement of the track that was playing before the player empties.
       startMeasuring(loudnessKey)
       // Between two tracks the focus and the headphones receiver are kept: the next one starts at once.
@@ -600,6 +619,8 @@ class AudioEngineManager(private val context: Context) {
   }
 
   fun seekTo(positionMs: Long) {
+    // Scrubbing during a crossfade ends it, as in Apple Music: the playing track goes to full level.
+    cancelCrossfade()
     try {
       player?.seekTo(positionMs)
       _currentPositionMs.value = positionMs
@@ -609,6 +630,8 @@ class AudioEngineManager(private val context: Context) {
   }
 
   fun stopPlayback() {
+    armCrossfade(null)
+    cancelCrossfade()
     startMeasuring(null)
     try {
       progressJob?.cancel()
@@ -638,6 +661,7 @@ class AudioEngineManager(private val context: Context) {
   fun release() {
     runCatching { audioManager.unregisterAudioDeviceCallback(deviceCallback) }
     stopPlayback()
+    releaseTail()
     releaseAudioEffects()
     runCatching { player?.release() }
     player = null
@@ -656,6 +680,18 @@ class AudioEngineManager(private val context: Context) {
               if (p.duration != C.TIME_UNSET) {
                 _durationMs.value = p.duration.coerceAtLeast(1L)
                 measuringDurationMs = p.duration
+                // Time to cross into the next track.
+                val overlap = crossfadeMs
+                if (overlap != null && p.duration - pos <= overlap) {
+                  val start = crossfadeStart
+                  armCrossfade(null)
+                  start?.invoke()
+                }
+              }
+              // The incoming track is playing: both levels start crossing now.
+              if (fadeInPending) {
+                fadeInPending = false
+                runCrossfadeRamp()
               }
               // Without a real FFT (no RECORD_AUDIO or unsupported device) show a flat floor,
               // never a fake animated spectrum.
@@ -754,7 +790,116 @@ class AudioEngineManager(private val context: Context) {
   /** The one place the player's volume is written: focus ducking and fades times the normalization. */
   private fun setLevel(level: Float) {
     levelVolume = level
-    player?.volume = level * normalizationGain
+    player?.volume = level * normalizationGain * fadeInGain
+  }
+
+  // --- crossfade ---
+  //
+  // At the transition the main player moves on to the next track as usual (so the session, focus,
+  // queue and counters see an ordinary change) while a second, plain player plays the rest of the
+  // outgoing track through its own copy of the equalizer, fading out, and then lets go.
+
+  /** Overlap asked by the controller for the playing track, or null; and what to call when it is time. */
+  private var crossfadeMs: Long? = null
+  private var crossfadeStart: (() -> Unit)? = null
+  /** The next [playTrack] is the incoming side of a crossfade: it starts silent and fades in. */
+  private var crossfadeHandoff = false
+  private var fadeInPending = false
+  private var tail: ExoPlayer? = null
+  private var tailGain = 1f
+  private var fadeJob: Job? = null
+
+  /** Asks for a crossfade of [overlapMs] at the end of the playing track ([onStart] then); null disarms it. */
+  fun armCrossfade(overlapMs: Long?, onStart: () -> Unit = {}) {
+    crossfadeMs = overlapMs
+    crossfadeStart = if (overlapMs != null) onStart else null
+  }
+
+  /** True while Tarkas Spatial processes this player: the crossfade tail could not carry it. */
+  val spatialActive: Boolean get() = com.example.data.audio.spatial.SpatialControl.active
+
+  /**
+   * Starts the outgoing side: the rest of the playing track goes on in a second player, through the
+   * same equalizer settings and at the same level. Call it right before loading the next track.
+   */
+  fun startCrossfadeOut() {
+    cancelCrossfade()
+    val p = player ?: return
+    val uri = p.currentMediaItem?.localConfiguration?.uri ?: return
+    val at = p.currentPosition
+    try {
+      val dsp = EqDsp().also { it.update(processedSettings()) }
+      val renderers = object : DefaultRenderersFactory(context) {
+        override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
+          DefaultAudioSink.Builder(context).setAudioProcessors(arrayOf(ParametricEqAudioProcessor(dsp))).build()
+      }
+      val attributes = androidx.media3.common.AudioAttributes.Builder()
+        .setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build()
+      tailGain = normalizationGain
+      tail = ExoPlayer.Builder(context, renderers)
+        .setAudioAttributes(attributes, false)
+        .build()
+        .also {
+          it.setMediaItem(MediaItem.fromUri(uri), at)
+          it.volume = levelVolume * tailGain
+          it.prepare()
+          it.play()
+        }
+      crossfadeHandoff = true
+    } catch (e: Exception) {
+      Log.w(TAG, "Crossfade tail failed; plain change", e)
+      cancelCrossfade()
+    }
+  }
+
+  /** Both levels cross over the tail's remaining time; a pause or a change by the user stops it at once. */
+  private fun runCrossfadeRamp() {
+    val t = tail ?: run { fadeInGain = 1f; setLevel(levelVolume); return }
+    val total = (t.duration.takeIf { it != C.TIME_UNSET }?.minus(t.currentPosition) ?: crossfadeMs ?: 0L)
+      .coerceIn(CROSSFADE_MIN_MS, CROSSFADE_MAX_MS)
+    fadeJob?.cancel()
+    Log.i(TAG, "Crossfade over $total ms")
+    fadeJob = coroutineScope.launch {
+      val started = android.os.SystemClock.elapsedRealtime()
+      while (isActive) {
+        // Paused by the user or the focus (playWhenReady false), not a moment of buffering, which the
+        // incoming track often has right after it starts.
+        if (player?.playWhenReady != true) {
+          Log.i(TAG, "Crossfade ended early: playback paused")
+          cancelCrossfade()
+          return@launch
+        }
+        val x = ((android.os.SystemClock.elapsedRealtime() - started).toFloat() / total).coerceIn(0f, 1f)
+        fadeInGain = com.example.data.playback.CrossfadePlanner.inGain(x)
+        setLevel(levelVolume)
+        tail?.volume = levelVolume * tailGain * com.example.data.playback.CrossfadePlanner.outGain(x)
+        if (x >= 1f) break
+        delay(CROSSFADE_STEP_MS)
+      }
+      Log.i(TAG, "Crossfade done in ${android.os.SystemClock.elapsedRealtime() - started} ms")
+      releaseTail()
+      fadeInGain = 1f
+      setLevel(levelVolume)
+    }
+  }
+
+  private fun releaseTail() {
+    tail?.let { runCatching { it.stop(); it.release() } }
+    tail = null
+  }
+
+  /** Ends any crossfade now: the outgoing tail stops, the playing track goes to its full level. */
+  private fun cancelCrossfade() {
+    if (tail != null) Log.i(TAG, "Crossfade cancelled")
+    fadeJob?.cancel()
+    fadeJob = null
+    releaseTail()
+    crossfadeHandoff = false
+    fadeInPending = false
+    if (fadeInGain != 1f) {
+      fadeInGain = 1f
+      setLevel(levelVolume)
+    }
   }
 
   /**

@@ -88,6 +88,9 @@ internal fun EqAdvancedPage(
   onStopSystemAudioCapture: () -> Unit,
   loudness: LoudnessUi,
   onSetNormalizationMode: (NormalizationMode) -> Unit,
+  crossfadeSeconds: Int = 0,
+  onSetCrossfade: (Int) -> Unit = {},
+  spatialOn: Boolean = false,
   outputCorrection: com.example.ui.screens.OutputCorrectionUi = com.example.ui.screens.OutputCorrectionUi(),
   onSetAutoOutputCorrection: (Boolean) -> Unit = {},
   onBack: () -> Unit
@@ -272,6 +275,47 @@ internal fun EqAdvancedPage(
     }
 
     item { LoudnessSection(loudness, onSetNormalizationMode) }
+
+    item {
+      Section("Transição entre faixas") {
+        InsetGroup {
+          SwitchRow(
+            title = "Crossfade",
+            subtitle = if (crossfadeSeconds > 0) "A próxima música entra enquanto a atual sai, em $crossfadeSeconds s"
+            else "Desligado: as músicas trocam sem pausa e sem sobreposição",
+            checked = crossfadeSeconds > 0,
+            onCheckedChange = { on -> onSetCrossfade(if (on) com.example.data.playback.CrossfadePlanner.DEFAULT_SECONDS else 0) },
+            modifier = Modifier.testTag("switch_crossfade")
+          )
+          AnimatedVisibility(
+            visible = crossfadeSeconds > 0,
+            enter = if (reduced) EnterTransition.None else expandVertically() + fadeIn(),
+            exit = if (reduced) ExitTransition.None else shrinkVertically() + fadeOut()
+          ) {
+            Column {
+              GroupDivider()
+              SliderRow(
+                label = "Duração",
+                valueText = "$crossfadeSeconds s",
+                value = crossfadeSeconds.toFloat(),
+                range = 1f..12f,
+                onChange = { v -> onSetCrossfade(v.roundToInt().coerceIn(1, 12)) }
+              )
+            }
+          }
+        }
+        GroupFooter(
+          when {
+            crossfadeSeconds > 0 && spatialOn ->
+              "Com o Tarkas Spatial ligado, as músicas trocam sem crossfade: o espacial acompanha uma música por vez."
+            else ->
+              "Faixas seguidas de um mesmo álbum trocam sem pausa e sem crossfade, para o álbum soar inteiro. Também não há crossfade " +
+                "em faixas com menos que o dobro da duração escolhida, com Repetir uma, com o Tarkas Spatial ligado ou quando há curiosidade narrada. " +
+                "Pausar, arrastar a barra ou pular durante a transição termina o crossfade na hora."
+          }
+        )
+      }
+    }
 
     item { Section("Apps tocando agora") { ActiveAppsGroup(activeApps) } }
 

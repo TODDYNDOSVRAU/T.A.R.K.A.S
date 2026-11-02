@@ -658,6 +658,8 @@ fun TarkasAppContent(
               suggestionQuery = viewModel.outputSuggestion.collectAsStateWithLifecycle().value?.query
             ),
             onSetAutoOutputCorrection = { viewModel.setAutoOutputCorrection(it) },
+            crossfadeSeconds = viewModel.crossfadeSeconds.collectAsStateWithLifecycle().value,
+            onSetCrossfade = { viewModel.setCrossfadeSeconds(it) },
             devicePickerRequest = viewModel.devicePickerRequest.collectAsStateWithLifecycle().value,
             onDevicePickerOpened = { viewModel.devicePickerOpened() },
             onSetEnabled = { on -> viewModel.setEqEnabled(on) },

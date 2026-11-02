@@ -122,6 +122,8 @@ fun AudioScreen(
   outputCorrection: OutputCorrectionUi = OutputCorrectionUi(),
   onSetAutoOutputCorrection: (Boolean) -> Unit = {},
   /** A search to open the fone list with (from a suggestion); [onDevicePickerOpened] clears it. */
+  crossfadeSeconds: Int = 0,
+  onSetCrossfade: (Int) -> Unit = {},
   devicePickerRequest: String? = null,
   onDevicePickerOpened: () -> Unit = {},
   onSetEnabled: (Boolean) -> Unit,
@@ -227,6 +229,9 @@ fun AudioScreen(
           onSetNormalizationMode = onSetNormalizationMode,
           outputCorrection = outputCorrection,
           onSetAutoOutputCorrection = onSetAutoOutputCorrection,
+          crossfadeSeconds = crossfadeSeconds,
+          onSetCrossfade = onSetCrossfade,
+          spatialOn = spatial.enabled,
           onBack = { page = AudioPage.MAIN }
         )
       }

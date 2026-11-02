@@ -129,6 +129,13 @@ class PreferencesRepository(context: Context) {
     prefs.edit().putString("eq_reach", key).apply()
   }
 
+  /** Crossfade between tracks, in seconds; 0 is off (the default: tracks change gapless). */
+  fun getCrossfadeSeconds(): Int = prefs.getInt("crossfade_seconds", 0)
+
+  fun saveCrossfadeSeconds(seconds: Int) {
+    prefs.edit().putInt("crossfade_seconds", seconds).apply()
+  }
+
   /** How Biblioteca lists the device's songs (SongOrder key). */
   fun getSongOrder(): String? = prefs.getString("song_order", null)
 

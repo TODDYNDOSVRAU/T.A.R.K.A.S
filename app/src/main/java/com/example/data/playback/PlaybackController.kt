@@ -61,6 +61,10 @@ class PlaybackController(
   private val _queue = MutableStateFlow<List<Track>>(emptyList())
   val queue: StateFlow<List<Track>> = _queue.asStateFlow()
 
+  private val _crossfadeSeconds = MutableStateFlow(preferences.getCrossfadeSeconds())
+  /** Crossfade between tracks in seconds; 0 is off. */
+  val crossfadeSeconds: StateFlow<Int> = _crossfadeSeconds.asStateFlow()
+
   // Play and skip counters (declared before init, which restores the last track).
   private val stats = PlayStatsStore(context)
   /** The track whose end is not recorded yet: set when its audio starts, cleared when it ends. */
@@ -356,6 +360,8 @@ class PlaybackController(
    */
   private fun refreshUpNext() {
     refreshUpcoming()
+    // Armed again below when the coming transition is a crossfade.
+    audioEngine.armCrossfade(null)
     val current = musicRepository.currentTrack.value
     if (current == null || _sleepTimer.value?.endOfTrack == true || narratesOutro(current)) {
       audioEngine.setUpNext(null) {}
@@ -367,8 +373,40 @@ class PlaybackController(
       audioEngine.setUpNext(null) {}
       return
     }
+    val crossfade = CrossfadePlanner.eligible(
+      current = current,
+      next = track,
+      seconds = _crossfadeSeconds.value,
+      repeatsSameTrack = next.loopSameTrack,
+      spatialOn = audioEngine.spatialActive,
+      narrationBetween = false, // checked above: an outro or intro returns before this
+      sleepAtEndOfTrack = false
+    )
+    if (crossfade) {
+      // The two tracks overlap: no gapless queue, the engine calls back when the overlap begins.
+      audioEngine.setUpNext(null) {}
+      audioEngine.armCrossfade(_crossfadeSeconds.value * 1000L) { onCrossfadeStart() }
+      return
+    }
     audioEngine.markAlbumInOrder(track.id, AlbumOrder.follows(current, track))
     audioEngine.setUpNext(track.filePath, loudnessKey = track.id) { onGaplessAdvance(next, track) }
+  }
+
+  // ---- crossfade ----
+
+  fun setCrossfadeSeconds(seconds: Int) {
+    val s = if (seconds <= 0) 0 else seconds.coerceIn(CrossfadePlanner.CHOICES)
+    _crossfadeSeconds.value = s
+    preferences.saveCrossfadeSeconds(s)
+    // Takes effect for the coming transition.
+    if (s == 0) audioEngine.armCrossfade(null)
+    refreshUpNext()
+  }
+
+  /** The overlap begins: the outgoing track goes on in the engine's tail while the next one starts. */
+  private fun onCrossfadeStart() {
+    audioEngine.startCrossfadeOut()
+    advance(auto = true)
   }
 
   /** The player moved on to the queued track by itself: catch the rest of the state up. */
