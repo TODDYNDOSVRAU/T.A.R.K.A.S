@@ -80,6 +80,10 @@ internal fun PresetPanel(
   presets: List<EqPreset>,
   activePresetId: String,
   device: DeviceCorrection?,
+  /** The output the correction is kept for, when each output keeps its own; null otherwise. */
+  deviceOutput: String?,
+  /** (search, fone name) when AutoEq has corrections for the fone playing now and none is chosen. */
+  suggestion: Pair<String, String>?,
   deviceSearch: DeviceSearchState,
   onSearchDevices: (String, String?) -> Unit,
   onRetryDevices: () -> Unit,
@@ -154,7 +158,7 @@ internal fun PresetPanel(
         Column(modifier = Modifier.weight(1f)) {
           Text(device.name, style = AppText.Body, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
           Text(
-            "Correção de ${device.source} · ${device.bands.size} filtros",
+            listOfNotNull(deviceOutput?.let { "Para $it" }, device.source, "${device.bands.size} filtros").joinToString(" · "),
             style = AppText.Footnote,
             color = colors.onSurfaceVariant,
             maxLines = 1,
@@ -162,6 +166,35 @@ internal fun PresetPanel(
           )
         }
         TextAction("Remover", onClearDevice)
+      }
+    } else if (suggestion != null && !(filter == PresetFilter.FONES && query == suggestion.first)) {
+      // The fone playing now has corrections in AutoEq: one tap lists them.
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = Space.page, vertical = Space.xs)
+          .clip(Shapes.m)
+          .background(colors.surfaceContainer)
+          .padding(start = Space.l, end = Space.xs, top = Space.xs, bottom = Space.xs)
+          .testTag("device_suggestion"),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Icon(Icons.Rounded.Headphones, contentDescription = null, tint = colors.primary, modifier = Modifier.size(Size.iconSmall))
+        Spacer(Modifier.width(Space.m))
+        Column(modifier = Modifier.weight(1f)) {
+          Text("Correções para ${suggestion.second}", style = AppText.Body, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          Text(
+            "Fones como “${suggestion.first}” medidos no AutoEq",
+            style = AppText.Footnote,
+            color = colors.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+          )
+        }
+        TextAction("Ver", onClick = {
+          filter = PresetFilter.FONES
+          onSearchDevices(suggestion.first, null)
+        })
       }
     }
 

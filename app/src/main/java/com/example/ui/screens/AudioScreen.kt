@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +46,14 @@ import com.example.ui.theme.rememberReducedMotion
 import com.example.ui.theme.subPageTransition
 import com.example.ui.viewmodel.DeviceSearchState
 import kotlinx.coroutines.launch
+
+/** The output playing now, and whether each output keeps its own fone correction. */
+data class OutputCorrectionUi(
+  val outputName: String = "",
+  val auto: Boolean = true,
+  /** A search that finds AutoEq corrections for the fone playing now, while it has none. */
+  val suggestionQuery: String? = null
+)
 
 /** What the Tarkas Spatial panel shows. */
 data class SpatialUi(
@@ -110,6 +119,11 @@ fun AudioScreen(
   onSearchDevices: (String, String?) -> Unit = { _, _ -> },
   onApplyDevice: (AutoEqEntry, () -> Unit) -> Unit = { _, _ -> },
   onClearDevice: () -> Unit = {},
+  outputCorrection: OutputCorrectionUi = OutputCorrectionUi(),
+  onSetAutoOutputCorrection: (Boolean) -> Unit = {},
+  /** A search to open the fone list with (from a suggestion); [onDevicePickerOpened] clears it. */
+  devicePickerRequest: String? = null,
+  onDevicePickerOpened: () -> Unit = {},
   onSetEnabled: (Boolean) -> Unit,
   onUpdateEq: ((EqSettings) -> EqSettings) -> Unit,
   onUpdateBand: (Int, (EqBand) -> EqBand) -> Unit,
@@ -150,6 +164,14 @@ fun AudioScreen(
       showPresets = false
       if (latestSearch.query.isNotEmpty()) latestSearchDevices("", latestSearch.source)
     }
+  }
+
+  LaunchedEffect(devicePickerRequest) {
+    val query = devicePickerRequest ?: return@LaunchedEffect
+    showPresets = true
+    onOpenDevicePicker()
+    onSearchDevices(query, null)
+    onDevicePickerOpened()
   }
 
   // Back leaves the sub-page before it leaves the tab. (The sheet handles back itself.)
@@ -203,6 +225,8 @@ fun AudioScreen(
           onStopSystemAudioCapture = onStopSystemAudioCapture,
           loudness = loudness,
           onSetNormalizationMode = onSetNormalizationMode,
+          outputCorrection = outputCorrection,
+          onSetAutoOutputCorrection = onSetAutoOutputCorrection,
           onBack = { page = AudioPage.MAIN }
         )
       }
@@ -219,6 +243,8 @@ fun AudioScreen(
         presets = presets,
         activePresetId = activePresetId,
         device = eqSettings.device,
+        deviceOutput = outputCorrection.outputName.takeIf { outputCorrection.auto },
+        suggestion = outputCorrection.suggestionQuery?.let { it to outputCorrection.outputName },
         deviceSearch = deviceSearch,
         onSearchDevices = onSearchDevices,
         onRetryDevices = onOpenDevicePicker,

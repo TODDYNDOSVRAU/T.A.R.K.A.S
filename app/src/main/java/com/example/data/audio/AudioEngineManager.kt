@@ -67,7 +67,9 @@ class AudioEngineManager(private val context: Context) {
     const val DUCK_VOLUME = 0.25f
     /** How long the focus is kept after a track ends or stops, for what comes next. */
     const val FOCUS_HOLD_MS = 4000L
-
+    /** How long the route is left to settle after a fone connects or disconnects. */
+    const val OUTPUT_SETTLE_MS = 400L
+    val EXTERNAL_KINDS = setOf(OutputKind.WIRED, OutputKind.BLUETOOTH, OutputKind.USB)
   }
   private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
@@ -130,8 +132,33 @@ class AudioEngineManager(private val context: Context) {
   private val _spectrumBars = MutableStateFlow<List<Float>>(List(15) { 0.05f })
   val spectrumBars: StateFlow<List<Float>> = _spectrumBars.asStateFlow()
 
+  private val _output = MutableStateFlow(detectOutput())
+  /** The output the music goes to, updated as fones connect and disconnect. */
+  val output: StateFlow<OutputDevice> = _output.asStateFlow()
+  private var outputJob: Job? = null
+
+  /**
+   * Fones connecting and disconnecting. A Bluetooth connection brings several events while the route
+   * settles, so the output is read once they stop.
+   */
+  private val deviceCallback = object : android.media.AudioDeviceCallback() {
+    override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = outputsChanged()
+    override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = outputsChanged()
+  }
+
+  private fun outputsChanged() {
+    outputJob?.cancel()
+    outputJob = coroutineScope.launch {
+      delay(OUTPUT_SETTLE_MS)
+      _output.value = detectOutput()
+      updateCapabilities()
+    }
+  }
+
   init {
     updateCapabilities()
+    runCatching { audioManager.registerAudioDeviceCallback(deviceCallback, android.os.Handler(android.os.Looper.getMainLooper())) }
+      .onFailure { Log.w(TAG, "No output change events", it) }
   }
 
   // --- audio focus, noisy-output handling ---
@@ -582,6 +609,7 @@ class AudioEngineManager(private val context: Context) {
 
   /** Frees the player, its audio track and session; the manager is not used after this. */
   fun release() {
+    runCatching { audioManager.unregisterAudioDeviceCallback(deviceCallback) }
     stopPlayback()
     releaseAudioEffects()
     runCatching { player?.release() }
@@ -830,31 +858,51 @@ class AudioEngineManager(private val context: Context) {
     else -> "Alto-falante do aparelho"
   }
 
+  /** Where music goes now, or null when Android does not say. */
+  private fun activeOutputDevice(): AudioDeviceInfo? {
+    val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+    // Android 13+ says where music actually goes. Before that, an external output wins, then the
+    // loudspeaker: the earpiece is listed first on many phones but only carries calls.
+    val routed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      val media = android.media.AudioAttributes.Builder()
+        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+        .build()
+      audioManager.getAudioDevicesForAttributes(media).firstOrNull()
+    } else null
+    return routed ?: devices.firstOrNull { kindOf(it.type) in EXTERNAL_KINDS }
+      ?: devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER } ?: devices.firstOrNull()
+  }
+
+  private fun kindOf(type: Int): OutputKind = when (type) {
+    AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> OutputKind.WIRED
+    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> OutputKind.BLUETOOTH
+    AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> OutputKind.USB
+    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> OutputKind.SPEAKER
+    else -> OutputKind.OTHER
+  }
+
+  private fun detectOutput(): OutputDevice = try {
+    activeOutputDevice()?.let { dev ->
+      val kind = kindOf(dev.type)
+      if (kind == OutputKind.SPEAKER) return@let OutputDevice.SPEAKER
+      // The jack reports the phone's model as its name: a wired fone is just "Fone com fio".
+      val product = if (kind == OutputKind.WIRED) null else dev.productName?.toString()?.ifBlank { null }
+      val address = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) dev.address else null
+      OutputDevice(OutputDevice.keyFor(kind, address, product), kind, product ?: friendlyRouteName(dev.type))
+    } ?: OutputDevice.SPEAKER
+  } catch (e: Exception) {
+    Log.w(TAG, "Error detecting the output", e)
+    OutputDevice.SPEAKER
+  }
+
   private fun detectCapabilities(sessionId: Int): AudioCapabilities {
     var routeName = "Alto-falante do Dispositivo"
     var routeType = "SPEAKER"
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
       try {
-        val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-        // Android 13+ says where music actually goes. Before that, an external output wins, then the
-        // loudspeaker: the earpiece is listed first on many phones but only carries calls.
-        val routed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-          val media = android.media.AudioAttributes.Builder()
-            .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
-            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
-            .build()
-          audioManager.getAudioDevicesForAttributes(media).firstOrNull()
-        } else null
-        val activeDevice = routed ?: devices.firstOrNull { d ->
-          d.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
-              d.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
-              d.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-              d.type == AudioDeviceInfo.TYPE_USB_DEVICE ||
-              d.type == AudioDeviceInfo.TYPE_USB_HEADSET
-        } ?: devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER } ?: devices.firstOrNull()
-
-        activeDevice?.let { dev ->
+        activeOutputDevice()?.let { dev ->
           routeType = when (dev.type) {
             AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> "FONE CABEADO (3.5mm)"
             AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "BLUETOOTH A2DP"

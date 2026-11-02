@@ -129,6 +129,32 @@ class PreferencesRepository(context: Context) {
     prefs.edit().putString("eq_reach", key).apply()
   }
 
+  // ---- Fone correction per output ----
+
+  /**
+   * The correction bound to each output (JSON, see OutputRouting); null before the first run. "_v2":
+   * a test build carried the correction in use over to any first fone, so its bindings are not read.
+   */
+  fun getOutputBindings(): String? = prefs.getString("output_bindings_v2", null)
+
+  fun saveOutputBindings(json: String) {
+    prefs.edit().putString("output_bindings_v2", json).remove("output_bindings").apply()
+  }
+
+  /** "Trocar a correção com o fone": on by default. */
+  fun getAutoOutputCorrection(): Boolean = prefs.getBoolean("auto_output_correction", true)
+
+  fun saveAutoOutputCorrection(on: Boolean) {
+    prefs.edit().putBoolean("auto_output_correction", on).apply()
+  }
+
+  /** Outputs already offered an AutoEq correction: each is offered once. */
+  fun getSuggestedOutputs(): Set<String> = prefs.getStringSet("suggested_outputs", emptySet()).orEmpty().toSet()
+
+  fun saveSuggestedOutputs(keys: Set<String>) {
+    prefs.edit().putStringSet("suggested_outputs", keys).apply()
+  }
+
   // ---- Tarkas Spatial (off until the user turns it on) ----
 
   fun getSpatialEnabled(): Boolean = prefs.getBoolean("spatial_enabled", false)

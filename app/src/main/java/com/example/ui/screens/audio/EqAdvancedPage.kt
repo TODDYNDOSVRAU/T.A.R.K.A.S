@@ -88,6 +88,8 @@ internal fun EqAdvancedPage(
   onStopSystemAudioCapture: () -> Unit,
   loudness: LoudnessUi,
   onSetNormalizationMode: (NormalizationMode) -> Unit,
+  outputCorrection: com.example.ui.screens.OutputCorrectionUi = com.example.ui.screens.OutputCorrectionUi(),
+  onSetAutoOutputCorrection: (Boolean) -> Unit = {},
   onBack: () -> Unit
 ) {
   val reduced = rememberReducedMotion()
@@ -129,6 +131,29 @@ internal fun EqAdvancedPage(
     }
 
     item { ReachSection(eqReach, globalEqStatus, rootPresent, onSetEqReach) }
+
+    item {
+      Section("Correção do fone") {
+        InsetGroup {
+          SwitchRow(
+            title = "Trocar a correção com o fone",
+            subtitle = "Saída agora: ${outputCorrection.outputName}",
+            checked = outputCorrection.auto,
+            onCheckedChange = onSetAutoOutputCorrection,
+            modifier = Modifier.testTag("switch_auto_output_correction")
+          )
+        }
+        GroupFooter(
+          if (outputCorrection.auto) {
+            "A correção escolhida com um fone conectado fica guardada para ele e volta sozinha quando ele reconecta. " +
+              "No alto-falante, nenhuma correção, a menos que você escolha uma com ele tocando. " +
+              "Fones com fio são tratados como um só, porque o conector não informa o modelo."
+          } else {
+            "A correção escolhida fica a mesma em qualquer saída."
+          }
+        )
+      }
+    }
 
     item {
       Section("Graves e agudos") {

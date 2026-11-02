@@ -173,6 +173,8 @@ class TarkasViewModel(
   }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyList())
 
   // Equalizer presets: the built-in ones followed by the user's own.
+  /** The saved curve, once loaded: what runs on it waits for this. */
+  private val eqLoaded = kotlinx.coroutines.CompletableDeferred<EqSettings>()
   private val _eqPresets = MutableStateFlow(EqPresets.BUILT_IN)
   val eqPresets: StateFlow<List<EqPreset>> = _eqPresets.asStateFlow()
 
@@ -318,6 +320,7 @@ class TarkasViewModel(
       _activePresetId.value = preset.id
       _eqModified.value = com.example.data.model.EqCompare.edited(settings, preset.settings)
       audioEngineManager.applyEqSettings(settings)
+      eqLoaded.complete(settings)
     }
 
     // Initial Siri greeting (concise without listing commands unless user asks for help)
@@ -847,6 +850,7 @@ class TarkasViewModel(
       try {
         val correction = autoEq.correction(entry) ?: throw IllegalStateException("curva vazia")
         updateEq { it.copy(device = correction) }
+        bindToCurrentOutput(correction)
         _deviceSearch.value = _deviceSearch.value.copy(applyingPath = null)
         onDone()
       } catch (e: Exception) {
@@ -855,7 +859,127 @@ class TarkasViewModel(
     }
   }
 
-  fun clearDevice() = updateEq { it.copy(device = null) }
+  fun clearDevice() {
+    updateEq { it.copy(device = null) }
+    bindToCurrentOutput(null)
+  }
+
+  // ---- Correction per output: a fone's correction comes back with the fone ----
+
+  /** The output the music goes to now. */
+  val output: StateFlow<com.example.data.audio.OutputDevice> get() = audioEngineManager.output
+
+  private var outputBindings: Map<String, com.example.data.model.DeviceCorrection?> = emptyMap()
+
+  private val _autoOutputCorrection = MutableStateFlow(preferencesRepository.getAutoOutputCorrection())
+  /** "Trocar a correção com o fone": each output gets the correction chosen on it. */
+  val autoOutputCorrection: StateFlow<Boolean> = _autoOutputCorrection.asStateFlow()
+
+  fun setAutoOutputCorrection(on: Boolean) {
+    _autoOutputCorrection.value = on
+    preferencesRepository.saveAutoOutputCorrection(on)
+    if (on) applyOutput(audioEngineManager.output.value, announce = false)
+  }
+
+  init {
+    viewModelScope.launch { startOutputRouting(eqLoaded.await()) }
+  }
+
+  /** Started once the saved curve is loaded: the first decision needs the correction in use. */
+  private fun startOutputRouting(loaded: EqSettings) {
+    outputBindings = com.example.data.audio.OutputRouting.fromJson(preferencesRepository.getOutputBindings())
+      ?: com.example.data.audio.OutputRouting.firstRun(loaded.device).also { saveOutputBindings(it) }
+    viewModelScope.launch {
+      var first = true
+      audioEngineManager.output.collect { out ->
+        // At launch the correction changes quietly; later, a notice says what changed.
+        applyOutput(out, announce = !first)
+        first = false
+      }
+    }
+  }
+
+  private fun saveOutputBindings(bindings: Map<String, com.example.data.model.DeviceCorrection?>) {
+    preferencesRepository.saveOutputBindings(com.example.data.audio.OutputRouting.toJson(bindings))
+  }
+
+  /** What the user just chose (a correction, or none) belongs to the output playing now. */
+  private fun bindToCurrentOutput(correction: com.example.data.model.DeviceCorrection?) {
+    outputBindings = outputBindings + (audioEngineManager.output.value.key to correction)
+    saveOutputBindings(outputBindings)
+    _outputSuggestion.value = null
+  }
+
+  private fun applyOutput(out: com.example.data.audio.OutputDevice, announce: Boolean) {
+    _outputSuggestion.value = null
+    if (!_autoOutputCorrection.value) return
+    val decision = com.example.data.audio.OutputRouting.decide(out, outputBindings)
+    if (decision.bindings != outputBindings) {
+      outputBindings = decision.bindings
+      saveOutputBindings(outputBindings)
+    }
+    if (decision.correction != audioEngineManager.eqSettings.value.device) {
+      updateEq { it.copy(device = decision.correction) }
+      if (announce) {
+        showNotice(Notice(decision.correction?.let { "Correção do fone: ${it.name}." } ?: "Sem correção de fone em ${out.name}."))
+      }
+    }
+    if (out.isExternal && out.key !in outputBindings) suggestCorrection(out)
+  }
+
+  /**
+   * A fone with no correction chosen yet, whose name matches an AutoEq measurement: offered once.
+   * Needs the AutoEq list (cached for a week, downloaded otherwise); offline, nothing is offered.
+   */
+  private fun suggestCorrection(out: com.example.data.audio.OutputDevice) {
+    viewModelScope.launch {
+      val index = runCatching { autoEq.index() }
+        .onFailure { android.util.Log.i("TarkasViewModel", "No AutoEq list for a suggestion: ${it.javaClass.simpleName}") }
+        .getOrNull() ?: return@launch
+      val found = withContext(Dispatchers.Default) {
+        com.example.data.audio.OutputRouting.suggestions(index, out.name)
+      }
+      android.util.Log.i("TarkasViewModel", "Suggestion for an output: ${found?.let { "${it.entries.size} model(s) for \"${it.query}\", exact=${it.exact}" } ?: "none"}")
+      if (found == null) return@launch
+      // Still on that fone, and still without a choice?
+      if (audioEngineManager.output.value.key != out.key || out.key in outputBindings) return@launch
+      // The fone list keeps it for as long as this fone has no correction; the notice comes once.
+      _outputSuggestion.value = found
+      val offered = preferencesRepository.getSuggestedOutputs()
+      if (out.key in offered) return@launch
+      preferencesRepository.saveSuggestedOutputs(offered + out.key)
+      val only = found.entries.singleOrNull()
+      showNotice(
+        if (found.exact && only != null) {
+          Notice("Há correção para ${only.name}, medida por ${only.source}.", actionLabel = "Aplicar", action = { applyDevice(only) {} })
+        } else {
+          // Only part of the name matched, or several models: the user picks the right one.
+          Notice(
+            "Há correções para fones como “${found.query}”. Escolha o modelo do seu.",
+            actionLabel = "Escolher",
+            action = { openDevicePickerFor(found.query) }
+          )
+        }
+      )
+    }
+  }
+
+  private val _outputSuggestion = MutableStateFlow<com.example.data.audio.OutputRouting.Suggestion?>(null)
+  /** What AutoEq has for the fone playing now, while it has no correction; null otherwise. */
+  val outputSuggestion: StateFlow<com.example.data.audio.OutputRouting.Suggestion?> = _outputSuggestion.asStateFlow()
+
+  private val _devicePickerRequest = MutableStateFlow<String?>(null)
+  /** A search to open the fone list with (from a suggestion); cleared once the list opens. */
+  val devicePickerRequest: StateFlow<String?> = _devicePickerRequest.asStateFlow()
+
+  private fun openDevicePickerFor(query: String) {
+    setTab(TarkasNavTab.AUDIO)
+    _devicePickerRequest.value = query
+  }
+
+  fun devicePickerOpened() {
+    _devicePickerRequest.value = null
+  }
 
   private val _reduceMotion = MutableStateFlow(preferencesRepository.getReduceMotion().also { AppMotion.userReduced = it })
   val reduceMotion: StateFlow<Boolean> = _reduceMotion.asStateFlow()

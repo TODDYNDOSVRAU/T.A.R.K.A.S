@@ -643,6 +643,14 @@ fun TarkasAppContent(
             onSearchDevices = { q, source -> viewModel.searchDevices(q, source) },
             onApplyDevice = { entry, done -> viewModel.applyDevice(entry, done) },
             onClearDevice = { viewModel.clearDevice() },
+            outputCorrection = com.example.ui.screens.OutputCorrectionUi(
+              outputName = viewModel.output.collectAsStateWithLifecycle().value.name,
+              auto = viewModel.autoOutputCorrection.collectAsStateWithLifecycle().value,
+              suggestionQuery = viewModel.outputSuggestion.collectAsStateWithLifecycle().value?.query
+            ),
+            onSetAutoOutputCorrection = { viewModel.setAutoOutputCorrection(it) },
+            devicePickerRequest = viewModel.devicePickerRequest.collectAsStateWithLifecycle().value,
+            onDevicePickerOpened = { viewModel.devicePickerOpened() },
             onSetEnabled = { on -> viewModel.setEqEnabled(on) },
             onUpdateEq = { transform -> viewModel.updateEq(transform) },
             onUpdateBand = { index, transform -> viewModel.updateEqBand(index, transform) },
