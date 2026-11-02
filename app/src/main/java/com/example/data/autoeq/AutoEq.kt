@@ -95,28 +95,71 @@ object AutoEqParser {
   }
 }
 
-/** Downloads the AutoEq index once (cached for a week) and each fone's curve on demand. */
-class AutoEqRepository(context: Context) {
+/**
+ * The offline package in the app's assets (see tools/autoeq): every parametric profile of AutoEq, one
+ * per line — name, source, rig, path, preamp and the filters as AutoEq wrote them ("PK 105 6.4 0.70 1").
+ */
+object AutoEqBundle {
+  /** One packaged profile: its entry and its curve, still as text until it is chosen. */
+  class Profile(val entry: AutoEqEntry, val preampDb: String, val filters: String)
+
+  fun parse(text: String): List<Profile> = text.lineSequence().mapNotNull { line ->
+    if (line.isBlank() || line.startsWith("#")) return@mapNotNull null
+    val f = line.split('\t')
+    if (f.size < 6) return@mapNotNull null
+    Profile(AutoEqEntry(name = f[0], source = f[1], rig = f[2], path = f[3]), f[4], f[5])
+  }.toList()
+
+  /** The packaged curve, read by the same parser as a downloaded ParametricEQ.txt. */
+  fun correction(p: Profile): DeviceCorrection? {
+    val text = buildString {
+      append("Preamp: ").append(p.preampDb).append(" dB\n")
+      p.filters.split(';').forEachIndexed { i, s ->
+        val (type, fc, gain, q, on) = s.trim().split(' ').takeIf { it.size == 5 } ?: return@forEachIndexed
+        append("Filter ${i + 1}: ${if (on == "1") "ON" else "OFF"} $type Fc $fc Hz Gain $gain dB Q $q\n")
+      }
+    }
+    return AutoEqParser.parseParametric(text, p.entry)
+  }
+}
+
+/**
+ * Fone corrections: the offline package first, so the list and the curves work without internet; the
+ * online index (read at most once a week) adds fones measured after the package, downloaded on demand.
+ */
+class AutoEqRepository(private val context: Context) {
   private val cacheFile = File(context.filesDir, "autoeq_index.md")
   @Volatile private var entries: List<AutoEqEntry>? = null
+  @Volatile private var bundle: Map<String, AutoEqBundle.Profile>? = null
+
+  private fun bundled(): Map<String, AutoEqBundle.Profile> = bundle ?: runCatching {
+    context.assets.open(BUNDLE).use { raw ->
+      java.util.zip.GZIPInputStream(raw).bufferedReader().use { AutoEqBundle.parse(it.readText()) }
+    }.associateBy { it.entry.path }
+  }.getOrElse { emptyMap() }.also { bundle = it }
+
+  /** How many fones come with the app. */
+  val bundledCount: Int get() = bundle?.size ?: 0
 
   suspend fun index(forceRefresh: Boolean = false): List<AutoEqEntry> = withContext(Dispatchers.IO) {
     entries?.takeIf { !forceRefresh }?.let { return@withContext it }
+    val local = bundled()
     val fresh = cacheFile.exists() && System.currentTimeMillis() - cacheFile.lastModified() < WEEK_MS
-    val text = if (fresh && !forceRefresh) {
-      cacheFile.readText()
-    } else {
-      try {
-        download("$BASE/INDEX.md").also { cacheFile.writeText(it) }
-      } catch (e: Exception) {
-        // Offline: an old index is better than none.
-        if (cacheFile.exists()) cacheFile.readText() else throw e
-      }
+    val online: List<AutoEqEntry> = try {
+      val text = if (fresh && !forceRefresh) cacheFile.readText() else download("$BASE/INDEX.md").also { cacheFile.writeText(it) }
+      AutoEqParser.parseIndex(text)
+    } catch (e: Exception) {
+      // Offline: an old index, or the package alone.
+      if (cacheFile.exists()) AutoEqParser.parseIndex(cacheFile.readText()) else emptyList()
     }
-    AutoEqParser.parseIndex(text).also { entries = it }
+    if (local.isEmpty() && online.isEmpty()) throw IllegalStateException("Sem lista de fones")
+    // The package's entries, then what the online index has beyond them.
+    (local.values.map { it.entry } + online.filter { it.path !in local }).also { entries = it }
   }
 
+  /** The fone's curve: from the package when it is there, downloaded otherwise. */
   suspend fun correction(entry: AutoEqEntry): DeviceCorrection? = withContext(Dispatchers.IO) {
+    bundled()[entry.path]?.let { return@withContext AutoEqBundle.correction(it) }
     val folder = entry.path.substringAfterLast('/')
     AutoEqParser.parseParametric(download("$BASE/${entry.path}/$folder%20ParametricEQ.txt"), entry)
   }
@@ -136,5 +179,7 @@ class AutoEqRepository(context: Context) {
   companion object {
     private const val BASE = "https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results"
     private const val WEEK_MS = 7L * 24 * 60 * 60 * 1000
+    /** Gzipped text. Not named .gz: the Android build unpacks .gz assets and renames them. */
+    private const val BUNDLE = "autoeq/parametric.aeq"
   }
 }

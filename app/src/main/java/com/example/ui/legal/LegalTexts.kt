@@ -25,7 +25,7 @@ object LegalTexts {
   val summary = listOf(
     "Seus ajustes, favoritos e playlists ficam só neste aparelho. O T.A.R.K.A.S. não tem conta nem servidor próprio.",
     "Quando você busca no Início, o termo da busca vai para o Audius e o Jamendo, que entregam as músicas. O título e o artista da faixa vão ao MusicBrainz quando você abre Sobre a faixa.",
-    "A lista de fones do equalizador é baixada do projeto AutoEq, no GitHub.",
+    "As curvas de fones do equalizador vêm do projeto AutoEq e estão no próprio app; fones novos são buscados no GitHub.",
     "O assistente só usa IA online (Gemini) se uma chave for configurada no app.",
     "Você pode exportar ou apagar todos os seus dados em Ajustes > Privacidade, quando quiser."
   )
@@ -81,7 +81,7 @@ object LegalTexts {
         "• Audius: o texto que você busca no Início e os pedidos das faixas que você toca, para listar e transmitir as músicas. O Audius recebe também o endereço IP da conexão, como qualquer site.\n" +
         "• Jamendo: o texto que você busca no Início, o pedido das músicas populares e os pedidos das faixas que você toca, para listar e transmitir as músicas. O Jamendo recebe o IP da conexão e a identificação do app (não a sua).\n" +
         "• MusicBrainz e Cover Art Archive: o título e o artista da faixa, só quando você abre Sobre a faixa no player, para mostrar álbum, data, gêneros e capa. Recebem o IP da conexão.\n" +
-        "• GitHub (projeto AutoEq): pedidos para baixar a lista de fones e a curva do fone escolhido. Nenhum dado seu vai junto além do IP.\n" +
+        "• GitHub (projeto AutoEq): as curvas dos fones vêm no próprio app; até uma vez por semana ele consulta a lista do AutoEq para fones novos e baixa a curva de um fone novo quando você o escolhe. Nenhum dado seu vai junto além do IP.\n" +
         "• Google Gemini: só se uma chave de IA estiver configurada no app, as mensagens que você escreve ao assistente que não são comandos locais.\n" +
         "• Reconhecimento de voz e leitura em voz alta: feitos pelos serviços do próprio Android, segundo as regras do fabricante do seu aparelho.",
       "Permissões do aparelho" to
