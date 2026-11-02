@@ -60,6 +60,10 @@ class PlaybackController(
   private val _queue = MutableStateFlow<List<Track>>(emptyList())
   val queue: StateFlow<List<Track>> = _queue.asStateFlow()
 
+  private val _upcoming = MutableStateFlow<List<Track>>(emptyList())
+  /** What the list plays after the queue runs out (a few tracks), for the queue screen. */
+  val upcoming: StateFlow<List<Track>> = _upcoming.asStateFlow()
+
   private val _shuffle = MutableStateFlow(preferences.getShuffle())
   val shuffle: StateFlow<Boolean> = _shuffle.asStateFlow()
 
@@ -142,14 +146,16 @@ class PlaybackController(
   // ---- starting tracks ----
 
   /** Plays a track from the whole library. */
-  fun playTrack(track: Track) {
+  fun playTrack(track: Track, keepQueue: Boolean = true) {
+    if (!keepQueue) _queue.value = emptyList()
     contextTracks = null
     shuffleOrder = emptyList()
     playInternal(track, recordHistory = true)
   }
 
   /** Plays a track and keeps going through [list] (a playlist, favorites, search results...). */
-  fun playFromList(track: Track, list: List<Track>) {
+  fun playFromList(track: Track, list: List<Track>, keepQueue: Boolean = true) {
+    if (!keepQueue) _queue.value = emptyList()
     contextTracks = list
     // A track picked by hand starts a new shuffled pass from itself.
     shuffleOrder = emptyList()
@@ -282,6 +288,13 @@ class PlaybackController(
 
   private fun contextList(): List<Track> = contextTracks ?: musicRepository.tracks.value
 
+  private fun refreshUpcoming() {
+    val current = musicRepository.currentTrack.value
+    val list = contextList()
+    if (_shuffle.value) shuffleOrder = PlaybackOrder.shuffleOrderFor(list, current, shuffleOrder)
+    _upcoming.value = PlaybackOrder.upcoming(current, list, _shuffle.value, shuffleOrder, _repeatMode.value, UPCOMING_SHOWN)
+  }
+
   /** [PlaybackOrder.resolveNext] with the shuffled order kept here, so a pass plays every track once. */
   private fun resolveNext(auto: Boolean): PlaybackOrder.Next {
     val current = musicRepository.currentTrack.value
@@ -300,6 +313,7 @@ class PlaybackController(
    * narration, a web track or the end-of-track sleep timer sits between the two.
    */
   private fun refreshUpNext() {
+    refreshUpcoming()
     val current = musicRepository.currentTrack.value
     if (current == null || _sleepTimer.value?.endOfTrack == true || narratesOutro(current)) {
       audioEngine.setUpNext(null) {}
@@ -453,9 +467,30 @@ class PlaybackController(
 
   fun addToQueue(track: Track) = updateQueue(PlaybackOrder.enqueueLast(_queue.value, track))
 
-  fun removeFromQueue(index: Int) = updateQueue(PlaybackOrder.removeAt(_queue.value, index))
+  /** Removes the queue item at [index] and returns it, so it can be put back. */
+  fun removeFromQueue(index: Int): Track? {
+    val removed = _queue.value.getOrNull(index) ?: return null
+    updateQueue(PlaybackOrder.removeAt(_queue.value, index))
+    return removed
+  }
+
+  /** Plays [track] from the list that plays now, keeping the list and the queue. */
+  fun playFromCurrentList(track: Track) = playInternal(track, recordHistory = true)
+
+  /** Puts [track] back at [index] (an undone removal). */
+  fun restoreToQueue(index: Int, track: Track) {
+    val list = _queue.value.toMutableList()
+    list.add(index.coerceIn(0, list.size), track)
+    updateQueue(list)
+  }
 
   fun clearQueue() = updateQueue(emptyList())
+
+  /** Whether playing from [list] (null: the whole library) would keep the list that plays now. */
+  fun isCurrentContext(list: List<Track>?): Boolean {
+    val now = contextTracks
+    return if (list == null) now == null else now != null && now.map { it.id } == list.map { it.id }
+  }
 
   /** Moves the queue item at [from] to [to]. */
   fun moveInQueue(from: Int, to: Int) {
@@ -604,5 +639,7 @@ class PlaybackController(
     const val KEY_STATE = "state"
     const val KEY_POSITION = "pos"
     const val KEY_POSITION_TRACK = "pos_track"
+    /** How many of the list's next tracks the queue screen shows after the queue. */
+    const val UPCOMING_SHOWN = 20
   }
 }

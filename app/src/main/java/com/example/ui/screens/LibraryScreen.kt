@@ -146,6 +146,9 @@ fun LibraryScreen(
   onPlayQueueItem: (Int) -> Unit,
   onRemoveQueueItem: (Int) -> Unit,
   onClearQueue: () -> Unit,
+  upcoming: List<Track> = emptyList(),
+  onMoveQueueItem: (Int, Int) -> Unit = { _, _ -> },
+  onPlayUpcoming: (Track) -> Unit = {},
   openQueue: Boolean = false,
   onQueueOpened: () -> Unit = {},
   modifier: Modifier = Modifier
@@ -332,9 +335,12 @@ fun LibraryScreen(
 
             LibrarySection.QUEUE -> QueueList(
               queue = queue,
+              upcoming = upcoming,
               onPlay = onPlayQueueItem,
               onRemove = onRemoveQueueItem,
-              onClear = onClearQueue
+              onMove = onMoveQueueItem,
+              onClear = onClearQueue,
+              onPlayUpcoming = onPlayUpcoming
             )
           }
         }
@@ -721,70 +727,4 @@ private fun PlaylistDetail(
       )
     }
   )
-}
-
-@Composable
-private fun QueueList(
-  queue: List<Track>,
-  onPlay: (Int) -> Unit,
-  onRemove: (Int) -> Unit,
-  onClear: () -> Unit
-) {
-  LazyColumn(
-    modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
-  ) {
-    if (queue.isEmpty()) {
-      item(key = "empty") {
-        EmptyState(
-          icon = Icons.AutoMirrored.Rounded.QueueMusic,
-          title = "A fila está vazia",
-          message = "Use “Tocar em seguida” ou “Adicionar à fila” no menu de uma música.",
-          modifier = Modifier.padding(horizontal = Space.page)
-        )
-      }
-      return@LazyColumn
-    }
-    item(key = "header") {
-      Row(
-        modifier = Modifier
-          .fillMaxWidth()
-          .heightIn(min = Size.touch)
-          .padding(start = Space.page, end = Space.page - Space.s, top = Space.s),
-        verticalAlignment = Alignment.CenterVertically
-      ) {
-        Text(
-          "A seguir",
-          style = AppText.Title2,
-          color = MaterialTheme.colorScheme.onSurface,
-          modifier = Modifier
-            .weight(1f)
-            .semantics { heading() }
-        )
-        TextAction("Limpar", onClick = onClear, modifier = Modifier.testTag("library_clear_queue"))
-      }
-    }
-    // The queue may hold the same song twice, so the key pairs the position with the id. Removal goes
-    // by position, as the ViewModel's queue does.
-    itemsIndexed(queue, key = { index, track -> "$index-${track.id}" }) { index, track ->
-      Column(modifier = Modifier.listEntrance(index)) {
-        if (index > 0) TrackDivider()
-        TrackRow(
-          track = track,
-          subtitle = trackSubtitle(track),
-          onClick = { onPlay(index) },
-          modifier = Modifier.opensPlayer(),
-          trailing = {
-            IconAction(
-              icon = Icons.Rounded.Close,
-              contentDescription = "Remover ${track.title} da fila",
-              onClick = { onRemove(index) },
-              tint = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.trailingEdge()
-            )
-          }
-        )
-      }
-    }
-  }
 }

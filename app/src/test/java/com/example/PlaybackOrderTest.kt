@@ -226,6 +226,28 @@ class PlaybackOrderTest {
   }
 
   @Test
+  fun `after the queue the list goes on from the current track`() {
+    val list = listOf(a, b, c, d)
+    assertEquals(listOf(c, d), PlaybackOrder.upcoming(b, list, false, emptyList(), RepeatMode.OFF, 10))
+    assertEquals(listOf(c, d, a), PlaybackOrder.upcoming(b, list, false, emptyList(), RepeatMode.ALL, 10))
+    assertEquals(listOf(c), PlaybackOrder.upcoming(b, list, false, emptyList(), RepeatMode.OFF, 1))
+    assertTrue(PlaybackOrder.upcoming(b, list, false, emptyList(), RepeatMode.ONE, 10).isEmpty())
+    // Shuffled: the order of the pass, not the list's.
+    assertEquals(listOf(a, c), PlaybackOrder.upcoming(d, list, true, listOf("b", "d", "a", "c"), RepeatMode.OFF, 10))
+    // A track from outside the list: the list from its start.
+    assertEquals(listOf(a, b), PlaybackOrder.upcoming(track("x"), listOf(a, b), false, emptyList(), RepeatMode.OFF, 10))
+  }
+
+  @Test
+  fun `queue keys stay with their entry when it moves`() {
+    assertEquals(listOf("a#0", "b#0", "a#1"), PlaybackOrder.entryKeys(listOf(a, b, a)))
+    val before = PlaybackOrder.entryKeys(listOf(a, b, c))
+    val after = PlaybackOrder.entryKeys(listOf(c, a, b))
+    assertEquals(before.toSet(), after.toSet())
+    assertEquals("c#0", after.first())
+  }
+
+  @Test
   fun `a shuffled order starts at the chosen track`() {
     repeat(50) { assertEquals("b", PlaybackOrder.shuffled(library, "b", Random(it)).first()) }
   }

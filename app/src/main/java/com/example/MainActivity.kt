@@ -539,8 +539,7 @@ fun TarkasAppContent(
               viewModel.setTab(TarkasNavTab.MUSIC)
             },
             onPlayTrack = { track ->
-              viewModel.playTrack(track)
-              viewModel.setTab(TarkasNavTab.MUSIC)
+              if (viewModel.playTrack(track)) viewModel.setTab(TarkasNavTab.MUSIC)
             },
             trending = trending,
             onRetryTrending = { viewModel.loadTrending() },
@@ -599,8 +598,8 @@ fun TarkasAppContent(
             currentTrack = currentTrack,
             isPlaying = isPlaying,
             onPlayFromList = { track, list ->
-              viewModel.playFromList(track, list)
-              viewModel.setTab(TarkasNavTab.MUSIC)
+              // With songs waiting in the queue it asks first; the player opens once it plays.
+              if (viewModel.playFromList(track, list)) viewModel.setTab(TarkasNavTab.MUSIC)
             },
             onShuffleList = { list -> viewModel.shuffleFrom(list) },
             onCreatePlaylist = { name -> viewModel.createPlaylist(name) },
@@ -617,6 +616,12 @@ fun TarkasAppContent(
             },
             onRemoveQueueItem = { index -> viewModel.removeFromQueue(index) },
             onClearQueue = { viewModel.clearQueue() },
+            upcoming = viewModel.upcoming.collectAsStateWithLifecycle().value,
+            onMoveQueueItem = { from, to -> viewModel.moveInQueue(from, to) },
+            onPlayUpcoming = { track ->
+              viewModel.playFromCurrentList(track)
+              viewModel.setTab(TarkasNavTab.MUSIC)
+            },
             openQueue = openQueueRequest,
             onQueueOpened = { viewModel.queueOpened() }
           )
@@ -828,6 +833,31 @@ fun TarkasAppContent(
         // A short message (a track that could not play, a permission left off), over the mini player.
         // It goes away by itself after a few seconds (longer when the user relies on accessibility
         // services), or when its action is used. Its clock waits while a full-screen page hides it.
+        // Starting another list while queued songs wait: keep them (they play first) or clear them.
+        viewModel.listStartPrompt.collectAsStateWithLifecycle().value?.let { p ->
+          androidx.compose.material3.AlertDialog(
+            onDismissRequest = { viewModel.answerListStart(null) },
+            title = { Text("Manter a fila?", style = com.example.ui.theme.AppText.Title3) },
+            text = {
+              Text(
+                if (p.queued == 1) "A música que você enfileirou toca antes da nova lista, ou sai da fila."
+                else "As ${p.queued} músicas que você enfileirou tocam antes da nova lista, ou saem da fila.",
+                style = com.example.ui.theme.AppText.Body
+              )
+            },
+            confirmButton = {
+              androidx.compose.material3.TextButton(onClick = { viewModel.answerListStart(true) }, modifier = Modifier.testTag("list_start_keep")) {
+                Text("Manter")
+              }
+            },
+            dismissButton = {
+              androidx.compose.material3.TextButton(onClick = { viewModel.answerListStart(false) }, modifier = Modifier.testTag("list_start_clear")) {
+                Text("Limpar fila")
+              }
+            }
+          )
+        }
+
         var shownNotice by remember { mutableStateOf(notice) }
         if (notice != null) shownNotice = notice
         val accessibility = androidx.compose.ui.platform.LocalAccessibilityManager.current

@@ -372,9 +372,43 @@ class TarkasViewModel(
     savedState[KEY_BACK] = ArrayList(backStack.map { it.name })
   }
 
-  fun playTrack(track: Track) = playback.playTrack(track)
+  fun playTrack(track: Track) = startList(track, null)
 
-  fun playFromList(track: Track, list: List<Track>) = playback.playFromList(track, list)
+  fun playFromList(track: Track, list: List<Track>) = startList(track, list)
+
+  /** Starting another list while songs the user queued are waiting: keep them or clear them? */
+  data class ListStartPrompt(val track: Track, val list: List<Track>?, val queued: Int)
+
+  private val _listStartPrompt = MutableStateFlow<ListStartPrompt?>(null)
+  val listStartPrompt: StateFlow<ListStartPrompt?> = _listStartPrompt.asStateFlow()
+
+  /**
+   * [list] null plays from the whole library. Asks first when it replaces the list and the queue has
+   * songs; false then, and the answer ([answerListStart]) plays it.
+   */
+  private fun startList(track: Track, list: List<Track>?): Boolean {
+    val queued = playback.queue.value.size
+    if (queued > 0 && !playback.isCurrentContext(list)) {
+      _listStartPrompt.value = ListStartPrompt(track, list, queued)
+      return false
+    }
+    if (list == null) playback.playTrack(track) else playback.playFromList(track, list)
+    return true
+  }
+
+  /** The answer to [listStartPrompt]: null dismisses it without playing. Playing opens the player. */
+  fun answerListStart(keepQueue: Boolean?) {
+    val p = _listStartPrompt.value ?: return
+    _listStartPrompt.value = null
+    if (keepQueue == null) return
+    if (p.list == null) playback.playTrack(p.track, keepQueue) else playback.playFromList(p.track, p.list, keepQueue)
+    setTab(TarkasNavTab.MUSIC)
+  }
+
+  /** What the list plays after the queue runs out. */
+  val upcoming: StateFlow<List<Track>> get() = playback.upcoming
+
+  fun playFromCurrentList(track: Track) = playback.playFromCurrentList(track)
 
   fun togglePlayPause() = playback.togglePlayPause()
 
@@ -406,7 +440,11 @@ class TarkasViewModel(
     showNotice(Notice("“${track.title}” adicionada à fila."))
   }
 
-  fun removeFromQueue(index: Int) = playback.removeFromQueue(index)
+  /** Removes a queue item, with an undo on the notice. */
+  fun removeFromQueue(index: Int) {
+    val removed = playback.removeFromQueue(index) ?: return
+    showNotice(Notice("“${removed.title}” saiu da fila.", actionLabel = "Desfazer", action = { playback.restoreToQueue(index, removed) }))
+  }
 
   fun moveInQueue(from: Int, to: Int) = playback.moveInQueue(from, to)
 

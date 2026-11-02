@@ -90,6 +90,43 @@ object PlaybackOrder {
   }
 
   /**
+   * What the list plays after the queue runs out, in order: up to [limit] tracks after [current], in
+   * the shuffled order when [shuffle] is on. Wraps to the start only with repeat-all; with repeat-one
+   * the current track repeats, so nothing follows.
+   */
+  fun upcoming(
+    current: Track?,
+    list: List<Track>,
+    shuffle: Boolean,
+    shuffleOrder: List<String>,
+    repeat: RepeatMode,
+    limit: Int
+  ): List<Track> {
+    if (list.isEmpty() || repeat == RepeatMode.ONE || limit <= 0) return emptyList()
+    val ordered: List<Track> = if (shuffle) {
+      val byId = list.associateBy { it.id }
+      shuffleOrder.mapNotNull { byId[it] }
+    } else list
+    val i = ordered.indexOfFirst { it.id == current?.id }
+    val after = ordered.drop(i + 1)
+    val wrapped = if (repeat == RepeatMode.ALL) after + ordered.take(i.coerceAtLeast(0)) else after
+    return wrapped.take(limit)
+  }
+
+  /**
+   * Keys for the queue's rows that survive a move: the track id and which copy of it this is, since the
+   * queue may hold the same song twice.
+   */
+  fun entryKeys(queue: List<Track>): List<String> {
+    val seen = HashMap<String, Int>()
+    return queue.map { t ->
+      val n = seen.getOrDefault(t.id, 0)
+      seen[t.id] = n + 1
+      "${t.id}#$n"
+    }
+  }
+
+  /**
    * After a track failed: true to skip to the next one, false to stop and offer a retry. A lost
    * connection never skips, since every next track would fail the same way and the list would run out;
    * a bad file skips, up to [failuresInARow] 3.
