@@ -17,8 +17,9 @@ import kotlin.math.abs
  * The equalizer curve applied to other apps' audio sessions, with Android's own effects
  * (DynamicsProcessing on Android 9+, the 5-band Equalizer before). The app's parametric curve is
  * laid onto DynamicsProcessing's FFT bins ([DpCurve]): a bin per band in the bass and fractions of an
- * octave above, so Q, shelves and pass filters carry over; the limiter carries over too. Balance and
- * stereo width need the app's own processor and apply only to its playback.
+ * octave above, so Q, shelves and pass filters carry over; the limiter carries over too. The preamp
+ * and the balance go in the effect's input gain per channel. Stereo width needs the app's own
+ * processor and applies only to its playback.
  */
 class SessionEqualizer {
   private val effects = mutableMapOf<Int, AudioEffect>()
@@ -156,17 +157,25 @@ class SessionEqualizer {
     throw lastError ?: IllegalStateException("No DynamicsProcessing")
   }
 
-  /** The current curve on the current layout: computed once per settings change, for all sessions. */
-  private fun curveGains(stops: IntArray): FloatArray =
-    curve?.takeIf { it.size == stops.size }
-      ?: DpCurve.bandGains(stops, sampleRate, block) { f -> EqDsp.responseDb(settings, f, sampleRate) }
-        .also { g -> for (i in g.indices) g[i] = g[i].coerceIn(-MAX_DB, MAX_DB) }
-        .also { curve = it }
+  /**
+   * The current curve on the current layout, without the preamp (it goes in the input gain): computed
+   * once per settings change, for all sessions.
+   */
+  private fun curveGains(stops: IntArray): FloatArray {
+    curve?.takeIf { it.size == stops.size }?.let { return it }
+    val preamp = EqDsp.totalPreampDb(settings).toDouble()
+    return DpCurve.bandGains(stops, sampleRate, block) { f -> EqDsp.responseDb(settings, f, sampleRate) - preamp }
+      .also { g -> for (i in g.indices) g[i] = g[i].coerceIn(-MAX_DB, MAX_DB) }
+      .also { curve = it }
+  }
 
   @androidx.annotation.RequiresApi(Build.VERSION_CODES.P)
   private fun applyDynamics(sessionId: Int, dp: DynamicsProcessing) {
     val stops = layout ?: return
     val gains = curveGains(stops)
+    val input = DpCurve.inputGainsDb(EqDsp.totalPreampDb(settings), settings.balance)
+    dp.setInputGainbyChannel(0, input[0])
+    dp.setInputGainbyChannel(1, input[1])
     val last = sent[sessionId]
     for (i in stops.indices) {
       // During a drag most bands do not move: only the ones that changed are sent (a call each).
@@ -174,10 +183,11 @@ class SessionEqualizer {
       dp.setPreEqBandAllChannelsTo(i, DynamicsProcessing.EqBand(true, DpCurve.cutoffHz(stops[i], sampleRate, block), gains[i]))
     }
     sent[sessionId] = gains.copyOf()
+    // Close to a brick wall (ratio 50: 6 dB over the ceiling comes out 0.12 dB over), fast to let go.
     dp.setLimiterAllChannelsTo(
       DynamicsProcessing.Limiter(
         true, settings.limiterEnabled, 0,
-        1f, 60f, 10f, settings.limiterCeilingDb, 0f
+        1f, 75f, 50f, settings.limiterCeilingDb, 0f
       )
     )
   }

@@ -69,6 +69,8 @@ class PlaybackController(
   // null = the whole library; otherwise the playlist/favorites/results the user started from.
   private var contextTracks: List<Track>? = null
   private val playHistory = mutableListOf<Track>()
+  /** With shuffle on: the order of the current pass through the list (track ids). */
+  private var shuffleOrder = emptyList<String>()
 
   private val _curiosityConfig = MutableStateFlow(preferences.getCuriosityConfig())
   val curiosityConfig: StateFlow<CuriosityConfig> = _curiosityConfig.asStateFlow()
@@ -142,12 +144,15 @@ class PlaybackController(
   /** Plays a track from the whole library. */
   fun playTrack(track: Track) {
     contextTracks = null
+    shuffleOrder = emptyList()
     playInternal(track, recordHistory = true)
   }
 
   /** Plays a track and keeps going through [list] (a playlist, favorites, search results...). */
   fun playFromList(track: Track, list: List<Track>) {
     contextTracks = list
+    // A track picked by hand starts a new shuffled pass from itself.
+    shuffleOrder = emptyList()
     playInternal(track, recordHistory = true)
   }
 
@@ -210,18 +215,35 @@ class PlaybackController(
     }
   }
 
-  /** Says what went wrong and moves on, unless several tracks in a row failed (offline, say). */
+  /**
+   * Says what went wrong. A bad file moves on to the next track, unless several failed in a row; a lost
+   * connection stops on this track, and the retry goes on from where it stopped.
+   */
   private fun onTrackFailed(track: Track, network: Boolean) {
     failuresInARow++
     _starting.value = false
-    val reason = if (network) "Sem conexão para tocar “${track.title}”." else "Não foi possível tocar “${track.title}”."
-    val canSkip = failuresInARow < 3 && (contextList().size > 1 || _queue.value.isNotEmpty())
-    if (canSkip) {
-      _notices.tryEmit(PlaybackNotice("$reason Pulando para a próxima."))
-      advance(auto = false)
-    } else {
-      _notices.tryEmit(
-        PlaybackNotice(reason, actionLabel = "Tentar de novo", action = { failuresInARow = 0; playInternal(track, recordHistory = false) })
+    val canAdvance = contextList().size > 1 || _queue.value.isNotEmpty()
+    when {
+      PlaybackOrder.skipAfterFailure(network, failuresInARow, canAdvance) -> {
+        _notices.tryEmit(PlaybackNotice("Não foi possível tocar “${track.title}”. Pulando para a próxima."))
+        advance(auto = false)
+      }
+      network -> {
+        val at = audioEngine.lastErrorPositionMs
+        _notices.tryEmit(
+          PlaybackNotice(
+            "Sem conexão para tocar “${track.title}”. Confira a internet e toque em Tentar de novo.",
+            actionLabel = "Tentar de novo",
+            action = { failuresInARow = 0; startTrackAudio(track, startPositionMs = at) }
+          )
+        )
+      }
+      else -> _notices.tryEmit(
+        PlaybackNotice(
+          "Não foi possível tocar “${track.title}”.",
+          actionLabel = "Tentar de novo",
+          action = { failuresInARow = 0; playInternal(track, recordHistory = false) }
+        )
       )
     }
   }
@@ -260,6 +282,17 @@ class PlaybackController(
 
   private fun contextList(): List<Track> = contextTracks ?: musicRepository.tracks.value
 
+  /** [PlaybackOrder.resolveNext] with the shuffled order kept here, so a pass plays every track once. */
+  private fun resolveNext(auto: Boolean): PlaybackOrder.Next {
+    val current = musicRepository.currentTrack.value
+    val list = contextList()
+    if (_shuffle.value) shuffleOrder = PlaybackOrder.shuffleOrderFor(list, current, shuffleOrder)
+    return PlaybackOrder.resolveNext(
+      current = current, queue = _queue.value, list = list,
+      shuffle = _shuffle.value, repeat = _repeatMode.value, auto = auto, shuffleOrder = shuffleOrder
+    )
+  }
+
   // ---- gapless ----
 
   /**
@@ -272,10 +305,7 @@ class PlaybackController(
       audioEngine.setUpNext(null) {}
       return
     }
-    val next = PlaybackOrder.resolveNext(
-      current = current, queue = _queue.value, list = contextList(),
-      shuffle = _shuffle.value, repeat = _repeatMode.value, auto = true
-    )
+    val next = resolveNext(auto = true)
     val track = next.track
     if (track == null || track.filePath == null || (!next.loopSameTrack && narratesIntro(track))) {
       audioEngine.setUpNext(null) {}
@@ -288,6 +318,7 @@ class PlaybackController(
   private fun onGaplessAdvance(next: PlaybackOrder.Next, track: Track) {
     failuresInARow = 0
     _queue.value = next.remainingQueue
+    next.shuffleOrder?.let { shuffleOrder = it }
     if (!next.loopSameTrack) {
       musicRepository.currentTrack.value?.let { prev ->
         val updated = PlaybackOrder.pushHistory(playHistory, prev, track)
@@ -351,15 +382,9 @@ class PlaybackController(
     speech.stopSpeech()
     afterNarration = null
     resumeAfterNarration = null
-    val next = PlaybackOrder.resolveNext(
-      current = musicRepository.currentTrack.value,
-      queue = _queue.value,
-      list = contextList(),
-      shuffle = _shuffle.value,
-      repeat = _repeatMode.value,
-      auto = auto
-    )
+    val next = resolveNext(auto)
     _queue.value = next.remainingQueue
+    next.shuffleOrder?.let { shuffleOrder = it }
     val track = next.track ?: run { _starting.value = false; save(); return }
     if (next.loopSameTrack) startTrackAudio(track) else playInternal(track, recordHistory = true)
   }
@@ -402,6 +427,8 @@ class PlaybackController(
   fun toggleShuffle() = setShuffle(!_shuffle.value)
 
   fun setShuffle(on: Boolean) {
+    // On: a new pass from the current track. Off: the list's own order goes on from here.
+    if (on != _shuffle.value) shuffleOrder = emptyList()
     _shuffle.value = on
     preferences.saveShuffle(on)
     refreshUpNext()

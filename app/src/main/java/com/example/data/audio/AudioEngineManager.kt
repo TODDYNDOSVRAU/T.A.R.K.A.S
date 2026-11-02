@@ -105,6 +105,9 @@ class AudioEngineManager(private val context: Context) {
   private var completionCallback: () -> Unit = {}
   /** Called when the track cannot play; true when the cause is the network. */
   private var errorCallback: (network: Boolean) -> Unit = {}
+  /** Where the last failed track was when it failed, so a retry can go on from there. */
+  var lastErrorPositionMs = 0L
+    private set
 
   private val coroutineScope = CoroutineScope(Dispatchers.Main + Job())
   private var progressJob: Job? = null
@@ -350,6 +353,7 @@ class AudioEngineManager(private val context: Context) {
       Log.e(TAG, "Player error: ${error.errorCodeName}", error)
       val network = error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
         error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+      lastErrorPositionMs = player?.currentPosition?.coerceAtLeast(0L) ?: 0L
       stopPlayback()
       errorCallback(network)
     }

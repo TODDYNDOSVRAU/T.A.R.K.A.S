@@ -18,12 +18,15 @@ object PlaybackOrder {
   data class Next(
     val track: Track?,
     val remainingQueue: List<Track>,
-    val loopSameTrack: Boolean = false
+    val loopSameTrack: Boolean = false,
+    /** With shuffle, the order to keep from now on (a new one once a pass through the list ended). */
+    val shuffleOrder: List<String>? = null
   )
 
   /**
    * @param list the playback context: the whole library, or the playlist/favorites being played
    * @param auto true when the track ended by itself, false when the user pressed Next
+   * @param shuffleOrder the shuffled order in use (track ids, see [shuffleOrderFor])
    */
   fun resolveNext(
     current: Track?,
@@ -32,7 +35,8 @@ object PlaybackOrder {
     shuffle: Boolean,
     repeat: RepeatMode,
     auto: Boolean,
-    random: Random = Random.Default
+    random: Random = Random.Default,
+    shuffleOrder: List<String> = emptyList()
   ): Next {
     // Repeat-one only applies when a track ends by itself; the Next button always moves on.
     if (auto && repeat == RepeatMode.ONE && current != null) {
@@ -42,8 +46,18 @@ object PlaybackOrder {
     if (list.isEmpty()) return Next(null, queue)
 
     if (shuffle) {
-      val pool = if (list.size > 1) list.filter { it.id != current?.id } else list
-      return Next(pool.random(random), queue)
+      // Every track once before any repeats, like the list itself but in another order.
+      val order = shuffleOrderFor(list, current, shuffleOrder, random)
+      val byId = list.associateBy { it.id }
+      val i = order.indexOf(current?.id)
+      if (i < order.lastIndex) return Next(byId[order[i + 1]], queue, shuffleOrder = order)
+      // The pass ended: a new order with the same rule as the end of the list.
+      if (repeat != RepeatMode.ALL && auto) return Next(null, queue, shuffleOrder = order)
+      val fresh = shuffled(list, null, random).let { o ->
+        // The track that just ended does not open the next pass.
+        if (o.size > 1 && o.first() == current?.id) o.drop(1) + o.first() else o
+      }
+      return Next(byId[fresh.first()], queue, shuffleOrder = fresh)
     }
 
     val nextIndex = list.indexOfFirst { it.id == current?.id } + 1
@@ -55,6 +69,33 @@ object PlaybackOrder {
     }
     return Next(track, queue)
   }
+
+  /**
+   * [order] when it still fits [list] and holds [current]; otherwise a new shuffled order that starts at
+   * [current] (or anywhere when it is not in the list). Turning shuffle off needs nothing: the list
+   * itself is the original order, and play goes on from the current track.
+   */
+  fun shuffleOrderFor(list: List<Track>, current: Track?, order: List<String>, random: Random = Random.Default): List<String> {
+    val fits = order.size == list.size &&
+      (current == null || current.id in order || list.none { it.id == current.id }) &&
+      order.toSet() == list.mapTo(HashSet()) { it.id }
+    return if (fits) order else shuffled(list, current?.id, random)
+  }
+
+  /** A uniform permutation of [list]'s ids; [firstId], when in the list, goes first. */
+  fun shuffled(list: List<Track>, firstId: String?, random: Random = Random.Default): List<String> {
+    val ids = list.map { it.id }.distinct().shuffled(random)
+    if (firstId == null || firstId !in ids) return ids
+    return listOf(firstId) + ids.filter { it != firstId }
+  }
+
+  /**
+   * After a track failed: true to skip to the next one, false to stop and offer a retry. A lost
+   * connection never skips, since every next track would fail the same way and the list would run out;
+   * a bad file skips, up to [failuresInARow] 3.
+   */
+  fun skipAfterFailure(network: Boolean, failuresInARow: Int, canAdvance: Boolean): Boolean =
+    !network && failuresInARow < 3 && canAdvance
 
   fun nextRepeatMode(mode: RepeatMode): RepeatMode = when (mode) {
     RepeatMode.OFF -> RepeatMode.ALL

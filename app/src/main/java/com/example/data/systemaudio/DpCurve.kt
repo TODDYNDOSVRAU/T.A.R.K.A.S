@@ -111,6 +111,24 @@ object DpCurve {
     }
   }
 
+  /** The deepest cut the input gain makes: a channel turned fully to the other side. */
+  const val MIN_INPUT_DB = -48f
+
+  /**
+   * The effect's input gain for the left and right channel, in dB: the preamp and the balance. The
+   * effect applies it before the bands, so a curve with boosts gets its headroom before any band
+   * raises the level, and the balance reaches other apps too. [balance] goes from -1 (left only) to 1.
+   */
+  fun inputGainsDb(preampDb: Float, balance: Float): FloatArray {
+    fun side(gain: Float): Float =
+      if (gain <= 0f) MIN_INPUT_DB else (preampDb + 20f * kotlin.math.log10(gain)).coerceAtLeast(MIN_INPUT_DB)
+    val b = balance.coerceIn(-1f, 1f)
+    return floatArrayOf(
+      if (b <= 0f) preampDb.coerceAtLeast(MIN_INPUT_DB) else side(1f - b),
+      if (b >= 0f) preampDb.coerceAtLeast(MIN_INPUT_DB) else side(1f + b)
+    )
+  }
+
   /** The gain the effect applies at bin [bin], for checking a layout against the exact curve. */
   fun gainAtBin(bin: Int, stops: IntArray, gains: FloatArray): Float {
     for (i in stops.indices) if (bin <= stops[i]) return gains[i]

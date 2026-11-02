@@ -298,8 +298,8 @@ internal fun EqAdvancedPage(
         if (eqReach == EqReach.APP) {
           "No modo sem root, o equalizador processa só o que o T.A.R.K.A.S. toca. Para os outros apps, escolha ADB ou root em Alcance."
         } else {
-          "Nos outros apps valem a correção do fone, as bandas, o grave, o agudo, o pré-amplificador e o limitador. Balanço, " +
-            "largura estéreo e virtualizador valem só para o que o T.A.R.K.A.S. toca. Alguns apps protegidos (chamadas, DRM) podem recusar o efeito. " +
+          "Nos outros apps valem a correção do fone, as bandas, o grave, o agudo, o pré-amplificador, o limitador e, no Android 9 ou mais novo, o balanço. " +
+            "Largura estéreo e virtualizador valem só para o que o T.A.R.K.A.S. toca. Alguns apps protegidos (chamadas, DRM) podem recusar o efeito. " +
             "Para seguir a curva até nos graves, o som dos outros apps passa a sair cerca de 85 ms atrasado: em vídeos, a voz pode ficar um pouco fora de sincronia."
         },
         modifier = Modifier.padding(top = Space.xl)
