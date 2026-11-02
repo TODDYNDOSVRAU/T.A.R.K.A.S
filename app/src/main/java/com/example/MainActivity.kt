@@ -619,6 +619,8 @@ fun TarkasAppContent(
             upcoming = viewModel.upcoming.collectAsStateWithLifecycle().value,
             initialSongOrder = viewModel.songOrder,
             onSongOrderChange = { viewModel.setSongOrder(it) },
+            playCounts = viewModel.playCounts.collectAsStateWithLifecycle().value,
+            onNeedPlayCounts = { viewModel.loadPlayCounts() },
             onMoveQueueItem = { from, to -> viewModel.moveInQueue(from, to) },
             onPlayUpcoming = { track ->
               viewModel.playFromCurrentList(track)

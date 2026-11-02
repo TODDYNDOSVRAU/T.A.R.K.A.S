@@ -416,6 +416,11 @@ class TarkasViewModel(
 
   fun setSongOrder(order: com.example.data.playback.SongOrder) = preferencesRepository.saveSongOrder(order.key)
 
+  /** Plays counted on this device per track, for "Mais tocadas". */
+  val playCounts: StateFlow<Map<String, Int>> get() = playback.playCounts
+
+  fun loadPlayCounts() = playback.loadPlayCounts()
+
   fun togglePlayPause() = playback.togglePlayPause()
 
   fun pause() = playback.pause()
@@ -808,6 +813,8 @@ class TarkasViewModel(
       .put("exportedAt", java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.US).format(java.util.Date()))
       .put("preferences", prefsJson("tarkas_prefs"))
       .put("library", prefsJson("tarkas_library"))
+      // Per track: "plays|skips|last played ms|last skipped ms".
+      .put("playStats", prefsJson(com.example.data.playback.PlayStatsStore.FILE))
       .toString(2)
   }
 

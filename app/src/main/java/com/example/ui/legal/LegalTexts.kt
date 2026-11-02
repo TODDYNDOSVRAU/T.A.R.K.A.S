@@ -75,7 +75,7 @@ object LegalTexts {
         "O controlador dos dados é $CONTROLLER, desenvolvedor do T.A.R.K.A.S. Contato para assuntos de privacidade e para exercer seus direitos: " +
         "$CONTACT_EMAIL, ou $CONTACT_INSTAGRAM no Instagram.",
       "Dados que ficam só no seu aparelho" to
-        "Ajustes do app (tema, aparência, equalizador e predefinições), favoritos, playlists, a fila de reprodução e a aceitação destes termos (versão e data). " +
+        "Ajustes do app (tema, aparência, equalizador e predefinições), favoritos, playlists, a fila de reprodução, quantas vezes cada música foi ouvida ou pulada (para a ordem Mais tocadas) e a aceitação destes termos (versão e data). " +
         "Esses dados não são enviados para nenhum servidor nosso: o T.A.R.K.A.S. não tem servidor nem conta de usuário.",
       "Dados enviados a terceiros, e para quê" to
         "• Audius: o texto que você busca no Início e os pedidos das faixas que você toca, para listar e transmitir as músicas. O Audius recebe também o endereço IP da conexão, como qualquer site.\n" +

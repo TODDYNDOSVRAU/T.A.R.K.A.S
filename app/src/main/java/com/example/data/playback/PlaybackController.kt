@@ -14,6 +14,7 @@ import com.example.data.repository.MusicRepository
 import com.example.data.repository.PreferencesRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
@@ -59,6 +60,15 @@ class PlaybackController(
   // Playback order: manual queue ("Up Next") first, then the playback context.
   private val _queue = MutableStateFlow<List<Track>>(emptyList())
   val queue: StateFlow<List<Track>> = _queue.asStateFlow()
+
+  // Play and skip counters (declared before init, which restores the last track).
+  private val stats = PlayStatsStore(context)
+  /** The track whose end is not recorded yet: set when its audio starts, cleared when it ends. */
+  private var unrecorded: Track? = null
+  private val _playCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
+  /** How many times each track counted as played, for "Mais tocadas". Loaded on first use. */
+  val playCounts: StateFlow<Map<String, Int>> = _playCounts.asStateFlow()
+  private var playCountsLoaded = false
 
   private val _upcoming = MutableStateFlow<List<Track>>(emptyList())
   /** What the list plays after the queue runs out (a few tracks), for the queue screen. */
@@ -162,8 +172,31 @@ class PlaybackController(
     playInternal(track, recordHistory = true)
   }
 
-  /** Plays [track] as the current one, with its start-of-track curiosity when there is one. */
-  private fun playInternal(track: Track, recordHistory: Boolean) {
+  // ---- play and skip counters ----
+
+  fun loadPlayCounts() {
+    if (playCountsLoaded) return
+    playCountsLoaded = true
+    scope.launch { _playCounts.value = withContext(Dispatchers.IO) { stats.allPlays() } }
+  }
+
+  /** Records how the current track ended (see [PlayRules]); nothing when it was recorded already. */
+  private fun recordEnd(reason: EndReason) {
+    val t = unrecorded ?: return
+    unrecorded = null
+    if (t.isDemo) return
+    val duration = t.durationMs.takeIf { it > 0 } ?: durationMs.value
+    val played = if (reason == EndReason.NATURAL) duration else positionMs.value
+    val after = stats.record(t.id, reason, played, duration)
+    if (playCountsLoaded && _playCounts.value[t.id] != after.plays) _playCounts.value = _playCounts.value + (t.id to after.plays)
+  }
+
+  /**
+   * Plays [track] as the current one, with its start-of-track curiosity when there is one. [reason] is
+   * how the track playing until now ends.
+   */
+  private fun playInternal(track: Track, recordHistory: Boolean, reason: EndReason = EndReason.NEW_SELECTION) {
+    recordEnd(reason)
     if (recordHistory) {
       musicRepository.currentTrack.value?.let { prev ->
         val updated = PlaybackOrder.pushHistory(playHistory, prev, track)
@@ -207,6 +240,9 @@ class PlaybackController(
   private fun startTrackAudio(track: Track, startPositionMs: Long = 0L) {
     val path = track.filePath
     _starting.value = true
+    // Repeat-one restarts the same track: its last round ended by itself.
+    if (unrecorded?.id == track.id && startPositionMs == 0L) recordEnd(EndReason.NATURAL)
+    unrecorded = track
     if (path == null) {
       onTrackFailed(track, network = false)
     } else {
@@ -262,6 +298,7 @@ class PlaybackController(
   private fun onTrackPlaybackCompleted(completedTrack: Track) {
     if (_sleepTimer.value?.endOfTrack == true) {
       // The sleep timer was set to the end of this track: stop here.
+      recordEnd(EndReason.NATURAL)
       _sleepTimer.value = null
       _starting.value = false
       audioEngine.stopPlayback()
@@ -336,6 +373,8 @@ class PlaybackController(
 
   /** The player moved on to the queued track by itself: catch the rest of the state up. */
   private fun onGaplessAdvance(next: PlaybackOrder.Next, track: Track) {
+    recordEnd(EndReason.NATURAL)
+    unrecorded = track
     failuresInARow = 0
     _queue.value = next.remainingQueue
     next.shuffleOrder?.let { shuffleOrder = it }
@@ -399,6 +438,8 @@ class PlaybackController(
 
   /** [auto] is true when the track ended by itself; false for the Next button. */
   private fun advance(auto: Boolean) {
+    // Recorded here too, since the end of the list plays nothing after it.
+    recordEnd(if (auto) EndReason.NATURAL else EndReason.SKIP_FORWARD)
     speech.stopSpeech()
     afterNarration = null
     resumeAfterNarration = null
@@ -428,7 +469,7 @@ class PlaybackController(
       val i = list.indexOfFirst { it.id == musicRepository.currentTrack.value?.id }
       list.getOrNull(if (i > 0) i - 1 else list.lastIndex)
     }
-    if (prev != null) playInternal(prev, recordHistory = false)
+    if (prev != null) playInternal(prev, recordHistory = false, reason = EndReason.SKIP_BACKWARD)
   }
 
   /** True when Next has somewhere to go, for the media session's buttons. */
@@ -606,6 +647,8 @@ class PlaybackController(
       _activeCuriosity.value = curiosityRepository.getCuriosityForTrack(track)
       val path = track.filePath
       if (path != null) {
+        // Resumed later, it counts like any other track.
+        unrecorded = track
         audioEngine.playTrack(
           path,
           onCompletion = { onTrackPlaybackCompleted(track) },

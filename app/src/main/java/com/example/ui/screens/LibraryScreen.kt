@@ -155,6 +155,9 @@ fun LibraryScreen(
   upcoming: List<Track> = emptyList(),
   initialSongOrder: com.example.data.playback.SongOrder = com.example.data.playback.SongOrder.TITLE,
   onSongOrderChange: (com.example.data.playback.SongOrder) -> Unit = {},
+  /** Plays counted on this device per track id, for "Mais tocadas"; [onNeedPlayCounts] loads them. */
+  playCounts: Map<String, Int> = emptyMap(),
+  onNeedPlayCounts: () -> Unit = {},
   onMoveQueueItem: (Int, Int) -> Unit = { _, _ -> },
   onPlayUpcoming: (Track) -> Unit = {},
   openQueue: Boolean = false,
@@ -164,7 +167,10 @@ fun LibraryScreen(
   var section by rememberSaveable { mutableStateOf(LibrarySection.SONGS) }
   var songOrder by remember { mutableStateOf(initialSongOrder) }
   // Sorted off the main thread would need a loading state; collation keys make this fast enough.
-  val sortedSongs = remember(deviceTracks, songOrder) { com.example.data.playback.LibrarySort.sorted(deviceTracks, songOrder) }
+  val sortedSongs = remember(deviceTracks, songOrder, playCounts) {
+    com.example.data.playback.LibrarySort.sorted(deviceTracks, songOrder, playCounts)
+  }
+  LaunchedEffect(songOrder) { if (songOrder == com.example.data.playback.SongOrder.MOST_PLAYED) onNeedPlayCounts() }
   var openPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
   // Dialogs are saved by id, so a rotation keeps them open on the same playlist.
   var showNewPlaylist by rememberSaveable { mutableStateOf(false) }
@@ -299,6 +305,12 @@ fun LibraryScreen(
                 }
               },
               index = { com.example.data.playback.LibrarySort.section(it, songOrder) },
+              subtitle = { t ->
+                val n = playCounts[t.id] ?: 0
+                if (songOrder == com.example.data.playback.SongOrder.MOST_PLAYED && n > 0) {
+                  "${if (n == 1) "1 reprodução" else "$n reproduções"} · ${trackSubtitle(t)}"
+                } else trackSubtitle(t)
+              },
               empty = {
                 when {
                   !musicAllowed -> MusicPermissionPrompt(
@@ -522,6 +534,8 @@ private fun TrackList(
   header: LazyListScope.() -> Unit = {},
   /** The A–Z letter of a track; with it, a letter strip on the right jumps through the list. */
   index: ((Track) -> String?)? = null,
+  /** A row's second line, when it should say more than artist and source. */
+  subtitle: (Track) -> String = { trackSubtitle(it) },
   trailing: (@Composable RowScope.(Track) -> Unit)? = null
 ) {
   val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -549,7 +563,7 @@ private fun TrackList(
           if (index > 0) TrackDivider()
           TrackRow(
             track = track,
-            subtitle = trackSubtitle(track),
+            subtitle = subtitle(track),
             onClick = { onPlay(track) },
             isCurrent = currentTrack?.id == track.id,
             isPlaying = isPlaying,

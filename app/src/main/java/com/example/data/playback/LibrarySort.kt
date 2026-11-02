@@ -10,7 +10,9 @@ enum class SongOrder(val key: String, val label: String) {
   ARTIST("artist", "Artista"),
   ALBUM("album", "Álbum"),
   /** Newest files first. */
-  RECENT("recent", "Recentes");
+  RECENT("recent", "Recentes"),
+  /** Most plays first (counted on this device, see PlayRules). */
+  MOST_PLAYED("most_played", "Mais tocadas");
 
   companion object {
     fun fromKey(key: String?): SongOrder = entries.firstOrNull { it.key == key } ?: TITLE
@@ -33,8 +35,9 @@ object LibrarySort {
     return if (article != null) folded.substring(article.length) else folded
   }
 
-  fun sorted(tracks: List<Track>, order: SongOrder): List<Track> {
+  fun sorted(tracks: List<Track>, order: SongOrder, plays: Map<String, Int> = emptyMap()): List<Track> {
     if (order == SongOrder.RECENT) return tracks.sortedWith(compareByDescending<Track> { it.dateAddedSec }.thenBy { sortName(it.title) })
+    if (order == SongOrder.MOST_PLAYED) return tracks.sortedWith(compareByDescending<Track> { plays[it.id] ?: 0 }.thenBy { sortName(it.title) })
     val collator = Collator.getInstance().apply { strength = Collator.PRIMARY }
     // Collation keys once per track: comparing them is cheap, building them is not.
     val keyed = tracks.map { t ->
@@ -42,7 +45,7 @@ object LibrarySort {
         SongOrder.TITLE -> t.title
         SongOrder.ARTIST -> t.artist
         SongOrder.ALBUM -> t.album.ifBlank { "￿" }
-        SongOrder.RECENT -> t.title
+        SongOrder.RECENT, SongOrder.MOST_PLAYED -> t.title
       }
       Triple(t, collator.getCollationKey(sortName(primary)), collator.getCollationKey(sortName(t.album)))
     }
@@ -61,7 +64,7 @@ object LibrarySort {
       SongOrder.TITLE -> track.title
       SongOrder.ARTIST -> track.artist
       SongOrder.ALBUM -> track.album
-      SongOrder.RECENT -> return null
+      SongOrder.RECENT, SongOrder.MOST_PLAYED -> return null
     }
     val c = sortName(name).firstOrNull() ?: return "#"
     return if (c in 'a'..'z') c.uppercaseChar().toString() else "#"
