@@ -541,12 +541,14 @@ class PlaybackController(
     store.edit()
       .putString(KEY_STATE, o.toString())
       .putLong(KEY_POSITION, positionMs.value)
+      .putString(KEY_POSITION_TRACK, current.id)
       .apply()
   }
 
+  /** The position goes with the track it belongs to, so a lost write never moves another track. */
   private fun savePosition() {
     val current = musicRepository.currentTrack.value ?: return
-    store.edit().putLong(KEY_POSITION, positionMs.value).apply()
+    store.edit().putLong(KEY_POSITION, positionMs.value).putString(KEY_POSITION_TRACK, current.id).apply()
   }
 
   /** Puts back the track, its position, the queue and the list it came from, paused. */
@@ -569,7 +571,9 @@ class PlaybackController(
           // A file that is gone since: forget it quietly instead of skipping through the list.
           onError = { audioEngine.stopPlayback() },
           // Older saves kept the position inside the JSON.
-          startPositionMs = store.getLong(KEY_POSITION, o.optLong("pos", 0L)),
+          // Saves before the track id was kept with the position are trusted as they are.
+          startPositionMs = store.getString(KEY_POSITION_TRACK, null)
+            .let { owner -> if (owner == null || owner == track.id) store.getLong(KEY_POSITION, o.optLong("pos", 0L)) else 0L },
           autoStart = false,
           loudnessKey = track.id
         )
@@ -599,5 +603,6 @@ class PlaybackController(
     const val SLEEP_FADE_MS = 6000L
     const val KEY_STATE = "state"
     const val KEY_POSITION = "pos"
+    const val KEY_POSITION_TRACK = "pos_track"
   }
 }

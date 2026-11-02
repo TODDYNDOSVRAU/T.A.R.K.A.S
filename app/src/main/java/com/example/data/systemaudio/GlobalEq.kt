@@ -41,7 +41,9 @@ data class GlobalEqStatus(
   /** Sessions carrying Tarkas Spatial (Android's Virtualizer) right now. */
   val spatialApps: Int = 0,
   /** The device refused the Virtualizer: no spatial for other apps here. */
-  val spatialUnsupported: Boolean = false
+  val spatialUnsupported: Boolean = false,
+  /** Apps where another equalizer app has the control of the effect, so this curve is not heard. */
+  val appsWithoutControl: Int = 0
 )
 
 /** Shared between the view model (which owns the curve) and [GlobalEqService] (which applies it). */
@@ -62,4 +64,10 @@ object GlobalEq {
   internal fun publish(status: GlobalEqStatus) {
     _status.value = status
   }
+
+  /** On/off asked from outside the app's screens (the quick settings tile); the view model applies it. */
+  val enabledRequests = kotlinx.coroutines.flow.MutableSharedFlow<Boolean>(extraBufferCapacity = 4)
+
+  /** Whether a view model collects [enabledRequests]; otherwise the tile writes the preference itself. */
+  @Volatile var appListening = false
 }

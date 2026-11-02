@@ -342,6 +342,10 @@ private fun MainSettings(
         title = "Saída atual",
         value = "${capabilities.activeRouteName} · ${String.format("%.1f", capabilities.sampleRateHz / 1000f)} kHz"
       )
+      capabilities.trackFormat?.let { format ->
+        GroupDivider()
+        InfoRow(title = "Faixa tocando", value = format)
+      }
     }
 
     // Catálogos online

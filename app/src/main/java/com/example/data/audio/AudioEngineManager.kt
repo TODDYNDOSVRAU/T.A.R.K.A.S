@@ -110,6 +110,8 @@ class AudioEngineManager(private val context: Context) {
   /** Where the last failed track was when it failed, so a retry can go on from there. */
   var lastErrorPositionMs = 0L
     private set
+  /** The format of the track that plays now, as its file states it. */
+  private var currentFormat: TrackFormat? = null
 
   private val coroutineScope = CoroutineScope(Dispatchers.Main + Job())
   private var progressJob: Job? = null
@@ -367,19 +369,44 @@ class AudioEngineManager(private val context: Context) {
       val audio = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO && it.isSelected }
       if (audio.isEmpty()) return
       val pairs = mutableListOf<Pair<String, String>>()
+      var format: androidx.media3.common.Format? = null
       for (group in audio) {
         for (i in 0 until group.length) {
-          if (group.isTrackSelected(i)) group.getTrackFormat(i).metadata?.let { pairs += tagPairs(it) }
+          if (!group.isTrackSelected(i)) continue
+          val f = group.getTrackFormat(i)
+          if (format == null) format = f
+          f.metadata?.let { pairs += tagPairs(it) }
         }
       }
       currentTags = LoudnessNormalization.parseTags(pairs)
       applyNormalization()
+      currentFormat = format?.let { f ->
+        TrackFormat(
+          codec = TrackFormat.codecName(f.sampleMimeType),
+          sampleRateHz = f.sampleRate.takeIf { it > 0 } ?: 0,
+          channels = f.channelCount.takeIf { it > 0 } ?: 0,
+          bits = when (f.pcmEncoding) {
+            C.ENCODING_PCM_16BIT -> 16
+            C.ENCODING_PCM_24BIT -> 24
+            C.ENCODING_PCM_32BIT, C.ENCODING_PCM_FLOAT -> 32
+            C.ENCODING_PCM_8BIT -> 8
+            else -> null
+          }
+        )
+      }
+      updateCapabilities()
     }
 
     override fun onPlayerError(error: PlaybackException) {
       Log.e(TAG, "Player error: ${error.errorCodeName}", error)
-      val network = error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
-        error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+      val causes = generateSequence(error.cause) { it.cause }.take(8).toList()
+      val network = PlaybackErrors.isNetwork(
+        network = error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+          error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+        httpStatus = causes.filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
+          .firstOrNull()?.responseCode,
+        timeout = causes.any { it is java.net.SocketTimeoutException }
+      )
       lastErrorPositionMs = player?.currentPosition?.coerceAtLeast(0L) ?: 0L
       stopPlayback()
       errorCallback(network)
@@ -899,10 +926,12 @@ class AudioEngineManager(private val context: Context) {
   private fun detectCapabilities(sessionId: Int): AudioCapabilities {
     var routeName = "Alto-falante do Dispositivo"
     var routeType = "SPEAKER"
+    var outputRates = IntArray(0)
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
       try {
         activeOutputDevice()?.let { dev ->
+          outputRates = dev.sampleRates ?: IntArray(0)
           routeType = when (dev.type) {
             AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> "FONE CABEADO (3.5mm)"
             AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "BLUETOOTH A2DP"
@@ -957,8 +986,11 @@ class AudioEngineManager(private val context: Context) {
       activeRouteName = routeName,
       activeRouteType = routeType,
       sampleRateHz = sampleRate,
-      channelCount = 2,
-      channelFormat = "2.0 Estéreo (PCM 16-bit)",
+      channelCount = currentFormat?.channels ?: 2,
+      channelFormat = currentFormat?.describe() ?: "Nenhuma faixa carregada",
+      trackFormat = currentFormat?.describe(),
+      outputBelowTrackRate = currentFormat?.let { TrackFormat.outputBelowTrack(it.sampleRateHz, outputRates) } ?: false,
+      outputMaxRateHz = outputRates.maxOrNull(),
       isAudioSessionActive = sessionId != 0 && (_isPlaying.value),
       audioSessionId = sessionId,
       isHardwareEqualizerAvailable = isEqAvail,

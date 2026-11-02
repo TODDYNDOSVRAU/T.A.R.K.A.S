@@ -48,12 +48,27 @@ class SessionEqualizer {
       return false
     }
     effects[sessionId] = effect
+    // Another app's effect of the same kind with a higher priority takes the control: ours stays
+    // attached but silent. Android says so when it happens; until then the status shows it.
+    if (!runCatching { effect.hasControl() }.getOrDefault(true)) noControl += sessionId
+    runCatching {
+      effect.setControlStatusListener { _, granted ->
+        if (granted) noControl -= sessionId else noControl += sessionId
+        // Control back: our parameters may have been overwritten meanwhile.
+        if (granted) effects[sessionId]?.let { sent.remove(sessionId); apply(sessionId, it) }
+      }
+    }
     apply(sessionId, effect)
     applySpatial(sessionId)
     return true
   }
 
+  /** Sessions where another app's equalizer has the control, so this curve is not heard. */
+  private val noControl = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
+  val sessionsWithoutControl: Int get() = noControl.count { it in effects }
+
   fun detach(sessionId: Int) {
+    noControl.remove(sessionId)
     sent.remove(sessionId)
     effects.remove(sessionId)?.let { runCatching { it.release() } }
     virtualizers.remove(sessionId)?.let { runCatching { it.release() } }
@@ -183,11 +198,14 @@ class SessionEqualizer {
       dp.setPreEqBandAllChannelsTo(i, DynamicsProcessing.EqBand(true, DpCurve.cutoffHz(stops[i], sampleRate, block), gains[i]))
     }
     sent[sessionId] = gains.copyOf()
-    // Close to a brick wall (ratio 50: 6 dB over the ceiling comes out 0.12 dB over), fast to let go.
+    // The effect's limiter (AOSP DPFrequency) measures the energy of a whole block (85 ms here), not the
+    // peak, and acts once per block. Music peaks sit above that level, so the threshold goes
+    // RMS_TO_PEAK_DB under the ceiling. Ratio 50, fast to let go. Bands are always sent enabled: AOSP
+    // applies the input gain twice to a disabled pre-EQ band.
     dp.setLimiterAllChannelsTo(
       DynamicsProcessing.Limiter(
         true, settings.limiterEnabled, 0,
-        1f, 75f, 50f, settings.limiterCeilingDb, 0f
+        1f, 75f, 50f, settings.limiterCeilingDb - RMS_TO_PEAK_DB, 0f
       )
     )
   }
@@ -204,8 +222,17 @@ class SessionEqualizer {
 
   private companion object {
     const val TAG = "SessionEqualizer"
-    /** Above normal, so this curve wins over a player's own built-in equalizer. */
-    const val PRIORITY = 1000
+    /**
+     * Above normal, so this curve wins over a player's own built-in equalizer. Among effects of the same
+     * kind on a session only the highest priority controls it; 1337 matches the best-known EQ app's.
+     */
+    const val PRIORITY = 1337
+    /**
+     * How far under the ceiling the block limiter's threshold goes, for the peaks it does not see. With
+     * the default ceiling (-0.5 dB) this gives -3.5 dB, what Poweramp Equalizer uses when the system
+     * volume is not handed to the effect (as here).
+     */
+    const val RMS_TO_PEAK_DB = 3f
     const val MAX_DB = 24f
     /** A band is sent again only when its gain moved at least this much. */
     const val RESEND_DB = 0.05f

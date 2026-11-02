@@ -535,7 +535,7 @@ private fun PlaylistsList(
   onImportAudio: () -> Unit
 ) {
   var query by rememberSaveable { mutableStateOf("") }
-  val shown = playlists.filter { query.isBlank() || it.name.contains(query, ignoreCase = true) }
+  val shown = playlists.filter { com.example.data.TextMatch.contains(it.name, query) }
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
     contentPadding = PaddingValues(top = Space.s, bottom = LocalBarInset.current + Space.l)

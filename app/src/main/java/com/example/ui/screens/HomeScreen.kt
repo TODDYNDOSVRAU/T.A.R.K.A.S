@@ -129,11 +129,12 @@ fun HomeScreen(
   // The user's own music; the synthesized demo tracks sit in their own section at the bottom.
   val myTracks = tracks.filter { !it.isDemo }
   val demoTracks = tracks.filter { it.isDemo }
-  val searchMatches = if (searchQuery.isBlank()) emptyList() else tracks.filter { track ->
-    track.title.contains(searchQuery, ignoreCase = true) ||
-      track.artist.contains(searchQuery, ignoreCase = true) ||
-      track.album.contains(searchQuery, ignoreCase = true)
-  }
+  // Accents and case do not matter: "acao" finds "Ação".
+  val searchMatches = if (searchQuery.isBlank()) emptyList() else androidx.compose.runtime.remember(searchQuery, tracks) { tracks.filter { track ->
+    com.example.data.TextMatch.contains(track.title, searchQuery) ||
+      com.example.data.TextMatch.contains(track.artist, searchQuery) ||
+      com.example.data.TextMatch.contains(track.album, searchQuery)
+  } }
 
   /** A song with its actions sheet; [showSource] adds the service to the subtitle. */
   fun LazyListScope.songs(
@@ -338,6 +339,9 @@ private fun CatalogSection(
   }
 }
 
+/** How long a search runs before its spinner shows. */
+private const val SPINNER_DELAY_MS = 1500L
+
 /** A section title over search results, with a small spinner while that service is still answering. */
 @Composable
 private fun ResultsHeader(title: String, searching: Boolean) {
@@ -348,7 +352,16 @@ private fun ResultsHeader(title: String, searching: Boolean) {
     verticalAlignment = Alignment.CenterVertically
   ) {
     SectionHeader(title, modifier = Modifier.weight(1f))
-    if (searching) {
+    // A quick answer never flashes a spinner: it shows only once the search takes a while.
+    var slow by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(searching) {
+      slow = false
+      if (searching) {
+        kotlinx.coroutines.delay(SPINNER_DELAY_MS)
+        slow = true
+      }
+    }
+    if (searching && slow) {
       CircularProgressIndicator(
         modifier = Modifier
           .size(Size.iconSmall)

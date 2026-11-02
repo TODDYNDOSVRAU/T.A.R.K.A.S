@@ -254,6 +254,17 @@ internal fun EqAdvancedPage(
         eqSettings.device?.let { d ->
           GroupFooter("A correção do fone já reduz ${formatDb(-d.preampDb)} dB para não distorcer.")
         }
+        capabilities.trackFormat?.let { format ->
+          val max = capabilities.outputMaxRateHz
+          GroupFooter(
+            if (capabilities.outputBelowTrackRate && max != null) {
+              "Faixa tocando: $format. A saída ${capabilities.activeRouteName} vai até ${com.example.data.audio.TrackFormat.khz(max)}, " +
+                "então o Android reduz a taxa antes de tocar."
+            } else {
+              "Faixa tocando: $format."
+            }
+          )
+        }
         if (capabilities.isVirtualizerAvailable) {
           GroupFooter("O virtualizador é um efeito do próprio Android. O resultado muda de aparelho para aparelho.")
         }
@@ -436,7 +447,10 @@ private fun ReachSection(reach: EqReach, status: GlobalEqStatus, rootPresent: Bo
           (if (status.globalOutput) ", e a saída geral." else ".")
       }
     }
-    line?.let {
+    val conflict = status.appsWithoutControl.takeIf { it > 0 && reach != EqReach.APP }?.let { n ->
+      " Em $n ${if (n == 1) "app" else "apps"}, outro app de equalizador tem prioridade e esta curva não é aplicada. Desligue o outro para usar a do T.A.R.K.A.S."
+    }.orEmpty()
+    (line?.plus(conflict))?.let {
       Text(
         it,
         style = AppText.Footnote,

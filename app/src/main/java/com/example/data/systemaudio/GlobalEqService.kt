@@ -226,7 +226,8 @@ class GlobalEqService : Service() {
         rootUnavailable = rootMissing,
         globalOutput = globalOutput,
         spatialApps = equalizer.spatialSessions,
-        spatialUnsupported = equalizer.spatialUnsupported
+        spatialUnsupported = equalizer.spatialUnsupported,
+        appsWithoutControl = equalizer.sessionsWithoutControl
       )
     )
     return retrySoon

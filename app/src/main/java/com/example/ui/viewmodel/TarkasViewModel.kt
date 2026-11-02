@@ -1059,6 +1059,18 @@ class TarkasViewModel(
   init {
     // The service applies the same curve the app uses.
     viewModelScope.launch { audioEngineManager.eqSettings.collect { GlobalEq.settings.value = it } }
+    // The quick settings tile: its taps come here, and it is told when the equalizer turns on or off.
+    viewModelScope.launch { GlobalEq.enabledRequests.collect { setEqEnabled(it) } }
+    GlobalEq.appListening = true
+    viewModelScope.launch {
+      audioEngineManager.eqSettings.map { it.enabled }.distinctUntilChanged().collect {
+        runCatching {
+          android.service.quicksettings.TileService.requestListeningState(
+            context, android.content.ComponentName(context, com.example.data.systemaudio.EqTileService::class.java)
+          )
+        }
+      }
+    }
     // Root on the output mix already equalizes this app's own player too: its own processor steps aside.
     viewModelScope.launch {
       GlobalEq.status.map { it.globalOutput }.distinctUntilChanged().collect { audioEngineManager.setCoveredByOutputMix(it) }
@@ -1319,6 +1331,7 @@ class TarkasViewModel(
 
   override fun onCleared() {
     super.onCleared()
+    GlobalEq.appListening = false
     timerTickerJob?.cancel()
     // The static callback held this view model; a new one sets its own when it asks for capture again.
     com.example.data.systemaudio.AudioCaptureService.onMediaProjectionReady = null
