@@ -1,6 +1,8 @@
 package com.example.data.systemaudio
 
 import android.media.AudioFormat
+import android.media.AudioManager
+import android.media.AudioTrack
 import android.media.audiofx.AudioEffect
 import android.media.audiofx.DynamicsProcessing
 import android.media.audiofx.Equalizer
@@ -9,16 +11,21 @@ import android.os.Build
 import android.util.Log
 import com.example.data.audio.dsp.EqDsp
 import com.example.data.model.EqSettings
-import kotlin.math.pow
+import kotlin.math.abs
 
 /**
  * The equalizer curve applied to other apps' audio sessions, with Android's own effects
  * (DynamicsProcessing on Android 9+, the 5-band Equalizer before). The app's parametric curve is
- * sampled at 31 third-octave bands, so Q, shelves and pass filters carry over; the limiter carries
- * over too. Balance and stereo width need the app's own processor and apply only to its playback.
+ * laid onto DynamicsProcessing's FFT bins ([DpCurve]): a bin per band in the bass and fractions of an
+ * octave above, so Q, shelves and pass filters carry over; the limiter carries over too. Balance and
+ * stereo width need the app's own processor and apply only to its playback.
  */
 class SessionEqualizer {
   private val effects = mutableMapOf<Int, AudioEffect>()
+  /** The band gains last sent to each DynamicsProcessing, so an update sends only the bands that moved. */
+  private val sent = mutableMapOf<Int, FloatArray>()
+  /** The curve for the current settings, laid onto the bands; built once per update for every session. */
+  private var curve: FloatArray? = null
   private val virtualizers = mutableMapOf<Int, Virtualizer>()
   private var settings = EqSettings()
   private var spatialStrength = 0
@@ -40,12 +47,13 @@ class SessionEqualizer {
       return false
     }
     effects[sessionId] = effect
-    apply(effect)
+    apply(sessionId, effect)
     applySpatial(sessionId)
     return true
   }
 
   fun detach(sessionId: Int) {
+    sent.remove(sessionId)
     effects.remove(sessionId)?.let { runCatching { it.release() } }
     virtualizers.remove(sessionId)?.let { runCatching { it.release() } }
   }
@@ -57,7 +65,8 @@ class SessionEqualizer {
 
   fun update(newSettings: EqSettings) {
     settings = newSettings
-    effects.values.forEach(::apply)
+    curve = null
+    effects.forEach { (id, effect) -> apply(id, effect) }
   }
 
   /** [strength] 0 turns the spatial effect off on every session; 1..1000 is the Virtualizer strength. */
@@ -93,14 +102,15 @@ class SessionEqualizer {
   fun releaseAll() {
     effects.values.forEach { runCatching { it.release() } }
     effects.clear()
+    sent.clear()
     virtualizers.values.forEach { runCatching { it.release() } }
     virtualizers.clear()
   }
 
-  private fun apply(effect: AudioEffect) {
+  private fun apply(sessionId: Int, effect: AudioEffect) {
     try {
       when {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && effect is DynamicsProcessing -> applyDynamics(effect)
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && effect is DynamicsProcessing -> applyDynamics(sessionId, effect)
         effect is Equalizer -> applyLegacy(effect)
       }
       effect.enabled = settings.enabled
@@ -109,26 +119,61 @@ class SessionEqualizer {
     }
   }
 
+  /**
+   * A DynamicsProcessing with the band layout of [DpCurve]. The first one also finds how many bands the
+   * device takes: some (Android 15 AIDL effects) accept fewer than asked, which shows when the last band
+   * cannot be read back. The layout then gets coarser, and every later effect uses it.
+   */
   @androidx.annotation.RequiresApi(Build.VERSION_CODES.P)
   private fun newDynamics(sessionId: Int): DynamicsProcessing {
-    val config = DynamicsProcessing.Config.Builder(
-      DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
-      2,
-      true, BAND_CENTERS.size,
-      false, 0,
-      false, 0,
-      true
-    ).build()
-    return DynamicsProcessing(PRIORITY, sessionId, config)
+    var lastError: Exception? = null
+    for (limit in BAND_LIMITS.filter { it <= maxBands }) {
+      val stops = DpCurve.layout(sampleRate, block, limit)
+      val config = DynamicsProcessing.Config.Builder(
+        DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
+        2,
+        true, stops.size,
+        false, 0,
+        false, 0,
+        true
+      ).setPreferredFrameDuration(DpCurve.FRAME_MS).build()
+      val dp = try {
+        DynamicsProcessing(PRIORITY, sessionId, config)
+      } catch (e: Exception) {
+        lastError = e
+        continue
+      }
+      val accepted = runCatching { dp.getPreEqBandByChannelIndex(0, stops.size - 1) }.isSuccess
+      if (accepted) {
+        if (limit != maxBands || layout == null) Log.i(TAG, "Other apps' curve: ${stops.size} bands, $block-sample blocks at $sampleRate Hz")
+        maxBands = limit
+        layout = stops
+        return dp
+      }
+      runCatching { dp.release() }
+      lastError = IllegalStateException("${stops.size} bands refused")
+    }
+    throw lastError ?: IllegalStateException("No DynamicsProcessing")
   }
 
+  /** The current curve on the current layout: computed once per settings change, for all sessions. */
+  private fun curveGains(stops: IntArray): FloatArray =
+    curve?.takeIf { it.size == stops.size }
+      ?: DpCurve.bandGains(stops, sampleRate, block) { f -> EqDsp.responseDb(settings, f, sampleRate) }
+        .also { g -> for (i in g.indices) g[i] = g[i].coerceIn(-MAX_DB, MAX_DB) }
+        .also { curve = it }
+
   @androidx.annotation.RequiresApi(Build.VERSION_CODES.P)
-  private fun applyDynamics(dp: DynamicsProcessing) {
-    BAND_CENTERS.forEachIndexed { i, center ->
-      val gain = EqDsp.responseDb(settings, center).toFloat().coerceIn(-MAX_DB, MAX_DB)
-      // A band's cutoff is its upper edge: half a third-octave above the centre.
-      dp.setPreEqBandAllChannelsTo(i, DynamicsProcessing.EqBand(true, (center * EDGE).toFloat(), gain))
+  private fun applyDynamics(sessionId: Int, dp: DynamicsProcessing) {
+    val stops = layout ?: return
+    val gains = curveGains(stops)
+    val last = sent[sessionId]
+    for (i in stops.indices) {
+      // During a drag most bands do not move: only the ones that changed are sent (a call each).
+      if (last != null && abs(last[i] - gains[i]) < RESEND_DB) continue
+      dp.setPreEqBandAllChannelsTo(i, DynamicsProcessing.EqBand(true, DpCurve.cutoffHz(stops[i], sampleRate, block), gains[i]))
     }
+    sent[sessionId] = gains.copyOf()
     dp.setLimiterAllChannelsTo(
       DynamicsProcessing.Limiter(
         true, settings.limiterEnabled, 0,
@@ -152,12 +197,17 @@ class SessionEqualizer {
     /** Above normal, so this curve wins over a player's own built-in equalizer. */
     const val PRIORITY = 1000
     const val MAX_DB = 24f
-    val EDGE = 2.0.pow(1.0 / 6.0)
-    /** ISO third-octave centres, 20 Hz to 20 kHz. */
-    val BAND_CENTERS = listOf(
-      20.0, 25.0, 31.5, 40.0, 50.0, 63.0, 80.0, 100.0, 125.0, 160.0, 200.0, 250.0, 315.0, 400.0, 500.0,
-      630.0, 800.0, 1000.0, 1250.0, 1600.0, 2000.0, 2500.0, 3150.0, 4000.0, 5000.0, 6300.0, 8000.0,
-      10000.0, 12500.0, 16000.0, 20000.0
-    )
+    /** A band is sent again only when its gain moved at least this much. */
+    const val RESEND_DB = 0.05f
+    /** Band counts tried, most first. 256 is beyond what the finest layout needs at 48 kHz. */
+    val BAND_LIMITS = intArrayOf(256, 128, 64, 32)
+
+    /** The rate effects run at (the output mixer's); the bins depend on it. */
+    val sampleRate: Int = runCatching { AudioTrack.getNativeOutputSampleRate(AudioManager.STREAM_MUSIC) }
+      .getOrDefault(48000).takeIf { it in 8000..384000 } ?: 48000
+    val block: Int = DpCurve.blockSize(sampleRate)
+    /** What the device took; found on the first effect and kept for the process. */
+    @Volatile var maxBands = BAND_LIMITS.first()
+    @Volatile var layout: IntArray? = null
   }
 }
