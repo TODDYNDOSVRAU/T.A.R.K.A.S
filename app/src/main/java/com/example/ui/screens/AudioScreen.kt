@@ -22,6 +22,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import com.example.data.audio.loudness.LoudnessUi
+import com.example.data.audio.loudness.NormalizationMode
 import com.example.data.audio.spatial.SpatialKnob
 import com.example.data.audio.spatial.SpatialPreset
 import com.example.data.audio.spatial.SpatialStatus
@@ -124,6 +126,8 @@ fun AudioScreen(
   spatial: SpatialUi = SpatialUi(),
   spatialActions: SpatialActions? = null,
   onCompare: (Boolean) -> Unit = {},
+  loudness: LoudnessUi = LoudnessUi(),
+  onSetNormalizationMode: (NormalizationMode) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   var page by rememberSaveable { mutableStateOf(AudioPage.MAIN) }
@@ -197,6 +201,8 @@ fun AudioScreen(
           onUpdateEq = onUpdateEq,
           onRequestSystemAudioCapture = onRequestSystemAudioCapture,
           onStopSystemAudioCapture = onStopSystemAudioCapture,
+          loudness = loudness,
+          onSetNormalizationMode = onSetNormalizationMode,
           onBack = { page = AudioPage.MAIN }
         )
       }

@@ -203,7 +203,8 @@ class PlaybackController(
         path,
         onCompletion = { onTrackPlaybackCompleted(track) },
         onError = { network -> onTrackFailed(track, network) },
-        startPositionMs = startPositionMs
+        startPositionMs = startPositionMs,
+        loudnessKey = track.id
       )
       refreshUpNext()
     }
@@ -280,7 +281,7 @@ class PlaybackController(
       audioEngine.setUpNext(null) {}
       return
     }
-    audioEngine.setUpNext(track.filePath) { onGaplessAdvance(next, track) }
+    audioEngine.setUpNext(track.filePath, loudnessKey = track.id) { onGaplessAdvance(next, track) }
   }
 
   /** The player moved on to the queued track by itself: catch the rest of the state up. */
@@ -542,7 +543,8 @@ class PlaybackController(
           onError = { audioEngine.stopPlayback() },
           // Older saves kept the position inside the JSON.
           startPositionMs = store.getLong(KEY_POSITION, o.optLong("pos", 0L)),
-          autoStart = false
+          autoStart = false,
+          loudnessKey = track.id
         )
         refreshUpNext()
       }

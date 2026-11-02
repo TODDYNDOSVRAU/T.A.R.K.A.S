@@ -18,15 +18,26 @@ import android.os.Build
 import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Metadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.util.Util
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.extractor.metadata.id3.InternalFrame
+import androidx.media3.extractor.metadata.id3.TextInformationFrame
+import androidx.media3.extractor.metadata.vorbis.VorbisComment
 import com.example.data.audio.dsp.EqDsp
+import com.example.data.audio.loudness.LoudnessMeterProcessor
+import com.example.data.audio.loudness.LoudnessNormalization
+import com.example.data.audio.loudness.LoudnessStore
+import com.example.data.audio.loudness.LoudnessUi
+import com.example.data.audio.loudness.NormalizationMode
+import com.example.data.audio.loudness.TaggedLoudness
 import com.example.data.audio.dsp.ParametricEqAudioProcessor
 import com.example.data.model.AudioCapabilities
 import com.example.data.model.EqSettings
@@ -65,6 +76,22 @@ class AudioEngineManager(private val context: Context) {
   // Tarkas Spatial comes first: it turns stereo into binaural, then the equalizer and the fone
   // correction shape the result.
   private val spatialProcessor = com.example.data.audio.spatial.SpatialAudioProcessor()
+  // Before both: measures the track as it is in the file, whatever the spatial and the EQ do.
+  private val loudnessMeter = LoudnessMeterProcessor()
+  private val loudnessStore = LoudnessStore(context)
+
+  /** Volume from focus ducking and fades; the player gets it times [normalizationGain]. */
+  private var levelVolume = 1f
+  private var normalizationGain = 1f
+
+  /** Id of the track whose audio the meter is measuring, and its length once known. */
+  private var measuringKey: String? = null
+  private var measuringDurationMs = 0L
+  /** Tags of the playing track, kept so a change of mode can decide again. */
+  private var currentTags = TaggedLoudness()
+
+  private val _loudness = MutableStateFlow(LoudnessUi(mode = loudnessStore.mode))
+  val loudness: StateFlow<LoudnessUi> = _loudness.asStateFlow()
 
   private var player: ExoPlayer? = null
   private var audioSessionId = 0
@@ -210,13 +237,13 @@ class AudioEngineManager(private val context: Context) {
           p.pause()
           _isPlaying.value = false
         }
-        AudioFocusPolicy.Action.DUCK -> p.volume = DUCK_VOLUME
+        AudioFocusPolicy.Action.DUCK -> setLevel(DUCK_VOLUME)
         AudioFocusPolicy.Action.RESUME -> {
-          p.volume = 1f
+          setLevel(1f)
           p.play()
           _isPlaying.value = true
         }
-        AudioFocusPolicy.Action.UNDUCK -> p.volume = 1f
+        AudioFocusPolicy.Action.UNDUCK -> setLevel(1f)
         AudioFocusPolicy.Action.NONE -> Unit
       }
     } catch (e: Exception) {
@@ -254,6 +281,9 @@ class AudioEngineManager(private val context: Context) {
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
       val p = player ?: return
       if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO || p.currentMediaItemIndex == 0) return
+      // The finished track was measured up to its own last sample (the meter closes it at its end of
+      // stream); its measurement is collected here.
+      startMeasuring(mediaItem?.mediaId, gapless = true)
       // The queued next track started with no gap: drop the finished one so the playlist is
       // always [playing, next].
       p.removeMediaItems(0, p.currentMediaItemIndex)
@@ -268,7 +298,10 @@ class AudioEngineManager(private val context: Context) {
       val p = player ?: return
       when (state) {
         Player.STATE_READY -> {
-          if (p.duration != C.TIME_UNSET) _durationMs.value = p.duration.coerceAtLeast(1L)
+          if (p.duration != C.TIME_UNSET) {
+            _durationMs.value = p.duration.coerceAtLeast(1L)
+            measuringDurationMs = p.duration
+          }
           if (pendingStart) {
             pendingStart = false
             // No focus (for example during a phone call): do not start talking over it.
@@ -277,7 +310,7 @@ class AudioEngineManager(private val context: Context) {
               stopPlayback()
               return
             }
-            p.volume = 1f
+            setLevel(1f)
             p.play()
             registerNoisyReceiver()
             _isPlaying.value = true
@@ -285,6 +318,7 @@ class AudioEngineManager(private val context: Context) {
           }
         }
         Player.STATE_ENDED -> {
+          startMeasuring(null)
           // The focus is held a moment longer: the next track or a narration usually follows.
           releaseFocusSoon()
           unregisterNoisyReceiver()
@@ -295,6 +329,21 @@ class AudioEngineManager(private val context: Context) {
         }
         else -> Unit
       }
+    }
+
+    override fun onTracksChanged(tracks: Tracks) {
+      // Arrives before a loaded track is ready, and at the moment a queued one takes over: the gain is
+      // set before its first sample is heard (within the player's position reporting at a gapless change).
+      val audio = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO && it.isSelected }
+      if (audio.isEmpty()) return
+      val pairs = mutableListOf<Pair<String, String>>()
+      for (group in audio) {
+        for (i in 0 until group.length) {
+          if (group.isTrackSelected(i)) group.getTrackFormat(i).metadata?.let { pairs += tagPairs(it) }
+        }
+      }
+      currentTags = LoudnessNormalization.parseTags(pairs)
+      applyNormalization()
     }
 
     override fun onPlayerError(error: PlaybackException) {
@@ -315,7 +364,7 @@ class AudioEngineManager(private val context: Context) {
         enableFloatOutput: Boolean,
         enableAudioTrackPlaybackParams: Boolean
       ): AudioSink = DefaultAudioSink.Builder(context)
-        .setAudioProcessors(arrayOf(spatialProcessor, eqProcessor))
+        .setAudioProcessors(arrayOf(loudnessMeter, spatialProcessor, eqProcessor))
         .build()
     }
     val media3Attributes = androidx.media3.common.AudioAttributes.Builder()
@@ -345,18 +394,26 @@ class AudioEngineManager(private val context: Context) {
     return if (isRemoteOrContent) Uri.parse(filePathOrUri) else Uri.fromFile(File(filePathOrUri))
   }
 
+  /** The item for a track; [loudnessKey] (the track id) is what its measured loudness is saved under. */
+  private fun mediaItemFor(uri: Uri, loudnessKey: String?): MediaItem =
+    MediaItem.Builder().setUri(uri).apply { if (loudnessKey != null) setMediaId(loudnessKey) }.build()
+
   /**
    * Loads a track and, with [autoStart], plays it as soon as it is ready. Without it (a track restored at
-   * launch) it waits at [startPositionMs] for play.
+   * launch) it waits at [startPositionMs] for play. [loudnessKey] identifies the track for the volume
+   * normalization; without one it is not measured.
    */
   fun playTrack(
     filePathOrUri: String,
     onCompletion: () -> Unit = {},
     onError: (network: Boolean) -> Unit = {},
     startPositionMs: Long = 0L,
-    autoStart: Boolean = true
+    autoStart: Boolean = true,
+    loudnessKey: String? = null
   ) {
     try {
+      // Closes the measurement of the track that was playing before the player empties.
+      startMeasuring(loudnessKey)
       // Between two tracks the focus and the headphones receiver are kept: the next one starts at once.
       resetPlayer()
       val uri = uriFor(filePathOrUri)
@@ -372,7 +429,7 @@ class AudioEngineManager(private val context: Context) {
       upNextAdvanced = null
       pendingStart = autoStart
       eqDsp.update(processedSettings())
-      p.setMediaItem(MediaItem.fromUri(uri), startPositionMs.coerceAtLeast(0L))
+      p.setMediaItem(mediaItemFor(uri, loudnessKey), startPositionMs.coerceAtLeast(0L))
       _currentPositionMs.value = startPositionMs.coerceAtLeast(0L)
       p.prepare()
       if (!autoStart) {
@@ -394,14 +451,14 @@ class AudioEngineManager(private val context: Context) {
    * (gapless). Null removes it, e.g. when the queue changed or the next song needs a narration first.
    * [onAdvanced] runs once the player has moved on to it.
    */
-  fun setUpNext(filePathOrUri: String?, onAdvanced: () -> Unit) {
+  fun setUpNext(filePathOrUri: String?, loudnessKey: String? = null, onAdvanced: () -> Unit) {
     val p = player ?: return
     try {
       if (p.mediaItemCount > 1) p.removeMediaItems(1, p.mediaItemCount)
       upNextAdvanced = null
       val uri = filePathOrUri?.let(::uriFor) ?: return
       if (p.mediaItemCount == 0) return
-      p.addMediaItem(MediaItem.fromUri(uri))
+      p.addMediaItem(mediaItemFor(uri, loudnessKey))
       upNextAdvanced = onAdvanced
     } catch (e: Exception) {
       Log.w(TAG, "Could not queue the next track", e)
@@ -438,18 +495,17 @@ class AudioEngineManager(private val context: Context) {
 
   /** Fades the volume out over [durationMs] and pauses: the sleep timer's end. */
   suspend fun fadeOutAndPause(durationMs: Long) {
-    val p = player ?: return
-    if (!_isPlaying.value) return
+    if (player == null || !_isPlaying.value) return
     val steps = 30
     try {
       for (i in steps downTo 0) {
-        p.volume = i / steps.toFloat()
+        setLevel(i / steps.toFloat())
         delay(durationMs / steps)
       }
       pauseByUser()
     } finally {
       // Also when the timer is cancelled halfway through the fade.
-      p.volume = 1f
+      setLevel(1f)
     }
   }
 
@@ -473,7 +529,7 @@ class AudioEngineManager(private val context: Context) {
         // Still loading a restored track: start as soon as it is ready.
         pendingStart = true
       } else if (requestFocus()) {
-        p.volume = 1f
+        setLevel(1f)
         p.play()
         registerNoisyReceiver()
         _isPlaying.value = true
@@ -495,6 +551,7 @@ class AudioEngineManager(private val context: Context) {
   }
 
   fun stopPlayback() {
+    startMeasuring(null)
     try {
       progressJob?.cancel()
       pendingStart = false
@@ -513,6 +570,7 @@ class AudioEngineManager(private val context: Context) {
       _currentPositionMs.value = 0L
       _durationMs.value = 0L
       _spectrumBars.value = List(15) { 0.05f }
+      _loudness.value = _loudness.value.copy(hasTrack = false)
       releaseAudioEffects()
       updateCapabilities()
     }
@@ -536,7 +594,10 @@ class AudioEngineManager(private val context: Context) {
             if (p.isPlaying) {
               val pos = p.currentPosition
               _currentPositionMs.value = pos
-              if (p.duration != C.TIME_UNSET) _durationMs.value = p.duration.coerceAtLeast(1L)
+              if (p.duration != C.TIME_UNSET) {
+                _durationMs.value = p.duration.coerceAtLeast(1L)
+                measuringDurationMs = p.duration
+              }
               // Without a real FFT (no RECORD_AUDIO or unsupported device) show a flat floor,
               // never a fake animated spectrum.
               if (!isRealFftActive) {
@@ -627,6 +688,68 @@ class AudioEngineManager(private val context: Context) {
     virtualizer = null
     isRealFftActive = false
     effectsAttached = false
+  }
+
+  // --- volume normalization ---
+
+  /** The one place the player's volume is written: focus ducking and fades times the normalization. */
+  private fun setLevel(level: Float) {
+    levelVolume = level
+    player?.volume = level * normalizationGain
+  }
+
+  /**
+   * Closes the measurement of the track that was playing, saving it when it covered most of the track,
+   * and starts one for [nextKey] (null: nothing to measure next). [gapless]: the next track took over
+   * with no gap and its first audio is already in the meter.
+   */
+  private fun startMeasuring(nextKey: String?, gapless: Boolean = false) {
+    val m = loudnessMeter.take()
+    // A gapless change keeps the next track's audio, already coming in; anything else starts clean.
+    if (!gapless) loudnessMeter.clear()
+    val key = measuringKey
+    if (key != null && m.lufs != null && LoudnessNormalization.isMeasurementComplete(m.seconds, measuringDurationMs)) {
+      loudnessStore.saveMeasured(key, m.lufs)
+      Log.d(TAG, "Loudness of $key: %.1f LUFS over %.0f s".format(m.lufs, m.seconds))
+    }
+    measuringKey = nextKey
+    measuringDurationMs = 0L
+  }
+
+  /** Decides the gain of the playing track from its tags, or an earlier measurement, and applies it. */
+  private fun applyNormalization() {
+    val key = player?.currentMediaItem?.mediaId?.takeIf { it.isNotEmpty() }
+    val mode = loudnessStore.mode
+    val decision = LoudnessNormalization.decide(mode, currentTags, key?.let(loudnessStore::measured))
+    normalizationGain = decision.linearGain
+    setLevel(levelVolume)
+    _loudness.value = LoudnessUi(mode, decision.source, decision.loudnessLufs, decision.gainDb, hasTrack = true)
+  }
+
+  /**
+   * Changes the mode. It applies at once to the playing track: the listener asked for it and expects to
+   * hear the change.
+   */
+  fun setNormalizationMode(mode: NormalizationMode) {
+    loudnessStore.mode = mode
+    if (player?.currentMediaItem != null) applyNormalization()
+    else _loudness.value = _loudness.value.copy(mode = mode)
+  }
+
+  /** The text tags of [metadata] as key and value: ID3 TXXX, Vorbis comments and MP4 iTunes atoms. */
+  private fun tagPairs(metadata: Metadata): List<Pair<String, String>> {
+    val out = mutableListOf<Pair<String, String>>()
+    for (i in 0 until metadata.length()) {
+      when (val e = metadata.get(i)) {
+        is TextInformationFrame -> {
+          val description = e.description
+          if (e.id == "TXXX" && description != null) e.values.firstOrNull()?.let { out += description to it }
+        }
+        is VorbisComment -> out += e.key to e.value
+        is InternalFrame -> out += e.description to e.text
+      }
+    }
+    return out
   }
 
   // --- processing chain ---

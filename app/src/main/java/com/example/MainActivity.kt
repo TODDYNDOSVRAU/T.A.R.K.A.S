@@ -664,6 +664,8 @@ fun TarkasAppContent(
               tuning = viewModel.spatialTuning.collectAsStateWithLifecycle().value
             ),
             onCompare = { viewModel.compareWithoutEq(it) },
+            loudness = viewModel.loudness.collectAsStateWithLifecycle().value,
+            onSetNormalizationMode = { viewModel.setNormalizationMode(it) },
             spatialActions = remember {
               com.example.ui.screens.SpatialActions(
                 onEnabled = { viewModel.setSpatialEnabled(it) },

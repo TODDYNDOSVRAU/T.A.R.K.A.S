@@ -610,6 +610,12 @@ class TarkasViewModel(
   /** Hold-to-compare: the player without the equalizer while [on]; nothing is saved. */
   fun compareWithoutEq(on: Boolean) = audioEngineManager.setBypass(on)
 
+  /** Volume normalization: the mode and what it does to the playing track. */
+  val loudness: StateFlow<com.example.data.audio.loudness.LoudnessUi> get() = audioEngineManager.loudness
+
+  fun setNormalizationMode(mode: com.example.data.audio.loudness.NormalizationMode) =
+    audioEngineManager.setNormalizationMode(mode)
+
   /** Edits a band of the mode in use (graphic or parametric). */
   fun updateEqBand(index: Int, transform: (EqBand) -> EqBand) = updateEq { s ->
     val bands = s.activeBands

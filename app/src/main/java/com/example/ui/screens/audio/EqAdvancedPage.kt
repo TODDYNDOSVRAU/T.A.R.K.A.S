@@ -36,6 +36,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.example.data.audio.dsp.EqDsp
+import com.example.data.audio.loudness.LoudnessSource
+import com.example.data.audio.loudness.LoudnessUi
+import com.example.data.audio.loudness.NormalizationMode
 import com.example.data.model.AudioCapabilities
 import com.example.data.model.EqSettings
 import com.example.data.systemaudio.ActiveAppsState
@@ -83,6 +86,8 @@ internal fun EqAdvancedPage(
   onUpdateEq: ((EqSettings) -> EqSettings) -> Unit,
   onRequestSystemAudioCapture: () -> Unit,
   onStopSystemAudioCapture: () -> Unit,
+  loudness: LoudnessUi,
+  onSetNormalizationMode: (NormalizationMode) -> Unit,
   onBack: () -> Unit
 ) {
   val reduced = rememberReducedMotion()
@@ -230,6 +235,8 @@ internal fun EqAdvancedPage(
       }
     }
 
+    item { LoudnessSection(loudness, onSetNormalizationMode) }
+
     item { Section("Apps tocando agora") { ActiveAppsGroup(activeApps) } }
 
     item {
@@ -298,6 +305,66 @@ internal fun EqAdvancedPage(
       )
     }
   }
+}
+
+/**
+ * Volume entre faixas: the normalization mode, then what it does to the playing track (where its
+ * loudness came from and the change applied), so the effect can be checked, not only trusted.
+ */
+@Composable
+private fun LoudnessSection(loudness: LoudnessUi, onSetMode: (NormalizationMode) -> Unit) {
+  Section("Volume entre faixas") {
+    InsetGroup(modifier = Modifier.testTag("loudness_panel")) {
+      RadioRow(
+        title = "Desligado",
+        selected = loudness.mode == NormalizationMode.OFF,
+        onClick = { onSetMode(NormalizationMode.OFF) }
+      )
+      GroupDivider()
+      RadioRow(
+        title = "Por faixa",
+        subtitle = "Todas as músicas no mesmo volume",
+        selected = loudness.mode == NormalizationMode.TRACK,
+        onClick = { onSetMode(NormalizationMode.TRACK) }
+      )
+      GroupDivider()
+      RadioRow(
+        title = "Por álbum",
+        subtitle = "Mantém a diferença entre as faixas de um álbum, quando o arquivo traz o valor do álbum",
+        selected = loudness.mode == NormalizationMode.ALBUM,
+        onClick = { onSetMode(NormalizationMode.ALBUM) }
+      )
+      if (loudness.mode != NormalizationMode.OFF && loudness.hasTrack) {
+        GroupDivider()
+        InfoRow(title = "Faixa atual", value = loudnessReadout(loudness))
+        if (loudness.loudnessLufs != null) {
+          GroupDivider()
+          InfoRow(
+            title = "Ajuste aplicado",
+            // 0 dB: the track is already at or below the target (the footer says it never raises).
+            value = if (loudness.gainDb < -0.05) formatDb(loudness.gainDb.toFloat()) + " dB" else "0 dB"
+          )
+        }
+      }
+    }
+    GroupFooter(
+      "Iguala as músicas em −14 LUFS. Só abaixa o volume, nunca aumenta, para não distorcer. " +
+        "Usa o valor ReplayGain do arquivo, se houver. Sem ele, mede a música enquanto toca e aplica a partir da próxima vez. " +
+        "A medição só vale se a música tocar quase inteira."
+    )
+  }
+}
+
+/** "−9.8 LUFS · tag do arquivo", or what is missing. */
+private fun loudnessReadout(l: LoudnessUi): String {
+  val lufs = l.loudnessLufs ?: return "Medindo nesta reprodução"
+  val source = when (l.source) {
+    LoudnessSource.TAG_TRACK -> "tag da faixa"
+    LoudnessSource.TAG_ALBUM -> "tag do álbum"
+    LoudnessSource.MEASURED -> "medido"
+    LoudnessSource.NONE -> ""
+  }
+  return formatDb(lufs.toFloat()) + " LUFS · " + source
 }
 
 /** A titled block of the page: the group header, then its content, with the gap to the next one. */
