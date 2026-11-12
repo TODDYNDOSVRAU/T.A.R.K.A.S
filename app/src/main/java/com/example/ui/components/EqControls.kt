@@ -53,9 +53,12 @@ import kotlin.math.abs
 private const val KNOB_SWEEP = 270f
 private const val KNOB_START = 135f
 
-/** How far a finger travels, in control heights, to sweep the whole range. Keeps fine moves possible. */
-private const val FADER_TRAVEL = 1.4f
-private const val KNOB_TRAVEL = 2.2f
+/**
+ * The fader follows the finger 1:1: the handle moves as far as the finger does. Fine values come from
+ * the numeric field behind the readout, not from a slowed-down drag. A knob has no handle to follow, so
+ * it sweeps its range over this many control heights.
+ */
+private const val KNOB_TRAVEL = 1.6f
 
 /**
  * A vertical fader: [value] runs from -1 (bottom) to +1 (top), 0 is the centre detent. The lit part
@@ -76,7 +79,9 @@ fun EqFader(
   modifier: Modifier = Modifier,
   enabled: Boolean = true,
   steps: Int = 29,
-  onHeldChange: (Boolean) -> Unit = {}
+  onHeldChange: (Boolean) -> Unit = {},
+  /** The colour of the filled part; the theme accent when null. A band passes its own. */
+  tint: androidx.compose.ui.graphics.Color? = null
 ) {
   val colors = MaterialTheme.colorScheme
   val current by rememberUpdatedState(value)
@@ -86,8 +91,9 @@ fun EqFader(
   val haptics = LocalHapticFeedback.current
   val track = colors.onSurface.copy(alpha = 0.12f)
   val tick = colors.onSurface.copy(alpha = 0.24f)
-  val accent = if (enabled) colors.primary else colors.onSurface.copy(alpha = 0.24f)
-  val handle = if (enabled) colors.onSurface else colors.onSurface.copy(alpha = 0.38f)
+  val accent = if (enabled) tint ?: colors.primary else colors.onSurface.copy(alpha = 0.24f)
+  val handle = if (enabled) colors.surfaceContainerHighest else colors.surfaceContainerHigh
+  val dash = if (enabled) colors.onSurface else colors.onSurface.copy(alpha = 0.38f)
 
   Canvas(
     modifier = modifier
@@ -134,7 +140,7 @@ fun EqFader(
             verticalDrag(down.id) { c ->
               val dy = c.positionChange().y
               c.consume()
-              val travel = size.height * FADER_TRAVEL
+              val travel = bottom - top
               val before = dragValue
               dragValue = (dragValue - 2f * dy / travel).coerceIn(-1f, 1f)
               // A tick when the handle crosses or lands on the centre, and at the two ends: the detent
@@ -157,24 +163,29 @@ fun EqFader(
     val bottom = size.height - handleH / 2f
     val mid = (top + bottom) / 2f
     val y = bottom - (value.coerceIn(-1f, 1f) + 1f) / 2f * (bottom - top)
-    val trackW = 4.dp.toPx()
+    val trackW = 2.dp.toPx()
 
-    // The centre detent, printed on both sides of the track like a desk's 0 dB mark.
-    val tickLen = 6.dp.toPx()
-    val gap = 6.dp.toPx()
-    drawLine(tick, Offset(cx - gap - tickLen, mid), Offset(cx - gap, mid), 1.dp.toPx())
-    drawLine(tick, Offset(cx + gap, mid), Offset(cx + gap + tickLen, mid), 1.dp.toPx())
+    // Dotted marks at +max, 0 dB and -max on both sides of the track, like the rule of a desk.
+    val dot = 1.dp.toPx()
+    val gap = 7.dp.toPx()
+    for (markY in floatArrayOf(top, mid, bottom)) {
+      drawCircle(tick, dot, Offset(cx - gap, markY))
+      drawCircle(tick, dot, Offset(cx + gap, markY))
+    }
 
     drawLine(track, Offset(cx, top), Offset(cx, bottom), strokeWidth = trackW, cap = StrokeCap.Round)
     if (abs(y - mid) > 0.5f) {
-      drawLine(accent, Offset(cx, mid), Offset(cx, y), strokeWidth = trackW, cap = StrokeCap.Round)
+      drawLine(accent, Offset(cx, mid), Offset(cx, y), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
     }
+    // The thumb: a tall pill with a light dash across it.
     drawRoundRect(
       color = handle,
       topLeft = Offset(cx - handleW / 2f, y - handleH / 2f),
       size = Size(handleW, handleH),
-      cornerRadius = CornerRadius(handleH / 2f)
+      cornerRadius = CornerRadius(handleW / 2f)
     )
+    val dashW = handleW * 0.46f
+    drawLine(dash, Offset(cx - dashW / 2f, y), Offset(cx + dashW / 2f, y), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
   }
 }
 
@@ -182,8 +193,8 @@ fun EqFader(
 private val FADER_GRAB = 24.dp
 
 /** The handle's size; its travel stops half a handle from each end. */
-private val FADER_HANDLE_H = 14.dp
-private val FADER_HANDLE_W = 30.dp
+private val FADER_HANDLE_H = 38.dp
+private val FADER_HANDLE_W = 24.dp
 
 /**
  * A rotary knob: a quiet disc with an indicator, and an arc showing the value. [value] runs 0..1;
@@ -203,7 +214,9 @@ fun EqKnob(
   bipolar: Boolean = false,
   defaultValue: Float = if (bipolar) 0.5f else 0f,
   enabled: Boolean = true,
-  steps: Int = 0
+  steps: Int = 0,
+  /** The colour of the arc; the theme accent when null. A band passes its own. */
+  tint: androidx.compose.ui.graphics.Color? = null
 ) {
   val colors = MaterialTheme.colorScheme
   val current by rememberUpdatedState(value)
@@ -212,7 +225,7 @@ fun EqKnob(
   var dragValue by remember { mutableFloatStateOf(value) }
   val track = colors.onSurface.copy(alpha = 0.12f)
   val disc = colors.surfaceContainerHigh
-  val accent = if (enabled) colors.primary else colors.onSurface.copy(alpha = 0.24f)
+  val accent = if (enabled) tint ?: colors.primary else colors.onSurface.copy(alpha = 0.24f)
   val tick = colors.onSurface.copy(alpha = if (enabled) 0.9f else 0.38f)
 
   Box(
@@ -245,11 +258,11 @@ fun EqKnob(
       }
   ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
-      val stroke = 3.dp.toPx()
+      val stroke = 4.dp.toPx()
       val inset = stroke / 2f
       val arcTopLeft = Offset(inset, inset)
       val arcSize = Size(this.size.width - stroke, this.size.height - stroke)
-      val discR = this.size.minDimension / 2f - stroke - 4.dp.toPx()
+      val discR = this.size.minDimension / 2f - stroke - 3.dp.toPx()
       val v = value.coerceIn(0f, 1f)
 
       drawArc(track, KNOB_START, KNOB_SWEEP, false, arcTopLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))

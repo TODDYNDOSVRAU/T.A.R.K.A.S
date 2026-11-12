@@ -114,6 +114,16 @@ object LegalTexts {
     title = "Novidades",
     subtitle = "O que mudou em cada versão",
     sections = listOf(
+      "1.15" to
+        "• Novo: atualização pelo GitHub. O app avisa quando sai uma versão nova e, na versão final, baixa, confere e instala.\n" +
+        "• Novo: correções AutoEq offline, com 8.849 perfis de fones no app, e cada fone guarda a própria correção.\n" +
+        "• Novo: crossfade entre faixas (1 a 12 s, desligado por padrão) e normalização de volume entre faixas.\n" +
+        "• Novo: fila com arrastar para reordenar, deslizar para remover com desfazer, e o que toca depois; mover e remover também pelo menu da faixa.\n" +
+        "• Novo: busca em Músicas e Favoritas, ordem \"Mais tocadas\" e faixa A-Z na biblioteca.\n" +
+        "• Equalizador: valor exato por campo numérico, desfazer ao restaurar, apagar banda ou trocar de predefinição, e nomes por extenso.\n" +
+        "• Player em paisagem dividido ao meio, e o player abre crescendo a partir do mini player.\n" +
+        "• Textos do app em português e inglês.\n" +
+        "• Correção: a reprodução não trava mais no fim da faixa com o áudio espacial.",
       "1.14" to
         "• Novo: músicas do Jamendo na busca e na linha Popular no Jamendo do Início, tocadas inteiras pelo player do app, com equalizador e áudio espacial.\n" +
         "• Novo: Sobre a faixa, no menu ⋯ do player: álbum, lançamento e gêneros do MusicBrainz, com a capa do Cover Art Archive.\n" +

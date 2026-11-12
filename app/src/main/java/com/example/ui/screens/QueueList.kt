@@ -42,15 +42,22 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.example.R
 import com.example.data.model.Track
 import com.example.data.playback.PlaybackOrder
 import com.example.ui.components.EmptyState
+import com.example.ui.components.QueueItemMenu
 import com.example.ui.components.TextAction
 import com.example.ui.components.TrackRow
 import com.example.ui.screens.library.TrackDivider
@@ -150,8 +157,8 @@ internal fun QueueList(
       item(key = "empty") {
         EmptyState(
           icon = Icons.AutoMirrored.Rounded.QueueMusic,
-          title = "A fila está vazia",
-          message = "Use “Tocar em seguida” ou “Adicionar à fila” no menu de uma música.",
+          title = stringResource(R.string.queue_empty_title),
+          message = stringResource(R.string.queue_empty_message),
           modifier = Modifier.padding(horizontal = Space.page)
         )
       }
@@ -167,7 +174,7 @@ internal fun QueueList(
         verticalAlignment = Alignment.CenterVertically
       ) {
         Text(
-          "Na fila",
+          stringResource(R.string.queue_header),
           style = AppText.Title2,
           color = colors.onSurface,
           modifier = Modifier
@@ -175,7 +182,7 @@ internal fun QueueList(
             .semantics { heading() }
         )
         if (queue.isNotEmpty()) {
-          TextAction("Limpar", onClick = { confirmClear = true }, modifier = Modifier.testTag("library_clear_queue"))
+          TextAction(stringResource(R.string.queue_clear), onClick = { confirmClear = true }, modifier = Modifier.testTag("library_clear_queue"))
         }
       }
     }
@@ -185,6 +192,10 @@ internal fun QueueList(
       val isDragged = key == dragKey
       // Not saved with the row: an undone removal brings back the same key, and a saved "dismissed"
       // state would remove it again at once.
+      val moveUpLabel = stringResource(R.string.queue_move_up)
+      val moveDownLabel = stringResource(R.string.queue_move_down)
+      val removeLabel = stringResource(R.string.queue_remove)
+      val handleLabel = stringResource(R.string.queue_handle)
       val dismiss = remember { SwipeToDismissBoxState(SwipeToDismissBoxValue.Settled, positionalThreshold = { it * 0.4f }) }
       SwipeToDismissBox(
         state = dismiss,
@@ -224,16 +235,29 @@ internal fun QueueList(
               .semantics {
                 // Moving without dragging, for TalkBack and switch access.
                 customActions = listOfNotNull(
-                  if (index > 0) CustomAccessibilityAction("Mover para cima") { onMove(index, index - 1); true } else null,
-                  if (index < shown.lastIndex) CustomAccessibilityAction("Mover para baixo") { onMove(index, index + 1); true } else null,
-                  CustomAccessibilityAction("Remover da fila") { onRemove(index); true }
+                  if (index > 0) CustomAccessibilityAction(moveUpLabel) { onMove(index, index - 1); true } else null,
+                  if (index < shown.lastIndex) CustomAccessibilityAction(moveDownLabel) { onMove(index, index + 1); true } else null,
+                  CustomAccessibilityAction(removeLabel) { onRemove(index); true }
                 )
               },
             trailing = {
+              Row(verticalAlignment = Alignment.CenterVertically) {
+              QueueItemMenu(
+                track = track,
+                canMoveUp = index > 0,
+                canMoveDown = index < shown.lastIndex,
+                onMoveUp = { onMove(index, index - 1) },
+                onMoveDown = { onMove(index, index + 1) },
+                onRemove = { onRemove(index) }
+              )
               Box(
                 modifier = Modifier
                   .size(Size.touch)
                   .testTag("queue_handle_$index")
+                  .semantics {
+                    contentDescription = handleLabel
+                    role = Role.Button
+                  }
                   .pointerInput(key) {
                     detectDragGestures(
                       onDragStart = {
@@ -258,6 +282,7 @@ internal fun QueueList(
               ) {
                 Icon(Icons.Rounded.DragHandle, contentDescription = null, tint = colors.onSurfaceVariant)
               }
+              }
             }
           )
         }
@@ -267,7 +292,7 @@ internal fun QueueList(
     if (queue.isEmpty()) {
       item(key = "queue_empty_note") {
         Text(
-          "Nada enfileirado. Use “Tocar em seguida” ou “Adicionar à fila” no menu de uma música.",
+          stringResource(R.string.queue_empty_note),
           style = AppText.Footnote,
           color = colors.onSurfaceVariant,
           modifier = Modifier.padding(horizontal = Space.page, vertical = Space.s)
@@ -278,7 +303,7 @@ internal fun QueueList(
     if (upcoming.isNotEmpty()) {
       item(key = "upcoming_header") {
         Text(
-          "Depois, da lista",
+          stringResource(R.string.queue_upcoming_header),
           style = AppText.Title3,
           color = colors.onSurface,
           modifier = Modifier
@@ -303,16 +328,15 @@ internal fun QueueList(
   if (confirmClear) {
     AlertDialog(
       onDismissRequest = { confirmClear = false },
-      title = { Text("Limpar a fila?", style = AppText.Title3) },
+      title = { Text(stringResource(R.string.queue_clear_title), style = AppText.Title3) },
       text = {
         Text(
-          if (queue.size == 1) "A música que você enfileirou sai da fila. A lista continua tocando."
-          else "As ${queue.size} músicas que você enfileirou saem da fila. A lista continua tocando.",
+          pluralStringResource(R.plurals.queue_clear_message, queue.size, queue.size),
           style = AppText.Body
         )
       },
-      confirmButton = { TextButton(onClick = { confirmClear = false; onClear() }) { Text("Limpar") } },
-      dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancelar") } }
+      confirmButton = { TextButton(onClick = { confirmClear = false; onClear() }) { Text(stringResource(R.string.queue_clear)) } },
+      dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(stringResource(R.string.queue_cancel)) } }
     )
   }
 }

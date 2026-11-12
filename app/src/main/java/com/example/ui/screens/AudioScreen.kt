@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import com.example.R
+import androidx.compose.ui.res.stringResource
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Box
@@ -82,12 +84,13 @@ class SpatialActions(
 )
 
 /** Says honestly what Tarkas Spatial does to apps other than this one. */
+@Composable
 private fun spatialOthersNote(enabled: Boolean, reach: EqReach, status: GlobalEqStatus): String? = when {
   !enabled -> null
-  reach == EqReach.APP -> "Outros apps (Spotify, YouTube): ligue o modo ADB ou root em Avançado"
-  status.spatialUnsupported -> "Este aparelho não deixa aplicar o espacial em outros apps"
-  status.spatialApps > 0 -> "Também ativo em outros apps (${status.spatialApps})"
-  else -> "Nos outros apps assim que algum tocar"
+  reach == EqReach.APP -> stringResource(R.string.audio_spatial_others_app)
+  status.spatialUnsupported -> stringResource(R.string.audio_spatial_others_unsupported)
+  status.spatialApps > 0 -> stringResource(R.string.audio_spatial_others_active, status.spatialApps)
+  else -> stringResource(R.string.audio_spatial_others_waiting)
 }
 
 /** The two pages of the tab: the console everyone uses, and the technical controls. */
@@ -262,15 +265,15 @@ fun AudioScreen(
 
   if (showSaveAs) {
     PresetNameDialog(
-      title = "Salvar predefinição",
-      initialName = if (activePreset?.isCustom == true) "${activePreset.name} 2" else "Minha predefinição",
+      title = stringResource(R.string.audio_preset_save_title),
+      initialName = if (activePreset?.isCustom == true) "${activePreset.name} 2" else stringResource(R.string.audio_preset_default_name),
       onConfirm = { name -> onSavePresetAs(name); showSaveAs = false },
       onDismiss = { showSaveAs = false }
     )
   }
   if (showRename && activePreset != null) {
     PresetNameDialog(
-      title = "Renomear predefinição",
+      title = stringResource(R.string.audio_preset_rename_title),
       initialName = activePreset.name,
       onConfirm = { name -> onRenamePreset(activePreset.id, name); showRename = false },
       onDismiss = { showRename = false }
@@ -279,14 +282,14 @@ fun AudioScreen(
   if (showDelete && activePreset != null) {
     AlertDialog(
       onDismissRequest = { showDelete = false },
-      title = { Text("Excluir \"${activePreset.name}\"?", style = AppText.Title3) },
-      text = { Text("O som atual continua igual. Só a predefinição salva é apagada.", style = AppText.Body) },
+      title = { Text(stringResource(R.string.audio_preset_delete_title, activePreset.name), style = AppText.Title3) },
+      text = { Text(stringResource(R.string.audio_preset_delete_body), style = AppText.Body) },
       confirmButton = {
         TextButton(onClick = { onDeletePreset(activePreset.id); showDelete = false }) {
-          Text("Excluir", color = MaterialTheme.colorScheme.error)
+          Text(stringResource(R.string.audio_action_delete), color = MaterialTheme.colorScheme.error)
         }
       },
-      dismissButton = { TextButton(onClick = { showDelete = false }) { Text("Cancelar") } }
+      dismissButton = { TextButton(onClick = { showDelete = false }) { Text(stringResource(R.string.audio_action_cancel)) } }
     )
   }
 }
@@ -310,14 +313,14 @@ private fun PresetNameDialog(
       OutlinedTextField(
         value = name,
         onValueChange = { name = it },
-        placeholder = { Text("Nome da predefinição") },
+        placeholder = { Text(stringResource(R.string.audio_preset_name_hint)) },
         singleLine = true,
         modifier = Modifier.testTag("preset_name_input")
       )
     },
     confirmButton = {
-      TextButton(onClick = { onConfirm(name.trim()) }, enabled = name.isNotBlank()) { Text("Salvar") }
+      TextButton(onClick = { onConfirm(name.trim()) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.audio_action_save)) }
     },
-    dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+    dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.audio_action_cancel)) } }
   )
 }

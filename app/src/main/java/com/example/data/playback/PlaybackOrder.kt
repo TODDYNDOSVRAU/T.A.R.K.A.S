@@ -75,11 +75,23 @@ object PlaybackOrder {
    * [current] (or anywhere when it is not in the list). Turning shuffle off needs nothing: the list
    * itself is the original order, and play goes on from the current track.
    */
-  fun shuffleOrderFor(list: List<Track>, current: Track?, order: List<String>, random: Random = Random.Default): List<String> {
-    val fits = order.size == list.size &&
+  fun shuffleOrderFor(list: List<Track>, current: Track?, order: List<String>, random: Random = Random.Default): List<String> =
+    if (shuffleOrderFits(list, current, order)) order else shuffled(list, current?.id, random)
+
+  /** True when [order] still covers exactly [list] and holds [current], so [shuffleOrderFor] keeps it. */
+  fun shuffleOrderFits(list: List<Track>, current: Track?, order: List<String>): Boolean =
+    order.size == list.size &&
       (current == null || current.id in order || list.none { it.id == current.id }) &&
       order.toSet() == list.mapTo(HashSet()) { it.id }
-    return if (fits) order else shuffled(list, current?.id, random)
+
+  /**
+   * The track the Previous button goes back to (once it is past the restart threshold): the last one
+   * in [history], or else the one before [current] in [list], wrapping to the list's end.
+   */
+  fun previous(history: List<Track>, list: List<Track>, current: Track?): Track? {
+    if (history.isNotEmpty()) return history.last()
+    val i = list.indexOfFirst { it.id == current?.id }
+    return list.getOrNull(if (i > 0) i - 1 else list.lastIndex)
   }
 
   /** A uniform permutation of [list]'s ids; [firstId], when in the list, goes first. */

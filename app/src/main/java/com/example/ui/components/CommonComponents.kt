@@ -29,6 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBackIos
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Equalizer
@@ -53,6 +54,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
@@ -67,6 +70,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -77,6 +81,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.unit.Constraints
+import kotlin.math.roundToInt
+import com.example.R
 import com.example.data.model.Curiosity
 import com.example.data.model.ToolExecutionReport
 import com.example.data.model.Track
@@ -210,14 +223,16 @@ fun EmptyState(
 /**
  * The large title at the top of a tab page, left-aligned at the page margin. [showSettings] adds the
  * Ajustes button at the trailing edge (only Início has it); without it the row keeps the same height,
- * so the title does not jump when switching tabs.
+ * so the title does not jump when switching tabs. A page that hides the bars (Ajustes) passes [onBack],
+ * which puts a back button in that spot, since the tab bar is no longer there to leave by.
  */
 @Composable
 fun TarkasLargeTitle(
   title: String,
   onOpenSettings: () -> Unit,
   modifier: Modifier = Modifier,
-  showSettings: Boolean = true
+  showSettings: Boolean = true,
+  onBack: (() -> Unit)? = null
 ) {
   Row(
     modifier = modifier
@@ -228,6 +243,15 @@ fun TarkasLargeTitle(
       .padding(start = Space.page, end = Space.s, top = Space.m, bottom = Space.s),
     verticalAlignment = Alignment.CenterVertically
   ) {
+    if (onBack != null) {
+      IconAction(
+        icon = Icons.AutoMirrored.Rounded.ArrowBackIos,
+        contentDescription = stringResource(R.string.player_common_back),
+        onClick = onBack,
+        tint = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.testTag("topbar_back_button")
+      )
+    }
     Text(
       text = title,
       style = AppText.LargeTitle,
@@ -238,10 +262,10 @@ fun TarkasLargeTitle(
         .weight(1f)
         .semantics { heading() }
     )
-    if (showSettings) {
+    if (showSettings && onBack == null) {
       IconAction(
         icon = Icons.Rounded.Settings,
-        contentDescription = "Ajustes",
+        contentDescription = stringResource(R.string.player_common_settings),
         onClick = onOpenSettings,
         tint = MaterialTheme.colorScheme.primary,
         modifier = Modifier.testTag("topbar_settings_button")
@@ -330,11 +354,19 @@ fun TarkasMark(
 }
 
 /**
- * The floating tab bar: a glass capsule (it floats over the content) with four tabs, icon over a
- * Caption1 label. The selected tab is tinted with the accent and sits on a quiet filled indicator
- * that glides to it on a critically damped spring. While the page scrolls down the capsule draws back
- * a little and its labels fade; scrolling up brings them back. Scale and alpha only, so the page layout
- * never moves.
+ * The floating tab bar: a glass capsule (it floats over the content) with four tabs in the "expanding
+ * label" style. The active tab is wider and shows its icon and Caption1 label inside a quiet filled
+ * pill; the others are icon only and narrower. Changing tab moves one fractional position on a
+ * critically damped spring (no bounce, response about 0.24 s): the widths redistribute, the pill
+ * travels and resizes, the old label folds back into its icon and the new one slides out of it, all
+ * from that single value, so a tap in the middle of the motion continues from what is on screen.
+ * The position is read only while laying out and drawing, so the animation never recomposes.
+ *
+ * While the page scrolls down ([collapsed]) the capsule draws back a little, as before, and the bar
+ * becomes icons only: the active tab keeps its accent icon and a round pill without text, and the
+ * slots even out. A label alone in a smaller capsule was the inconsistent half (the inactive tabs
+ * already have none), and the pill still says which tab is open. Scrolling up brings the label back.
+ * The height of the bar never changes, so the page and the mini player above never move.
  */
 @Composable
 fun TarkasBottomNav(
@@ -343,98 +375,323 @@ fun TarkasBottomNav(
   modifier: Modifier = Modifier,
   collapsed: Boolean = false
 ) {
-  val items = listOf(
-    // No "Música" tab: the player opens from the mini player.
-    Triple(TarkasNavTab.HOME, "Início", Icons.Rounded.PlayCircle),
-    Triple(TarkasNavTab.LIBRARY, "Biblioteca", Icons.Rounded.LibraryMusic),
-    Triple(TarkasNavTab.AUDIO, "Áudio", Icons.Rounded.Equalizer),
-    Triple(TarkasNavTab.ASSISTANT, "Assistente", Icons.Rounded.Psychology)
-  )
+  val homeLabel = stringResource(R.string.player_common_tab_home)
+  val libraryLabel = stringResource(R.string.player_common_tab_library)
+  val audioLabel = stringResource(R.string.player_common_tab_audio)
+  val assistantLabel = stringResource(R.string.player_common_tab_assistant)
+  val items = remember(homeLabel, libraryLabel, audioLabel, assistantLabel) {
+    listOf(
+      // No "Música" tab: the player opens from the mini player.
+      Triple(TarkasNavTab.HOME, homeLabel, Icons.Rounded.PlayCircle),
+      Triple(TarkasNavTab.LIBRARY, libraryLabel, Icons.Rounded.LibraryMusic),
+      Triple(TarkasNavTab.AUDIO, audioLabel, Icons.Rounded.Equalizer),
+      Triple(TarkasNavTab.ASSISTANT, assistantLabel, Icons.Rounded.Psychology)
+    )
+  }
+  val count = items.size
   val selectedIndex = items.indexOfFirst { it.first == currentTab }
   val reduced = rememberReducedMotion()
 
-  val indicator = remember { Animatable(selectedIndex.coerceAtLeast(0).toFloat()) }
+  // The one value that drives the whole bar: which tab is active, fractional while moving.
+  val position = remember { Animatable(selectedIndex.coerceAtLeast(0).toFloat()) }
   LaunchedEffect(selectedIndex, reduced) {
     if (selectedIndex < 0) return@LaunchedEffect
-    if (reduced) indicator.snapTo(selectedIndex.toFloat())
-    else indicator.animateTo(selectedIndex.toFloat(), Motion.criticalSpatial(stiffness = 700f))
+    // Reduced motion: the bar switches at once (no width animation).
+    if (reduced) position.snapTo(selectedIndex.toFloat())
+    else position.animateTo(selectedIndex.toFloat(), Motion.criticalSpatial(stiffness = 700f))
   }
-  val indicatorAlpha by animateFloatAsState(
-    targetValue = if (selectedIndex >= 0) 1f else 0f,
-    animationSpec = tween(150),
-    label = "navIndicatorAlpha"
+  // 1 while one of the four tabs is open. Ajustes is reached from Início but is none of them: the bar
+  // folds to icons only, evenly spaced, with no pill and no accent. While the player covers the bar
+  // (MUSIC) it stays as it was, so nothing in it changes while it leaves or comes back.
+  val presence = animateFloatAsState(
+    targetValue = if (selectedIndex >= 0 || currentTab == TarkasNavTab.MUSIC) 1f else 0f,
+    animationSpec = if (reduced) snap() else Motion.criticalSpatial(stiffness = 700f),
+    label = "navPresence"
   )
-  val shrink by animateFloatAsState(
+  val shrink = animateFloatAsState(
     targetValue = if (collapsed && !reduced) 1f else 0f,
     animationSpec = Motion.criticalSpatial(stiffness = 400f),
     label = "navShrink"
   )
-  val indicatorColor = MaterialTheme.colorScheme.onSurface
+  // 0: labels may show; 1: icons only (scrolled down, or no tab open).
+  val fold = remember { { 1f - (1f - shrink.value) * presence.value } }
 
-  Row(
+  val colors = MaterialTheme.colorScheme
+  val pillColor = colors.onSurface.copy(alpha = 0.12f)
+  val labelStyle = remember { AppText.Caption1.copy(fontWeight = FontWeight.SemiBold) }
+  val density = LocalDensity.current
+  val measurer = rememberTextMeasurer()
+  val geometry = remember { NavBarGeometry(count) }
+  // Measured once per font size, not per frame: the labels' widths decide the active slot, and the
+  // label's height keeps the bar exactly as tall as the old icon-over-label layout.
+  remember(density, labelStyle) {
+    var textHeight = 0
+    items.forEachIndexed { i, item ->
+      val size = measurer.measure(item.second, labelStyle, softWrap = false, maxLines = 1).size
+      geometry.labelWidths[i] = size.width.toFloat()
+      textHeight = maxOf(textHeight, size.height)
+    }
+    with(density) {
+      geometry.icon = Sizes.icon.toPx()
+      geometry.touch = Sizes.touch.toPx()
+      geometry.slide = 8.dp.toPx()
+      geometry.height = (6.dp * 2 + Sizes.icon + Space.xxs).roundToPx() + textHeight
+      geometry.gapWide = 6.dp.toPx()
+      geometry.gapTight = Space.xs.toPx()
+      geometry.padWide = 14.dp.toPx()
+      geometry.padTight = Space.s.toPx()
+    }
+    true
+  }
+
+  // The glass capsule is its own node, outside the animation: the moving tabs and pill live in a
+  // child with its own layer, so a frame of the animation re-lays and redraws only that child and
+  // never re-measures or re-records the glass (its backdrop and lens are the costly part).
+  Box(
     modifier = modifier
       .fillMaxWidth()
       .graphicsLayer {
-        val s = 1f - 0.08f * shrink
+        val s = 1f - 0.08f * shrink.value
         scaleX = s
         scaleY = s
         transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
       }
       .glassSurface(Shapes.pill)
       .padding(Space.xs + Space.xxs)
-      .drawBehind {
-        val slot = size.width / items.size
-        drawRoundRect(
-          indicatorColor.copy(alpha = 0.09f * indicatorAlpha),
-          topLeft = Offset(indicator.value * slot, 0f),
-          size = Size(slot, size.height),
-          cornerRadius = CornerRadius(size.height / 2f)
-        )
-      }
   ) {
-    items.forEach { (tab, label, icon) ->
-      val selected = currentTab == tab
-      val tint by animateColorAsState(
-        targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        animationSpec = tween(150),
-        label = "navTint"
-      )
-      Column(
-        modifier = Modifier
-          .weight(1f)
-          .heightIn(min = Sizes.touch)
-          .testTag("nav_tab_${tab.name.lowercase()}")
-          .clip(Shapes.pill)
-          .selectable(
-            selected = selected,
-            role = Role.Tab,
+    Layout(
+      content = {
+        items.forEachIndexed { index, (tab, label, icon) ->
+          // Kept between recompositions, so a tab change does not recompose the tabs' contents.
+          // How far this tab is open: its share of the position, folded away while collapsed.
+          val reveal = remember(index) { { NavLayout.share(position.value, index, count) * (1f - fold()) } }
+          val tint = remember(index) { { NavLayout.share(position.value, index, count) * presence.value } }
+          NavTab(
+            label = label,
+            icon = icon,
+            selected = currentTab == tab,
+            tag = "nav_tab_${tab.name.lowercase()}",
+            reveal = reveal,
+            tint = tint,
+            geometry = geometry,
+            labelStyle = labelStyle,
+            activeColor = colors.primary,
+            inactiveColor = colors.onSurfaceVariant,
+            reduced = reduced,
             onClick = { onTabSelected(tab) }
           )
-          .padding(horizontal = Space.xs, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-      ) {
-        // The label below names the tab for TalkBack, so the icon stays silent (no double reading).
-        Icon(
-          imageVector = icon,
-          contentDescription = null,
-          tint = tint,
-          modifier = Modifier
-            .size(Sizes.icon)
-            // With the labels faded, the icons drop to the middle of the capsule.
-            .graphicsLayer { translationY = shrink * 7.dp.toPx() }
-        )
-        Spacer(modifier = Modifier.height(Space.xxs))
-        Text(
-          text = label,
-          style = AppText.Caption1.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
-          color = tint,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-          textAlign = TextAlign.Center,
-          modifier = Modifier.graphicsLayer { alpha = 1f - shrink }
-        )
+        }
+      },
+      modifier = Modifier
+        .fillMaxWidth()
+        .graphicsLayer {}
+        .drawBehind {
+          val alpha = presence.value
+          if (alpha <= 0f) return@drawBehind
+          val p = position.value
+          val s = fold()
+          geometry.slots(p, s, size.width, geometry.drawWidths)
+          val k = p.toInt().coerceIn(0, count - 1)
+          val f = (p - k).coerceIn(0f, 1f)
+          geometry.pill(k, NavLayout.share(p, k, count) * (1f - s), geometry.drawWidths, size.height)
+          var left = geometry.pillLeft
+          var right = geometry.pillRight
+          if (k + 1 < count && f > 0f) {
+            geometry.pill(k + 1, NavLayout.share(p, k + 1, count) * (1f - s), geometry.drawWidths, size.height)
+            left += (geometry.pillLeft - left) * f
+            right += (geometry.pillRight - right) * f
+          }
+          drawRoundRect(
+            pillColor.copy(alpha = pillColor.alpha * alpha),
+            topLeft = Offset(left, 0f),
+            size = Size(right - left, size.height),
+            cornerRadius = CornerRadius(size.height / 2f)
+          )
+        }
+    ) { measurables, constraints ->
+      val total = constraints.maxWidth.toFloat()
+      geometry.fit(total)
+      geometry.slots(position.value, fold(), total, geometry.layoutWidths)
+      val h = geometry.height.coerceIn(constraints.minHeight, constraints.maxHeight)
+      // Whole pixels that still add up to the full width: each slot ends where the running sum rounds.
+      var sum = 0f
+      var previous = 0
+      for (i in 0 until count) {
+        sum += geometry.layoutWidths[i]
+        val end = if (i == count - 1) constraints.maxWidth else sum.roundToInt()
+        geometry.placeables[i] = measurables[i].measure(Constraints.fixed((end - previous).coerceAtLeast(0), h))
+        previous = end
       }
+      layout(constraints.maxWidth, h) {
+        var x = 0
+        for (i in 0 until count) {
+          val placeable = geometry.placeables[i] ?: continue
+          placeable.place(x, 0)
+          x += placeable.width
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Sizes of the tab bar, measured once per font size and kept between frames (the arrays are reused,
+ * so the animation allocates nothing). Written while measuring, read while laying out and drawing.
+ */
+private class NavBarGeometry(val count: Int) {
+  val labelWidths = FloatArray(count)
+  val layoutWidths = FloatArray(count)
+  val drawWidths = FloatArray(count)
+  val placeables = arrayOfNulls<androidx.compose.ui.layout.Placeable>(count)
+  var icon = 0f
+  var touch = 0f
+  var slide = 0f
+  var height = 0
+  var gapWide = 0f
+  var gapTight = 0f
+  var padWide = 0f
+  var padTight = 0f
+
+  /** Space between icon and label, and inside the pill on each side, after [fit]. */
+  var gap = 0f
+  var pad = 0f
+  var activeWeight = 1f
+  var pillLeft = 0f
+  var pillRight = 0f
+
+  /**
+   * Gives the active slot room for the longest label. If the other tabs would drop below the touch
+   * size (large system fonts), the spacing tightens first; the label is never shortened.
+   */
+  fun fit(total: Float) {
+    var longest = 0f
+    for (w in labelWidths) longest = maxOf(longest, w)
+    gap = gapWide
+    pad = padWide
+    var needed = icon + gap + longest + 2f * pad
+    if ((total - needed) / (count - 1) < touch) {
+      gap = gapTight
+      pad = padTight
+      needed = icon + gap + longest + 2f * pad
+    }
+    val active = minOf(needed, total - (count - 1) * touch)
+    // At least 1.5: with short labels the active tab still reads as the wider one.
+    activeWeight = maxOf(1.5f, NavLayout.weightFor(active, count, total))
+  }
+
+  /** Slot widths at [position]; folding (collapsed, or no tab open) evens them out: all icon only. */
+  fun slots(position: Float, fold: Float, total: Float, out: FloatArray) {
+    val weight = 1f + (activeWeight - 1f) * (1f - fold)
+    NavLayout.slotWidths(position, count, total, weight, out)
+  }
+
+  /** Pill around tab [index] opened by [reveal]: icon plus the revealed label, centred in its slot. */
+  fun pill(index: Int, reveal: Float, widths: FloatArray, height: Float) {
+    var start = 0f
+    for (i in 0 until index) start += widths[i]
+    val slot = widths[index]
+    val content = icon + reveal * (gap + labelWidths[index]) + 2f * pad
+    // Never narrower than tall (a circle around the icon alone), never wider than the slot.
+    val width = maxOf(content, height).coerceAtMost(slot)
+    val centre = start + slot / 2f
+    pillLeft = centre - width / 2f
+    pillRight = centre + width / 2f
+  }
+}
+
+/**
+ * One tab: the icon (inactive colour, with the accent copy over it faded in by [tint], so the colour
+ * blends without recomposing) and the label, which slides out of the icon behind a clip as [reveal]
+ * grows. Announced as a tab with its name and state; pressing scales it at once (on pointer-down).
+ */
+@Composable
+private fun NavTab(
+  label: String,
+  icon: ImageVector,
+  selected: Boolean,
+  tag: String,
+  reveal: () -> Float,
+  tint: () -> Float,
+  geometry: NavBarGeometry,
+  labelStyle: androidx.compose.ui.text.TextStyle,
+  activeColor: Color,
+  inactiveColor: Color,
+  reduced: Boolean,
+  onClick: () -> Unit
+) {
+  val interaction = remember { MutableInteractionSource() }
+  val pressed by interaction.collectIsPressedAsState()
+  val press = animateFloatAsState(
+    targetValue = if (pressed && !reduced) 0.9f else 1f,
+    animationSpec = Motion.criticalSpatial(stiffness = 900f),
+    label = "navPress"
+  )
+  Layout(
+    content = {
+      Icon(imageVector = icon, contentDescription = null, tint = inactiveColor, modifier = Modifier.size(Sizes.icon))
+      Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = activeColor,
+        modifier = Modifier
+          .size(Sizes.icon)
+          .graphicsLayer {
+            alpha = tint()
+            // One icon, nothing overlapping: the alpha goes on its pixels, with no offscreen buffer.
+            compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.ModulateAlpha
+          }
+      )
+      Text(
+        text = label,
+        style = labelStyle,
+        color = activeColor,
+        maxLines = 1,
+        softWrap = false,
+        modifier = Modifier
+          // The tab itself carries the name, so the label is not read twice.
+          .clearAndSetSemantics {}
+          .graphicsLayer {
+            alpha = ((reveal() - 0.15f) / 0.85f).coerceIn(0f, 1f)
+            compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.ModulateAlpha
+          }
+          .drawWithContent {
+            val r = reveal()
+            if (r <= 0.001f) return@drawWithContent
+            // Revealed from the icon's side; the text trails in from behind it.
+            clipRect(left = 0f, top = -size.height, right = r * size.width, bottom = size.height * 2f) {
+              translate(left = -(1f - r) * geometry.slide) { this@drawWithContent.drawContent() }
+            }
+          }
+      )
+    },
+    modifier = Modifier
+      .testTag(tag)
+      .semantics { contentDescription = label }
+      .selectable(
+        selected = selected,
+        interactionSource = interaction,
+        indication = null,
+        role = Role.Tab,
+        onClick = onClick
+      )
+      .graphicsLayer {
+        scaleX = press.value
+        scaleY = press.value
+      }
+  ) { measurables, constraints ->
+    val loose = Constraints()
+    val base = measurables[0].measure(loose)
+    val accent = measurables[1].measure(loose)
+    val text = measurables[2].measure(loose)
+    layout(constraints.maxWidth, constraints.maxHeight) {
+      // Read here, so moving between tabs only re-places (no re-measure, no recomposition).
+      val r = reveal()
+      val content = base.width + r * (geometry.gap + text.width)
+      val x = ((constraints.maxWidth - content) / 2f).roundToInt()
+      val iconY = (constraints.maxHeight - base.height) / 2
+      base.place(x, iconY)
+      accent.place(x, iconY)
+      text.place(x + base.width + (r * geometry.gap).roundToInt(), (constraints.maxHeight - text.height) / 2)
     }
   }
 }
@@ -457,6 +714,9 @@ fun MiniPlayerBar(
 ) {
   if (track == null) return
 
+  val openPlayerLabel = stringResource(R.string.player_common_open_player)
+  val previousLabel = stringResource(R.string.player_common_previous_track)
+  val nextLabel = stringResource(R.string.player_common_next_track)
   val haptics = LocalHapticFeedback.current
   val scope = rememberCoroutineScope()
   val reduced = rememberReducedMotion()
@@ -508,11 +768,11 @@ fun MiniPlayerBar(
           swipe += dx
         }
       }
-      .pressClickable(pressedScale = 0.985f, onClickLabel = "Abrir player", onClick = onClick)
+      .pressClickable(pressedScale = 0.985f, onClickLabel = openPlayerLabel, onClick = onClick)
       .semantics {
         customActions = listOf(
-          CustomAccessibilityAction("Faixa anterior") { currentPrevious(); true },
-          CustomAccessibilityAction("Próxima faixa") { currentNext(); true }
+          CustomAccessibilityAction(previousLabel) { currentPrevious(); true },
+          CustomAccessibilityAction(nextLabel) { currentNext(); true }
         )
       }
       // A hairline of progress along the bottom edge, inside the capsule's straight part.
@@ -537,9 +797,22 @@ fun MiniPlayerBar(
         .padding(start = Space.s + Space.xxs, end = Space.xs, top = Space.s, bottom = Space.s),
       verticalAlignment = Alignment.CenterVertically
     ) {
-      TrackArtwork(track = track, shape = Shapes.xs, iconSize = 20.dp, modifier = Modifier.size(40.dp))
+      TrackArtwork(
+        track = track,
+        shape = Shapes.s,
+        iconSize = 20.dp,
+        modifier = Modifier
+          .size(40.dp)
+          // The player's cover starts here and lands back here when it closes.
+          .onGloballyPositioned { com.example.ui.theme.PlayerOrigin.miniCover = it.boundsInWindow() }
+      )
       Spacer(modifier = Modifier.width(Space.m))
-      Column(modifier = Modifier.weight(1f)) {
+      Column(
+        modifier = Modifier
+          .weight(1f)
+          // The player's title goes to and from here.
+          .onGloballyPositioned { com.example.ui.theme.PlayerOrigin.miniTitle = it.boundsInWindow() }
+      ) {
         Text(
           text = track.title,
           style = AppText.Subhead.copy(fontWeight = FontWeight.SemiBold),
@@ -563,14 +836,24 @@ fun MiniPlayerBar(
           .testTag("mini_player_play_pause"),
         contentAlignment = Alignment.Center
       ) {
-        PlayPauseIcon(isPlaying = isPlaying, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(28.dp))
+        PlayPauseIcon(
+          isPlaying = isPlaying,
+          tint = MaterialTheme.colorScheme.onSurface,
+          modifier = Modifier
+            .size(28.dp)
+            // The player's play glyph goes to and from here.
+            .onGloballyPositioned { com.example.ui.theme.PlayerOrigin.miniPlay = it.boundsInWindow() }
+        )
       }
       IconAction(
         icon = Icons.Rounded.SkipNext,
-        contentDescription = "Próxima faixa",
+        contentDescription = nextLabel,
         onClick = onNext,
         tint = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.testTag("mini_player_next")
+        modifier = Modifier
+          .testTag("mini_player_next")
+          // The player's next button goes to and from here.
+          .onGloballyPositioned { com.example.ui.theme.PlayerOrigin.miniNext = it.boundsInWindow() }
       )
     }
   }
@@ -584,6 +867,7 @@ fun MiniPlayerBar(
 @Composable
 fun PlayPauseIcon(isPlaying: Boolean, tint: Color, modifier: Modifier = Modifier) {
   val reduced = rememberReducedMotion()
+  val description = stringResource(if (isPlaying) R.string.player_common_pause else R.string.player_common_play)
   // 0 = play triangle, 1 = pause bars.
   val morph by animateFloatAsState(
     targetValue = if (isPlaying) 1f else 0f,
@@ -592,7 +876,7 @@ fun PlayPauseIcon(isPlaying: Boolean, tint: Color, modifier: Modifier = Modifier
   )
   val path = remember { Path() }
   Canvas(
-    modifier = modifier.semantics { contentDescription = if (isPlaying) "Pausar" else "Reproduzir" }
+    modifier = modifier.semantics { contentDescription = description }
   ) {
     val k = size.minDimension / 24f
     val ox = (size.width - 24f * k) / 2f
@@ -647,7 +931,7 @@ fun ToolReportCard(
   ) {
     Icon(
       imageVector = if (report.success) Icons.Rounded.CheckCircle else Icons.Rounded.ErrorOutline,
-      contentDescription = if (report.success) "Concluído" else "Não concluído",
+      contentDescription = stringResource(if (report.success) R.string.player_common_done else R.string.player_common_not_done),
       tint = if (report.success) colors.primary else colors.error,
       modifier = Modifier
         .padding(top = 1.dp)
@@ -668,14 +952,15 @@ fun ToolReportCard(
 }
 
 /** A person's name for what a tool did. */
+@Composable
 private fun toolTitle(toolName: String, success: Boolean): String = when (toolName) {
-  "analyze_and_research_music" -> "Pesquisa sobre a música"
-  "get_current_track" -> "Faixa atual"
-  "get_audio_capabilities" -> "Recursos de áudio"
-  "apply_audio_profile" -> "Perfil de áudio"
-  "create_timer" -> "Timer criado"
-  "cancel_timer" -> "Timer cancelado"
-  else -> if (success) "Feito" else "Não deu certo"
+  "analyze_and_research_music" -> stringResource(R.string.player_common_tool_research)
+  "get_current_track" -> stringResource(R.string.player_common_tool_current_track)
+  "get_audio_capabilities" -> stringResource(R.string.player_common_tool_audio_capabilities)
+  "apply_audio_profile" -> stringResource(R.string.player_common_tool_audio_profile)
+  "create_timer" -> stringResource(R.string.player_common_tool_timer_created)
+  "cancel_timer" -> stringResource(R.string.player_common_tool_timer_cancelled)
+  else -> if (success) stringResource(R.string.player_common_tool_done) else stringResource(R.string.player_common_tool_failed)
 }
 
 /**
@@ -692,7 +977,7 @@ fun CuriosityDetailDialog(
     onDismissRequest = onDismiss,
     title = {
       Column {
-        Text(text = "Curiosidade da faixa", style = AppText.Title3, color = colors.onSurface)
+        Text(text = stringResource(R.string.player_common_curiosity_title), style = AppText.Title3, color = colors.onSurface)
         Spacer(Modifier.height(Space.xxs))
         Text(
           text = "${curiosity.trackTitle} · ${curiosity.artist}",
@@ -710,7 +995,7 @@ fun CuriosityDetailDialog(
         if (curiosity.documentedFacts.isNotBlank()) {
           Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
             Text(
-              text = "Fatos documentados",
+              text = stringResource(R.string.player_common_curiosity_facts),
               style = AppText.Footnote.copy(fontWeight = FontWeight.SemiBold),
               color = colors.onSurfaceVariant,
               modifier = Modifier.semantics { heading() }
@@ -721,7 +1006,7 @@ fun CuriosityDetailDialog(
         if (curiosity.sources.isNotEmpty()) {
           Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
             Text(
-              text = "Fontes",
+              text = stringResource(R.string.player_common_curiosity_sources),
               style = AppText.Footnote.copy(fontWeight = FontWeight.SemiBold),
               color = colors.onSurfaceVariant,
               modifier = Modifier.semantics { heading() }
@@ -735,7 +1020,7 @@ fun CuriosityDetailDialog(
     },
     confirmButton = {
       TextButton(onClick = onDismiss) {
-        Text("Fechar", style = AppText.Headline)
+        Text(stringResource(R.string.player_common_close), style = AppText.Headline)
       }
     }
   )

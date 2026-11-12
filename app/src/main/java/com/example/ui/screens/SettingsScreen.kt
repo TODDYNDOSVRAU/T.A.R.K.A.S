@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -59,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.example.BuildConfig
+import com.example.R
 import com.example.data.model.AudioCapabilities
 import com.example.data.model.CuriosityConfig
 import com.example.data.model.RepeatMode
@@ -89,7 +91,9 @@ import com.example.ui.theme.subPageTransition
 private enum class SettingsPage { MAIN, ABOUT, TERMS, PRIVACY, LICENSES, CHANGELOG }
 
 /** The name a sub-page's back control shows for the page it returns to. */
-private fun SettingsPage.backLabel(): String = if (this == SettingsPage.ABOUT) "Sobre" else "Ajustes"
+@Composable
+private fun SettingsPage.backLabel(): String =
+  stringResource(if (this == SettingsPage.ABOUT) R.string.settings_about else R.string.settings_back_settings)
 
 /**
  * Ajustes, as a grouped list in the manner of the platform's own settings: Aparência, Reprodução,
@@ -249,18 +253,18 @@ private fun MainSettings(
     contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
   ) {
     // Aparência
-    settingsGroup("Tema", tag = "settings_theme_card") {
+    settingsGroup(context.getString(R.string.settings_theme), tag = "settings_theme_card") {
       ThemeOptionRows(themeMode, onThemeModeChange, tagPrefix = "theme_chip_")
     }
     settingsGroup(
-      "Barras flutuantes",
-      footer = "Como são desenhadas a barra de abas e o mini player. O conteúdo das páginas é sempre sólido."
+      context.getString(R.string.settings_floating_bars),
+      footer = context.getString(R.string.settings_floating_bars_footer)
     ) {
       SurfaceOptionRows(surfaceStyle, onSurfaceStyleChange, tagPrefix = "surface_style_")
     }
     settingsGroup(
-      "Animação das listas",
-      footer = "Como as músicas entram na tela ao rolar as listas. Com Reduzir animações, nenhuma."
+      context.getString(R.string.settings_list_animation),
+      footer = context.getString(R.string.settings_list_animation_footer)
     ) {
       Row(
         modifier = Modifier
@@ -279,10 +283,10 @@ private fun MainSettings(
         }
       }
     }
-    settingsGroup("Acessibilidade") {
+    settingsGroup(context.getString(R.string.settings_accessibility)) {
       SwitchRow(
-        title = "Reduzir transparência",
-        subtitle = if (AppMotion.systemBlurOff) "Ativado no Android" else "Barras sólidas, sem vidro",
+        title = stringResource(R.string.settings_reduce_transparency),
+        subtitle = if (AppMotion.systemBlurOff) stringResource(R.string.settings_on_in_android) else stringResource(R.string.settings_reduce_transparency_hint),
         checked = reduceTransparency || AppMotion.systemBlurOff,
         enabled = !AppMotion.systemBlurOff,
         onCheckedChange = onReduceTransparencyChange,
@@ -290,8 +294,8 @@ private fun MainSettings(
       )
       GroupDivider()
       SwitchRow(
-        title = "Reduzir animações",
-        subtitle = if (AppMotion.systemReduced) "Ativado no Android" else "Troca de tela sem movimento",
+        title = stringResource(R.string.settings_reduce_motion),
+        subtitle = if (AppMotion.systemReduced) stringResource(R.string.settings_on_in_android) else stringResource(R.string.settings_reduce_motion_hint),
         checked = reduceMotion || AppMotion.systemReduced,
         enabled = !AppMotion.systemReduced,
         onCheckedChange = onReduceMotionChange,
@@ -300,24 +304,24 @@ private fun MainSettings(
     }
 
     // Reprodução
-    settingsGroup("Reprodução") {
+    settingsGroup(context.getString(R.string.settings_playback)) {
       SwitchRow(
-        title = "Aleatório",
+        title = stringResource(R.string.settings_shuffle),
         checked = isShuffle,
         onCheckedChange = { onToggleShuffle() },
         modifier = Modifier.testTag("settings_shuffle")
       )
     }
     settingsGroup(
-      "Repetir",
-      footer = "A música pausa sozinha quando o fone com fio ou Bluetooth desconecta, para não sair pelo alto-falante.",
+      context.getString(R.string.settings_repeat),
+      footer = context.getString(R.string.settings_repeat_footer),
       tag = "settings_repeat"
     ) {
       Column(Modifier.selectableGroup()) {
         RepeatChoices.forEachIndexed { i, (mode, label) ->
           if (i > 0) GroupDivider()
           RadioRow(
-            title = label,
+            title = stringResource(label),
             selected = repeatMode == mode,
             onClick = { if (repeatMode != mode) onSetRepeatMode(mode) },
             modifier = Modifier.testTag("settings_repeat_${mode.name.lowercase()}")
@@ -328,66 +332,77 @@ private fun MainSettings(
 
     // Áudio
     settingsGroup(
-      "Áudio",
-      footer = "Para equalizar o Spotify, o YouTube e os outros apps, abra a aba Áudio, toque em Ajustes avançados e escolha ADB ou Root."
+      context.getString(R.string.settings_audio),
+      footer = context.getString(R.string.settings_audio_footer)
     ) {
       ListRow(
-        title = "Equalizador e som",
-        subtitle = "15 bandas ou paramétrico, com correção para o seu fone",
+        title = stringResource(R.string.settings_audio_eq),
+        subtitle = stringResource(R.string.settings_audio_eq_subtitle),
         onClick = onOpenAudio,
         modifier = Modifier.testTag("settings_open_audio")
       )
       GroupDivider()
       InfoRow(
-        title = "Saída atual",
-        value = "${capabilities.activeRouteName} · ${String.format("%.1f", capabilities.sampleRateHz / 1000f)} kHz"
+        title = stringResource(R.string.settings_audio_output),
+        value = stringResource(
+          R.string.settings_audio_output_value,
+          capabilities.activeRouteName,
+          String.format("%.1f", capabilities.sampleRateHz / 1000f)
+        )
       )
       capabilities.trackFormat?.let { format ->
         GroupDivider()
-        InfoRow(title = "Faixa tocando", value = format)
+        InfoRow(title = stringResource(R.string.settings_audio_playing), value = format)
       }
     }
 
     // Catálogos online
     settingsGroup(
-      "Catálogos online",
-      footer = "A busca do Início procura no Audius e no Jamendo, músicas independentes que tocam inteiras e de graça. " +
-        "O MusicBrainz mostra álbum, ano e gêneros em Sobre a faixa, no menu ⋯ do player."
+      context.getString(R.string.settings_catalogs),
+      footer = context.getString(R.string.settings_catalogs_footer)
     ) {
-      InfoRow(title = "Audius", value = "Ativo")
+      InfoRow(title = "Audius", value = stringResource(R.string.settings_catalog_active))
       GroupDivider()
-      InfoRow(title = "Jamendo", value = if (com.example.data.jamendo.JamendoApiService.isConfigured) "Ativo" else "Sem chave")
+      InfoRow(
+        title = "Jamendo",
+        value = if (com.example.data.jamendo.JamendoApiService.isConfigured) stringResource(R.string.settings_catalog_active)
+        else stringResource(R.string.settings_catalog_no_key)
+      )
       GroupDivider()
-      InfoRow(title = "MusicBrainz", value = "Ativo")
+      InfoRow(title = "MusicBrainz", value = stringResource(R.string.settings_catalog_active))
     }
 
     // Curiosidades e assistente
     settingsGroup(
-      "Curiosidades e assistente",
-      footer = if (hasGeminiKey) "Mensagens que não são comandos locais vão para o Gemini."
-      else "Sem uma chave do Gemini, o assistente responde só aos comandos locais."
+      context.getString(R.string.settings_assistant),
+      footer = if (hasGeminiKey) context.getString(R.string.settings_assistant_footer_gemini)
+      else context.getString(R.string.settings_assistant_footer_local)
     ) {
       val enabled = curiosityConfig?.enabled != false
       val timing = curiosityConfig?.timing
       ListRow(
-        title = "Curiosidades musicais",
-        value = if (!enabled) "Desligadas" else curiosityTimingChoices.firstOrNull { it.timing == timing }?.short ?: "Ligadas",
+        title = stringResource(R.string.settings_curiosity_title),
+        value = if (!enabled) stringResource(R.string.settings_curiosity_state_off)
+        else stringResource(curiosityTimingChoices.firstOrNull { it.timing == timing }?.short ?: R.string.settings_curiosity_state_on),
         onClick = onOpenCuriositySettings,
         modifier = Modifier.testTag("settings_curiosidades_musicais_card")
       )
       GroupDivider()
-      InfoRow(title = "IA online (Gemini)", value = if (hasGeminiKey) "Conectada" else "Não configurada")
+      InfoRow(
+        title = stringResource(R.string.settings_gemini),
+        value = if (hasGeminiKey) stringResource(R.string.settings_gemini_connected) else stringResource(R.string.settings_gemini_not_set)
+      )
     }
 
     // Notificações
     settingsGroup(
-      "Notificações",
-      footer = if (notificationsOn) "Controles da música na tela bloqueada e na barra, com a curiosidade da faixa quando houver."
-      else "Sem notificações, os controles não aparecem na tela bloqueada."
+      context.getString(R.string.settings_notifications),
+      footer = if (notificationsOn) context.getString(R.string.settings_notifications_footer_on)
+      else context.getString(R.string.settings_notifications_footer_off)
     ) {
       ListRow(
-        title = "Notificações",
-        value = if (notificationsOn) "Ativadas" else "Desativadas",
+        title = stringResource(R.string.settings_notifications),
+        value = if (notificationsOn) stringResource(R.string.settings_notifications_on) else stringResource(R.string.settings_notifications_off),
         onClick = {
           openSystem(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
         },
@@ -395,11 +410,13 @@ private fun MainSettings(
       )
     }
 
+    updateSettingsGroup(context.getString(R.string.settings_update_header))
+
     // Armazenamento
-    settingsGroup("Armazenamento", footer = "Capas e a lista de fones guardadas. São baixadas de novo quando precisar.") {
+    settingsGroup(context.getString(R.string.settings_storage), footer = context.getString(R.string.settings_storage_footer)) {
       ListRow(
-        title = "Limpar cache",
-        value = cacheSize?.let { formatBytes(it) } ?: "Calculando…",
+        title = stringResource(R.string.settings_clear_cache),
+        value = cacheSize?.let { formatBytes(it) } ?: stringResource(R.string.settings_calculating),
         onClick = { onClearCache { cacheRefresh++ } },
         chevron = false,
         modifier = Modifier.testTag("settings_clear_cache")
@@ -408,25 +425,25 @@ private fun MainSettings(
 
     // Privacidade
     settingsGroup(
-      "Privacidade",
-      footer = "Favoritos, playlists e ajustes ficam só neste aparelho. O T.A.R.K.A.S. não tem conta nem servidor próprio. A exportação segue a LGPD (acesso e portabilidade)."
+      context.getString(R.string.settings_privacy),
+      footer = context.getString(R.string.settings_privacy_footer)
     ) {
       ListRow(
-        title = "Permissões",
-        subtitle = "Microfone e notificações, pedidas na hora do uso",
+        title = stringResource(R.string.settings_permissions),
+        subtitle = stringResource(R.string.settings_permissions_subtitle),
         onClick = { openSystem(appDetails) },
         modifier = Modifier.testTag("settings_open_permissions")
       )
       GroupDivider()
-      ListRow(title = "Exportar meus dados", onClick = { exportLauncher.launch("tarkas-meus-dados.json") }, modifier = Modifier.testTag("settings_export"))
+      ListRow(title = stringResource(R.string.settings_export), onClick = { exportLauncher.launch("tarkas-meus-dados.json") }, modifier = Modifier.testTag("settings_export"))
       GroupDivider()
-      ListRow(title = "Política de Privacidade", onClick = onOpenPrivacy, modifier = Modifier.testTag("settings_privacy"))
+      ListRow(title = stringResource(R.string.settings_privacy_policy), onClick = onOpenPrivacy, modifier = Modifier.testTag("settings_privacy"))
       GroupDivider()
-      ListRow(title = "Termos de Uso", onClick = onOpenTerms, modifier = Modifier.testTag("settings_terms"))
+      ListRow(title = stringResource(R.string.settings_terms), onClick = onOpenTerms, modifier = Modifier.testTag("settings_terms"))
     }
-    settingsGroup(header = null, footer = "Apaga ajustes, favoritos, playlists e o cache deste aparelho, e fecha o app.") {
+    settingsGroup(header = null, footer = context.getString(R.string.settings_erase_footer)) {
       ListRow(
-        title = "Apagar todos os dados",
+        title = stringResource(R.string.settings_erase),
         onClick = { confirmErase = true },
         chevron = false,
         destructive = true,
@@ -435,9 +452,9 @@ private fun MainSettings(
     }
 
     // Sobre
-    settingsGroup("Sobre") {
+    settingsGroup(context.getString(R.string.settings_about)) {
       ListRow(
-        title = "Sobre o T.A.R.K.A.S.",
+        title = stringResource(R.string.settings_about_row),
         value = BuildConfig.VERSION_NAME,
         onClick = onOpenAbout,
         modifier = Modifier.testTag("settings_about")
@@ -449,27 +466,22 @@ private fun MainSettings(
   if (confirmErase) {
     AlertDialog(
       onDismissRequest = { confirmErase = false },
-      title = { Text("Apagar todos os dados?", style = AppText.Title3) },
-      text = {
-        Text(
-          "Favoritos, playlists, predefinições do equalizador, ajustes e o cache serão apagados deste aparelho. " +
-            "Não dá para desfazer. O app fecha e, na próxima abertura, começa do zero. Para guardar uma cópia, use antes \"Exportar meus dados\"."
-        )
-      },
+      title = { Text(stringResource(R.string.settings_erase_dialog_title), style = AppText.Title3) },
+      text = { Text(stringResource(R.string.settings_erase_dialog_text)) },
       confirmButton = {
         TextButton(onClick = { confirmErase = false; onEraseAllData() }, modifier = Modifier.testTag("settings_erase_confirm")) {
-          Text("Apagar tudo", color = colors.error)
+          Text(stringResource(R.string.settings_erase_confirm), color = colors.error)
         }
       },
-      dismissButton = { TextButton(onClick = { confirmErase = false }) { Text("Cancelar") } }
+      dismissButton = { TextButton(onClick = { confirmErase = false }) { Text(stringResource(R.string.settings_cancel)) } }
     )
   }
 }
 
 private val RepeatChoices = listOf(
-  RepeatMode.OFF to "Desligado",
-  RepeatMode.ALL to "Repetir a lista",
-  RepeatMode.ONE to "Repetir a faixa"
+  RepeatMode.OFF to R.string.settings_repeat_off,
+  RepeatMode.ALL to R.string.settings_repeat_all,
+  RepeatMode.ONE to R.string.settings_repeat_one
 )
 
 @Composable
@@ -490,7 +502,14 @@ private fun AboutPage(
     modifier = Modifier.fillMaxSize().testTag("settings_about_page"),
     contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
   ) {
-    item { SubPageHeader(title = "Sobre", backLabel = "Ajustes", onBack = onBack, modifier = Modifier.testTag("about_back")) }
+    item {
+      SubPageHeader(
+        title = stringResource(R.string.settings_about),
+        backLabel = stringResource(R.string.settings_back_settings),
+        onBack = onBack,
+        modifier = Modifier.testTag("about_back")
+      )
+    }
     item {
       Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -500,7 +519,7 @@ private fun AboutPage(
         Spacer(Modifier.height(Space.m))
         Text("T.A.R.K.A.S.", style = AppText.Title2, color = colors.onSurface)
         Text(
-          "Música, equalizador e curiosidades",
+          stringResource(R.string.settings_about_tagline),
           style = AppText.Subhead,
           color = colors.onSurfaceVariant,
           textAlign = TextAlign.Center
@@ -518,34 +537,43 @@ private fun AboutPage(
     }
     settingsGroup(header = null) {
       ListRow(
-        title = "Versão",
-        value = if (copied) "Copiado" else "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+        title = stringResource(R.string.settings_about_version),
+        value = if (copied) stringResource(R.string.settings_about_copied) else "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
         chevron = false,
         onClick = {
           val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-          cm?.setPrimaryClip(ClipData.newPlainText("Versão do T.A.R.K.A.S.", "T.A.R.K.A.S. ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}), Android ${android.os.Build.VERSION.RELEASE}, ${android.os.Build.MODEL}"))
+          cm?.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.settings_about_clip_label), "T.A.R.K.A.S. ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}), Android ${android.os.Build.VERSION.RELEASE}, ${android.os.Build.MODEL}"))
           copied = true
         },
         modifier = Modifier.testTag("about_version")
       )
       GroupDivider()
-      ListRow(title = "Novidades", onClick = { onOpen(SettingsPage.CHANGELOG) }, modifier = Modifier.testTag("about_changelog"))
-      GroupDivider()
-      ListRow(title = "Todas as versões no GitHub", subtitle = "Baixe o APK mais recente", onClick = { open(LegalTexts.RELEASES_URL) })
-    }
-    settingsGroup("Legal") {
-      ListRow(title = "Termos de Uso", onClick = { onOpen(SettingsPage.TERMS) }, modifier = Modifier.testTag("about_terms"))
+      ListRow(title = stringResource(R.string.settings_about_whats_new), onClick = { onOpen(SettingsPage.CHANGELOG) }, modifier = Modifier.testTag("about_changelog"))
       GroupDivider()
       ListRow(
-        title = "Política de Privacidade",
-        subtitle = if (termsAcceptedAt > 0) "Aceita em ${java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("pt", "BR")).format(java.util.Date(termsAcceptedAt))}" else null,
+        title = stringResource(R.string.settings_about_all_versions),
+        subtitle = stringResource(R.string.settings_about_all_versions_subtitle),
+        onClick = { open(LegalTexts.RELEASES_URL) }
+      )
+    }
+    settingsGroup(context.getString(R.string.settings_about_legal)) {
+      ListRow(title = stringResource(R.string.settings_terms), onClick = { onOpen(SettingsPage.TERMS) }, modifier = Modifier.testTag("about_terms"))
+      GroupDivider()
+      ListRow(
+        title = stringResource(R.string.settings_privacy_policy),
+        subtitle = if (termsAcceptedAt > 0) {
+          stringResource(
+            R.string.settings_about_accepted_on,
+            java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("pt", "BR")).format(java.util.Date(termsAcceptedAt))
+          )
+        } else null,
         onClick = { onOpen(SettingsPage.PRIVACY) },
         modifier = Modifier.testTag("about_privacy")
       )
       GroupDivider()
-      ListRow(title = "Licenças de código aberto", onClick = { onOpen(SettingsPage.LICENSES) }, modifier = Modifier.testTag("about_licenses"))
+      ListRow(title = stringResource(R.string.settings_about_licenses), onClick = { onOpen(SettingsPage.LICENSES) }, modifier = Modifier.testTag("about_licenses"))
     }
-    settingsGroup("Créditos") {
+    settingsGroup(context.getString(R.string.settings_about_credits)) {
       LegalTexts.credits.forEachIndexed { i, (title, body) ->
         if (i > 0) GroupDivider()
         Column(
@@ -560,9 +588,9 @@ private fun AboutPage(
         }
       }
     }
-    settingsGroup("Contato") {
+    settingsGroup(context.getString(R.string.settings_about_contact)) {
       ListRow(
-        title = "Enviar e-mail",
+        title = stringResource(R.string.settings_about_send_email),
         subtitle = LegalTexts.CONTACT_EMAIL,
         onClick = {
           val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${LegalTexts.CONTACT_EMAIL}"))
@@ -574,9 +602,9 @@ private fun AboutPage(
       GroupDivider()
       ListRow(title = "Instagram", subtitle = LegalTexts.CONTACT_INSTAGRAM, onClick = { open(LegalTexts.INSTAGRAM_URL) })
     }
-    settingsGroup(header = null, footer = "Mostra de novo as boas-vindas, a aparência e as curiosidades. Seus dados ficam como estão.") {
+    settingsGroup(header = null, footer = context.getString(R.string.settings_about_restart_footer)) {
       ListRow(
-        title = "Refazer configuração inicial",
+        title = stringResource(R.string.settings_about_restart),
         onClick = onRestartOnboarding,
         modifier = Modifier.testTag("about_restart_onboarding")
       )
@@ -614,10 +642,10 @@ private fun formatBytes(bytes: Long): String = when {
 
 /** The theme options, in the order shown in Ajustes and in the setup. */
 internal val ThemeChoices = listOf(
-  Triple("system", "Automático", "Segue o tema claro ou escuro do Android"),
-  Triple("light", "Claro", null),
-  Triple("dark", "Escuro", null),
-  Triple("amoled", "Preto (AMOLED)", "Preto puro, poupa bateria em telas OLED")
+  Triple("system", R.string.settings_theme_system, R.string.settings_theme_system_desc),
+  Triple("light", R.string.settings_theme_light, null),
+  Triple("dark", R.string.settings_theme_dark, null),
+  Triple("amoled", R.string.settings_theme_amoled, R.string.settings_theme_amoled_desc)
 )
 
 /** The theme as radio rows; put inside an [InsetGroup]. */
@@ -627,8 +655,8 @@ internal fun ThemeOptionRows(themeMode: String, onThemeMode: (String) -> Unit, t
     ThemeChoices.forEachIndexed { i, (key, label, subtitle) ->
       if (i > 0) GroupDivider()
       RadioRow(
-        title = label,
-        subtitle = subtitle,
+        title = stringResource(label),
+        subtitle = subtitle?.let { stringResource(it) },
         selected = themeMode == key,
         onClick = { onThemeMode(key) },
         modifier = Modifier.testTag("$tagPrefix$key")
@@ -641,11 +669,14 @@ internal fun ThemeOptionRows(themeMode: String, onThemeMode: (String) -> Unit, t
  * One line each, so the three options scan quickly. Liquid glass needs Android 13; on older devices
  * it says it falls back to frosted glass instead of silently looking the same.
  */
-private fun SurfaceStyle.shortDescription(): String = when (this) {
-  SurfaceStyle.SOLID -> "Sem transparência, o mais leve"
-  SurfaceStyle.FROSTED -> "Desfoca o que passa por trás"
-  SurfaceStyle.LIQUID -> if (liquidGlassSupported) "Vidro que curva o fundo, usa mais a GPU" else "Precisa do Android 13; aqui vira vidro fosco"
-}
+@Composable
+private fun SurfaceStyle.shortDescription(): String = stringResource(
+  when (this) {
+    SurfaceStyle.SOLID -> R.string.settings_surface_solid_desc
+    SurfaceStyle.FROSTED -> R.string.settings_surface_frosted_desc
+    SurfaceStyle.LIQUID -> if (liquidGlassSupported) R.string.settings_surface_liquid_desc else R.string.settings_surface_liquid_unsupported
+  }
+)
 
 /** The floating-surface style as radio rows; put inside an [InsetGroup]. */
 @Composable

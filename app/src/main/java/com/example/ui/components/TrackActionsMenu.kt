@@ -41,6 +41,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import com.example.R
 import com.example.data.model.Playlist
 import com.example.data.model.Track
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -89,7 +95,7 @@ fun TrackActionsMenu(
   ) {
     Icon(
       imageVector = icon,
-      contentDescription = "Mais opções para ${track.title}",
+      contentDescription = stringResource(R.string.player_menu_more, track.title),
       tint = iconTint ?: MaterialTheme.colorScheme.onSurfaceVariant
     )
   }
@@ -121,31 +127,31 @@ fun TrackActionsMenu(
         Hairline(Modifier.padding(vertical = Space.s))
         if (!showPlaylists) {
           ListRow(
-            title = if (isFavorite) "Remover dos favoritos" else "Favoritar",
+            title = stringResource(if (isFavorite) R.string.player_menu_unfavorite else R.string.player_menu_favorite),
             icon = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
             chevron = false,
             onClick = { close(onToggleFavorite) }
           )
           ListRow(
-            title = "Tocar em seguida",
+            title = stringResource(R.string.player_menu_play_next),
             icon = Icons.Rounded.SkipNext,
             chevron = false,
             onClick = { close(onPlayNext) }
           )
           ListRow(
-            title = "Adicionar à fila",
+            title = stringResource(R.string.player_menu_add_queue),
             icon = Icons.AutoMirrored.Rounded.QueueMusic,
             chevron = false,
             onClick = { close(onAddToQueue) }
           )
           ListRow(
-            title = "Adicionar a uma playlist",
+            title = stringResource(R.string.player_menu_add_playlist),
             icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
             onClick = { showPlaylists = true }
           )
           if (onAbout != null) {
             ListRow(
-              title = "Sobre a faixa",
+              title = stringResource(R.string.player_menu_about),
               icon = Icons.Rounded.Info,
               chevron = false,
               onClick = { close(onAbout) },
@@ -154,7 +160,7 @@ fun TrackActionsMenu(
           }
           if (onSleepTimer != null) {
             ListRow(
-              title = "Timer de dormir",
+              title = stringResource(R.string.player_menu_sleep_timer),
               icon = Icons.Rounded.Bedtime,
               value = sleepTimerLabel,
               chevron = false,
@@ -163,9 +169,9 @@ fun TrackActionsMenu(
             )
           }
         } else {
-          GroupHeader("Adicionar a uma playlist", Modifier.padding(top = Space.s))
+          GroupHeader(stringResource(R.string.player_menu_add_playlist), Modifier.padding(top = Space.s))
           ListRow(
-            title = "Nova playlist…",
+            title = stringResource(R.string.player_menu_new_playlist_item),
             icon = Icons.Rounded.Add,
             chevron = false,
             onClick = { close { showNewPlaylist = true } }
@@ -173,7 +179,7 @@ fun TrackActionsMenu(
           playlists.forEach { playlist ->
             ListRow(
               title = playlist.name,
-              subtitle = if (playlist.trackIds.size == 1) "1 faixa" else "${playlist.trackIds.size} faixas",
+              subtitle = pluralStringResource(R.plurals.player_menu_tracks, playlist.trackIds.size, playlist.trackIds.size),
               icon = Icons.AutoMirrored.Rounded.QueueMusic,
               iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
               chevron = false,
@@ -187,12 +193,92 @@ fun TrackActionsMenu(
 
   if (showNewPlaylist) {
     NamePlaylistDialog(
-      title = "Nova playlist",
-      confirmLabel = "Criar",
+      title = stringResource(R.string.player_menu_new_playlist),
+      confirmLabel = stringResource(R.string.player_menu_create),
       initialName = "",
       onConfirm = { name -> onCreatePlaylist(name); showNewPlaylist = false },
       onDismiss = { showNewPlaylist = false }
     )
+  }
+}
+
+/**
+ * The menu of a queued song: move it up or down and take it out, the touch alternative to dragging by
+ * the handle and swiping away. "Up" is off on the first song and "down" on the last. Removing goes
+ * through the same callback as the swipe, so the undo is the same.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun QueueItemMenu(
+  track: Track,
+  canMoveUp: Boolean,
+  canMoveDown: Boolean,
+  onMoveUp: () -> Unit,
+  onMoveDown: () -> Unit,
+  onRemove: () -> Unit,
+  modifier: Modifier = Modifier
+) {
+  var expanded by rememberSaveable { mutableStateOf(false) }
+
+  IconButton(
+    onClick = { expanded = true },
+    modifier = modifier
+      .size(Size.touch)
+      .testTag("queue_menu_${track.id}")
+  ) {
+    Icon(
+      imageVector = Icons.Rounded.MoreHoriz,
+      contentDescription = stringResource(R.string.queue_item_menu, track.title),
+      tint = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+  }
+
+  if (expanded) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    fun close(then: () -> Unit) {
+      then()
+      scope.launch { sheetState.hide() }.invokeOnCompletion { expanded = false }
+    }
+    ModalBottomSheet(
+      onDismissRequest = { expanded = false },
+      sheetState = sheetState,
+      containerColor = MaterialTheme.colorScheme.surfaceContainer,
+      shape = RoundedCornerShape(topStart = Radius.l, topEnd = Radius.l)
+    ) {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState())
+          .padding(bottom = Space.l)
+      ) {
+        SheetHeader(track)
+        Hairline(Modifier.padding(vertical = Space.s))
+        ListRow(
+          title = stringResource(R.string.queue_move_up),
+          icon = Icons.Rounded.ArrowUpward,
+          chevron = false,
+          enabled = canMoveUp,
+          onClick = { close(onMoveUp) },
+          modifier = Modifier.testTag("queue_menu_up")
+        )
+        ListRow(
+          title = stringResource(R.string.queue_move_down),
+          icon = Icons.Rounded.ArrowDownward,
+          chevron = false,
+          enabled = canMoveDown,
+          onClick = { close(onMoveDown) },
+          modifier = Modifier.testTag("queue_menu_down")
+        )
+        ListRow(
+          title = stringResource(R.string.queue_remove),
+          icon = Icons.Rounded.Delete,
+          chevron = false,
+          onClick = { close(onRemove) },
+          modifier = Modifier.testTag("queue_menu_remove")
+        )
+      }
+    }
   }
 }
 
@@ -243,7 +329,7 @@ fun NamePlaylistDialog(
       OutlinedTextField(
         value = name,
         onValueChange = { name = it },
-        placeholder = { Text("Nome da playlist", style = AppText.Body) },
+        placeholder = { Text(stringResource(R.string.player_menu_playlist_name), style = AppText.Body) },
         textStyle = AppText.Body,
         singleLine = true,
         shape = Shapes.s,
@@ -253,6 +339,6 @@ fun NamePlaylistDialog(
     confirmButton = {
       TextButton(onClick = { onConfirm(name.trim()) }, enabled = name.isNotBlank()) { Text(confirmLabel) }
     },
-    dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+    dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.player_menu_cancel)) } }
   )
 }

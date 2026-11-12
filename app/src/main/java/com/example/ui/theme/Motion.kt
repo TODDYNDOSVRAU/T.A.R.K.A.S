@@ -13,7 +13,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -56,9 +55,37 @@ object Motion {
   const val SlowSpatialDamping = 1f
   const val SlowSpatialStiffness = 200f
   const val DefaultEffectsStiffness = 1600f
-  /** A surface growing out of what was tapped (the full player): spatial, never visibly overshooting. */
-  const val ExpandDamping = 0.88f
-  const val ExpandStiffness = 300f
+  /**
+   * The full player growing out of what was tapped: a jelly spring (damping 0.62, about 8% overshoot).
+   * The sheet itself is clamped to the screen, so what swings past is the travelling cover, which
+   * grows a little beyond its place and settles back. Requested explicitly for the player; the one
+   * spring in the app that bounces without a flick, and only when motion is not reduced.
+   */
+  const val ExpandDamping = 0.85f
+  /** Settles in about 0.55 s: a large repositioning (the whole screen), slow enough to follow with the eye. */
+  const val ExpandStiffness = 120f
+  /** The jelly of the cover carousel: side covers coming out, a swipe landing, the cover stepping back on pause. */
+  const val JellyDamping = 0.8f
+  const val JellyStiffness = 200f
+  /** Landing of a swipe: gentle (damping 0.7), and looser after a flick (0.5). */
+  const val SwipeDamping = 0.85f
+  const val FlickDamping = 0.7f
+  /**
+   * The player shrinking back into the mini player: critically damped (no overshoot at all) and
+   * stiffer than the opening, so the shrink is below 2% left at ~0.4 s instead of ~0.6 s. It is still
+   * a large repositioning (the whole screen to a capsule), which is why it may pass 300 ms; the mini
+   * player fades in on the same progress (PlayerTravel.miniIn), so both are one movement.
+   */
+  const val CollapseDamping = 1f
+  /**
+   * The player opening and closing run on time, not a spring: a spring is fastest in its first frames,
+   * which read as a jolt for a movement this large. Slow in, slow out: starts gently, glides through the
+   * middle and lands softly, the same curve both ways so closing is the opening played back.
+   */
+  const val ExpandMillis = 620
+  const val CollapseMillis = 520
+  val PlayerEasing = androidx.compose.animation.core.CubicBezierEasing(0.45f, 0f, 0.15f, 1f)
+  const val CollapseStiffness = 130f
 
   /** Taps, toggles, small controls moving into place. */
   fun <T> fastSpatial() = spring<T>(dampingRatio = FastSpatialDamping, stiffness = FastSpatialStiffness)
@@ -139,10 +166,10 @@ fun springAt(seconds: Float, damping: Float = 10f, mass: Float = 1f, stiffness: 
 
 /**
  * Transition between screens. Tabs fade through: the old page is gone in 90 ms, then the new one fades
- * in over 200 ms while settling from 98% scale (a critically damped spring, so it lands without a
- * wobble). No sideways movement, as Material advises for bottom tabs (a slide suggests the pages can
- * be swiped), and quick, because switching tabs is done all the time. Opening the full player grows
- * it out of what was tapped (see expandFromOrigin).
+ * in over 200 ms. No scaling, so the page is not re-rasterised every frame. No sideways movement, as
+ * Material advises for bottom tabs (a slide suggests the pages can be swiped), and quick, because
+ * switching tabs is done all the time. Opening the full player grows it out of what was tapped (see
+ * expandFromOrigin).
  */
 fun screenTransition(from: Any, to: Any, reduced: Boolean = false): ContentTransform {
   if (reduced) return EnterTransition.None togetherWith ExitTransition.None
@@ -162,8 +189,8 @@ fun screenTransition(from: Any, to: Any, reduced: Boolean = false): ContentTrans
     }
   }
 
-  val enter = fadeIn(tween(200, delayMillis = 90, easing = LinearOutSlowInEasing)) +
-    scaleIn(initialScale = 0.98f, animationSpec = tween(200, delayMillis = 90, easing = Motion.Settle))
+  // Alpha only: scaling a whole page re-rasterises it every frame, which dropped frames on the S23.
+  val enter = fadeIn(tween(200, delayMillis = 90, easing = LinearOutSlowInEasing))
   val exit = fadeOut(tween(150, easing = FastOutLinearInEasing))
   return (enter togetherWith exit).apply {
     // The new screen draws over the old one, so it never slips behind the page that is leaving.
@@ -294,4 +321,33 @@ fun Modifier.pressClickable(
       role = role,
       onClick = onClick
     )
+}
+
+/**
+ * Decides whether decorative effects that run all the time (the moving cover behind the player) may keep
+ * running. It is given the time between frames: [strikes] slow frames in a row (each longer than
+ * [limitMs]) turn the effect off for good, until [reset]. One slow frame alone, such as the one where a
+ * screen opens, is forgiven.
+ */
+class FrameGuard(private val limitMs: Float = 24f, private val strikes: Int = 3) {
+  private var slowInARow = 0
+
+  /** False once the effect has been switched off. */
+  var allowed: Boolean = true
+    private set
+
+  fun onFrame(deltaMs: Float) {
+    if (!allowed) return
+    if (deltaMs > limitMs) {
+      slowInARow++
+      if (slowInARow >= strikes) allowed = false
+    } else {
+      slowInARow = 0
+    }
+  }
+
+  fun reset() {
+    slowInARow = 0
+    allowed = true
+  }
 }

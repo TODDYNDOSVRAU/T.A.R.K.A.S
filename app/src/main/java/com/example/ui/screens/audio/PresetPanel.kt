@@ -1,5 +1,9 @@
 package com.example.ui.screens.audio
 
+import androidx.annotation.StringRes
+import androidx.compose.ui.res.pluralStringResource
+import com.example.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -62,7 +66,13 @@ import com.example.ui.theme.Size
 import com.example.ui.theme.Space
 import com.example.ui.viewmodel.DeviceSearchState
 
-private enum class PresetFilter(val label: String) { ALL("Todas"), MINE("Minhas"), BUILT_IN("Embutidas"), FONES("Fones (AutoEq)") }
+// The label is a string resource id: the chip text is resolved where it is drawn.
+private enum class PresetFilter(@StringRes val labelRes: Int) {
+  ALL(R.string.audio_filter_all),
+  MINE(R.string.audio_filter_mine),
+  BUILT_IN(R.string.audio_filter_builtin),
+  FONES(R.string.audio_filter_fones)
+}
 
 /** Size of the curve thumbnail in a preset row, and the leading slot of every row in the list. */
 private val THUMB_W = 64.dp
@@ -107,7 +117,7 @@ internal fun PresetPanel(
 
   Column(modifier = modifier.fillMaxWidth().testTag("eq_preset_panel")) {
     Text(
-      "Predefinições",
+      stringResource(R.string.audio_presets_title),
       style = AppText.Title3,
       color = colors.onSurface,
       modifier = Modifier
@@ -118,7 +128,7 @@ internal fun PresetPanel(
     SearchField(
       value = query,
       onValueChange = { onSearchDevices(it, deviceSearch.source) },
-      placeholder = "Pesquisar estilo ou fone",
+      placeholder = stringResource(R.string.audio_presets_search_hint),
       modifier = Modifier.padding(horizontal = Space.page).testTag("device_search_input")
     )
 
@@ -127,7 +137,7 @@ internal fun PresetPanel(
       contentPadding = PaddingValues(horizontal = Space.page - Space.xs, vertical = Space.xs)
     ) {
       items(PresetFilter.entries) { f ->
-        FilterChip(label = f.label, selected = filter == f, onClick = { filter = f }, modifier = Modifier.testTag("preset_filter_${f.name}"))
+        FilterChip(label = stringResource(f.labelRes), selected = filter == f, onClick = { filter = f }, modifier = Modifier.testTag("preset_filter_${f.name}"))
       }
     }
     if (filter == PresetFilter.FONES && deviceSearch.sources.isNotEmpty()) {
@@ -135,7 +145,7 @@ internal fun PresetPanel(
         horizontalArrangement = Arrangement.spacedBy(Space.xs),
         contentPadding = PaddingValues(start = Space.page - Space.xs, end = Space.page - Space.xs, bottom = Space.xs)
       ) {
-        item { FilterChip(label = "Todas as medições", selected = deviceSearch.source == null, onClick = { onSearchDevices(query, null) }) }
+        item { FilterChip(label = stringResource(R.string.audio_filter_all_sources), selected = deviceSearch.source == null, onClick = { onSearchDevices(query, null) }) }
         items(deviceSearch.sources.take(10)) { s ->
           FilterChip(label = s, selected = deviceSearch.source == s, onClick = { onSearchDevices(query, s) })
         }
@@ -158,14 +168,18 @@ internal fun PresetPanel(
         Column(modifier = Modifier.weight(1f)) {
           Text(device.name, style = AppText.Body, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
           Text(
-            listOfNotNull(deviceOutput?.let { "Para $it" }, device.source, "${device.bands.size} filtros").joinToString(" · "),
+            listOfNotNull(
+              deviceOutput?.let { stringResource(R.string.audio_device_for_output, it) },
+              device.source,
+              pluralStringResource(R.plurals.audio_device_filters, device.bands.size, device.bands.size)
+            ).joinToString(" · "),
             style = AppText.Footnote,
             color = colors.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
           )
         }
-        TextAction("Remover", onClearDevice)
+        TextAction(stringResource(R.string.audio_action_remove), onClearDevice)
       }
     } else if (suggestion != null && !(filter == PresetFilter.FONES && query == suggestion.first)) {
       // The fone playing now has corrections in AutoEq: one tap lists them.
@@ -182,16 +196,16 @@ internal fun PresetPanel(
         Icon(Icons.Rounded.Headphones, contentDescription = null, tint = colors.primary, modifier = Modifier.size(Size.iconSmall))
         Spacer(Modifier.width(Space.m))
         Column(modifier = Modifier.weight(1f)) {
-          Text("Correções para ${suggestion.second}", style = AppText.Body, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          Text(stringResource(R.string.audio_device_suggest_title, suggestion.second), style = AppText.Body, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
           Text(
-            "Fones como “${suggestion.first}” medidos no AutoEq",
+            stringResource(R.string.audio_device_suggest_sub, suggestion.first),
             style = AppText.Footnote,
             color = colors.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
           )
         }
-        TextAction("Ver", onClick = {
+        TextAction(stringResource(R.string.audio_action_view), onClick = {
           filter = PresetFilter.FONES
           onSearchDevices(suggestion.first, null)
         })
@@ -203,21 +217,21 @@ internal fun PresetPanel(
       contentPadding = PaddingValues(bottom = Space.xl + navBar)
     ) {
       if (showMine && mine.isNotEmpty()) {
-        item(key = "h_mine") { ListSection("Minhas") }
+        item(key = "h_mine") { ListSection(stringResource(R.string.audio_section_mine)) }
         items(mine, key = { "p_" + it.id }) { p ->
-          PresetRow(p.name, "Minha predefinição", p.settings, selected = p.id == activePresetId, onClick = { onPickPreset(p) }, modifier = Modifier.animateItem())
+          PresetRow(p.name, stringResource(R.string.audio_preset_kind_mine), p.settings, selected = p.id == activePresetId, onClick = { onPickPreset(p) }, modifier = Modifier.animateItem())
         }
       }
       if (showBuiltIn && builtIn.isNotEmpty()) {
-        item(key = "h_builtin") { ListSection("Embutidas") }
+        item(key = "h_builtin") { ListSection(stringResource(R.string.audio_section_builtin)) }
         items(builtIn, key = { "p_" + it.id }) { p ->
-          PresetRow(p.name, "Embutida", p.settings, selected = p.id == activePresetId, onClick = { onPickPreset(p) }, modifier = Modifier.animateItem())
+          PresetRow(p.name, stringResource(R.string.audio_preset_kind_builtin), p.settings, selected = p.id == activePresetId, onClick = { onPickPreset(p) }, modifier = Modifier.animateItem())
         }
       }
       if (showFones) {
         item(key = "h_fones") {
           Column {
-            ListSection("Fones · AutoEq")
+            ListSection(stringResource(R.string.audio_section_fones))
             when {
               deviceSearch.loading -> Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -225,18 +239,19 @@ internal fun PresetPanel(
               ) {
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(Space.m))
-                Text("Baixando a lista de fones…", style = AppText.Footnote, color = colors.onSurfaceVariant)
+                Text(stringResource(R.string.audio_device_downloading), style = AppText.Footnote, color = colors.onSurfaceVariant)
               }
               deviceSearch.error != null && deviceSearch.total == 0 -> Column(modifier = Modifier.padding(horizontal = Space.page)) {
                 Text(deviceSearch.error, style = AppText.Footnote, color = colors.error)
-                TextAction("Tentar de novo", onRetryDevices)
+                TextAction(stringResource(R.string.audio_action_retry), onRetryDevices)
               }
               else -> {
                 if (deviceSearch.error != null) {
                   Text(deviceSearch.error, style = AppText.Footnote, color = colors.error, modifier = Modifier.padding(horizontal = Space.page))
                 }
                 Text(
-                  if (words.isEmpty()) "${deviceSearch.total} fones medidos. Pesquise o modelo do seu." else "${deviceSearch.results.size} fone(s)",
+                  if (words.isEmpty()) pluralStringResource(R.plurals.audio_device_total, deviceSearch.total, deviceSearch.total)
+                  else pluralStringResource(R.plurals.audio_device_results, deviceSearch.results.size, deviceSearch.results.size),
                   style = AppText.Footnote,
                   color = colors.onSurfaceVariant,
                   modifier = Modifier.padding(horizontal = Space.page, vertical = Space.xxs)
@@ -251,8 +266,7 @@ internal fun PresetPanel(
         }
         item(key = "credit") {
           Text(
-            "Curvas do projeto AutoEq (Jaakko Pasanen, licença MIT), a partir de medições de oratory1990, crinacle, Rtings e outros. " +
-              "Precisa de internet só para baixar.",
+            stringResource(R.string.audio_device_credit),
             style = AppText.Caption1,
             color = colors.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = Space.page, vertical = Space.m)

@@ -14,6 +14,8 @@ import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import com.example.R
 import com.example.data.model.Track
 import com.example.ui.components.GroupDivider
 import com.example.ui.components.TonalButton
@@ -70,13 +72,13 @@ internal fun PlayShuffleRow(onPlay: () -> Unit, onShuffle: () -> Unit, modifier:
     horizontalArrangement = Arrangement.spacedBy(Space.m)
   ) {
     TonalButton(
-      text = "Tocar",
+      text = stringResource(R.string.library_play),
       icon = Icons.Rounded.PlayArrow,
       onClick = onPlay,
       modifier = Modifier.weight(1f).testTag("library_btn_play")
     )
     TonalButton(
-      text = "Aleatório",
+      text = stringResource(R.string.library_shuffle),
       icon = Icons.Rounded.Shuffle,
       onClick = onShuffle,
       modifier = Modifier.weight(1f).testTag("library_btn_shuffle")

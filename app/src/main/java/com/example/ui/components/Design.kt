@@ -261,7 +261,7 @@ fun RowIcon(icon: ImageVector, tint: Color = MaterialTheme.colorScheme.primary) 
   }
 }
 
-private val RoundedSquare = androidx.compose.foundation.shape.RoundedCornerShape(7.dp)
+private val RoundedSquare = com.example.ui.theme.Shapes.xs
 
 @Composable
 private fun RowLayout(

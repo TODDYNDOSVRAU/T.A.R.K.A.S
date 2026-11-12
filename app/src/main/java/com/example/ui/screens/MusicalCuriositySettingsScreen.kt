@@ -1,6 +1,8 @@
 package com.example.ui.screens
 
+import android.content.Context
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -26,13 +28,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
+import com.example.R
 import com.example.data.model.CuriosityConfig
 import com.example.data.model.CuriosityDisplayMode
 import com.example.data.model.CuriosityTiming
@@ -49,17 +54,34 @@ import com.example.ui.theme.Size
 import com.example.ui.theme.Space
 
 /** One "when to speak" option: [short] is the value shown on the Ajustes row. */
-internal data class TimingChoice(val timing: CuriosityTiming, val title: String, val short: String, val description: String)
+internal data class TimingChoice(
+  val timing: CuriosityTiming,
+  @StringRes val title: Int,
+  @StringRes val short: Int,
+  @StringRes val description: Int
+)
 
 /**
  * The four timings, shared by this page and the first-run setup so both offer the same choices in
  * the same words. The default comes first.
  */
 internal val curiosityTimingChoices = listOf(
-  TimingChoice(CuriosityTiming.END_OF_TRACK, "Ao final da música", "No final", "Antes da próxima faixa. É o padrão."),
-  TimingChoice(CuriosityTiming.START_OF_TRACK, "No início da música", "No início", "A faixa começa depois da fala."),
-  TimingChoice(CuriosityTiming.BOTH, "No início e no final", "Início e final", "Uma introdução curta e um fato ao final."),
-  TimingChoice(CuriosityTiming.MANUAL_ONLY, "Só quando eu pedir", "Só ao pedir", "Toque na lâmpada do player para ouvir.")
+  TimingChoice(
+    CuriosityTiming.END_OF_TRACK,
+    R.string.settings_curiosity_timing_end, R.string.settings_curiosity_timing_end_short, R.string.settings_curiosity_timing_end_desc
+  ),
+  TimingChoice(
+    CuriosityTiming.START_OF_TRACK,
+    R.string.settings_curiosity_timing_start, R.string.settings_curiosity_timing_start_short, R.string.settings_curiosity_timing_start_desc
+  ),
+  TimingChoice(
+    CuriosityTiming.BOTH,
+    R.string.settings_curiosity_timing_both, R.string.settings_curiosity_timing_both_short, R.string.settings_curiosity_timing_both_desc
+  ),
+  TimingChoice(
+    CuriosityTiming.MANUAL_ONLY,
+    R.string.settings_curiosity_timing_manual, R.string.settings_curiosity_timing_manual_short, R.string.settings_curiosity_timing_manual_desc
+  )
 )
 
 /** The timing choices as radio rows; put inside an [InsetGroup]. */
@@ -69,8 +91,8 @@ internal fun CuriosityTimingRows(timing: CuriosityTiming, onTiming: (CuriosityTi
     curiosityTimingChoices.forEachIndexed { i, choice ->
       if (i > 0) GroupDivider()
       RadioRow(
-        title = choice.title,
-        subtitle = choice.description,
+        title = stringResource(choice.title),
+        subtitle = stringResource(choice.description),
         selected = timing == choice.timing,
         onClick = { onTiming(choice.timing) },
         modifier = Modifier.testTag("$tagPrefix${choice.timing.name}")
@@ -80,23 +102,26 @@ internal fun CuriosityTimingRows(timing: CuriosityTiming, onTiming: (CuriosityTi
 }
 
 private val displayChoices = listOf(
-  Triple(CuriosityDisplayMode.VOICE_AND_BANNER, "Voz e aviso no player", "Um aviso aparece no player durante a fala."),
-  Triple(CuriosityDisplayMode.VOICE_ONLY, "Só voz", "Nada aparece na tela, só o áudio.")
+  Triple(CuriosityDisplayMode.VOICE_AND_BANNER, R.string.settings_curiosity_display_both, R.string.settings_curiosity_display_both_desc),
+  Triple(CuriosityDisplayMode.VOICE_ONLY, R.string.settings_curiosity_display_voice, R.string.settings_curiosity_display_voice_desc)
 )
 
 /** Short names for the voice styles (the model's labels are long and mix "&" and "/"). */
-private fun VoicePreset.title(): String = when (this) {
-  VoicePreset.NATURAL -> "Natural"
-  VoicePreset.CALM -> "Calma"
-  VoicePreset.DYNAMIC -> "Locutor de rádio"
-  VoicePreset.DEEP -> "Grave"
-  VoicePreset.UPBEAT -> "Animada"
-}
+@Composable
+private fun VoicePreset.title(): String = stringResource(
+  when (this) {
+    VoicePreset.NATURAL -> R.string.settings_curiosity_preset_natural
+    VoicePreset.CALM -> R.string.settings_curiosity_preset_calm
+    VoicePreset.DYNAMIC -> R.string.settings_curiosity_preset_dynamic
+    VoicePreset.DEEP -> R.string.settings_curiosity_preset_deep
+    VoicePreset.UPBEAT -> R.string.settings_curiosity_preset_upbeat
+  }
+)
 
-private fun pitchLabel(pitch: Float): String = when {
-  pitch < 0.9f -> "Grave, %.2f×".format(pitch)
-  pitch > 1.1f -> "Agudo, %.2f×".format(pitch)
-  else -> "Natural, %.2f×".format(pitch)
+private fun pitchLabel(context: Context, pitch: Float): String = when {
+  pitch < 0.9f -> context.getString(R.string.settings_curiosity_pitch_low, pitch)
+  pitch > 1.1f -> context.getString(R.string.settings_curiosity_pitch_high, pitch)
+  else -> context.getString(R.string.settings_curiosity_pitch_natural, pitch)
 }
 
 /**
@@ -114,10 +139,11 @@ fun MusicalCuriositySettingsScreen(
   onStopVoice: () -> Unit,
   onBack: () -> Unit,
   modifier: Modifier = Modifier,
-  backLabel: String = "Ajustes"
+  backLabel: String = stringResource(R.string.settings_back_settings)
 ) {
   BackHandler(onBack = onBack)
   val colors = MaterialTheme.colorScheme
+  val context = LocalContext.current
 
   LazyColumn(
     modifier = modifier.fillMaxSize(),
@@ -125,7 +151,7 @@ fun MusicalCuriositySettingsScreen(
   ) {
     item {
       SubPageHeader(
-        title = "Curiosidades musicais",
+        title = context.getString(R.string.settings_curiosity_title),
         backLabel = backLabel,
         onBack = onBack,
         modifier = Modifier.testTag("btn_back_curiosity_settings")
@@ -134,28 +160,28 @@ fun MusicalCuriositySettingsScreen(
 
     settingsGroup(
       header = null,
-      footer = "Fatos curtos sobre a faixa, falados em voz alta. Só para faixas com uma curiosidade de fonte verificada.",
+      footer = context.getString(R.string.settings_curiosity_master_footer),
       tag = "card_master_curiosity_switch"
     ) {
       SwitchRow(
-        title = "Curiosidades faladas",
+        title = stringResource(R.string.settings_curiosity_spoken),
         checked = config.enabled,
         onCheckedChange = { onConfigChange(config.copy(enabled = it)) },
         modifier = Modifier.testTag("switch_curiosity_enabled")
       )
     }
 
-    settingsGroup("Quando falar") {
+    settingsGroup(context.getString(R.string.settings_curiosity_when)) {
       CuriosityTimingRows(config.timing, { onConfigChange(config.copy(timing = it)) }, tagPrefix = "timing_option_")
     }
 
-    settingsGroup("Como aparece") {
+    settingsGroup(context.getString(R.string.settings_curiosity_how)) {
       Column(Modifier.selectableGroup()) {
         displayChoices.forEachIndexed { i, (mode, title, description) ->
           if (i > 0) GroupDivider()
           RadioRow(
-            title = title,
-            subtitle = description,
+            title = stringResource(title),
+            subtitle = stringResource(description),
             selected = config.displayMode == mode,
             onClick = { onConfigChange(config.copy(displayMode = mode)) },
             modifier = Modifier.testTag("display_mode_${mode.name}")
@@ -164,7 +190,10 @@ fun MusicalCuriositySettingsScreen(
       }
     }
 
-    settingsGroup("Estilo da voz", footer = "Cada estilo ajusta a velocidade e o tom. Você pode refinar os dois abaixo.") {
+    settingsGroup(
+      context.getString(R.string.settings_curiosity_voice_style),
+      footer = context.getString(R.string.settings_curiosity_voice_style_footer)
+    ) {
       Column(Modifier.selectableGroup()) {
         VoicePreset.entries.forEachIndexed { i, preset ->
           if (i > 0) GroupDivider()
@@ -179,11 +208,11 @@ fun MusicalCuriositySettingsScreen(
     }
 
     settingsGroup(
-      "Voz",
-      footer = "A narração usa uma ou duas frases da curiosidade, para não interromper a música. Faixas sem curiosidade verificada tocam sem narração."
+      context.getString(R.string.settings_curiosity_voice),
+      footer = context.getString(R.string.settings_curiosity_voice_footer)
     ) {
       VoiceSlider(
-        title = "Velocidade da fala",
+        title = stringResource(R.string.settings_curiosity_speech_rate),
         value = config.speechRate,
         label = { "%.2f×".format(it) },
         onValueFinished = { onConfigChange(config.copy(speechRate = it)) },
@@ -191,9 +220,9 @@ fun MusicalCuriositySettingsScreen(
       )
       GroupDivider()
       VoiceSlider(
-        title = "Tom da voz",
+        title = stringResource(R.string.settings_curiosity_pitch),
         value = config.pitch,
-        label = ::pitchLabel,
+        label = { pitchLabel(context, it) },
         onValueFinished = { onConfigChange(config.copy(pitch = it)) },
         modifier = Modifier.testTag("slider_pitch")
       )
@@ -215,17 +244,17 @@ fun MusicalCuriositySettingsScreen(
               .weight(1f)
               .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }
           ) {
-            Text("Falando agora", style = AppText.Footnote, color = colors.primary)
+            Text(stringResource(R.string.settings_curiosity_speaking_now), style = AppText.Footnote, color = colors.primary)
             Text(currentSpokenText, style = AppText.Subhead, color = colors.onSurface, maxLines = 3, overflow = TextOverflow.Ellipsis)
           }
-          IconAction(icon = Icons.Rounded.Stop, contentDescription = "Parar a demonstração", onClick = onStopVoice, tint = colors.primary)
+          IconAction(icon = Icons.Rounded.Stop, contentDescription = stringResource(R.string.settings_curiosity_stop_demo_cd), onClick = onStopVoice, tint = colors.primary)
         }
       }
     }
 
     item {
       TonalButton(
-        text = if (isSpeaking) "Parar demonstração" else "Ouvir demonstração da voz",
+        text = if (isSpeaking) context.getString(R.string.settings_curiosity_stop_demo) else context.getString(R.string.settings_curiosity_play_demo),
         icon = if (isSpeaking) Icons.Rounded.Stop else Icons.Rounded.PlayArrow,
         onClick = { if (isSpeaking) onStopVoice() else onTestVoice() },
         modifier = Modifier

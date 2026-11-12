@@ -14,6 +14,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
@@ -38,6 +40,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.example.ui.theme.LocalBarInset
 import com.example.ui.theme.LocalHazeState
 import com.example.ui.theme.LocalSurfaceStyle
+import com.example.ui.theme.Radius
 import com.example.ui.theme.glassPill
 import com.example.ui.theme.screenTransition
 import androidx.compose.foundation.background
@@ -70,6 +73,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -81,6 +87,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -94,6 +101,7 @@ import com.example.ui.components.TarkasBottomNav
 import com.example.ui.components.TarkasLargeTitle
 import com.example.ui.screens.AssistantScreen
 import com.example.ui.screens.AudioScreen
+import com.example.ui.screens.PrefetchCarouselCovers
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LibraryScreen
 import com.example.ui.screens.MusicScreen
@@ -139,11 +147,15 @@ class MainActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     AppGraph.init(this)
+    com.example.data.update.UpdateManager.init(this)
+    com.example.data.update.UpdateJobService.schedule(this)
+    lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Default) { com.example.data.update.UpdateManager.runAutomatic() }
     AppMotion.readSystem(this)
     // Must run before super.onCreate: swaps the splash theme for the normal one after the first frame.
     installSplashScreen()
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+    com.example.ui.theme.RefreshRate.requestHighest(this)
     setContent {
       val viewModel: TarkasViewModel = viewModel()
       val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -168,8 +180,8 @@ class MainActivity : ComponentActivity() {
         } else {
           viewModel.showNotice(
             com.example.ui.viewmodel.Notice(
-              "Sem o microfone, o equalizador funciona igual, só sem o espectro ao vivo.",
-              actionLabel = "Permissões",
+              this@MainActivity.getString(R.string.nav_mic_denied_notice),
+              actionLabel = this@MainActivity.getString(R.string.nav_mic_denied_action),
               // The notice outlives this activity (it sits in the view model across rotation), so its
               // action holds only the application context, never the activity.
               action = openAppSettings(applicationContext)
@@ -200,10 +212,10 @@ class MainActivity : ComponentActivity() {
             )
           } catch (e: Exception) {
             android.util.Log.e("MainActivity", "AudioCaptureService start failed", e)
-            viewModel.markSystemCaptureUnavailable("Não foi possível iniciar o serviço de captura de áudio.")
+            viewModel.markSystemCaptureUnavailable(this@MainActivity.getString(R.string.nav_capture_start_failed))
           }
         } else {
-          viewModel.markSystemCaptureUnavailable("Permissão de captura negada. O medidor continua desligado.")
+          viewModel.markSystemCaptureUnavailable(this@MainActivity.getString(R.string.nav_capture_denied))
         }
       }
 
@@ -230,7 +242,7 @@ class MainActivity : ComponentActivity() {
             if (intent != null) {
               mediaProjectionLauncher.launch(intent)
             } else {
-              viewModel.markSystemCaptureUnavailable("Este aparelho não oferece captura de áudio do sistema.")
+              viewModel.markSystemCaptureUnavailable(this@MainActivity.getString(R.string.nav_capture_unsupported))
             }
           },
           spectrumAllowed = micGranted,
@@ -269,21 +281,18 @@ class MainActivity : ComponentActivity() {
         if (askNotifications && notificationsMissing && !showBoot && !showOnboarding) {
           androidx.compose.material3.AlertDialog(
             onDismissRequest = { viewModel.notificationsAsked() },
-            title = { Text("Controles na notificação") },
+            title = { Text(androidx.compose.ui.res.stringResource(R.string.nav_notifications_title)) },
             text = {
-              Text(
-                "Com a permissão de notificações, a música aparece na tela bloqueada e na barra de notificações, " +
-                  "com tocar, pausar e pular, e a curiosidade da faixa quando houver uma."
-              )
+              Text(androidx.compose.ui.res.stringResource(R.string.nav_notifications_message))
             },
             confirmButton = {
               androidx.compose.material3.TextButton(
                 onClick = { permissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS)) },
                 modifier = Modifier.testTag("notifications_allow")
-              ) { Text("Continuar") }
+              ) { Text(androidx.compose.ui.res.stringResource(R.string.nav_notifications_continue)) }
             },
             dismissButton = {
-              androidx.compose.material3.TextButton(onClick = { viewModel.notificationsAsked() }) { Text("Agora não") }
+              androidx.compose.material3.TextButton(onClick = { viewModel.notificationsAsked() }) { Text(androidx.compose.ui.res.stringResource(R.string.nav_notifications_not_now)) }
             }
           )
         }
@@ -314,6 +323,7 @@ fun TarkasAppContent(
   val tracks by viewModel.musicRepository.tracks.collectAsStateWithLifecycle()
   val currentTrack by viewModel.musicRepository.currentTrack.collectAsStateWithLifecycle()
   val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
+  val wantsToPlay by viewModel.wantsToPlay.collectAsStateWithLifecycle()
   // Values that change many times a second are kept as State and read only where they are drawn,
   // so a tick does not recompose the whole app.
   val currentPosMs = viewModel.positionMs.collectAsStateWithLifecycle()
@@ -367,6 +377,9 @@ fun TarkasAppContent(
   val imeVisible = WindowInsets.isImeVisible
   var settingsSubPage by remember { mutableStateOf(false) }
   LaunchedEffect(currentTab) { if (currentTab != TarkasNavTab.SETTINGS) settingsSubPage = false }
+  // Ajustes and its pages are a place to go into, not a tab to stay on: the mini player and the tab bar
+  // step aside, and the page's own back button (or the back gesture) leads out.
+  val barsHidden = currentTab == TarkasNavTab.SETTINGS || isShowingCuriositySettings
 
   // Status bar icons follow the app theme, except on the Now Playing page, which is always a dark tint.
   val hostView = LocalView.current
@@ -451,10 +464,17 @@ fun TarkasAppContent(
         .then(if (liquidOn) Modifier.layerBackdrop(backdrop) else Modifier)
         .nestedScroll(navScroll)
     ) {
+      // The player is not a page of the switcher: it is drawn over the page it came from, which stays
+      // composed underneath. Closing then shows a page that is already built, instead of composing it
+      // in the first frames of the shrink (a hitch of ~170 ms on the S23).
+      var pageBelowPlayer by remember { mutableStateOf<TarkasNavTab>(TarkasNavTab.HOME) }
+      if (currentTab != TarkasNavTab.MUSIC) pageBelowPlayer = currentTab
       val screenKey: Any = when {
         isShowingCuriositySettings -> "curiosity"
+        currentTab == TarkasNavTab.MUSIC -> pageBelowPlayer
         else -> currentTab
       }
+      val pagePlaying = isPlaying && currentTab != TarkasNavTab.MUSIC
       val reducedMotion = com.example.ui.theme.rememberReducedMotion()
       // Each page keeps its saved state (list scroll, open playlist, search) while another page
       // is shown, so going back from the player lands exactly where the user left the list.
@@ -474,7 +494,6 @@ fun TarkasAppContent(
             when (screen) {
               // The growing shape takes the colour read from the artwork (PlayerOrigin.tint, set by the
               // player); black until a cover was read, never the catalogue colour, which can be wrong.
-              TarkasNavTab.MUSIC -> Modifier.expandFromOrigin(this@AnimatedContent, Color.Black, reducedMotion)
               "curiosity" -> Modifier.statusBarsPadding()
               else -> Modifier
             }
@@ -487,7 +506,8 @@ fun TarkasAppContent(
         TarkasLargeTitle(
           title = (screen as TarkasNavTab).label,
           onOpenSettings = { viewModel.setTab(TarkasNavTab.SETTINGS) },
-          showSettings = screen == TarkasNavTab.HOME
+          showSettings = screen == TarkasNavTab.HOME,
+          onBack = if (screen == TarkasNavTab.SETTINGS) ({ viewModel.goBack() }) else null
         )
       }
       Box(modifier = Modifier.weight(1f)) {
@@ -509,7 +529,7 @@ fun TarkasAppContent(
           HomeScreen(
             currentTrack = currentTrack,
             tracks = tracks,
-            isPlaying = isPlaying,
+            isPlaying = pagePlaying,
             favoriteIds = favoriteIds,
             playlists = playlists,
             onToggleFavorite = { track -> viewModel.toggleFavorite(track) },
@@ -551,38 +571,7 @@ fun TarkasAppContent(
           )
         }
 
-        TarkasNavTab.MUSIC -> {
-          MusicScreen(
-            currentTrack = currentTrack,
-            isPlaying = isPlaying,
-            currentPositionMs = { currentPosMs.value },
-            durationMs = { durationMs.value },
-            activeCuriosity = activeCuriosity,
-            onTogglePlayPause = { viewModel.togglePlayPause() },
-            onNextTrack = { viewModel.playNextTrack() },
-            onPreviousTrack = { viewModel.playPreviousTrack() },
-            onSeekTo = { pos -> viewModel.seekTo(pos) },
-            isShuffle = isShuffle,
-            repeatMode = repeatMode,
-            favoriteIds = favoriteIds,
-            playlists = playlists,
-            onToggleShuffle = { viewModel.toggleShuffle() },
-            onCycleRepeat = { viewModel.cycleRepeatMode() },
-            onToggleFavorite = { track -> viewModel.toggleFavorite(track) },
-            onPlayNext = { track -> viewModel.playNext(track) },
-            onAddToQueue = { track -> viewModel.addToQueue(track) },
-            onAddToPlaylist = { id, track -> viewModel.addToPlaylist(id, track) },
-            onCreatePlaylist = { name, track -> viewModel.createPlaylist(name, track) },
-            onOpenQueue = { viewModel.openQueue() },
-            sleepTimer = viewModel.sleepTimer.collectAsStateWithLifecycle().value,
-            onSetSleepTimer = { m -> viewModel.setSleepTimer(m) },
-            onSleepAtEndOfTrack = { viewModel.setSleepAtEndOfTrack() },
-            onCancelSleepTimer = { viewModel.cancelSleepTimer() },
-            trackDetails = viewModel.trackDetails.collectAsStateWithLifecycle().value,
-            onLoadTrackDetails = { track -> viewModel.loadTrackDetails(track) },
-            onClose = { viewModel.goBack() }
-          )
-        }
+        TarkasNavTab.MUSIC -> Unit
 
         TarkasNavTab.LIBRARY -> {
           LibraryScreen(
@@ -596,7 +585,7 @@ fun TarkasAppContent(
             onScanDevice = { viewModel.scanDeviceMusic() },
             queue = queue,
             currentTrack = currentTrack,
-            isPlaying = isPlaying,
+            isPlaying = pagePlaying,
             onPlayFromList = { track, list ->
               // With songs waiting in the queue it asks first; the player opens once it plays.
               if (viewModel.playFromList(track, list)) viewModel.setTab(TarkasNavTab.MUSIC)
@@ -639,7 +628,7 @@ fun TarkasAppContent(
             activePresetId = activePresetId,
             eqModified = eqModified,
             systemAudioStatus = systemAudioStatus,
-            isPlaying = isPlaying,
+            isPlaying = pagePlaying,
             spectrumBars = { spectrumBars.value },
             activeApps = activeApps,
             onRefreshActiveApps = { viewModel.refreshActiveApps() },
@@ -744,23 +733,87 @@ fun TarkasAppContent(
       }
       }
       }
+      // The covers around the current track are loaded ahead whenever it changes, before the player
+      // is even opened, so its carousel has them in memory.
+      PrefetchCarouselCovers(viewModel.coverNeighbors)
+      // The full player, over the page below it. The shape grows from what was tapped and shrinks into
+      // the mini player (expandFromOrigin); the visibility keeps it composed until the shape has landed.
+      AnimatedVisibility(
+        visible = currentTab == TarkasNavTab.MUSIC,
+        enter = EnterTransition.None,
+        exit = ExitTransition.None,
+        modifier = Modifier.fillMaxSize()
+      ) {
+        Box(
+          modifier = Modifier
+            .fillMaxSize()
+            .expandFromOrigin(this, Color.Black, reducedMotion)
+        ) {
+          pageStates.SaveableStateProvider("music") {
+            MusicScreen(
+            currentTrack = currentTrack,
+            isPlaying = isPlaying,
+            coverPlaying = wantsToPlay,
+            currentPositionMs = { currentPosMs.value },
+            durationMs = { durationMs.value },
+            activeCuriosity = activeCuriosity,
+            onTogglePlayPause = { viewModel.togglePlayPause() },
+            onNextTrack = { viewModel.playNextTrack() },
+            onPreviousTrack = { viewModel.playPreviousTrack() },
+            coverNeighbors = viewModel.coverNeighbors.collectAsStateWithLifecycle().value,
+            onPreviousFromCover = { viewModel.playPreviousTrack(force = true) },
+            onSeekTo = { pos -> viewModel.seekTo(pos) },
+            isShuffle = isShuffle,
+            repeatMode = repeatMode,
+            favoriteIds = favoriteIds,
+            playlists = playlists,
+            onToggleShuffle = { viewModel.toggleShuffle() },
+            onCycleRepeat = { viewModel.cycleRepeatMode() },
+            onToggleFavorite = { track -> viewModel.toggleFavorite(track) },
+            onPlayNext = { track -> viewModel.playNext(track) },
+            onAddToQueue = { track -> viewModel.addToQueue(track) },
+            onAddToPlaylist = { id, track -> viewModel.addToPlaylist(id, track) },
+            onCreatePlaylist = { name, track -> viewModel.createPlaylist(name, track) },
+            onOpenQueue = { viewModel.openQueue() },
+            sleepTimer = viewModel.sleepTimer.collectAsStateWithLifecycle().value,
+            onSetSleepTimer = { m -> viewModel.setSleepTimer(m) },
+            onSleepAtEndOfTrack = { viewModel.setSleepAtEndOfTrack() },
+            onCancelSleepTimer = { viewModel.cancelSleepTimer() },
+            trackDetails = viewModel.trackDetails.collectAsStateWithLifecycle().value,
+            onLoadTrackDetails = { track -> viewModel.loadTrackDetails(track) },
+            onClose = { viewModel.goBack() }
+          )
+          }
+        }
+      }
     }
       // Fades the content into the page colour behind the floating capsules, so text never runs
       // legibly under or below them. Drawn outside the blur source, so the glass still sees the content.
-      val scrimColor = if (currentTab == TarkasNavTab.MUSIC) Color.Black else MaterialTheme.colorScheme.background
-      Box(
-        modifier = Modifier
-          .align(Alignment.BottomCenter)
-          .fillMaxWidth()
-          .height(barInset + 36.dp)
-          .background(
-            Brush.verticalGradient(
-              0f to scrimColor.copy(alpha = 0f),
-              0.35f to scrimColor.copy(alpha = 0.9f),
-              1f to scrimColor.copy(alpha = 0.97f)
+      // Not over the full player: it has no capsules, and its bottom edge is the blurred cover.
+      // Not on pages that hide the capsules (Ajustes): there is nothing to fade behind, and the scrim
+      // would cut the last rows of the list.
+      if (currentTab != TarkasNavTab.MUSIC) {
+        val scrimColor = MaterialTheme.colorScheme.background
+        val scrimAlpha by animateFloatAsState(
+          targetValue = if (barsHidden) 0f else 1f,
+          animationSpec = androidx.compose.animation.core.tween(180),
+          label = "barScrim"
+        )
+        Box(
+          modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .fillMaxWidth()
+            .height(barInset + 36.dp)
+            .graphicsLayer { alpha = scrimAlpha }
+            .background(
+              Brush.verticalGradient(
+                0f to scrimColor.copy(alpha = 0f),
+                0.35f to scrimColor.copy(alpha = 0.9f),
+                1f to scrimColor.copy(alpha = 0.97f)
+              )
             )
-          )
-      )
+        )
+      }
       Column(
         modifier = Modifier
           .align(Alignment.BottomCenter)
@@ -785,7 +838,7 @@ fun TarkasAppContent(
           Box(
             modifier = Modifier
               .fillMaxWidth()
-              .glassPill(cornerRadius = 30.dp)
+              .glassPill(cornerRadius = Radius.xl)
           ) {
             Row(
               modifier = Modifier
@@ -812,7 +865,9 @@ fun TarkasAppContent(
 
               Column(modifier = Modifier.weight(1f)) {
                 Text(
-                  text = if (curiositySpeechStage == "intro") "Curiosidade antes da música" else "Curiosidade da faixa",
+                  text = androidx.compose.ui.res.stringResource(
+                    if (curiositySpeechStage == "intro") R.string.nav_curiosity_intro else R.string.nav_curiosity_track
+                  ),
                   fontWeight = FontWeight.Bold,
                   fontSize = 13.sp,
                   color = MaterialTheme.colorScheme.onSurface
@@ -829,7 +884,7 @@ fun TarkasAppContent(
               Spacer(modifier = Modifier.width(8.dp))
 
               com.example.ui.components.GlassChip(
-                label = "Pular",
+                label = androidx.compose.ui.res.stringResource(R.string.nav_curiosity_skip),
                 onClick = { viewModel.skipCuriositySpeech() }
               )
             }
@@ -843,22 +898,21 @@ fun TarkasAppContent(
         viewModel.listStartPrompt.collectAsStateWithLifecycle().value?.let { p ->
           androidx.compose.material3.AlertDialog(
             onDismissRequest = { viewModel.answerListStart(null) },
-            title = { Text("Manter a fila?", style = com.example.ui.theme.AppText.Title3) },
+            title = { Text(androidx.compose.ui.res.stringResource(R.string.nav_keep_queue_title), style = com.example.ui.theme.AppText.Title3) },
             text = {
               Text(
-                if (p.queued == 1) "A música que você enfileirou toca antes da nova lista, ou sai da fila."
-                else "As ${p.queued} músicas que você enfileirou tocam antes da nova lista, ou saem da fila.",
+                androidx.compose.ui.res.pluralStringResource(R.plurals.nav_keep_queue_message, p.queued, p.queued),
                 style = com.example.ui.theme.AppText.Body
               )
             },
             confirmButton = {
               androidx.compose.material3.TextButton(onClick = { viewModel.answerListStart(true) }, modifier = Modifier.testTag("list_start_keep")) {
-                Text("Manter")
+                Text(androidx.compose.ui.res.stringResource(R.string.nav_keep_queue_keep))
               }
             },
             dismissButton = {
               androidx.compose.material3.TextButton(onClick = { viewModel.answerListStart(false) }, modifier = Modifier.testTag("list_start_clear")) {
-                Text("Limpar fila")
+                Text(androidx.compose.ui.res.stringResource(R.string.nav_keep_queue_clear))
               }
             }
           )
@@ -884,7 +938,7 @@ fun TarkasAppContent(
           Row(
             modifier = Modifier
               .fillMaxWidth()
-              .glassPill(cornerRadius = 30.dp)
+              .glassPill(cornerRadius = Radius.xl)
               .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
               .heightIn(min = 40.dp)
               .semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite }
@@ -917,12 +971,17 @@ fun TarkasAppContent(
         // grows out of it. The last track is kept so the capsule does not empty while leaving.
         var lastTrack by remember { mutableStateOf(currentTrack) }
         if (currentTrack != null) lastTrack = currentTrack
+        // Arriving from the closing player: no entrance of its own. The mini player is drawn with an
+        // alpha taken from the player's shrink progress, so shrink and appearance are one movement.
+        val miniFromPlayer = com.example.ui.theme.PlayerOrigin.progress != null &&
+          currentTab != TarkasNavTab.MUSIC && !com.example.ui.theme.rememberReducedMotion()
         AnimatedVisibility(
-          visible = currentTab != TarkasNavTab.MUSIC && currentTrack != null && !imeVisible,
-          enter = if (com.example.ui.theme.rememberReducedMotion()) androidx.compose.animation.EnterTransition.None
-            else androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220, delayMillis = 140)) +
+          visible = currentTab != TarkasNavTab.MUSIC && currentTrack != null && !imeVisible && !barsHidden,
+          enter = if (miniFromPlayer || com.example.ui.theme.rememberReducedMotion()) androidx.compose.animation.EnterTransition.None
+            else androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220, delayMillis = 60)) +
               androidx.compose.animation.scaleIn(initialScale = 0.94f, animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = 500f)),
-          exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150))
+          // Gone within a few frames: the cover of the opening player is drawn above it and takes its place.
+          exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(60))
         ) {
           MiniPlayerBar(
             track = lastTrack,
@@ -936,6 +995,14 @@ fun TarkasAppContent(
             },
             onClick = { viewModel.setTab(TarkasNavTab.MUSIC) },
             modifier = Modifier
+              .graphicsLayer {
+                // Still composed at alpha 0, so its bounds are registered for the cover to land on.
+                if (miniFromPlayer) {
+                  alpha = com.example.ui.theme.PlayerTravel.miniIn(
+                    com.example.ui.theme.PlayerOrigin.progress?.value ?: 0f
+                  )
+                }
+              }
               .onGloballyPositioned { com.example.ui.theme.PlayerOrigin.mini = it.boundsInWindow() }
               .opensPlayer()
           )
@@ -943,11 +1010,16 @@ fun TarkasAppContent(
 
         // The full player covers the tab bar, as in Apple Music; it slides back when the player closes.
         AnimatedVisibility(
-          visible = currentTab != TarkasNavTab.MUSIC && !imeVisible,
+          visible = currentTab != TarkasNavTab.MUSIC && !imeVisible && !barsHidden,
           enter = if (reducedChrome) androidx.compose.animation.EnterTransition.None
             else androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200, delayMillis = 80)) +
               androidx.compose.animation.slideInVertically(androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 500f)) { it / 2 },
-          exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150))
+          // It leaves downwards, quickly, as the player rises (95% gone with 15% of the opening done).
+          exit = if (reducedChrome) androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150))
+            else androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)) +
+              androidx.compose.animation.slideOutVertically(
+                androidx.compose.animation.core.tween(150, easing = androidx.compose.animation.core.FastOutLinearInEasing)
+              ) { it / 2 }
         ) {
           TarkasBottomNav(
             currentTab = currentTab,

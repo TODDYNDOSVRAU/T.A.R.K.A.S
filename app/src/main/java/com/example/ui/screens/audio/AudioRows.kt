@@ -1,5 +1,7 @@
 package com.example.ui.screens.audio
 
+import com.example.R
+import androidx.compose.ui.res.stringResource
 import android.content.ClipData
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -107,10 +109,11 @@ internal fun CommandRow(command: String) {
   val clipboard = LocalClipboard.current
   val scope = rememberCoroutineScope()
   var copied by remember { mutableStateOf(false) }
+  val copyLabel = stringResource(R.string.audio_copy_command)
   Column(
     modifier = Modifier
       .fillMaxWidth()
-      .highlightClickable(onClickLabel = "Copiar o comando") {
+      .highlightClickable(onClickLabel = copyLabel) {
         scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Comando", command))) }
         copied = true
       }
@@ -118,7 +121,7 @@ internal fun CommandRow(command: String) {
   ) {
     Text(command, style = AppText.Footnote.copy(fontFamily = com.example.ui.theme.JetBrainsMono), color = colors.onSurface)
     Text(
-      if (copied) "Copiado" else "Toque para copiar",
+      if (copied) stringResource(R.string.audio_copied) else stringResource(R.string.audio_tap_to_copy),
       style = AppText.Footnote,
       color = colors.primary,
       modifier = Modifier.padding(top = Space.xs)

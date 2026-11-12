@@ -18,6 +18,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import com.example.R
 import com.example.data.playback.SleepTimer
 import com.example.ui.theme.AppText
 import com.example.ui.theme.Size
@@ -30,7 +33,7 @@ private val MINUTES = listOf(5, 10, 15, 30, 45, 60, 90)
 @Composable
 fun sleepTimerLabel(timer: SleepTimer?): String? {
   if (timer == null) return null
-  if (timer.endOfTrack) return "fim da faixa"
+  if (timer.endOfTrack) return stringResource(R.string.player_sleep_label_end_of_track)
   val endsAt = timer.endsAtMs ?: return null
   var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
   LaunchedEffect(endsAt) {
@@ -40,7 +43,7 @@ fun sleepTimerLabel(timer: SleepTimer?): String? {
     }
   }
   val minutes = ((endsAt - now + 59_999) / 60_000).coerceAtLeast(1)
-  return "$minutes min"
+  return stringResource(R.string.player_sleep_label_minutes, minutes)
 }
 
 /**
@@ -59,31 +62,31 @@ fun SleepTimerDialog(
   val label = sleepTimerLabel(timer)
   AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text("Timer de dormir", style = AppText.Title3) },
+    title = { Text(stringResource(R.string.player_sleep_title), style = AppText.Title3) },
     text = {
       Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
         if (label != null) {
           Text(
-            "A música pausa em $label.",
+            stringResource(R.string.player_sleep_pauses_in, label),
             style = AppText.Subhead,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = Space.s)
           )
         }
         MINUTES.forEach { m ->
-          Option("$m minutos", "sleep_$m") { onMinutes(m); onDismiss() }
+          Option(pluralStringResource(R.plurals.player_sleep_minutes, m, m), "sleep_$m") { onMinutes(m); onDismiss() }
         }
-        Option("No fim desta faixa", "sleep_end_of_track") { onEndOfTrack(); onDismiss() }
+        Option(stringResource(R.string.player_sleep_end_of_track), "sleep_end_of_track") { onEndOfTrack(); onDismiss() }
       }
     },
     confirmButton = {
       if (timer != null) {
         TextButton(onClick = { onCancel(); onDismiss() }) {
-          Text("Desligar timer", color = MaterialTheme.colorScheme.error)
+          Text(stringResource(R.string.player_sleep_turn_off), color = MaterialTheme.colorScheme.error)
         }
       }
     },
-    dismissButton = { TextButton(onClick = onDismiss) { Text("Fechar") } }
+    dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.player_sleep_close)) } }
   )
 }
 

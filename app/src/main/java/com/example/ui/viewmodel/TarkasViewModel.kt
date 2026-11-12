@@ -206,6 +206,8 @@ class TarkasViewModel(
 
   // The player screens read these, from the app's own engine.
   val isPlaying: StateFlow<Boolean> = playback.isPlaying
+  /** Playing, or a track on its way: stays true while the next track loads, false only on a real pause. */
+  val wantsToPlay: StateFlow<Boolean> = playback.wantsToPlay
   val positionMs: StateFlow<Long> = playback.positionMs
   val durationMs: StateFlow<Long> = playback.durationMs
 
@@ -434,7 +436,11 @@ class TarkasViewModel(
 
   fun playNextTrack() = playback.playNextTrack()
 
-  fun playPreviousTrack() = playback.playPreviousTrack()
+  /** [force] goes back even a few seconds into the track (the cover of the previous one was swiped in). */
+  fun playPreviousTrack(force: Boolean = false) = playback.playPreviousTrack(force)
+
+  /** The tracks Previous and Next go to, shown beside the cover in the full player. */
+  val coverNeighbors: StateFlow<com.example.data.playback.CoverNeighbors.Result> get() = playback.coverNeighbors
 
   // --- queue, shuffle, repeat, sleep timer ---
 
@@ -680,8 +686,35 @@ class TarkasViewModel(
     else s.withActiveBands(bands.toMutableList().also { it[index] = transform(it[index]) })
   }
 
-  /** Loads a preset. The on/off switch stays as it is. */
+  /** The equalizer as it is, to put back with "Desfazer". */
+  private inner class EqSnapshot {
+    val settings = audioEngineManager.eqSettings.value
+    val presetId = _activePresetId.value
+    val modified = _eqModified.value
+    val saved = userPresets()
+
+    fun restore() {
+      if (saved != userPresets()) storeUserPresets(saved)
+      _activePresetId.value = presetId
+      preferencesRepository.saveActiveProfileId(presetId)
+      updateEq { settings }
+      _eqModified.value = modified
+    }
+  }
+
+  private fun offerEqUndo(text: String, snapshot: EqSnapshot) =
+    showNotice(Notice(text, actionLabel = "Desfazer", action = { snapshot.restore() }))
+
+  /** Loads a preset; edits not saved to the one in use are offered back with "Desfazer". */
   fun selectEqPreset(preset: EqPreset) {
+    val snapshot = EqSnapshot()
+    val discards = _eqModified.value && preset.id != _activePresetId.value
+    loadEqPreset(preset)
+    if (discards) offerEqUndo("Predefinição \"${preset.name}\" carregada. Os ajustes não salvos foram descartados.", snapshot)
+  }
+
+  /** Loads a preset. The on/off switch stays as it is. */
+  private fun loadEqPreset(preset: EqPreset) {
     val current = audioEngineManager.eqSettings.value
     _activePresetId.value = preset.id
     preferencesRepository.saveActiveProfileId(preset.id)
@@ -695,9 +728,11 @@ class TarkasViewModel(
 
   /** Back to flat in the mode in use: graphic faders at zero, or the parametric back to one band. */
   fun resetEq() {
+    val snapshot = EqSnapshot()
     val wasParametric = audioEngineManager.eqSettings.value.parametric
-    selectEqPreset(EqPresets.FLAT)
+    loadEqPreset(EqPresets.FLAT)
     if (wasParametric) updateEq { it.copy(parametric = true, paramBands = EqSettings.DEFAULT_PARAM_BANDS) }
+    offerEqUndo("Equalizador restaurado ao padrão.", snapshot)
   }
 
   fun saveEqPresetAs(name: String) {
@@ -708,7 +743,7 @@ class TarkasViewModel(
       isCustom = true
     )
     storeUserPresets(userPresets() + preset)
-    selectEqPreset(preset)
+    loadEqPreset(preset)
   }
 
   /** Writes the current curve into the active user preset. */
@@ -726,12 +761,15 @@ class TarkasViewModel(
   }
 
   fun deleteEqPreset(id: String) {
+    val snapshot = EqSnapshot()
+    val name = userPresets().firstOrNull { it.id == id }?.name
     storeUserPresets(userPresets().filterNot { it.id == id })
     if (_activePresetId.value == id) {
       // Keep the sound as it is; it simply no longer belongs to a saved preset.
       _activePresetId.value = EqPresets.FLAT.id
       _eqModified.value = true
     }
+    if (name != null) offerEqUndo("Predefinição \"$name\" excluída.", snapshot)
   }
 
   private fun userPresets(): List<EqPreset> = _eqPresets.value.filter { it.isCustom }
@@ -937,6 +975,11 @@ class TarkasViewModel(
     if (on) applyOutput(audioEngineManager.output.value, announce = false)
   }
 
+  // Declared before the init below: that block can run at once and writes to it.
+  private val _outputSuggestion = MutableStateFlow<com.example.data.audio.OutputRouting.Suggestion?>(null)
+  /** What AutoEq has for the fone playing now, while it has no correction; null otherwise. */
+  val outputSuggestion: StateFlow<com.example.data.audio.OutputRouting.Suggestion?> = _outputSuggestion.asStateFlow()
+
   init {
     viewModelScope.launch { startOutputRouting(eqLoaded.await()) }
   }
@@ -1019,10 +1062,6 @@ class TarkasViewModel(
       )
     }
   }
-
-  private val _outputSuggestion = MutableStateFlow<com.example.data.audio.OutputRouting.Suggestion?>(null)
-  /** What AutoEq has for the fone playing now, while it has no correction; null otherwise. */
-  val outputSuggestion: StateFlow<com.example.data.audio.OutputRouting.Suggestion?> = _outputSuggestion.asStateFlow()
 
   private val _devicePickerRequest = MutableStateFlow<String?>(null)
   /** A search to open the fone list with (from a suggestion); cleared once the list opens. */

@@ -27,10 +27,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.R
 import com.example.data.model.Track
 import com.example.ui.theme.AppText
 import com.example.ui.theme.Radius
@@ -53,6 +55,7 @@ fun TrackDetailsSheet(
 ) {
   val context = LocalContext.current
   val info = state.info
+  val loadingDescription = stringResource(R.string.player_details_loading)
   ModalBottomSheet(
     onDismissRequest = onDismiss,
     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -84,51 +87,51 @@ fun TrackDetailsSheet(
         }
       }
       Hairline(Modifier.padding(vertical = Space.s))
-      GroupHeader("Sobre a faixa", Modifier.padding(top = Space.s))
+      GroupHeader(stringResource(R.string.player_details_header), Modifier.padding(top = Space.s))
 
       when {
         state.loading -> Box(
           modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = Space.xl)
-            .semantics { stateDescription = "Buscando no MusicBrainz" },
+            .semantics { stateDescription = loadingDescription },
           contentAlignment = Alignment.Center
         ) {
           CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
         }
         state.offline -> EmptyState(
           icon = Icons.Rounded.CloudOff,
-          title = "Sem conexão com o MusicBrainz",
-          message = "Confira a internet e tente de novo.",
-          actionLabel = "Tentar de novo",
+          title = stringResource(R.string.player_details_offline_title),
+          message = stringResource(R.string.player_details_offline_message),
+          actionLabel = stringResource(R.string.player_details_retry),
           onAction = onRetry,
           modifier = Modifier.padding(horizontal = Space.page).testTag("track_details_offline")
         )
         info == null -> Text(
-          "O MusicBrainz não tem esta faixa, ou não tem certeza de qual é.",
+          stringResource(R.string.player_details_not_found),
           style = AppText.Subhead,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
           modifier = Modifier.padding(horizontal = Space.page, vertical = Space.s).testTag("track_details_not_found")
         )
         else -> Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
           info.release?.let { release ->
-            InfoRow("Álbum", listOfNotNull(release, info.releaseType?.let(::releaseTypeLabel)).joinToString(" · "))
+            InfoRow(stringResource(R.string.player_details_album), listOfNotNull(release, info.releaseType?.let { releaseTypeLabel(it) }).joinToString(" · "))
             GroupDivider()
           }
           info.firstReleaseDate?.let {
-            InfoRow("Lançamento", formatReleaseDate(it))
+            InfoRow(stringResource(R.string.player_details_release_date), formatReleaseDate(it))
             GroupDivider()
           }
           if (info.artist.isNotBlank() && !info.artist.equals(track.artist, ignoreCase = true)) {
-            InfoRow("Artista no MusicBrainz", info.artist)
+            InfoRow(stringResource(R.string.player_details_artist), info.artist)
             GroupDivider()
           }
           if (info.tags.isNotEmpty()) {
-            InfoRow("Gêneros", info.tags.joinToString(", ") { it.replaceFirstChar(Char::uppercase) })
+            InfoRow(stringResource(R.string.player_details_genres), info.tags.joinToString(", ") { it.replaceFirstChar(Char::uppercase) })
             GroupDivider()
           }
           ListRow(
-            title = "Ver no MusicBrainz",
+            title = stringResource(R.string.player_details_open),
             onClick = {
               runCatching {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.pageUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -139,7 +142,7 @@ fun TrackDetailsSheet(
         }
       }
       Text(
-        "Dados do MusicBrainz (CC0) e capas do Cover Art Archive.",
+        stringResource(R.string.player_details_attribution),
         style = AppText.Footnote,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = Space.page, vertical = Space.m)
@@ -148,11 +151,12 @@ fun TrackDetailsSheet(
   }
 }
 
+@Composable
 private fun releaseTypeLabel(type: String): String = when (type.lowercase()) {
-  "album" -> "Álbum"
-  "single" -> "Single"
+  "album" -> stringResource(R.string.player_details_type_album)
+  "single" -> stringResource(R.string.player_details_type_single)
   "ep" -> "EP"
-  "broadcast" -> "Transmissão"
+  "broadcast" -> stringResource(R.string.player_details_type_broadcast)
   else -> type
 }
 

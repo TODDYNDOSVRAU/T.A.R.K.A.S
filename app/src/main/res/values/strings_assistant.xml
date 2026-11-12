@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Assistant tab. Default language: English. Portuguese is in values-pt/strings_assistant.xml. -->
+
+    <!-- Header status -->
+    <string name="assistant_status_online">Local commands and online AI (Gemini).</string>
+    <string name="assistant_status_local">Local commands. No online AI.</string>
+    <string name="assistant_enable_action">How to enable</string>
+    <string name="assistant_enable_hide">Hide</string>
+    <string name="assistant_enable_body">Online AI needs a Gemini key (GEMINI_API_KEY) in the .env file, included when the app is built. There is no setting for it inside the app.</string>
+
+    <!-- Empty state -->
+    <string name="assistant_empty_title">How can I help?</string>
+    <string name="assistant_empty_body">Ask to change track, adjust the equalizer or set a timer. Tap the microphone to speak.</string>
+
+    <!-- Suggestions (the command sent is fixed; only the label is translated) -->
+    <string name="assistant_suggestion_next">Next track</string>
+    <string name="assistant_suggestion_shuffle">Shuffle</string>
+    <string name="assistant_suggestion_repeat">Repeat</string>
+    <string name="assistant_suggestion_favorite">Favorite</string>
+    <string name="assistant_suggestion_diagnostics">Audio diagnostics</string>
+    <string name="assistant_suggestion_eq_flat">Flat equalizer</string>
+    <string name="assistant_suggestion_timer">15 min timer</string>
+    <string name="assistant_suggestion_help">Help</string>
+
+    <!-- Who spoke, for screen readers -->
+    <string name="assistant_sender_user">You</string>
+    <string name="assistant_sender_assistant">Assistant</string>
+    <string name="assistant_sender_tool">Action</string>
+    <string name="assistant_sender_system">Notice</string>
+    <string name="assistant_message_spoken">%1$s: %2$s</string>
+
+    <!-- States -->
+    <string name="assistant_listening">Listening</string>
+    <string name="assistant_thinking">Thinking</string>
+    <string name="assistant_thinking_visible">Thinking…</string>
+
+    <!-- Voice input -->
+    <string name="assistant_voice_prompt">Ask for an analysis, change track or adjust the sound</string>
+    <string name="assistant_voice_unavailable">This device has no speech recognition. Type the request below.</string>
+    <string name="assistant_voice_failed">Could not open speech recognition. Type the request below.</string>
+
+    <!-- Controls -->
+    <string name="assistant_mic_idle">Speak to the assistant</string>
+    <string name="assistant_send">Send</string>
+    <string name="assistant_composer_description">Message to the assistant</string>
+    <string name="assistant_composer_placeholder">Ask for something or type \"help\"</string>
+    <string name="assistant_timer_line">%1$s: %2$s</string>
+    <string name="assistant_timer_cancel">Cancel timer %1$s</string>
+</resources>

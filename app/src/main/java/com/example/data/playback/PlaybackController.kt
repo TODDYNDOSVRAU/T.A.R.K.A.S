@@ -78,6 +78,10 @@ class PlaybackController(
   /** What the list plays after the queue runs out (a few tracks), for the queue screen. */
   val upcoming: StateFlow<List<Track>> = _upcoming.asStateFlow()
 
+  private val _coverNeighbors = MutableStateFlow(CoverNeighbors.Result())
+  /** The tracks Previous and Next go to, for the covers beside the current one in the full player. */
+  val coverNeighbors: StateFlow<CoverNeighbors.Result> = _coverNeighbors.asStateFlow()
+
   private val _shuffle = MutableStateFlow(preferences.getShuffle())
   val shuffle: StateFlow<Boolean> = _shuffle.asStateFlow()
 
@@ -136,6 +140,10 @@ class PlaybackController(
 
   init {
     restore()
+    // Playing from the whole library, its neighbours change when the library is (re)loaded.
+    scope.launch {
+      musicRepository.tracks.drop(1).collect { if (contextTracks == null) refreshNeighbors() }
+    }
     scope.launch {
       // The first value is the restored, paused state; saving it could store position 0 before the
       // restored track has even been prepared.
@@ -209,6 +217,7 @@ class PlaybackController(
       }
     }
     musicRepository.selectTrack(track)
+    refreshNeighbors()
     val cur = curiosityRepository.getCuriosityForTrack(track)
     _activeCuriosity.value = cur
     resumeAfterNarration = null
@@ -339,6 +348,21 @@ class PlaybackController(
     val list = contextList()
     if (_shuffle.value) shuffleOrder = PlaybackOrder.shuffleOrderFor(list, current, shuffleOrder)
     _upcoming.value = PlaybackOrder.upcoming(current, list, _shuffle.value, shuffleOrder, _repeatMode.value, UPCOMING_SHOWN)
+    refreshNeighbors()
+  }
+
+  /**
+   * Recomputes the covers beside the current one. Called as soon as the current track, the history,
+   * the queue or the order changes (not only once the audio starts, which waits for an intro narration).
+   */
+  private fun refreshNeighbors() {
+    val current = musicRepository.currentTrack.value
+    val list = contextList()
+    if (_shuffle.value) shuffleOrder = PlaybackOrder.shuffleOrderFor(list, current, shuffleOrder)
+    _coverNeighbors.value = CoverNeighbors.of(
+      current = current, queue = _queue.value, list = list, history = playHistory.toList(),
+      shuffle = _shuffle.value, shuffleOrder = shuffleOrder, repeat = _repeatMode.value
+    )
   }
 
   /** [PlaybackOrder.resolveNext] with the shuffled order kept here, so a pass plays every track once. */
@@ -500,13 +524,9 @@ class PlaybackController(
       seekTo(0L)
       return
     }
-    val prev = if (playHistory.isNotEmpty()) {
-      playHistory.removeAt(playHistory.lastIndex)
-    } else {
-      val list = contextList()
-      val i = list.indexOfFirst { it.id == musicRepository.currentTrack.value?.id }
-      list.getOrNull(if (i > 0) i - 1 else list.lastIndex)
-    }
+    // The same rule the player's cover carousel shows on its left (CoverNeighbors).
+    val prev = PlaybackOrder.previous(playHistory, contextList(), musicRepository.currentTrack.value)
+    if (playHistory.isNotEmpty()) playHistory.removeAt(playHistory.lastIndex)
     if (prev != null) playInternal(prev, recordHistory = false, reason = EndReason.SKIP_BACKWARD)
   }
 
@@ -682,6 +702,7 @@ class PlaybackController(
       _queue.value = TrackJson.listFromJson(o.optJSONArray("queue"))
       contextTracks = o.optJSONArray("context")?.let { TrackJson.listFromJson(it) }
       musicRepository.selectTrack(track)
+      refreshNeighbors()
       _activeCuriosity.value = curiosityRepository.getCuriosityForTrack(track)
       val path = track.filePath
       if (path != null) {

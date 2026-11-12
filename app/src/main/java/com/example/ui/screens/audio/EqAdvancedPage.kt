@@ -1,5 +1,8 @@
 package com.example.ui.screens.audio
 
+import androidx.compose.ui.res.pluralStringResource
+import com.example.R
+import androidx.compose.ui.res.stringResource
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
@@ -23,6 +26,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -126,21 +131,21 @@ internal fun EqAdvancedPage(
   ) {
     item {
       SubPageHeader(
-        title = "Ajustes avançados",
-        backLabel = "Áudio",
+        title = stringResource(R.string.audio_menu_advanced),
+        backLabel = stringResource(R.string.audio_adv_back),
         onBack = onBack,
         modifier = Modifier.testTag("eq_subpage_back")
       )
     }
 
-    item { ReachSection(eqReach, globalEqStatus, rootPresent, onSetEqReach) }
+    item { GroupLabel(stringResource(R.string.audio_adv_group_sound)) }
 
     item {
-      Section("Correção do fone") {
+      Section(stringResource(R.string.audio_adv_section_correction)) {
         InsetGroup {
           SwitchRow(
-            title = "Trocar a correção com o fone",
-            subtitle = "Saída agora: ${outputCorrection.outputName}",
+            title = stringResource(R.string.audio_adv_auto_correction),
+            subtitle = stringResource(R.string.audio_adv_output_now, outputCorrection.outputName),
             checked = outputCorrection.auto,
             onCheckedChange = onSetAutoOutputCorrection,
             modifier = Modifier.testTag("switch_auto_output_correction")
@@ -148,21 +153,19 @@ internal fun EqAdvancedPage(
         }
         GroupFooter(
           if (outputCorrection.auto) {
-            "A correção escolhida com um fone conectado fica guardada para ele e volta sozinha quando ele reconecta. " +
-              "No alto-falante, nenhuma correção, a menos que você escolha uma com ele tocando. " +
-              "Fones com fio são tratados como um só, porque o conector não informa o modelo."
+            stringResource(R.string.audio_adv_correction_auto_footer)
           } else {
-            "A correção escolhida fica a mesma em qualquer saída."
+            stringResource(R.string.audio_adv_correction_manual_footer)
           }
         )
       }
     }
 
     item {
-      Section("Graves e agudos") {
+      Section(stringResource(R.string.audio_adv_section_tone)) {
         InsetGroup {
           LogSliderRow(
-            label = "Frequência dos graves",
+            label = stringResource(R.string.audio_adv_bass_freq),
             valueText = spokenHz(eqSettings.bassFreqHz),
             value = eqSettings.bassFreqHz,
             min = 30f, max = 400f,
@@ -170,22 +173,22 @@ internal fun EqAdvancedPage(
           )
           GroupDivider()
           LogSliderRow(
-            label = "Frequência dos agudos",
+            label = stringResource(R.string.audio_adv_treble_freq),
             valueText = spokenHz(eqSettings.trebleFreqHz),
             value = eqSettings.trebleFreqHz,
             min = 1500f, max = 16000f,
             onChange = { v -> onUpdateEq { it.copy(trebleFreqHz = v) } }
           )
         }
-        GroupFooter("Onde os botões de graves e agudos começam a agir.")
+        GroupFooter(stringResource(R.string.audio_adv_tone_footer))
       }
     }
 
     item {
-      Section("Saída") {
+      Section(stringResource(R.string.audio_adv_section_output)) {
         InsetGroup {
           SliderRow(
-            label = "Pré-amplificação",
+            label = stringResource(R.string.audio_preamp_long),
             valueText = formatDb(eqSettings.preampDb) + " dB",
             value = eqSettings.preampDb,
             range = -EqSettings.PREAMP_RANGE_DB..EqSettings.PREAMP_RANGE_DB,
@@ -195,16 +198,16 @@ internal fun EqAdvancedPage(
           GroupDivider()
           val auto = EqDsp.autoPreampDb(eqSettings)
           SwitchRow(
-            title = "Pré-amp automático",
-            subtitle = if (eqSettings.autoPreamp && auto < 0f) "Baixa ${formatDb(-auto)} dB para os reforços não distorcerem"
-            else "Baixa o volume o quanto a curva reforça, para não distorcer",
+            title = stringResource(R.string.audio_adv_auto_preamp),
+            subtitle = if (eqSettings.autoPreamp && auto < 0f) stringResource(R.string.audio_adv_auto_preamp_lowers, formatDb(-auto))
+            else stringResource(R.string.audio_adv_auto_preamp_idle),
             checked = eqSettings.autoPreamp,
             onCheckedChange = { on -> onUpdateEq { it.copy(autoPreamp = on) } },
             modifier = Modifier.testTag("switch_auto_preamp")
           )
           GroupDivider()
           SliderRow(
-            label = "Balanço",
+            label = stringResource(R.string.audio_adv_balance),
             valueText = balanceText(eqSettings.balance),
             value = eqSettings.balance,
             range = -1f..1f,
@@ -212,7 +215,7 @@ internal fun EqAdvancedPage(
           )
           GroupDivider()
           SliderRow(
-            label = "Largura estéreo",
+            label = stringResource(R.string.audio_adv_stereo_width),
             valueText = widthText(eqSettings.stereoWidth),
             value = eqSettings.stereoWidth,
             range = 0f..2f,
@@ -220,8 +223,8 @@ internal fun EqAdvancedPage(
           )
           GroupDivider()
           SwitchRow(
-            title = "Limitador",
-            subtitle = "Evita distorção quando a curva soma ganho demais",
+            title = stringResource(R.string.audio_switch_limiter),
+            subtitle = stringResource(R.string.audio_adv_limiter_sub),
             checked = eqSettings.limiterEnabled,
             onCheckedChange = { on -> onUpdateEq { it.copy(limiterEnabled = on) } },
             modifier = Modifier.testTag("switch_limiter_advanced")
@@ -234,7 +237,7 @@ internal fun EqAdvancedPage(
             Column {
               GroupDivider()
               SliderRow(
-                label = "Teto do limitador",
+                label = stringResource(R.string.audio_adv_limiter_ceiling),
                 valueText = formatDb(eqSettings.limiterCeilingDb) + " dB",
                 value = eqSettings.limiterCeilingDb,
                 range = -12f..0f,
@@ -245,7 +248,7 @@ internal fun EqAdvancedPage(
           if (capabilities.isVirtualizerAvailable) {
             GroupDivider()
             SliderRow(
-              label = "Virtualizador (palco)",
+              label = stringResource(R.string.audio_adv_virtualizer),
               valueText = "${eqSettings.virtualizerStrength / 10}%",
               value = eqSettings.virtualizerStrength / 1000f,
               range = 0f..1f,
@@ -255,34 +258,38 @@ internal fun EqAdvancedPage(
           }
         }
         eqSettings.device?.let { d ->
-          GroupFooter("A correção do fone já reduz ${formatDb(-d.preampDb)} dB para não distorcer.")
+          GroupFooter(stringResource(R.string.audio_adv_device_reduces, formatDb(-d.preampDb)))
         }
         capabilities.trackFormat?.let { format ->
           val max = capabilities.outputMaxRateHz
           GroupFooter(
             if (capabilities.outputBelowTrackRate && max != null) {
-              "Faixa tocando: $format. A saída ${capabilities.activeRouteName} vai até ${com.example.data.audio.TrackFormat.khz(max)}, " +
-                "então o Android reduz a taxa antes de tocar."
+              stringResource(
+                R.string.audio_adv_track_format_downsample,
+                format, capabilities.activeRouteName, com.example.data.audio.TrackFormat.khz(max)
+              )
             } else {
-              "Faixa tocando: $format."
+              stringResource(R.string.audio_adv_track_format, format)
             }
           )
         }
         if (capabilities.isVirtualizerAvailable) {
-          GroupFooter("O virtualizador é um efeito do próprio Android. O resultado muda de aparelho para aparelho.")
+          GroupFooter(stringResource(R.string.audio_adv_virtualizer_footer))
         }
       }
     }
 
+    item { GroupLabel(stringResource(R.string.audio_adv_group_playback)) }
+
     item { LoudnessSection(loudness, onSetNormalizationMode) }
 
     item {
-      Section("Transição entre faixas") {
+      Section(stringResource(R.string.audio_adv_section_transition)) {
         InsetGroup {
           SwitchRow(
-            title = "Crossfade",
-            subtitle = if (crossfadeSeconds > 0) "A próxima música entra enquanto a atual sai, em $crossfadeSeconds s"
-            else "Desligado: as músicas trocam sem pausa e sem sobreposição",
+            title = stringResource(R.string.audio_adv_crossfade),
+            subtitle = if (crossfadeSeconds > 0) stringResource(R.string.audio_adv_crossfade_on, crossfadeSeconds)
+            else stringResource(R.string.audio_adv_crossfade_off),
             checked = crossfadeSeconds > 0,
             onCheckedChange = { on -> onSetCrossfade(if (on) com.example.data.playback.CrossfadePlanner.DEFAULT_SECONDS else 0) },
             modifier = Modifier.testTag("switch_crossfade")
@@ -295,7 +302,7 @@ internal fun EqAdvancedPage(
             Column {
               GroupDivider()
               SliderRow(
-                label = "Duração",
+                label = stringResource(R.string.audio_adv_duration),
                 valueText = "$crossfadeSeconds s",
                 value = crossfadeSeconds.toFloat(),
                 range = 1f..12f,
@@ -307,22 +314,27 @@ internal fun EqAdvancedPage(
         GroupFooter(
           when {
             crossfadeSeconds > 0 && spatialOn ->
-              "Com o Tarkas Spatial ligado, as músicas trocam sem crossfade: o espacial acompanha uma música por vez."
+              stringResource(R.string.audio_adv_crossfade_spatial)
             else ->
-              "Faixas seguidas de um mesmo álbum trocam sem pausa e sem crossfade, para o álbum soar inteiro. Também não há crossfade " +
-                "em faixas com menos que o dobro da duração escolhida, com Repetir uma, com o Tarkas Spatial ligado ou quando há curiosidade narrada. " +
-                "Pausar, arrastar a barra ou pular durante a transição termina o crossfade na hora."
+              stringResource(R.string.audio_adv_crossfade_footer)
           }
         )
       }
     }
 
-    item { Section("Apps tocando agora") { ActiveAppsGroup(activeApps) } }
+    item { GroupLabel(stringResource(R.string.audio_adv_group_engineering)) }
+
+    item { ReachSection(eqReach, globalEqStatus, rootPresent, onSetEqReach) }
+
+    item { Section(stringResource(R.string.audio_adv_section_apps)) { ActiveAppsGroup(activeApps) } }
 
     item {
-      Section("Medidor de nível") {
+      Section(stringResource(R.string.audio_adv_section_meter)) {
         InsetGroup(modifier = Modifier.testTag("system_audio_capture_card")) {
-          InfoRow(title = "Áudio do sistema", value = if (systemAudioStatus.isCapturing) "Ativo" else "Inativo")
+          InfoRow(
+            title = stringResource(R.string.audio_adv_system_audio),
+            value = stringResource(if (systemAudioStatus.isCapturing) R.string.audio_adv_meter_active else R.string.audio_adv_meter_inactive)
+          )
           if (systemAudioStatus.isCapturing) {
             val level by animateFloatAsState(
               targetValue = systemAudioStatus.currentRmsEnergy.coerceIn(0.02f, 1f),
@@ -349,7 +361,7 @@ internal fun EqAdvancedPage(
           }
           GroupDivider()
           ListRow(
-            title = if (systemAudioStatus.isCapturing) "Desligar medidor" else "Ativar medidor",
+            title = stringResource(if (systemAudioStatus.isCapturing) R.string.audio_adv_meter_stop else R.string.audio_adv_meter_start),
             onClick = if (systemAudioStatus.isCapturing) onStopSystemAudioCapture else onRequestSystemAudioCapture,
             chevron = false,
             enabled = systemAudioStatus.isMediaProjectionSupported,
@@ -365,9 +377,7 @@ internal fun EqAdvancedPage(
           )
         }
         GroupFooter(
-          "Experimental. Mede o volume do áudio tocado por outros apps, usando a captura de áudio do Android (10 ou mais). " +
-            "Apps que bloqueiam a captura não aparecem. Não aplica equalização neles e não identifica a música. " +
-            "Desliga sozinho quando você sai desta página."
+          stringResource(R.string.audio_adv_meter_footer)
         )
       }
     }
@@ -376,11 +386,9 @@ internal fun EqAdvancedPage(
     item {
       GroupFooter(
         if (eqReach == EqReach.APP) {
-          "No modo sem root, o equalizador processa só o que o T.A.R.K.A.S. toca. Para os outros apps, escolha ADB ou root em Alcance."
+          stringResource(R.string.audio_adv_limits_app)
         } else {
-          "Nos outros apps valem a correção do fone, as bandas, o grave, o agudo, o pré-amplificador, o limitador e, no Android 9 ou mais novo, o balanço. " +
-            "Largura estéreo e virtualizador valem só para o que o T.A.R.K.A.S. toca. Alguns apps protegidos (chamadas, DRM) podem recusar o efeito. " +
-            "Para seguir a curva até nos graves, o som dos outros apps passa a sair cerca de 85 ms atrasado: em vídeos, a voz pode ficar um pouco fora de sincronia."
+          stringResource(R.string.audio_adv_limits_other)
         },
         modifier = Modifier.padding(top = Space.xl)
       )
@@ -394,41 +402,41 @@ internal fun EqAdvancedPage(
  */
 @Composable
 private fun LoudnessSection(loudness: LoudnessUi, onSetMode: (NormalizationMode) -> Unit) {
-  Section("Volume entre faixas") {
+  Section(stringResource(R.string.audio_adv_section_loudness)) {
     InsetGroup(modifier = Modifier.testTag("loudness_panel")) {
       RadioRow(
-        title = "Desligado",
+        title = stringResource(R.string.audio_adv_loudness_off),
         selected = loudness.mode == NormalizationMode.OFF,
         onClick = { onSetMode(NormalizationMode.OFF) }
       )
       GroupDivider()
       RadioRow(
-        title = "Automático",
-        subtitle = "Por álbum quando um álbum toca em ordem; por faixa no resto",
+        title = stringResource(R.string.audio_adv_loudness_auto),
+        subtitle = stringResource(R.string.audio_adv_loudness_auto_sub),
         selected = loudness.mode == NormalizationMode.AUTO,
         onClick = { onSetMode(NormalizationMode.AUTO) }
       )
       GroupDivider()
       RadioRow(
-        title = "Por faixa",
-        subtitle = "Todas as músicas no mesmo volume",
+        title = stringResource(R.string.audio_adv_loudness_track),
+        subtitle = stringResource(R.string.audio_adv_loudness_track_sub),
         selected = loudness.mode == NormalizationMode.TRACK,
         onClick = { onSetMode(NormalizationMode.TRACK) }
       )
       GroupDivider()
       RadioRow(
-        title = "Por álbum",
-        subtitle = "Mantém a diferença entre as faixas de um álbum, quando o arquivo traz o valor do álbum",
+        title = stringResource(R.string.audio_adv_loudness_album),
+        subtitle = stringResource(R.string.audio_adv_loudness_album_sub),
         selected = loudness.mode == NormalizationMode.ALBUM,
         onClick = { onSetMode(NormalizationMode.ALBUM) }
       )
       if (loudness.mode != NormalizationMode.OFF && loudness.hasTrack) {
         GroupDivider()
-        InfoRow(title = "Faixa atual", value = loudnessReadout(loudness))
+        InfoRow(title = stringResource(R.string.audio_adv_loudness_current), value = loudnessReadout(loudness))
         if (loudness.loudnessLufs != null) {
           GroupDivider()
           InfoRow(
-            title = "Ajuste aplicado",
+            title = stringResource(R.string.audio_adv_loudness_applied),
             // 0 dB: the track is already at or below the target (the footer says it never raises).
             value = if (loudness.gainDb < -0.05) formatDb(loudness.gainDb.toFloat()) + " dB" else "0 dB"
           )
@@ -436,23 +444,33 @@ private fun LoudnessSection(loudness: LoudnessUi, onSetMode: (NormalizationMode)
       }
     }
     GroupFooter(
-      "Iguala as músicas em −14 LUFS. Só abaixa o volume, nunca aumenta, para não distorcer. " +
-        "Usa o valor ReplayGain do arquivo, se houver. Sem ele, mede a música enquanto toca e aplica a partir da próxima vez. " +
-        "A medição só vale se a música tocar quase inteira."
+      stringResource(R.string.audio_adv_loudness_footer)
     )
   }
 }
 
 /** "−9.8 LUFS · tag do arquivo", or what is missing. */
+@Composable
 private fun loudnessReadout(l: LoudnessUi): String {
-  val lufs = l.loudnessLufs ?: return "Medindo nesta reprodução"
+  val lufs = l.loudnessLufs ?: return stringResource(R.string.audio_adv_loudness_measuring)
   val source = when (l.source) {
-    LoudnessSource.TAG_TRACK -> "tag da faixa"
-    LoudnessSource.TAG_ALBUM -> "tag do álbum"
-    LoudnessSource.MEASURED -> "medido"
+    LoudnessSource.TAG_TRACK -> stringResource(R.string.audio_adv_loudness_src_track)
+    LoudnessSource.TAG_ALBUM -> stringResource(R.string.audio_adv_loudness_src_album)
+    LoudnessSource.MEASURED -> stringResource(R.string.audio_adv_loudness_src_measured)
     LoudnessSource.NONE -> ""
   }
   return formatDb(lufs.toFloat()) + " LUFS · " + source
+}
+
+/** Names a group of sections: Som, Reprodução, Engenharia (the layers of the product). */
+@Composable
+private fun GroupLabel(text: String) {
+  Text(
+    text,
+    style = AppText.Title3,
+    color = MaterialTheme.colorScheme.onSurface,
+    modifier = Modifier.padding(start = Space.page, end = Space.page, top = Space.l, bottom = Space.xs).semantics { heading() }
+  )
 }
 
 /** A titled block of the page: the group header, then its content, with the gap to the next one. */
@@ -464,42 +482,64 @@ internal fun Section(title: String?, content: @Composable () -> Unit) {
   }
 }
 
+// EqReach is a data enum with Portuguese text; the UI maps each entry to its string resource.
+@Composable
+private fun reachLabel(r: EqReach): String = stringResource(
+  when (r) {
+    EqReach.APP -> R.string.audio_adv_reach_app
+    EqReach.ADB -> R.string.audio_adv_reach_adb
+    EqReach.ROOT -> R.string.audio_adv_reach_root
+  }
+)
+
+@Composable
+private fun reachDescription(r: EqReach): String = stringResource(
+  when (r) {
+    EqReach.APP -> R.string.audio_adv_reach_app_desc
+    EqReach.ADB -> R.string.audio_adv_reach_adb_desc
+    EqReach.ROOT -> R.string.audio_adv_reach_root_desc
+  }
+)
+
 /** How far the equalizer reaches, with what each mode needs and what it is doing now. */
 @Composable
 private fun ReachSection(reach: EqReach, status: GlobalEqStatus, rootPresent: Boolean, onSetReach: (EqReach) -> Unit) {
   val colors = MaterialTheme.colorScheme
-  Section("Alcance do equalizador") {
+  Section(stringResource(R.string.audio_adv_section_reach)) {
     InsetGroup(modifier = Modifier.testTag("eq_reach_panel")) {
       EqReach.entries.forEachIndexed { i, r ->
         if (i > 0) GroupDivider()
         RadioRow(
-          title = r.label,
+          title = reachLabel(r),
           selected = r == reach,
           onClick = { onSetReach(r) },
           modifier = Modifier.testTag("eq_reach_${r.key}")
         )
       }
     }
-    GroupFooter(reach.description)
+    GroupFooter(reachDescription(reach))
 
     val line: String? = when (reach) {
       EqReach.APP -> null
       EqReach.ADB -> when {
         status.needsDump -> null
-        status.apps.isEmpty() -> "Ligado. Nenhum outro app está tocando agora."
-        else -> "Equalizando agora: ${status.apps.joinToString(", ")}."
+        status.apps.isEmpty() -> stringResource(R.string.audio_adv_reach_adb_idle)
+        else -> stringResource(R.string.audio_adv_reach_now, status.apps.joinToString(", "))
       }
       EqReach.ROOT -> when {
-        !rootPresent -> "Este aparelho não tem root (o comando su não existe). Use o modo ADB."
-        status.rootUnavailable -> "O root ainda não foi liberado. Permita o T.A.R.K.A.S. no Magisk (ou no seu gerenciador de root) e escolha Root de novo."
-        status.apps.isEmpty() -> "Ligado com root" + (if (status.globalOutput) ", incluindo a saída geral." else ".") +
-          " Nenhum outro app está tocando agora."
-        else -> "Equalizando agora: ${status.apps.joinToString(", ")}" +
-          (if (status.globalOutput) ", e a saída geral." else ".")
+        !rootPresent -> stringResource(R.string.audio_adv_reach_no_root)
+        status.rootUnavailable -> stringResource(R.string.audio_adv_reach_root_denied)
+        status.apps.isEmpty() -> stringResource(
+          if (status.globalOutput) R.string.audio_adv_reach_root_idle_global else R.string.audio_adv_reach_root_idle
+        )
+        else -> stringResource(
+          if (status.globalOutput) R.string.audio_adv_reach_now_global else R.string.audio_adv_reach_now,
+          status.apps.joinToString(", ")
+        )
       }
     }
     val conflict = status.appsWithoutControl.takeIf { it > 0 && reach != EqReach.APP }?.let { n ->
-      " Em $n ${if (n == 1) "app" else "apps"}, outro app de equalizador tem prioridade e esta curva não é aplicada. Desligue o outro para usar a do T.A.R.K.A.S."
+      " " + pluralStringResource(R.plurals.audio_adv_reach_conflict, n, n)
     }.orEmpty()
     (line?.plus(conflict))?.let {
       Text(
@@ -511,11 +551,10 @@ private fun ReachSection(reach: EqReach, status: GlobalEqStatus, rootPresent: Bo
     }
     if (reach == EqReach.ADB && status.needsDump) {
       Spacer(Modifier.height(Space.l))
-      GroupHeader("Falta a permissão DUMP")
+      GroupHeader(stringResource(R.string.audio_adv_dump_missing))
       InsetGroup { CommandRow(DUMP_COMMAND) }
       GroupFooter(
-        "Ligue a depuração USB, conecte o celular ao computador e rode o comando uma vez. " +
-          "Até lá, só os players que avisam a própria sessão de áudio são equalizados."
+        stringResource(R.string.audio_adv_dump_steps)
       )
     }
   }
@@ -530,8 +569,7 @@ private fun ActiveAppsGroup(state: ActiveAppsState) {
       is ActiveAppsState.PermissionMissing -> {
         InsetGroup { CommandRow(DUMP_COMMAND) }
         GroupFooter(
-          "Para ver quais apps estão tocando, libere a permissão DUMP uma vez. O Android só a concede por computador, " +
-            "com este comando. É com ela que o modo ADB encontra os outros apps para equalizar."
+          stringResource(R.string.audio_adv_dump_apps)
         )
       }
 
@@ -545,7 +583,7 @@ private fun ActiveAppsGroup(state: ActiveAppsState) {
       is ActiveAppsState.Ready -> {
         if (state.apps.isEmpty()) {
           Text(
-            "Nenhum outro app está tocando agora.",
+            stringResource(R.string.audio_adv_no_other_apps),
             style = AppText.Footnote,
             color = colors.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = Space.page + Space.l)

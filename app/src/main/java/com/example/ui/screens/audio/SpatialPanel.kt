@@ -1,5 +1,7 @@
 package com.example.ui.screens.audio
 
+import com.example.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -47,11 +49,12 @@ import com.example.ui.theme.rememberReducedMotion
 import kotlin.math.roundToInt
 
 /** What the switch row says under its title, for each state of the engine. */
+@Composable
 private fun spatialStatusText(status: SpatialStatus): String = when (status) {
-  SpatialStatus.OFF -> "Abre a música ao redor da cabeça"
-  SpatialStatus.PREPARING -> "Preparando…"
-  SpatialStatus.ACTIVE -> "Ativo"
-  SpatialStatus.NOT_STEREO -> "Esta faixa não é estéreo"
+  SpatialStatus.OFF -> stringResource(R.string.audio_spatial_status_off)
+  SpatialStatus.PREPARING -> stringResource(R.string.audio_spatial_status_preparing)
+  SpatialStatus.ACTIVE -> stringResource(R.string.audio_spatial_status_active)
+  SpatialStatus.NOT_STEREO -> stringResource(R.string.audio_spatial_status_not_stereo)
 }
 
 /**
@@ -65,7 +68,7 @@ internal fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modi
   Column(modifier = modifier) {
     InsetGroup {
       SwitchRow(
-        title = "Áudio espacial",
+        title = stringResource(R.string.audio_spatial_title),
         subtitle = spatialStatusText(ui.status),
         checked = ui.enabled,
         onCheckedChange = actions.onEnabled,
@@ -82,7 +85,7 @@ internal fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modi
             GroupDivider()
             RadioRow(
               title = p.label,
-              subtitle = if (ui.tuning[p].orEmpty().isNotEmpty()) "Ajustado por você" else null,
+              subtitle = if (ui.tuning[p].orEmpty().isNotEmpty()) stringResource(R.string.audio_spatial_tuned) else null,
               selected = ui.preset == p,
               onClick = { actions.onPreset(p) },
               modifier = Modifier.testTag("spatial_preset_${p.key}"),
@@ -90,7 +93,7 @@ internal fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modi
                 val turn by animateFloatAsState(if (open) 180f else 0f, tween(if (reduced) 0 else 200), label = "tuning_arrow")
                 IconAction(
                   icon = Icons.Rounded.ExpandMore,
-                  contentDescription = if (open) "Fechar ajustes de ${p.label}" else "Ajustes de ${p.label}",
+                  contentDescription = stringResource(if (open) R.string.audio_spatial_tune_close else R.string.audio_spatial_tune_open, p.label),
                   onClick = {
                     // The sliders change what is playing, so the mode they belong to must be the one playing.
                     if (!open && ui.preset != p) actions.onPreset(p)
@@ -110,7 +113,7 @@ internal fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modi
           }
           GroupDivider()
           SliderRow(
-            label = "Intensidade",
+            label = stringResource(R.string.audio_spatial_intensity),
             valueText = "${(ui.intensity * 100).roundToInt()}%",
             value = ui.intensity,
             range = 0.2f..1f,
@@ -122,7 +125,7 @@ internal fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modi
       }
     }
     GroupFooter(
-      "Funciona em qualquer saída, melhor nos fones. Músicas mono ou multicanal tocam como estão." +
+      stringResource(R.string.audio_spatial_footer) +
         (ui.othersNote?.let { "\n" + it } ?: "")
     )
   }
@@ -137,6 +140,7 @@ private fun SpatialTuning(preset: SpatialPreset, ui: SpatialUi, actions: Spatial
   val context = LocalContext.current
   val values = ui.tuning[preset].orEmpty()
   val shown = SpatialControl.paramsFor(preset, values)
+  val copyHeader = stringResource(R.string.audio_spatial_copy_header, preset.label, "%.2f".format(Locale.US, ui.intensity))
   Column(modifier = Modifier.testTag("spatial_tuning_${preset.key}")) {
     SpatialKnob.entries.forEach { knob ->
       GroupDivider()
@@ -155,9 +159,9 @@ private fun SpatialTuning(preset: SpatialPreset, ui: SpatialUi, actions: Spatial
       modifier = Modifier.fillMaxWidth().padding(horizontal = Space.s),
       horizontalArrangement = Arrangement.SpaceBetween
     ) {
-      TextAction("Restaurar valores do modo", onClick = { actions.onResetTuning(preset) }, enabled = values.isNotEmpty())
-      TextAction("Copiar valores", onClick = {
-        val text = SpatialKnob.entries.joinToString("\n", prefix = "Modo ${preset.label} (intensidade ${"%.2f".format(Locale.US, ui.intensity)})\n") {
+      TextAction(stringResource(R.string.audio_spatial_reset_mode), onClick = { actions.onResetTuning(preset) }, enabled = values.isNotEmpty())
+      TextAction(stringResource(R.string.audio_spatial_copy_values), onClick = {
+        val text = SpatialKnob.entries.joinToString("\n", prefix = copyHeader) {
           "${it.label}: ${String.format(Locale.US, "%.${it.decimals}f", it.read(shown))}${it.unit}"
         }
         context.getSystemService(ClipboardManager::class.java)

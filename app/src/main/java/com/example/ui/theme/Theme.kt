@@ -112,9 +112,19 @@ fun TarkasTheme(
   MaterialTheme(
     colorScheme = colorScheme,
     typography = TarkasTypography,
+    shapes = TarkasMaterialShapes,
     content = content
   )
 }
+
+/** Material's own shapes (dialogs, sheets, menus, chips) on the app's radius scale. */
+val TarkasMaterialShapes = androidx.compose.material3.Shapes(
+  extraSmall = com.example.ui.theme.Shapes.xs,
+  small = com.example.ui.theme.Shapes.s,
+  medium = com.example.ui.theme.Shapes.m,
+  large = com.example.ui.theme.Shapes.l,
+  extraLarge = com.example.ui.theme.Shapes.xl
+)
 
 /**
  * Forces the dark scheme on [content] when [enabled]. The player page is always dark, so the floating
@@ -125,6 +135,6 @@ fun TarkasDarkOverride(enabled: Boolean, content: @Composable () -> Unit) {
   if (!enabled || MaterialTheme.colorScheme.background.luminance() < 0.5f) {
     content()
   } else {
-    MaterialTheme(colorScheme = TarkasDarkColorScheme, typography = TarkasTypography, content = content)
+    MaterialTheme(colorScheme = TarkasDarkColorScheme, typography = TarkasTypography, shapes = TarkasMaterialShapes, content = content)
   }
 }

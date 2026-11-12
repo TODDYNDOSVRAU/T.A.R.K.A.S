@@ -1,5 +1,8 @@
 package com.example.ui.screens.audio
 
+import androidx.compose.ui.platform.LocalContext
+import com.example.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
@@ -82,7 +85,7 @@ private fun EqSettings.responseKey(): EqSettings = copy(
 /**
  * The real frequency response of the whole chain (bands, tone shelves and preamp), computed from the
  * same filter maths the audio uses, over 20 Hz to 20 kHz on a log scale. The live spectrum sits behind
- * it; each band shows as a dot, for reading only. With a [window] the part of the strip in view is
+ * it; each band shows as a dot, for reading only: the dots are never touched, they move when a control moves. With a [window] the part of the strip in view is
  * outlined, and dragging sideways slides the strip.
  */
 @Composable
@@ -92,18 +95,11 @@ internal fun EqGraph(
   spectrumBars: () -> List<Float>,
   isPlaying: Boolean,
   modifier: Modifier = Modifier,
-  window: StripView? = null,
-  onSelectBand: (Int) -> Unit = {},
-  onUpdateBand: ((Int, (EqBand) -> EqBand) -> Unit)? = null
+  window: StripView? = null
 ) {
   val colors = MaterialTheme.colorScheme
   val scope = rememberCoroutineScope()
-  val haptics = LocalHapticFeedback.current
   val curveKey = settings.responseKey()
-  val latestSettings by rememberUpdatedState(settings)
-  val latestSelect by rememberUpdatedState(onSelectBand)
-  val latestUpdate by rememberUpdatedState(onUpdateBand)
-  var grabbed by remember { mutableIntStateOf(-1) }
   // Computed only when something that shapes the response changes. EqDsp designs the filters once per
   // settings value, so each point costs a handful of multiplications.
   // The shape as set: the level the app lowers on its own (fone headroom, automatic preamp) is left
@@ -141,6 +137,18 @@ internal fun EqGraph(
   }
 
   val accent = colors.primary
+  // In parametric mode each band has its colour, and its own curve is drawn under the total.
+  val parametric = settings.parametric
+  val bandTints = settings.activeBands.indices.map { bandColor(it) }
+  val bandCurves = remember(curveKey) {
+    if (!curveKey.parametric) emptyList() else curveKey.paramBands.map { b ->
+      if (!b.enabled || (b.type.usesGain && kotlin.math.abs(b.gainDb) < 0.05f)) null
+      else {
+        val c = com.example.data.audio.dsp.BiquadCoefficients.design(b.type, b.freqHz.toDouble(), b.gainDb.toDouble(), b.q.toDouble(), 48000.0)
+        FloatArray(CURVE_POINTS) { i -> c.magnitudeDb(xToFreq(i / (CURVE_POINTS - 1f)).toDouble(), 48000.0).toFloat() }
+      }
+    }
+  }
   val grid = colors.onSurface.copy(alpha = 0.08f)
   val zero = colors.onSurface.copy(alpha = 0.24f)
   val label = colors.onSurfaceVariant
@@ -149,36 +157,28 @@ internal fun EqGraph(
   val windowEdge = colors.onSurface.copy(alpha = 0.4f)
   val outsideShade = colors.background.copy(alpha = 0.5f)
 
+  // What the curve does, in words: its highest boost and deepest cut, so a screen reader gets the shape.
+  val res = LocalContext.current.resources
+  val summary = remember(settings, res) {
+    val freqs = (0..40).map { 20.0 * Math.pow(1000.0, it / 40.0) }
+    val points = freqs.map { it to EqDsp.responseDb(settings, it) }
+    val high = points.maxByOrNull { it.second }!!
+    val low = points.minByOrNull { it.second }!!
+    when {
+      high.second < 0.25 && low.second > -0.25 -> res.getString(R.string.audio_curve_flat)
+      else -> buildString {
+        if (high.second >= 0.25) append(res.getString(R.string.audio_curve_peak_gain, formatDb(high.second.toFloat()), spokenHz(high.first.toFloat())))
+        if (low.second <= -0.25) append(res.getString(R.string.audio_curve_peak_cut, formatDb(low.second.toFloat()), spokenHz(low.first.toFloat())))
+      }.trim()
+    }
+  }
+  val curveDescription = stringResource(R.string.audio_curve_description, summary)
   Box(
     modifier = modifier
       .clip(Shapes.m)
       .background(colors.surface)
-      .then(
-        if (onUpdateBand != null && settings.enabled) {
-          Modifier.curveGestures(
-            settings = { latestSettings },
-            window = window,
-            scope = scope,
-            onGrab = { i ->
-              grabbed = i
-              if (i >= 0) {
-                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                latestSelect(i)
-              }
-            },
-            onTick = { haptics.performHapticFeedback(HapticFeedbackType.SegmentTick) },
-            onEdit = { i, t -> latestUpdate?.invoke(i, t) }
-          )
-        } else if (window != null) {
-          Modifier.overviewGestures(window, scope)
-        } else {
-          Modifier
-        }
-      )
-      .semantics {
-        contentDescription = "Curva do equalizador. Arraste um ponto para mudar a banda, toque duas vezes nele para voltar a 0 dB. " +
-          "Arraste fora dos pontos para rolar as bandas."
-      }
+      .then(if (window != null) Modifier.overviewGestures(window, scope) else Modifier)
+      .semantics { contentDescription = curveDescription }
   ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
       val w = size.width
@@ -220,6 +220,18 @@ internal fun EqGraph(
         )
       }
 
+      // Each parametric band's own curve, in its colour, under the total
+      bandCurves.forEachIndexed { bi, curve ->
+        if (curve == null) return@forEachIndexed
+        val bp = Path()
+        curve.forEachIndexed { i, db ->
+          val x = i / (CURVE_POINTS - 1f) * w
+          val y = dbToY(db.coerceIn(-GRAPH_DB_RANGE - 3f, GRAPH_DB_RANGE + 3f), h)
+          if (i == 0) bp.moveTo(x, y) else bp.lineTo(x, y)
+        }
+        drawPath(bp, bandTints[bi].copy(alpha = 0.7f * dim), style = Stroke(width = 1.dp.toPx(), cap = StrokeCap.Round))
+      }
+
       // Response curve with a light fill towards 0 dB
       val p = morph.value
       for (i in shown.indices) shown[i] = from[i] + (target[i] - from[i]) * p
@@ -241,18 +253,9 @@ internal fun EqGraph(
       // Band nodes: the selected one filled with the accent
       settings.activeBands.forEachIndexed { i, band ->
         val pos = nodePosition(curveKey, i, w, h)
-        val isSel = i == selectedBand || i == grabbed
-        // The grabbed point grows under the finger so it stays visible past the fingertip.
-        val r = when {
-          i == grabbed -> 9.dp.toPx()
-          isSel -> 6.dp.toPx()
-          else -> 4.dp.toPx()
-        }
-        if (i == grabbed) {
-          // A guide down to the frequency axis; the values are printed at the top of the graph.
-          drawLine(accent.copy(alpha = 0.35f), Offset(pos.x, 0f), Offset(pos.x, h), 1.dp.toPx())
-        }
-        val c = (if (band.enabled) accent else label).copy(alpha = dim)
+        val isSel = i == selectedBand
+        val r = if (isSel) 6.dp.toPx() else 4.dp.toPx()
+        val c = (if (band.enabled) bandTints.getOrElse(i) { accent } else label).copy(alpha = dim)
         if (isSel) {
           drawCircle(c, radius = r, center = pos)
         } else {
@@ -273,7 +276,7 @@ internal fun EqGraph(
             windowEdge,
             Offset(left, 0f),
             Size(ww, h),
-            CornerRadius(8.dp.toPx()),
+            CornerRadius(com.example.ui.theme.Radius.xs.toPx()),
             style = Stroke(1.dp.toPx())
           )
         }
@@ -297,117 +300,14 @@ internal fun EqGraph(
         .align(Alignment.TopStart)
         .padding(start = Space.s, top = Space.xxs)
     )
-    settings.activeBands.getOrNull(grabbed)?.let { b ->
-      Text(
-        spokenHz(b.freqHz) + if (b.type.usesGain) " · ${formatDb(b.gainDb)} dB" else "",
-        style = AppText.Caption1.copy(fontFeatureSettings = "tnum"),
-        color = accent,
-        modifier = Modifier
-          .align(Alignment.TopCenter)
-          .padding(top = Space.xxs)
-      )
-    }
-  }
-}
-
-/** How close, in dp, a finger must land to a band's point to grab it instead of scrolling. */
-private const val GRAB_RADIUS_DP = 24f
-private const val DOUBLE_TAP_MS = 300L
-
-/**
- * Direct editing on the curve. A finger that lands on a band's point grabs it: graphic bands move up
- * and down (gain), parametric bands move anywhere (frequency and gain). A double tap on a point
- * returns it to 0 dB. A finger anywhere else keeps the overview gestures (slide the strip's window).
- * Crossing 0 dB gives a haptic tick.
- */
-private fun Modifier.curveGestures(
-  settings: () -> EqSettings,
-  window: StripView?,
-  scope: CoroutineScope,
-  onGrab: (Int) -> Unit,
-  onTick: () -> Unit,
-  onEdit: (Int, (EqBand) -> EqBand) -> Unit
-): Modifier = pointerInput(window) {
-  var lastTapBand = -1
-  var lastTapAt = 0L
-  awaitEachGesture {
-    val down = awaitFirstDown(requireUnconsumed = false)
-    val w = size.width.toFloat()
-    val h = size.height.toFloat()
-    val s = settings()
-    val key = s.responseKey()
-    val radius = GRAB_RADIUS_DP.dp.toPx()
-    val hit = s.activeBands.indices
-      .map { it to (nodePosition(key, it, w, h) - down.position).getDistance() }
-      .filter { it.second <= radius }
-      .minByOrNull { it.second }?.first
-
-    if (hit == null) {
-      // Not on a point: the overview gesture, sideways only, so the page still scrolls over the graph.
-      if (window == null) return@awaitEachGesture
-      fun stripPerPx() = window.total / w
-      val slop = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
-        change.consume()
-        window.scroll.dispatchRawDelta(over * stripPerPx())
-      }
-      if (slop == null) {
-        val up = currentEvent.changes.firstOrNull { it.id == down.id }
-        if (up != null && !up.pressed && !up.isConsumed) {
-          val target = (down.position.x * stripPerPx() - window.viewport / 2f).roundToInt().coerceIn(0, window.scroll.maxValue)
-          scope.launch { window.scroll.animateScrollTo(target, spring(dampingRatio = 1f, stiffness = 320f)) }
-        }
-        return@awaitEachGesture
-      }
-      horizontalDrag(slop.id) { change ->
-        val dx = change.positionChange().x
-        change.consume()
-        window.scroll.dispatchRawDelta(dx * stripPerPx())
-      }
-      return@awaitEachGesture
-    }
-
-    // On a point: it is ours from the first touch, so the page does not scroll under the finger.
-    down.consume()
-    onGrab(hit)
-    val band = s.activeBands[hit]
-    val parametric = s.parametric
-    // The grab offset is kept, so the point never jumps to the fingertip.
-    val start = nodePosition(key, hit, w, h)
-    val grabDx = start.x - down.position.x
-    val grabDy = start.y - down.position.y
-    var lastGain = band.gainDb
-    var moved = false
-    while (true) {
-      val event = awaitPointerEvent()
-      val change = event.changes.firstOrNull { it.id == down.id } ?: break
-      if (!change.pressed) break
-      if (!moved && (change.position - down.position).getDistance() < viewConfiguration.touchSlop) continue
-      moved = true
-      change.consume()
-      val gain = if (band.type.usesGain) {
-        snap(yToDb(change.position.y + grabDy, h).coerceIn(-EqBand.MAX_GAIN, EqBand.MAX_GAIN))
-      } else band.gainDb
-      if ((lastGain > 0f && gain <= 0f) || (lastGain < 0f && gain >= 0f)) onTick()
-      lastGain = gain
-      if (parametric) {
-        val f = xToFreq(((change.position.x + grabDx) / w).coerceIn(0f, 1f))
-        onEdit(hit) { it.copy(freqHz = f, gainDb = gain) }
-      } else {
-        onEdit(hit) { it.copy(gainDb = gain) }
-      }
-    }
-    onGrab(-1)
-    if (!moved) {
-      val now = android.os.SystemClock.uptimeMillis()
-      if (hit == lastTapBand && now - lastTapAt < DOUBLE_TAP_MS) {
-        if (band.gainDb != 0f) onTick()
-        onEdit(hit) { it.copy(gainDb = 0f) }
-        lastTapBand = -1
-      } else {
-        lastTapBand = hit
-        lastTapAt = now
-      }
-    }
+    Text(
+      "0",
+      style = AppText.Caption2,
+      color = label,
+      modifier = Modifier
+        .align(Alignment.CenterStart)
+        .padding(start = Space.s)
+    )
   }
 }
 

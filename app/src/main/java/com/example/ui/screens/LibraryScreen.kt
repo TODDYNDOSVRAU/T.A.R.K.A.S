@@ -55,6 +55,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -81,8 +82,14 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.annotation.StringRes
+import androidx.compose.material.icons.rounded.SearchOff
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import com.example.R
 import com.example.data.model.Playlist
 import com.example.data.model.Track
+import com.example.data.playback.LibrarySearch
 import com.example.ui.components.EmptyState
 import com.example.ui.components.FilterChip
 import com.example.ui.components.IconAction
@@ -113,11 +120,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private enum class LibrarySection(val label: String) {
-  SONGS("Músicas"),
-  PLAYLISTS("Playlists"),
-  FAVORITES("Favoritos"),
-  QUEUE("Fila")
+private enum class LibrarySection(@StringRes val labelRes: Int) {
+  SONGS(R.string.library_section_songs),
+  PLAYLISTS(R.string.library_section_playlists),
+  FAVORITES(R.string.library_section_favorites),
+  QUEUE(R.string.library_section_queue)
+}
+
+/** The name of a song order in the current language. */
+@StringRes
+private fun com.example.data.playback.SongOrder.labelRes(): Int = when (this) {
+  com.example.data.playback.SongOrder.TITLE -> R.string.library_order_title
+  com.example.data.playback.SongOrder.ARTIST -> R.string.library_order_artist
+  com.example.data.playback.SongOrder.ALBUM -> R.string.library_order_album
+  com.example.data.playback.SongOrder.RECENT -> R.string.library_order_recent
+  com.example.data.playback.SongOrder.MOST_PLAYED -> R.string.library_order_most_played
 }
 
 /** Artwork of a playlist row. */
@@ -171,6 +188,15 @@ fun LibraryScreen(
     com.example.data.playback.LibrarySort.sorted(deviceTracks, songOrder, playCounts)
   }
   LaunchedEffect(songOrder) { if (songOrder == com.example.data.playback.SongOrder.MOST_PLAYED) onNeedPlayCounts() }
+  // Search inside Músicas and Favoritos: the sorted list is filtered, so the chosen order holds in the
+  // result. The folded text of a song is made the first time a search needs it, not on every keystroke.
+  var songQuery by rememberSaveable { mutableStateOf("") }
+  var favoriteQuery by rememberSaveable { mutableStateOf("") }
+  val songHaystacks = remember(deviceTracks) { HashMap<String, String>() }
+  val shownSongs = remember(sortedSongs, songQuery) {
+    LibrarySearch.filter(sortedSongs, songQuery) { songHaystacks.getOrPut(it.id) { LibrarySearch.haystack(it) } }
+  }
+  val shownFavorites = remember(favoriteTracks, favoriteQuery) { LibrarySearch.filter(favoriteTracks, favoriteQuery) }
   var openPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
   // Dialogs are saved by id, so a rotation keeps them open on the same playlist.
   var showNewPlaylist by rememberSaveable { mutableStateOf(false) }
@@ -191,13 +217,15 @@ fun LibraryScreen(
   // thread.
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
+  val audioFallbackName = stringResource(R.string.library_audio_fallback_name)
   val audioPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
     if (uri != null) {
       val appContext = context.applicationContext
       scope.launch {
-        val (name, durationMs) = withContext(Dispatchers.IO) { readAudioFile(appContext, uri) }
+        val (name, durationMs) = withContext(Dispatchers.IO) { readAudioFile(appContext, uri, audioFallbackName) }
         // Falls back to 3 min only when the file has no duration in its metadata.
         onAddLocalTrack(name, "Biblioteca Local", uri.toString(), if (durationMs > 0) durationMs else 180_000L)
+        // "Biblioteca Local" is kept as is: the repository stores and compares that literal.
       }
     }
   }
@@ -278,7 +306,9 @@ fun LibraryScreen(
         ) {
           LibrarySection.entries.forEach { s ->
             FilterChip(
-              label = if (s == LibrarySection.QUEUE && queue.isNotEmpty()) "${s.label} (${queue.size})" else s.label,
+              label = if (s == LibrarySection.QUEUE && queue.isNotEmpty()) {
+                stringResource(R.string.library_section_queue_count, queue.size)
+              } else stringResource(s.labelRes),
               selected = section == s,
               onClick = { section = s },
               modifier = Modifier.testTag("library_chip_${s.name.lowercase()}")
@@ -294,21 +324,34 @@ fun LibraryScreen(
         ) { shownSection ->
           when (shownSection) {
             LibrarySection.SONGS -> TrackList(
-              tracks = if (musicAllowed) sortedSongs else emptyList(),
+              tracks = if (musicAllowed) shownSongs else emptyList(),
               currentTrack = currentTrack,
               isPlaying = isPlaying,
-              onPlay = { track -> onPlayFromList(track, sortedSongs) },
-              onShuffle = { onShuffleList(sortedSongs) },
+              onPlay = { track -> onPlayFromList(track, shownSongs) },
+              onShuffle = { onShuffleList(shownSongs) },
               header = {
-                if (musicAllowed && deviceTracks.isNotEmpty()) item(key = "song_order") {
-                  SongOrderRow(songOrder, onChange = { songOrder = it; onSongOrderChange(it) })
+                if (musicAllowed && deviceTracks.isNotEmpty()) {
+                  item(key = "song_search") {
+                    SearchField(
+                      value = songQuery,
+                      onValueChange = { songQuery = it },
+                      placeholder = stringResource(R.string.library_search_songs_hint),
+                      modifier = Modifier
+                        .padding(horizontal = Space.page)
+                        .padding(top = Space.s, bottom = Space.xs)
+                        .testTag("library_search_songs")
+                    )
+                  }
+                  item(key = "song_order") {
+                    SongOrderRow(songOrder, onChange = { songOrder = it; onSongOrderChange(it) })
+                  }
                 }
               },
               index = { com.example.data.playback.LibrarySort.section(it, songOrder) },
               subtitle = { t ->
                 val n = playCounts[t.id] ?: 0
                 if (songOrder == com.example.data.playback.SongOrder.MOST_PLAYED && n > 0) {
-                  "${if (n == 1) "1 reprodução" else "$n reproduções"} · ${trackSubtitle(t)}"
+                  "${pluralStringResource(R.plurals.library_play_count, n, n)} · ${trackSubtitle(t)}"
                 } else trackSubtitle(t)
               },
               empty = {
@@ -318,12 +361,14 @@ fun LibraryScreen(
                     onAllow = { musicPermissionLauncher.launch(MusicPermission) },
                     onOpenSettings = openAppSettings
                   )
-                  deviceScanning -> Loading("Procurando músicas no aparelho…")
-                  else -> EmptyState(
-                    icon = Icons.Rounded.LibraryMusic,
-                    title = "Nenhuma música no aparelho",
-                    message = "Não achamos arquivos de áudio no celular. Você pode importar um arquivo em Playlists.",
-                    modifier = Modifier.padding(horizontal = Space.page)
+                  deviceScanning -> Loading(stringResource(R.string.library_loading_songs))
+                  deviceTracks.isNotEmpty() -> NoMatch(
+                    message = stringResource(R.string.library_search_empty_songs, songQuery.trim()),
+                    onClear = { songQuery = "" }
+                  )
+                  else -> EmptyLibrary(
+                    onRefresh = onScanDevice,
+                    onImport = { audioPickerLauncher.launch(arrayOf("audio/*")) }
                   )
                 }
               }
@@ -338,23 +383,43 @@ fun LibraryScreen(
             )
 
             LibrarySection.FAVORITES -> TrackList(
-              tracks = favoriteTracks,
+              tracks = shownFavorites,
               currentTrack = currentTrack,
               isPlaying = isPlaying,
-              onPlay = { track -> onPlayFromList(track, favoriteTracks) },
-              onShuffle = { onShuffleList(favoriteTracks) },
+              onPlay = { track -> onPlayFromList(track, shownFavorites) },
+              onShuffle = { onShuffleList(shownFavorites) },
+              header = {
+                if (favoriteTracks.isNotEmpty()) item(key = "favorite_search") {
+                  SearchField(
+                    value = favoriteQuery,
+                    onValueChange = { favoriteQuery = it },
+                    placeholder = stringResource(R.string.library_search_favorites_hint),
+                    modifier = Modifier
+                      .padding(horizontal = Space.page)
+                      .padding(top = Space.s, bottom = Space.xs)
+                      .testTag("library_search_favorites")
+                  )
+                }
+              },
               empty = {
-                EmptyState(
-                  icon = Icons.Rounded.FavoriteBorder,
-                  title = "Nenhum favorito ainda",
-                  message = "Toque em “Favoritar” no menu de uma música para guardá-la aqui.",
-                  modifier = Modifier.padding(horizontal = Space.page)
-                )
+                if (favoriteTracks.isNotEmpty()) {
+                  NoMatch(
+                    message = stringResource(R.string.library_search_empty_favorites, favoriteQuery.trim()),
+                    onClear = { favoriteQuery = "" }
+                  )
+                } else {
+                  EmptyState(
+                    icon = Icons.Rounded.FavoriteBorder,
+                    title = stringResource(R.string.library_favorites_empty_title),
+                    message = stringResource(R.string.library_favorites_empty_message),
+                    modifier = Modifier.padding(horizontal = Space.page)
+                  )
+                }
               },
               trailing = { track ->
                 IconAction(
                   icon = Icons.Rounded.Favorite,
-                  contentDescription = "Remover ${track.title} dos favoritos",
+                  contentDescription = stringResource(R.string.library_favorite_remove, track.title),
                   onClick = { onToggleFavorite(track) },
                   tint = MaterialTheme.colorScheme.primary,
                   modifier = Modifier.trailingEdge()
@@ -379,8 +444,8 @@ fun LibraryScreen(
 
   if (showNewPlaylist) {
     NamePlaylistDialog(
-      title = "Nova playlist",
-      confirmLabel = "Criar",
+      title = stringResource(R.string.library_new_playlist_title),
+      confirmLabel = stringResource(R.string.library_create),
       initialName = "",
       onConfirm = { name -> onCreatePlaylist(name); showNewPlaylist = false },
       onDismiss = { showNewPlaylist = false }
@@ -388,8 +453,8 @@ fun LibraryScreen(
   }
   playlists.firstOrNull { it.id == renamingId }?.let { pl ->
     NamePlaylistDialog(
-      title = "Renomear playlist",
-      confirmLabel = "Salvar",
+      title = stringResource(R.string.library_rename_playlist_title),
+      confirmLabel = stringResource(R.string.library_save),
       initialName = pl.name,
       onConfirm = { name -> onRenamePlaylist(pl.id, name); renamingId = null },
       onDismiss = { renamingId = null }
@@ -398,11 +463,11 @@ fun LibraryScreen(
   playlists.firstOrNull { it.id == deletingId }?.let { pl ->
     AlertDialog(
       onDismissRequest = { deletingId = null },
-      title = { Text("Excluir “${pl.name}”?", style = AppText.Title3) },
+      title = { Text(stringResource(R.string.library_delete_title, pl.name), style = AppText.Title3) },
       text = {
         Text(
-          if (pl.trackIds.isEmpty()) "A playlist está vazia."
-          else "A playlist e a ordem das ${pl.trackIds.size} faixas serão apagadas. As músicas continuam na biblioteca.",
+          if (pl.trackIds.isEmpty()) stringResource(R.string.library_delete_body_empty)
+          else pluralStringResource(R.plurals.library_delete_body, pl.trackIds.size, pl.trackIds.size),
           style = AppText.Subhead
         )
       },
@@ -414,19 +479,19 @@ fun LibraryScreen(
             openPlaylistId = null
           },
           modifier = Modifier.testTag("library_confirm_delete")
-        ) { Text("Excluir", color = MaterialTheme.colorScheme.error) }
+        ) { Text(stringResource(R.string.library_delete), color = MaterialTheme.colorScheme.error) }
       },
-      dismissButton = { TextButton(onClick = { deletingId = null }) { Text("Cancelar") } }
+      dismissButton = { TextButton(onClick = { deletingId = null }) { Text(stringResource(R.string.library_cancel)) } }
     )
   }
 }
 
 /** Name and duration of a picked audio file. Blocking: call it on [Dispatchers.IO]. */
-private fun readAudioFile(context: Context, uri: Uri): Pair<String, Long> {
+private fun readAudioFile(context: Context, uri: Uri, fallbackName: String): Pair<String, Long> {
   runCatching {
     context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
   }
-  var displayName = "Áudio Local"
+  var displayName = fallbackName
   runCatching {
     context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
       val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
@@ -464,27 +529,59 @@ private fun MusicPermissionPrompt(blocked: Boolean, onAllow: () -> Unit, onOpenS
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
     Text(
-      "Suas músicas do aparelho",
+      stringResource(R.string.library_permission_title),
       style = AppText.Title3,
       color = MaterialTheme.colorScheme.onSurface,
       modifier = Modifier.semantics { heading() }
     )
     Spacer(Modifier.size(Space.s))
     Text(
-      if (blocked) "O acesso às músicas está bloqueado. Libere em Ajustes › Permissões › Música e áudio para ver aqui tudo o que está no celular."
-      else "Permita o acesso às músicas para ver aqui tudo o que está no celular, com capa, artista e álbum.",
+      stringResource(if (blocked) R.string.library_permission_blocked else R.string.library_permission_request),
       style = AppText.Subhead,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
       textAlign = androidx.compose.ui.text.style.TextAlign.Center
     )
     Spacer(Modifier.size(Space.l))
     if (blocked) {
-      PrimaryButton("Abrir Ajustes do app", onClick = onOpenSettings, modifier = Modifier.fillMaxWidth().testTag("library_open_settings"))
+      PrimaryButton(stringResource(R.string.library_permission_open_settings), onClick = onOpenSettings, modifier = Modifier.fillMaxWidth().testTag("library_open_settings"))
       // The detection cannot tell "don't ask again" from a dismissed dialog, so asking stays possible.
-      TextAction("Pedir de novo", onClick = onAllow)
+      TextAction(stringResource(R.string.library_permission_ask_again), onClick = onAllow)
     } else {
-      PrimaryButton("Permitir acesso", onClick = onAllow, modifier = Modifier.fillMaxWidth().testTag("library_allow_music"))
+      PrimaryButton(stringResource(R.string.library_permission_allow), onClick = onAllow, modifier = Modifier.fillMaxWidth().testTag("library_allow_music"))
     }
+  }
+}
+
+/** A search that found nothing: says so, and the one thing to do next. */
+@Composable
+private fun NoMatch(message: String, onClear: () -> Unit) {
+  EmptyState(
+    icon = Icons.Rounded.SearchOff,
+    title = stringResource(R.string.library_search_empty_title),
+    message = message,
+    modifier = Modifier.padding(horizontal = Space.page),
+    actionLabel = stringResource(R.string.library_search_clear),
+    onAction = onClear
+  )
+}
+
+/** The device has no music the app can see: refresh the scan, or import one file by hand. */
+@Composable
+private fun EmptyLibrary(onRefresh: () -> Unit, onImport: () -> Unit) {
+  Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    EmptyState(
+      icon = Icons.Rounded.LibraryMusic,
+      title = stringResource(R.string.library_empty_songs_title),
+      message = stringResource(R.string.library_empty_songs_message),
+      modifier = Modifier.padding(horizontal = Space.page),
+      actionLabel = stringResource(R.string.library_refresh),
+      onAction = onRefresh
+    )
+    TextAction(
+      stringResource(R.string.library_import_file),
+      onClick = onImport,
+      modifier = Modifier.testTag("library_empty_import")
+    )
   }
 }
 
@@ -535,7 +632,7 @@ private fun TrackList(
   /** The A–Z letter of a track; with it, a letter strip on the right jumps through the list. */
   index: ((Track) -> String?)? = null,
   /** A row's second line, when it should say more than artist and source. */
-  subtitle: (Track) -> String = { trackSubtitle(it) },
+  subtitle: @Composable (Track) -> String = { trackSubtitle(it) },
   trailing: (@Composable RowScope.(Track) -> Unit)? = null
 ) {
   val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -555,7 +652,13 @@ private fun TrackList(
   ) {
     header()
     if (tracks.isEmpty()) {
-      item(key = "empty") { empty() }
+      // Centered in the space the list has, below whatever the header holds.
+      item(key = "empty") {
+        Box(
+          modifier = Modifier.fillMaxWidth().fillParentMaxHeight(0.8f),
+          contentAlignment = Alignment.Center
+        ) { empty() }
+      }
     } else {
       item(key = "play_shuffle") { PlayShuffleRow(onPlay = { onPlay(tracks.first()) }, onShuffle = onShuffle) }
       itemsIndexed(tracks, key = { _, t -> t.id }) { index, track ->
@@ -602,7 +705,7 @@ private fun SongOrderRow(order: com.example.data.playback.SongOrder, onChange: (
     items(com.example.data.playback.SongOrder.entries.size) { i ->
       val o = com.example.data.playback.SongOrder.entries[i]
       FilterChip(
-        label = o.label,
+        label = stringResource(o.labelRes()),
         selected = o == order,
         onClick = { onChange(o) },
         modifier = Modifier.testTag("song_order_${o.key}")
@@ -631,15 +734,32 @@ private fun LetterStrip(letters: List<String>, onLetter: (String) -> Unit, modif
     }
   }
   Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-    active?.let { l ->
+    // The bubble grows from nothing in 100 ms and keeps the last letter while it shrinks away.
+    var shown by remember { mutableStateOf("") }
+    active?.let { shown = it }
+    val bubble by androidx.compose.animation.core.animateFloatAsState(
+      targetValue = if (active != null) 1f else 0f,
+      animationSpec = if (com.example.ui.theme.rememberReducedMotion()) {
+        androidx.compose.animation.core.snap()
+      } else {
+        androidx.compose.animation.core.tween(100, easing = androidx.compose.animation.core.LinearOutSlowInEasing)
+      },
+      label = "letterBubble"
+    )
+    if (bubble > 0f) {
       Box(
         modifier = Modifier
           .size(56.dp)
+          .graphicsLayer {
+            scaleX = bubble
+            scaleY = bubble
+            alpha = bubble
+          }
           .clip(CircleShape)
           .background(MaterialTheme.colorScheme.surfaceContainerHigh),
         contentAlignment = Alignment.Center
       ) {
-        Text(l, style = AppText.Title2, color = MaterialTheme.colorScheme.onSurface)
+        Text(shown, style = AppText.Title2, color = MaterialTheme.colorScheme.onSurface)
       }
       Spacer(Modifier.width(Space.s))
     }
@@ -696,7 +816,7 @@ private fun PlaylistsList(
       SearchField(
         value = query,
         onValueChange = { query = it },
-        placeholder = "Buscar nas playlists",
+        placeholder = stringResource(R.string.library_search_playlists_hint),
         modifier = Modifier
           .padding(horizontal = Space.page)
           .padding(bottom = Space.s)
@@ -704,17 +824,17 @@ private fun PlaylistsList(
       )
     }
     item(key = "new") {
-      ActionRow("Nova playlist…", Icons.Rounded.Add, onNew, Modifier.testTag("library_new_playlist"))
+      ActionRow(stringResource(R.string.library_new_playlist), Icons.Rounded.Add, onNew, Modifier.testTag("library_new_playlist"))
     }
     item(key = "import") {
       TrackDivider()
-      ActionRow("Importar arquivo de áudio…", Icons.Rounded.AudioFile, onImportAudio, Modifier.testTag("library_add_local_audio"))
+      ActionRow(stringResource(R.string.library_import_audio), Icons.Rounded.AudioFile, onImportAudio, Modifier.testTag("library_add_local_audio"))
     }
     when {
       playlists.isEmpty() -> item(key = "empty") {
-        Note("Crie uma playlist e adicione músicas pelo menu de qualquer faixa.")
+        Note(stringResource(R.string.library_playlists_empty_note))
       }
-      shown.isEmpty() -> item(key = "no_match") { Note("Nenhuma playlist com “$query”.") }
+      shown.isEmpty() -> item(key = "no_match") { Note(stringResource(R.string.library_search_no_playlist, query.trim())) }
     }
     itemsIndexed(shown, key = { _, p -> p.id }) { index, playlist ->
       Column(modifier = itemMotion(index)) {
@@ -758,7 +878,7 @@ private fun PlaylistRow(playlist: Playlist, tracks: List<Track>, onClick: () -> 
   Row(
     modifier = Modifier
       .fillMaxWidth()
-      .highlightClickable(onClickLabel = "Abrir ${playlist.name}", onClick = onClick)
+      .highlightClickable(onClickLabel = stringResource(R.string.library_open_playlist, playlist.name), onClick = onClick)
       .padding(horizontal = Space.page, vertical = 6.dp)
       .testTag("playlist_row_${playlist.id}"),
     verticalAlignment = Alignment.CenterVertically
@@ -768,7 +888,8 @@ private fun PlaylistRow(playlist: Playlist, tracks: List<Track>, onClick: () -> 
     Column(modifier = Modifier.weight(1f)) {
       Text(playlist.name, style = AppText.Body, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
       Text(
-        if (playlist.trackIds.size == 1) "1 faixa" else "${playlist.trackIds.size} faixas",
+        if (playlist.trackIds.isEmpty()) stringResource(R.string.library_tracks_none)
+        else pluralStringResource(R.plurals.library_track_count, playlist.trackIds.size, playlist.trackIds.size),
         style = AppText.Subhead,
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )
@@ -845,12 +966,12 @@ private fun PlaylistDetail(
       item(key = "header") {
         SubPageHeader(
           title = playlist.name,
-          backLabel = "Biblioteca",
+          backLabel = stringResource(R.string.library_back_label),
           onBack = onBack,
           modifier = Modifier.testTag("library_back"),
           trailing = {
-            IconAction(Icons.Rounded.Edit, contentDescription = "Renomear playlist", onClick = onRename, tint = MaterialTheme.colorScheme.primary)
-            IconAction(Icons.Rounded.Delete, contentDescription = "Excluir playlist", onClick = onDelete, tint = MaterialTheme.colorScheme.error)
+            IconAction(Icons.Rounded.Edit, contentDescription = stringResource(R.string.library_rename_desc), onClick = onRename, tint = MaterialTheme.colorScheme.primary)
+            IconAction(Icons.Rounded.Delete, contentDescription = stringResource(R.string.library_delete_desc), onClick = onDelete, tint = MaterialTheme.colorScheme.error)
           }
         )
       }
@@ -858,15 +979,15 @@ private fun PlaylistDetail(
     empty = {
       EmptyState(
         icon = Icons.AutoMirrored.Rounded.QueueMusic,
-        title = "Playlist vazia",
-        message = "Use “Adicionar a uma playlist” no menu de uma música para colocá-la aqui.",
+        title = stringResource(R.string.library_playlist_empty_title),
+        message = stringResource(R.string.library_playlist_empty_message),
         modifier = Modifier.padding(horizontal = Space.page)
       )
     },
     trailing = { track ->
       IconAction(
         icon = Icons.Rounded.Close,
-        contentDescription = "Remover ${track.title} da playlist",
+        contentDescription = stringResource(R.string.library_playlist_remove, track.title),
         onClick = { onRemoveTrack(track.id) },
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.trailingEdge()

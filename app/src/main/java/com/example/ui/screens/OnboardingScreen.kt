@@ -45,12 +45,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.R
 import com.example.data.model.CuriosityConfig
 import com.example.ui.components.GroupDivider
 import com.example.ui.components.GroupFooter
@@ -164,7 +166,7 @@ fun OnboardingScreen(
     ) { shown ->
       if (shown != null) {
         Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-          LegalScreen(doc = shown, backLabel = "Configuração", onBack = { reading = null })
+          LegalScreen(doc = shown, backLabel = stringResource(R.string.onboarding_back_label), onBack = { reading = null })
         }
       } else {
         Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
@@ -175,11 +177,11 @@ fun OnboardingScreen(
               .padding(horizontal = Space.s)
           ) {
             if (index > 0) {
-              TextAction("Voltar", onClick = { index-- }, modifier = Modifier.align(Alignment.CenterStart).testTag("onboarding_back"))
+              TextAction(stringResource(R.string.onboarding_back), onClick = { index-- }, modifier = Modifier.align(Alignment.CenterStart).testTag("onboarding_back"))
             }
             if (step.skippable) {
               TextAction(
-                "Pular",
+                stringResource(R.string.onboarding_skip),
                 onClick = { index = steps.lastIndex },
                 modifier = Modifier.align(Alignment.CenterEnd).testTag("onboarding_skip")
               )
@@ -227,7 +229,7 @@ fun OnboardingScreen(
               Spacer(Modifier.height(Space.l))
             }
             PrimaryButton(
-              text = if (step == Step.DONE) "Começar a usar" else "Continuar",
+              text = stringResource(if (step == Step.DONE) R.string.onboarding_start else R.string.onboarding_continue),
               enabled = step != Step.TERMS || accepted,
               onClick = ::next,
               modifier = Modifier
@@ -252,9 +254,10 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 @Composable
 private fun PageIndicator(current: Int, count: Int) {
   val colors = MaterialTheme.colorScheme
+  val description = stringResource(R.string.onboarding_step_of, current + 1, count)
   Row(
     horizontalArrangement = Arrangement.spacedBy(Space.s),
-    modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "Passo ${current + 1} de $count" }
+    modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = description }
   ) {
     repeat(count) { i ->
       Box(
@@ -296,14 +299,14 @@ private fun SectionGap() = Spacer(Modifier.height(Space.xl))
 @Composable
 private fun WelcomeStep() {
   StepHeader(
-    title = "Boas-vindas ao T.A.R.K.A.S.",
-    body = "Leva menos de um minuto para deixar do seu jeito.",
+    title = stringResource(R.string.onboarding_welcome_title),
+    body = stringResource(R.string.onboarding_welcome_body),
     mark = true
   )
   SectionGap()
-  FeatureRow(Icons.Rounded.LibraryMusic, "Sua música, de vários lugares", "Do aparelho, do Audius e do Jamendo, numa biblioteca só.")
-  FeatureRow(Icons.Rounded.Equalizer, "Som ajustado ao seu fone", "Equalizador de 15 bandas ou paramétrico, com correção para mais de 8 mil fones.")
-  FeatureRow(Icons.Rounded.Lightbulb, "Curiosidades e assistente", "Fatos verificados sobre a faixa e comandos por voz.")
+  FeatureRow(Icons.Rounded.LibraryMusic, stringResource(R.string.onboarding_feature_music), stringResource(R.string.onboarding_feature_music_body))
+  FeatureRow(Icons.Rounded.Equalizer, stringResource(R.string.onboarding_feature_sound), stringResource(R.string.onboarding_feature_sound_body))
+  FeatureRow(Icons.Rounded.Lightbulb, stringResource(R.string.onboarding_feature_assistant), stringResource(R.string.onboarding_feature_assistant_body))
 }
 
 /** One feature on the welcome screen: an icon, a title and one line, read as a single item. */
@@ -330,9 +333,8 @@ private fun FeatureRow(icon: ImageVector, title: String, body: String) {
 private fun TermsStep(accepted: Boolean, onAccepted: (Boolean) -> Unit, onRead: (String) -> Unit, changed: Boolean) {
   val colors = MaterialTheme.colorScheme
   StepHeader(
-    title = if (changed) "Os termos mudaram" else "Termos e privacidade",
-    body = if (changed) "Leia o que mudou e aceite a nova versão para continuar usando o app."
-    else "O essencial em poucas linhas. O texto completo está logo abaixo."
+    title = stringResource(if (changed) R.string.onboarding_terms_changed_title else R.string.onboarding_terms_title),
+    body = stringResource(if (changed) R.string.onboarding_terms_changed_body else R.string.onboarding_terms_body)
   )
   SectionGap()
   InsetGroup {
@@ -348,9 +350,9 @@ private fun TermsStep(accepted: Boolean, onAccepted: (Boolean) -> Unit, onRead: 
   }
   SectionGap()
   InsetGroup {
-    ListRow(title = "Termos de Uso", onClick = { onRead("terms") }, modifier = Modifier.testTag("onboarding_read_terms"))
+    ListRow(title = stringResource(R.string.onboarding_read_terms), onClick = { onRead("terms") }, modifier = Modifier.testTag("onboarding_read_terms"))
     GroupDivider()
-    ListRow(title = "Política de Privacidade", onClick = { onRead("privacy") }, modifier = Modifier.testTag("onboarding_read_privacy"))
+    ListRow(title = stringResource(R.string.onboarding_read_privacy), onClick = { onRead("privacy") }, modifier = Modifier.testTag("onboarding_read_privacy"))
   }
   SectionGap()
   InsetGroup {
@@ -370,10 +372,10 @@ private fun TermsStep(accepted: Boolean, onAccepted: (Boolean) -> Unit, onRead: 
         colors = CheckboxDefaults.colors(checkedColor = colors.primary, checkmarkColor = colors.onPrimary),
         modifier = Modifier.size(Size.touch)
       )
-      Text("Li e aceito os Termos de Uso e a Política de Privacidade", style = AppText.Body, color = colors.onSurface)
+      Text(stringResource(R.string.onboarding_accept), style = AppText.Body, color = colors.onSurface)
     }
   }
-  GroupFooter("Responsável: ${LegalTexts.CONTROLLER} · ${LegalTexts.CONTACT_EMAIL}")
+  GroupFooter(stringResource(R.string.onboarding_controller, LegalTexts.CONTROLLER, LegalTexts.CONTACT_EMAIL))
 }
 
 @Composable
@@ -385,19 +387,19 @@ private fun LookStep(
   reduceMotion: Boolean,
   onReduceMotion: (Boolean) -> Unit
 ) {
-  StepHeader("Aparência", "Muda na hora. Dá para trocar depois em Ajustes.")
+  StepHeader(stringResource(R.string.onboarding_look_title), stringResource(R.string.onboarding_look_body))
   SectionGap()
-  GroupHeader("Tema")
+  GroupHeader(stringResource(R.string.onboarding_theme))
   InsetGroup { ThemeOptionRows(themeMode, onThemeMode, tagPrefix = "onboarding_theme_") }
   SectionGap()
-  GroupHeader("Barras flutuantes")
+  GroupHeader(stringResource(R.string.onboarding_floating_bars))
   InsetGroup { SurfaceOptionRows(surfaceStyle, onSurfaceStyle, tagPrefix = "onboarding_surface_") }
-  GroupFooter("Como são desenhadas a barra de abas e o mini player.")
+  GroupFooter(stringResource(R.string.onboarding_floating_bars_footer))
   SectionGap()
   InsetGroup {
     SwitchRow(
-      title = "Reduzir animações",
-      subtitle = "Troca de tela sem movimento",
+      title = stringResource(R.string.onboarding_reduce_motion),
+      subtitle = stringResource(R.string.onboarding_reduce_motion_hint),
       checked = reduceMotion,
       onCheckedChange = onReduceMotion,
       modifier = Modifier.testTag("onboarding_reduce_motion")
@@ -408,13 +410,13 @@ private fun LookStep(
 @Composable
 private fun CuriosityStep(config: CuriosityConfig, onConfig: (CuriosityConfig) -> Unit) {
   StepHeader(
-    "Curiosidades",
-    "Para faixas com uma curiosidade verificada, o app conta um fato curto em voz alta. Ele também aparece no player e na notificação."
+    stringResource(R.string.onboarding_curiosity_title),
+    stringResource(R.string.onboarding_curiosity_body)
   )
   SectionGap()
   InsetGroup {
     SwitchRow(
-      title = "Curiosidades faladas",
+      title = stringResource(R.string.onboarding_curiosity_spoken),
       checked = config.enabled,
       onCheckedChange = { onConfig(config.copy(enabled = it)) },
       modifier = Modifier.testTag("onboarding_curiosity_switch")
@@ -422,7 +424,7 @@ private fun CuriosityStep(config: CuriosityConfig, onConfig: (CuriosityConfig) -
   }
   if (config.enabled) {
     SectionGap()
-    GroupHeader("Quando falar")
+    GroupHeader(stringResource(R.string.onboarding_curiosity_when))
     InsetGroup { CuriosityTimingRows(config.timing, { onConfig(config.copy(timing = it)) }, tagPrefix = "onboarding_timing_") }
   }
 }
@@ -430,14 +432,14 @@ private fun CuriosityStep(config: CuriosityConfig, onConfig: (CuriosityConfig) -
 @Composable
 private fun DoneStep() {
   val colors = MaterialTheme.colorScheme
-  StepHeader("Tudo pronto", "Algumas coisas para saber.", mark = true)
+  StepHeader(stringResource(R.string.onboarding_done_title), stringResource(R.string.onboarding_done_body), mark = true)
   SectionGap()
   InsetGroup {
     listOf(
-      "Busque músicas na barra do Início. As do aparelho entram pela Biblioteca.",
-      "O equalizador fica na aba Áudio, com correção para mais de 8 mil fones.",
-      "Notificações e microfone são pedidos só quando você usa o recurso.",
-      "Aparência, privacidade e Sobre ficam em Ajustes, no alto do Início."
+      stringResource(R.string.onboarding_done_tip_search),
+      stringResource(R.string.onboarding_done_tip_eq),
+      stringResource(R.string.onboarding_done_tip_permissions),
+      stringResource(R.string.onboarding_done_tip_settings)
     ).forEachIndexed { i, line ->
       if (i > 0) GroupDivider()
       Text(

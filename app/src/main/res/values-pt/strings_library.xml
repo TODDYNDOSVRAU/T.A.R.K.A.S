@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Biblioteca (português). O inglês, padrão, está em values/strings_library.xml; mantenha os dois em dia. -->
+<resources>
+    <!-- Seções -->
+    <string name="library_section_songs">Músicas</string>
+    <string name="library_section_playlists">Playlists</string>
+    <string name="library_section_favorites">Favoritos</string>
+    <string name="library_section_queue">Fila</string>
+    <string name="library_section_queue_count">Fila (%1$d)</string>
+    <string name="library_back_label">Biblioteca</string>
+
+    <!-- Ordem das músicas -->
+    <string name="library_order_title">Título</string>
+    <string name="library_order_artist">Artista</string>
+    <string name="library_order_album">Álbum</string>
+    <string name="library_order_recent">Recentes</string>
+    <string name="library_order_most_played">Mais tocadas</string>
+    <plurals name="library_play_count">
+        <item quantity="one">%1$d reprodução</item>
+        <item quantity="other">%1$d reproduções</item>
+    </plurals>
+
+    <!-- Busca -->
+    <string name="library_search_songs_hint">Buscar músicas, artistas e álbuns</string>
+    <string name="library_search_favorites_hint">Buscar nos favoritos</string>
+    <string name="library_search_playlists_hint">Buscar nas playlists</string>
+    <string name="library_search_empty_title">Nada encontrado</string>
+    <string name="library_search_empty_songs">Nenhuma música combina com “%1$s”. Confira a escrita ou tente o nome de um artista ou de um álbum.</string>
+    <string name="library_search_empty_favorites">Nenhum favorito combina com “%1$s”. Confira a escrita ou limpe a busca para ver todos.</string>
+    <string name="library_search_clear">Limpar busca</string>
+    <string name="library_search_no_playlist">Nenhuma playlist com “%1$s”.</string>
+
+    <!-- Músicas do aparelho -->
+    <string name="library_loading_songs">Procurando músicas no aparelho…</string>
+    <string name="library_empty_songs_title">Nenhuma música no aparelho</string>
+    <string name="library_empty_songs_message">Não encontramos arquivos de áudio no celular. Coloque músicas no aparelho e atualize a biblioteca, ou importe um arquivo.</string>
+    <string name="library_refresh">Atualizar biblioteca</string>
+    <string name="library_import_file">Importar arquivo</string>
+    <string name="library_permission_title">Suas músicas do aparelho</string>
+    <string name="library_permission_blocked">O acesso às músicas está bloqueado. Libere em Ajustes › Permissões › Música e áudio para ver aqui tudo o que está no celular.</string>
+    <string name="library_permission_request">Permita o acesso às músicas para ver aqui tudo o que está no celular, com capa, artista e álbum.</string>
+    <string name="library_permission_open_settings">Abrir Ajustes do app</string>
+    <string name="library_permission_ask_again">Pedir de novo</string>
+    <string name="library_permission_allow">Permitir acesso</string>
+
+    <!-- Favoritos -->
+    <string name="library_favorites_empty_title">Nenhum favorito ainda</string>
+    <string name="library_favorites_empty_message">Toque em “Favoritar” no menu de uma música para guardá-la aqui.</string>
+    <string name="library_favorite_remove">Remover %1$s dos favoritos</string>
+
+    <!-- Tocar e aleatório -->
+    <string name="library_play">Tocar</string>
+    <string name="library_shuffle">Aleatório</string>
+
+    <!-- Playlists -->
+    <string name="library_new_playlist">Nova playlist…</string>
+    <string name="library_import_audio">Importar arquivo de áudio…</string>
+    <string name="library_playlists_empty_note">Crie uma playlist e adicione músicas pelo menu de qualquer faixa.</string>
+    <string name="library_open_playlist">Abrir %1$s</string>
+    <string name="library_tracks_none">0 faixas</string>
+    <plurals name="library_track_count">
+        <item quantity="one">%1$d faixa</item>
+        <item quantity="other">%1$d faixas</item>
+    </plurals>
+    <string name="library_new_playlist_title">Nova playlist</string>
+    <string name="library_create">Criar</string>
+    <string name="library_rename_playlist_title">Renomear playlist</string>
+    <string name="library_save">Salvar</string>
+    <string name="library_delete_title">Excluir “%1$s”?</string>
+    <string name="library_delete_body_empty">A playlist está vazia.</string>
+    <plurals name="library_delete_body">
+        <item quantity="one">A playlist e a ordem da faixa serão apagadas. A música continua na biblioteca.</item>
+        <item quantity="other">A playlist e a ordem das %1$d faixas serão apagadas. As músicas continuam na biblioteca.</item>
+    </plurals>
+    <string name="library_delete">Excluir</string>
+    <string name="library_cancel">Cancelar</string>
+    <string name="library_rename_desc">Renomear playlist</string>
+    <string name="library_delete_desc">Excluir playlist</string>
+    <string name="library_playlist_empty_title">Playlist vazia</string>
+    <string name="library_playlist_empty_message">Use “Adicionar a uma playlist” no menu de uma música para colocá-la aqui.</string>
+    <string name="library_playlist_remove">Remover %1$s da playlist</string>
+    <string name="library_audio_fallback_name">Áudio Local</string>
+</resources>

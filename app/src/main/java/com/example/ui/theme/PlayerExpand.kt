@@ -4,10 +4,14 @@ import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -21,8 +25,11 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.shape.GenericShape
-import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -48,6 +55,50 @@ object PlayerOrigin {
    * growing container is filled with it so the opening has no seam; null until a player has shown.
    */
   var tint: Color? by mutableStateOf(null)
+
+  /** Bounds of the cover inside the mini player, where the travelling cover starts and lands. */
+  var miniCover: Rect? = null
+
+  /**
+   * The opening progress of the player on screen (0 closed, 1 open), the same value that grows the
+   * container, so the cover, the page around it and the bars all follow one number. Null when the
+   * player is not growing out of anything (reduced motion), which reads as fully open.
+   */
+  var progress: State<Float>? by mutableStateOf(null)
+    internal set
+
+  /**
+   * Window y of the top of the shape the sheet grows from (or shrinks into). The page around the
+   * cover rides this edge up as the sheet opens, instead of sitting still behind a growing window.
+   */
+  var sheetFromTop: Float = 0f
+    internal set
+
+  /** True while the player is closing, so the cover travels towards the mini player. */
+  var closing: Boolean = false
+    internal set
+
+  /** The player's page, to measure its parts in the page's own space. */
+  var pageCoords: androidx.compose.ui.layout.LayoutCoordinates? = null
+
+  /** Window position of the page's top-left corner, to bring the mini player's rectangles into page space. */
+  var pageOrigin: Offset = Offset.Zero
+
+  /** Where each part of the player rests, in page space (written by MusicScreen). */
+  val rest = HashMap<String, Rect>()
+
+  /** The mini player's title, play and next (window space): where those parts of the player come from and go back to. */
+  var miniTitle: Rect? = null
+  var miniPlay: Rect? = null
+  var miniNext: Rect? = null
+
+  /** True when the player opens out of the mini player, so its parts come from the mini's parts. */
+  var fromMini: Boolean = true
+    internal set
+
+  /** Where the cover starts as the player opens: the cover of what was tapped. */
+  var openingCover: Rect? = null
+    internal set
 
   internal fun press(bounds: Rect?) {
     pressed = bounds
@@ -78,21 +129,26 @@ fun Modifier.opensPlayer(): Modifier = composed {
 }
 
 /**
- * A spatial spring (damping 0.88): it has the momentum of a real surface, and its overshoot stays
- * below 0.5%, which is under a pixel at the corners, so it never visibly bounces.
+ * A jelly spring (Motion.ExpandDamping): it overshoots about 8%. The sheet is clamped to the screen
+ * (below), so the overshoot shows only in the travelling cover, which swings a little past its place.
  */
-private val ExpandSpring = spring<Float>(
-  dampingRatio = Motion.ExpandDamping,
-  stiffness = Motion.ExpandStiffness,
-  visibilityThreshold = 0.001f
+private val ExpandSpring = tween<Float>(
+  durationMillis = Motion.ExpandMillis,
+  easing = Motion.PlayerEasing
+)
+
+/** Closing into the mini player: no overshoot, faster than the opening (see Motion.CollapseStiffness). */
+private val CollapseSpring = tween<Float>(
+  durationMillis = Motion.CollapseMillis,
+  easing = Motion.PlayerEasing
 )
 
 /**
- * Container transform for the full player. The page is clipped to a rounded rectangle that grows
- * from the pressed element's bounds to the whole screen, filled with the player's tint (or
- * [containerColor] before any player has shown) while the
- * player fades and settles in; on close it shrinks into the mini player. Driven by the screen
- * transition itself, so AnimatedContent keeps the page until the shape has landed.
+ * Container transform for the full player: the mini player (or the tapped element) expands to fill the
+ * screen, and everything in the player grows with it, the cover landing on its place; on close it
+ * shrinks back into the mini player. The container is filled with the player's tint (or
+ * [containerColor] before any player has shown). Driven by the visibility transition of the player,
+ * which keeps it composed until it has shrunk.
  */
 @Composable
 fun Modifier.expandFromOrigin(
@@ -102,39 +158,65 @@ fun Modifier.expandFromOrigin(
 ): Modifier {
   if (reduced) return this
   val origin = remember { PlayerOrigin.takeOpening() }
-  val progress = scope.transition.animateFloat(transitionSpec = { ExpandSpring }, label = "playerExpand") {
+  val progress = scope.transition.animateFloat(
+    transitionSpec = { if (targetState == EnterExitState.Visible) ExpandSpring else CollapseSpring },
+    label = "playerExpand"
+  ) {
     if (it == EnterExitState.Visible) 1f else 0f
+  }
+  // Present only while the player is composed (opening, open, closing); the mini player reads it to
+  // know it is arriving from the player, and falls back to its own entrance once it is gone.
+  DisposableEffect(progress) {
+    onDispose { if (PlayerOrigin.progress === progress) PlayerOrigin.progress = null }
   }
   val closing = scope.transition.targetState == EnterExitState.PostExit
   val self = remember { arrayOf(Offset.Zero) }
-  val cornerStart = 22.dp
+  val cornerStart = Radius.l
+  SideEffect {
+    PlayerOrigin.progress = progress
+    PlayerOrigin.closing = closing
+    PlayerOrigin.fromMini = origin == null || origin == PlayerOrigin.mini
+    PlayerOrigin.openingCover = when {
+      origin == null -> null
+      origin == PlayerOrigin.mini && PlayerOrigin.miniCover != null -> PlayerOrigin.miniCover
+      else -> PlayerTravel.coverIn(origin)
+    }
+  }
 
   return this
-    .onGloballyPositioned { self[0] = it.positionInWindow() }
+    .onGloballyPositioned {
+      self[0] = it.positionInWindow()
+      PlayerOrigin.pageOrigin = self[0]
+    }
+    // Outer layer: the container, a rounded rectangle that grows from the mini player (or the tapped
+    // element) to the whole screen and shrinks back into it.
     .graphicsLayer {
       // Clamped, so the spring's sub-pixel overshoot never grows the shape past the screen.
       val p = progress.value.coerceIn(0f, 1f)
       val full = Rect(Offset.Zero, size)
       val from = ((if (closing) PlayerOrigin.mini ?: origin else origin)?.translate(-self[0]))
         ?: Rect(Offset(size.width * 0.5f, size.height), Offset(size.width * 0.5f, size.height))
-      val r = lerp(from, full, p)
-      val corner = (cornerStart.toPx() * (1f - p)).coerceAtLeast(0f)
-      shape = GenericShape { _, _ -> addRoundRect(RoundRect(r, CornerRadius(corner))) }
+      shape = SheetShape(lerp(from, full, p), (cornerStart.toPx() * (1f - p)).coerceAtLeast(0f))
       clip = true
+      // Closing: the container dissolves into the mini player over its last stretch instead of being
+      // removed the moment the spring ends.
+      alpha = if (closing) {
+        val t = (p / 0.18f).coerceIn(0f, 1f)
+        t * t * (3f - 2f * t)
+      } else 1f
     }
     .drawBehind { drawRect(PlayerOrigin.tint ?: containerColor) }
-    .graphicsLayer {
-      // The page itself fades in once the shape has grown a little, and settles from slightly
-      // smaller, anchored where it came from.
-      val p = progress.value.coerceIn(0f, 1f)
-      alpha = ((p - 0.12f) / 0.45f).coerceIn(0f, 1f)
-      val s = 0.92f + 0.08f * p
-      scaleX = s
-      scaleY = s
-      val from = (if (closing) PlayerOrigin.mini ?: origin else origin)
-      if (from != null && size.width > 0f && size.height > 0f) {
-        val c = from.center - self[0]
-        transformOrigin = TransformOrigin((c.x / size.width).coerceIn(0f, 1f), (c.y / size.height).coerceIn(0f, 1f))
-      }
-    }
+    // The parts of the page (cover, title, buttons) travel on their own between the mini player's
+    // elements and their places (MusicScreen.playerPart), inside this container.
+    .onGloballyPositioned { PlayerOrigin.pageCoords = it }
 }
+
+/**
+ * The container's clip: a rounded rectangle outline, which the GPU clips directly. A path-based shape
+ * (GenericShape) is rebuilt and clipped as a path on every frame of a full-screen layer.
+ */
+private data class SheetShape(val rect: Rect, val corner: Float) : Shape {
+  override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline =
+    Outline.Rounded(RoundRect(rect, CornerRadius(corner)))
+}
+

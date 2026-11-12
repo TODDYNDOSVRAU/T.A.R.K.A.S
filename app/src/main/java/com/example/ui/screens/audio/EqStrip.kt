@@ -1,5 +1,7 @@
 package com.example.ui.screens.audio
 
+import com.example.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -24,14 +26,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material.icons.rounded.Undo
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -47,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -76,12 +85,10 @@ import kotlin.math.roundToInt
 /** How the bands are shown: one fader each, or one card each with every parameter. */
 internal enum class EqMode { GRAPHIC, PARAMETRIC }
 
-/** Height of the band strip, the same in both modes so switching never moves what is below. */
-internal val STRIP_HEIGHT = 300.dp
 
 /** A fader column: the 48 dp touch target, which also fits a "+12.5" readout. */
 private val FADER_WIDTH = Size.touch
-private val FADER_GAP = Space.xs
+private val FADER_GAP = Space.s
 private val CARD_WIDTH = 208.dp
 private val CARD_GAP = Space.s
 
@@ -109,27 +116,35 @@ internal fun BandStrip(
   modifier: Modifier = Modifier
 ) {
   val reduced = rememberReducedMotion()
-  Row(modifier = modifier.fillMaxWidth().height(STRIP_HEIGHT)) {
-    Spacer(Modifier.width(Space.page))
-    FaderColumn(
-      value = settings.preampDb / EqSettings.PREAMP_RANGE_DB,
-      enabled = settings.enabled,
-      name = "Pré",
-      readout = formatDb(settings.preampDb),
-      spoken = "Pré-amplificação",
-      stateText = "${formatDb(settings.preampDb)} dB",
-      active = settings.preampDb != 0f,
-      modifier = Modifier.testTag("fader_preamp_strip"),
-      onChange = { v -> onUpdateEq { it.copy(preampDb = snap(v * EqSettings.PREAMP_RANGE_DB)) } }
-    )
-    Spacer(Modifier.width(Space.s))
+  Row(modifier = modifier.fillMaxWidth()) {
+    Spacer(Modifier.width(Space.page - Space.xs))
+    // The preamp sits on its own rounded panel, apart from the bands.
     Box(
       modifier = Modifier
-        .padding(vertical = Space.l)
-        .width(0.5.dp)
         .fillMaxHeight()
-        .background(MaterialTheme.colorScheme.outline)
-    )
+        .clip(com.example.ui.theme.Shapes.m)
+        .background(MaterialTheme.colorScheme.surfaceContainer)
+        .padding(horizontal = Space.xxs)
+    ) {
+      FaderColumn(
+        value = settings.preampDb / EqSettings.PREAMP_RANGE_DB,
+        enabled = settings.enabled,
+        name = stringResource(R.string.audio_preamp_short),
+        readout = formatDb(settings.preampDb),
+        spoken = stringResource(R.string.audio_preamp_long),
+        stateText = "${formatDb(settings.preampDb)} dB",
+        active = settings.preampDb != 0f,
+        tint = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.testTag("fader_preamp_strip"),
+        onChange = { v -> onUpdateEq { it.copy(preampDb = snap(v * EqSettings.PREAMP_RANGE_DB)) } },
+        edit = NumberEdit(
+          title = stringResource(R.string.audio_preamp_long), unit = "dB", value = settings.preampDb,
+          min = -EqSettings.PREAMP_RANGE_DB, max = EqSettings.PREAMP_RANGE_DB, step = 0.5f, decimals = 1, defaultValue = 0f,
+          onApply = { v -> onUpdateEq { it.copy(preampDb = v) } }
+        )
+      )
+    }
+    Spacer(Modifier.width(Space.xs))
     AnimatedContent(
       targetState = mode,
       transitionSpec = {
@@ -188,11 +203,17 @@ private fun GraphicBands(settings: EqSettings, view: StripView, onBandGain: (Int
         enabled = settings.enabled && usesGain,
         name = formatHz(band.freqHz),
         readout = if (usesGain) formatDb(band.gainDb) else "—",
-        spoken = "Banda ${spokenHz(band.freqHz)}",
-        stateText = if (usesGain) "${formatDb(band.gainDb)} dB" else "${band.type.label}, sem ganho",
+        spoken = stringResource(R.string.audio_band_spoken, spokenHz(band.freqHz)),
+        stateText = if (usesGain) "${formatDb(band.gainDb)} dB" else stringResource(R.string.audio_band_no_gain, filterTypeLabel(band.type)),
         active = usesGain && band.gainDb != 0f,
+        tint = bandColor(i),
         modifier = Modifier.testTag("vertical_fader_band_$i"),
-        onChange = { v -> onBandGain(i, snap(v * EqBand.MAX_GAIN)) }
+        onChange = { v -> onBandGain(i, snap(v * EqBand.MAX_GAIN)) },
+        edit = if (usesGain) NumberEdit(
+          title = stringResource(R.string.audio_gain_at, spokenHz(band.freqHz)), unit = "dB", value = band.gainDb,
+          min = EqBand.MIN_GAIN, max = EqBand.MAX_GAIN, step = 0.5f, decimals = 1, defaultValue = 0f,
+          onApply = { v -> onBandGain(i, v) }
+        ) else null
       )
     }
   }
@@ -212,12 +233,16 @@ private fun FaderColumn(
   spoken: String,
   stateText: String,
   active: Boolean,
+  tint: androidx.compose.ui.graphics.Color,
   onChange: (Float) -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  edit: NumberEdit? = null
 ) {
   val colors = MaterialTheme.colorScheme
   val reduced = rememberReducedMotion()
   var held by remember { mutableStateOf(false) }
+  var editing by remember { mutableStateOf(false) }
+  if (editing && edit != null) NumberEntryFor(edit) { editing = false }
   val grow by animateFloatAsState(
     targetValue = if (held) 1.3f else 1f,
     animationSpec = if (reduced) snap() else spring(dampingRatio = 1f, stiffness = 800f),
@@ -235,6 +260,7 @@ private fun FaderColumn(
       enabled = enabled,
       steps = GAIN_STEPS,
       onHeldChange = { held = it },
+      tint = tint,
       modifier = Modifier.weight(1f).fillMaxWidth()
     )
     Spacer(Modifier.height(Space.s))
@@ -248,14 +274,24 @@ private fun FaderColumn(
     Text(
       readout,
       style = Tabular,
-      color = if (active || held) colors.primary else colors.onSurfaceVariant,
+      // Band hues only reach 3:1 on light; text needs 4.5:1, so on light the readout uses the accent.
+      color = if (active || held) (if (colors.background.luminance() < 0.5f) tint else colors.primary) else colors.onSurfaceVariant,
       maxLines = 1,
       textAlign = TextAlign.Center,
-      modifier = Modifier.graphicsLayer {
-        scaleX = grow
-        scaleY = grow
-        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
-      }
+      modifier = Modifier
+        .then(
+          if (edit != null && enabled) Modifier
+            .heightIn(min = Size.touch)
+            .clip(Shapes.pill)
+            .clickable(onClickLabel = stringResource(R.string.audio_enter_value)) { editing = true }
+            .wrapContentHeight(Alignment.Top)
+          else Modifier
+        )
+        .graphicsLayer {
+          scaleX = grow
+          scaleY = grow
+          transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0f)
+        }
     )
   }
 }
@@ -279,7 +315,15 @@ private class BandKeys {
   fun removeAt(i: Int) {
     if (i in ids.indices) ids.removeAt(i)
   }
+
+  /** A band put back at [i] gets a new id, so no card inherits another's state. */
+  fun insertAt(i: Int) {
+    ids.add(i.coerceIn(0, ids.size), next++)
+  }
 }
+
+/** A band just deleted, kept for a few seconds so "Desfazer" can put it back where it was. */
+private class RemovedBand(val index: Int, val band: EqBand, val number: Int)
 
 @Composable
 private fun ParametricBands(
@@ -293,6 +337,13 @@ private fun ParametricBands(
   val density = LocalDensity.current
   val keys = remember { BandKeys() }
   val ids = keys.sync(settings.paramBands.size)
+  var removed by remember { mutableStateOf<RemovedBand?>(null) }
+  LaunchedEffect(removed) {
+    if (removed != null) {
+      kotlinx.coroutines.delay(8000)
+      removed = null
+    }
+  }
 
   // Selecting a band brings its card to the middle of the strip.
   LaunchedEffect(selected) {
@@ -313,6 +364,7 @@ private fun ParametricBands(
           onSelect = { onSelect(i) },
           onChange = { t -> onSelect(i); onUpdateBand(i, t) },
           onDelete = {
+            removed = RemovedBand(i, band, i + 1)
             keys.removeAt(i)
             onUpdateEq { s -> s.copy(paramBands = s.paramBands.filterIndexed { j, _ -> j != i }) }
             onSelect((i - 1).coerceAtLeast(0))
@@ -324,15 +376,31 @@ private fun ParametricBands(
       modifier = Modifier.fillMaxHeight(),
       contentAlignment = Alignment.Center
     ) {
-      TonalButton(
-        text = "Adicionar banda",
-        icon = Icons.Rounded.Add,
-        onClick = {
-          onUpdateEq { s -> s.copy(paramBands = s.paramBands + EqBand(freqHz = 1000f, q = 1.4f)) }
-          onSelect(settings.paramBands.size)
-        },
-        modifier = Modifier.testTag("eq_add_band")
-      )
+      Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(Space.s)) {
+        TonalButton(
+          text = stringResource(R.string.audio_band_add),
+          icon = Icons.Rounded.Add,
+          onClick = {
+            onUpdateEq { s -> s.copy(paramBands = s.paramBands + EqBand(freqHz = 1000f, q = 1.4f)) }
+            onSelect(settings.paramBands.size)
+          },
+          modifier = Modifier.testTag("eq_add_band")
+        )
+        removed?.let { gone ->
+          TonalButton(
+            text = stringResource(R.string.audio_band_undo, gone.number),
+            icon = Icons.Rounded.Undo,
+            onClick = {
+              val at = gone.index.coerceIn(0, settings.paramBands.size)
+              keys.insertAt(at)
+              onUpdateEq { s -> s.copy(paramBands = s.paramBands.toMutableList().also { it.add(at.coerceAtMost(it.size), gone.band) }) }
+              onSelect(at)
+              removed = null
+            },
+            modifier = Modifier.testTag("eq_undo_delete_band")
+          )
+        }
+      }
     }
   }
 }
@@ -354,8 +422,13 @@ private fun BandCard(
 ) {
   val colors = MaterialTheme.colorScheme
   val reduced = rememberReducedMotion()
+  val tint = bandColor(index)
+  // Every card carries its band's colour as a wash; the selected one carries more of it.
   val fill by animateColorAsState(
-    targetValue = if (selected) colors.primary.copy(alpha = 0.14f).compositeOver(colors.surface) else colors.surface,
+    // On light the deep hues darken the card, which would pull the grey labels under AA: a lighter wash there.
+    targetValue = tint.copy(
+      alpha = if (colors.background.luminance() < 0.5f) (if (selected) 0.22f else 0.10f) else (if (selected) 0.11f else 0.05f)
+    ).compositeOver(colors.surface),
     animationSpec = if (reduced) snap() else tween(200),
     label = "bandFill"
   )
@@ -371,7 +444,7 @@ private fun BandCard(
       .clickable(
         interactionSource = null,
         indication = null,
-        onClickLabel = "Selecionar banda $number",
+        onClickLabel = stringResource(R.string.audio_band_select, number),
         onClick = onSelect
       )
       .padding(start = Space.m, end = Space.xs, bottom = Space.s)
@@ -379,17 +452,17 @@ private fun BandCard(
   ) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
       Text(
-        "Banda $number",
+        stringResource(R.string.audio_band_title, number),
         style = AppText.Headline,
         color = colors.onSurface,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.weight(1f)
       )
-      BandPowerToggle(number, band.enabled) { on -> onChange { it.copy(enabled = on) } }
+      BandPowerToggle(number, band.enabled, tint) { on -> onChange { it.copy(enabled = on) } }
       IconAction(
         icon = Icons.Rounded.Delete,
-        contentDescription = "Excluir banda $number",
+        contentDescription = stringResource(R.string.audio_band_delete, number),
         onClick = onDelete,
         tint = colors.onSurfaceVariant,
         size = Size.touch
@@ -400,45 +473,69 @@ private fun BandCard(
         EqFader(
           value = band.gainDb / EqBand.MAX_GAIN,
           onChange = { v -> onChange { it.copy(gainDb = snap(v * EqBand.MAX_GAIN)) } },
-          label = "Ganho da banda $number",
-          stateText = if (band.type.usesGain) "${formatDb(band.gainDb)} dB" else "${band.type.label}, sem ganho",
+          label = stringResource(R.string.audio_band_gain_label, number),
+          stateText = if (band.type.usesGain) "${formatDb(band.gainDb)} dB" else stringResource(R.string.audio_band_no_gain, filterTypeLabel(band.type)),
           enabled = live && band.type.usesGain,
           steps = GAIN_STEPS,
+          tint = tint,
           modifier = Modifier.weight(1f).fillMaxWidth()
         )
-        Readout("Ganho", if (band.type.usesGain) formatDb(band.gainDb) else "—", active = band.type.usesGain && band.gainDb != 0f)
+        Readout(
+          stringResource(R.string.audio_gain), if (band.type.usesGain) "${formatDb(band.gainDb)} dB" else "—",
+          active = band.type.usesGain && band.gainDb != 0f,
+          edit = if (live && band.type.usesGain) NumberEdit(
+            title = stringResource(R.string.audio_band_gain_label, number), unit = "dB", value = band.gainDb,
+            min = EqBand.MIN_GAIN, max = EqBand.MAX_GAIN, step = 0.5f, decimals = 1, defaultValue = 0f,
+            onApply = { v -> onChange { it.copy(gainDb = v) } }
+          ) else null
+        )
       }
       Column(
         modifier = Modifier.weight(1f).fillMaxHeight(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
       ) {
-        FilterTypeButton(index, band.type, enabled = live) {
-          onChange { b -> b.copy(type = FilterType.entries[(b.type.ordinal + 1) % FilterType.entries.size]) }
-        }
+        FilterTypeButton(index, band.type, enabled = live) { picked -> onChange { b -> b.copy(type = picked) } }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
           EqKnob(
             value = qToKnob(band.q),
             onChange = { v -> onChange { it.copy(q = knobToQ(v)) } },
-            label = "Q da banda $number",
+            label = stringResource(R.string.audio_band_q_label, number),
             stateText = formatQ(band.q),
             defaultValue = qToKnob(EqBand.DEFAULT_Q),
             enabled = live,
-            size = 56.dp
+            size = 56.dp,
+            tint = tint
           )
-          Readout("Q", formatQ(band.q), active = false)
+          Readout(
+            "Q", formatQ(band.q), active = false,
+            edit = if (live) NumberEdit(
+              title = stringResource(R.string.audio_band_q_label, number), unit = "", value = band.q,
+              min = EqBand.MIN_Q, max = EqBand.MAX_Q, step = 0.1f, decimals = 2, defaultValue = EqBand.DEFAULT_Q,
+              resetLabel = stringResource(R.string.audio_default), onApply = { v -> onChange { it.copy(q = v) } }
+            ) else null
+          )
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
           EqKnob(
             value = freqToX(band.freqHz),
             onChange = { v -> onChange { it.copy(freqHz = xToFreq(v)) } },
-            label = "Frequência da banda $number",
+            label = stringResource(R.string.audio_band_freq_label, number),
             stateText = spokenHz(band.freqHz),
             defaultValue = freqToX(1000f),
             enabled = live,
-            size = 56.dp
+            size = 56.dp,
+            tint = tint
           )
-          Readout("Freq", formatHz(band.freqHz), active = false)
+          Readout(
+            stringResource(R.string.audio_freq_short), "${formatHz(band.freqHz)} Hz".replace("k Hz", " kHz"), active = false,
+            edit = if (live) NumberEdit(
+              title = stringResource(R.string.audio_band_freq_label, number), unit = "Hz", value = band.freqHz,
+              min = EqBand.MIN_FREQ, max = EqBand.MAX_FREQ, step = maxOf(1f, band.freqHz * 0.05f), decimals = 0,
+              defaultValue = 1000f, resetLabel = "1000 Hz", allowK = true,
+              onApply = { v -> onChange { it.copy(freqHz = v) } }
+            ) else null
+          )
         }
       }
     }
@@ -447,9 +544,23 @@ private fun BandCard(
 
 /** A control's name and value under it. The value takes the accent only when it is not neutral. */
 @Composable
-private fun Readout(name: String, value: String, active: Boolean) {
+private fun Readout(name: String, value: String, active: Boolean, edit: NumberEdit? = null) {
   val colors = MaterialTheme.colorScheme
-  Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = Space.xs)) {
+  var editing by remember { mutableStateOf(false) }
+  if (editing && edit != null) NumberEntryFor(edit) { editing = false }
+  Column(
+    horizontalAlignment = Alignment.CenterHorizontally,
+    modifier = Modifier
+      .padding(top = Space.xs)
+      .then(
+        if (edit != null) Modifier
+          .heightIn(min = Size.touch)
+          .clip(Shapes.pill)
+          .clickable(onClickLabel = stringResource(R.string.audio_enter_value_for, name)) { editing = true }
+          .padding(horizontal = Space.s)
+        else Modifier
+      )
+  ) {
     Text(name, style = AppText.Caption1, color = colors.onSurfaceVariant, maxLines = 1)
     Text(value, style = Tabular, color = if (active) colors.primary else colors.onSurface, maxLines = 1)
   }
@@ -457,42 +568,66 @@ private fun Readout(name: String, value: String, active: Boolean) {
 
 /** Turns one band on or off: a switch for screen readers, a power icon lit in the accent when on. */
 @Composable
-private fun BandPowerToggle(number: Int, on: Boolean, onToggle: (Boolean) -> Unit) {
+private fun BandPowerToggle(number: Int, on: Boolean, tint: androidx.compose.ui.graphics.Color, onToggle: (Boolean) -> Unit) {
   val colors = MaterialTheme.colorScheme
+  val bandTitle = stringResource(R.string.audio_band_title, number)
   Box(
     modifier = Modifier
       .size(Size.touch)
       .clip(Shapes.pill)
       .toggleable(value = on, role = Role.Switch, onValueChange = onToggle)
-      .semantics { contentDescription = "Banda $number" },
+      .semantics { contentDescription = bandTitle },
     contentAlignment = Alignment.Center
   ) {
     Icon(
       Icons.Rounded.PowerSettingsNew,
       contentDescription = null,
-      tint = if (on) colors.primary else colors.onSurfaceVariant,
+      tint = if (on) tint else colors.onSurfaceVariant,
       modifier = Modifier.size(Size.iconSmall)
     )
   }
 }
 
-/** The band's filter shape; a tap steps to the next type. */
+/** The band's filter type, named, with a menu of all five; the icon alone told nothing before the tap. */
 @Composable
-private fun FilterTypeButton(index: Int, type: FilterType, enabled: Boolean, onNext: () -> Unit) {
+private fun FilterTypeButton(index: Int, type: FilterType, enabled: Boolean, onPick: (FilterType) -> Unit) {
   val colors = MaterialTheme.colorScheme
-  Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .heightIn(min = Size.touch)
-      .clip(Shapes.s)
-      .background(colors.surfaceContainer)
-      .highlightClickable(enabled = enabled, onClickLabel = "Trocar o tipo de filtro", onClick = onNext)
-      .semantics(mergeDescendants = true) { contentDescription = "Filtro ${type.label}" }
-      .padding(horizontal = Space.s)
-      .testTag("band_type_$index"),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.Center
-  ) {
-    FilterShapeIcon(type, color = if (enabled) colors.onSurface else colors.onSurfaceVariant)
+  var open by remember { mutableStateOf(false) }
+  val filterDescription = stringResource(R.string.audio_filter_desc, filterTypeLabel(type))
+  Box {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .heightIn(min = Size.touch)
+        .clip(Shapes.s)
+        .background(colors.surfaceContainer)
+        .highlightClickable(enabled = enabled, onClickLabel = stringResource(R.string.audio_filter_choose_type), onClick = { open = true })
+        .semantics(mergeDescendants = true) { contentDescription = filterDescription }
+        .padding(horizontal = Space.s)
+        .testTag("band_type_$index"),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(Space.xs)
+    ) {
+      FilterShapeIcon(type, color = if (enabled) colors.onSurface else colors.onSurfaceVariant)
+      Text(
+        filterTypeLabel(type),
+        style = AppText.Caption1,
+        color = if (enabled) colors.onSurface else colors.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.weight(1f)
+      )
+      Icon(Icons.Rounded.ArrowDropDown, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(Size.iconSmall))
+    }
+    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+      FilterType.entries.forEach { option ->
+        DropdownMenuItem(
+          text = { Text(filterTypeLabel(option), style = AppText.Body, color = if (option == type) colors.primary else colors.onSurface) },
+          leadingIcon = { FilterShapeIcon(option, color = if (option == type) colors.primary else colors.onSurface) },
+          onClick = { open = false; onPick(option) },
+          modifier = Modifier.testTag("band_type_${index}_${option.key}")
+        )
+      }
+    }
   }
 }

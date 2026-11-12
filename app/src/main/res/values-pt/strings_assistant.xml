@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Aba Assistente, em português. O padrão (inglês) está em values/strings_assistant.xml. -->
+
+    <!-- Estado no topo -->
+    <string name="assistant_status_online">Comandos locais e IA online (Gemini).</string>
+    <string name="assistant_status_local">Comandos locais. Sem IA online.</string>
+    <string name="assistant_enable_action">Como ativar</string>
+    <string name="assistant_enable_hide">Ocultar</string>
+    <string name="assistant_enable_body">A IA online precisa de uma chave do Gemini (GEMINI_API_KEY) no arquivo .env, incluída ao compilar o app. Não há ajuste para isso dentro do app.</string>
+
+    <!-- Estado vazio -->
+    <string name="assistant_empty_title">Como posso ajudar?</string>
+    <string name="assistant_empty_body">Peça para trocar de faixa, ajustar o equalizador ou marcar um timer. Toque no microfone para falar.</string>
+
+    <!-- Sugestões (o comando enviado é fixo; só o rótulo é traduzido) -->
+    <string name="assistant_suggestion_next">Próxima faixa</string>
+    <string name="assistant_suggestion_shuffle">Aleatório</string>
+    <string name="assistant_suggestion_repeat">Repetir</string>
+    <string name="assistant_suggestion_favorite">Favoritar</string>
+    <string name="assistant_suggestion_diagnostics">Diagnóstico de áudio</string>
+    <string name="assistant_suggestion_eq_flat">Equalizador flat</string>
+    <string name="assistant_suggestion_timer">Timer de 15 min</string>
+    <string name="assistant_suggestion_help">Ajuda</string>
+
+    <!-- Quem falou, para leitores de tela -->
+    <string name="assistant_sender_user">Você</string>
+    <string name="assistant_sender_assistant">Assistente</string>
+    <string name="assistant_sender_tool">Ação</string>
+    <string name="assistant_sender_system">Aviso</string>
+    <string name="assistant_message_spoken">%1$s: %2$s</string>
+
+    <!-- Estados -->
+    <string name="assistant_listening">Ouvindo</string>
+    <string name="assistant_thinking">Pensando</string>
+    <string name="assistant_thinking_visible">Pensando…</string>
+
+    <!-- Entrada de voz -->
+    <string name="assistant_voice_prompt">Peça uma análise, troque de faixa ou ajuste o som</string>
+    <string name="assistant_voice_unavailable">Este aparelho não tem reconhecimento de voz. Digite o pedido abaixo.</string>
+    <string name="assistant_voice_failed">Não foi possível abrir o reconhecimento de voz. Digite o pedido abaixo.</string>
+
+    <!-- Controles -->
+    <string name="assistant_mic_idle">Falar com o assistente</string>
+    <string name="assistant_send">Enviar</string>
+    <string name="assistant_composer_description">Mensagem para o assistente</string>
+    <string name="assistant_composer_placeholder">Peça algo ou digite \"ajuda\"</string>
+    <string name="assistant_timer_line">%1$s: %2$s</string>
+    <string name="assistant_timer_cancel">Cancelar timer %1$s</string>
+</resources>

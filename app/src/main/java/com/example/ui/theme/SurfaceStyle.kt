@@ -153,4 +153,4 @@ private fun Modifier.glassFinish(frosted: Boolean, isDark: Boolean): Modifier {
 
 /** Rounded variant used by small floating controls. */
 @Composable
-fun Modifier.glassPill(cornerRadius: Dp = 24.dp): Modifier = glassSurface(RoundedCornerShape(cornerRadius))
+fun Modifier.glassPill(cornerRadius: Dp = Radius.xl): Modifier = glassSurface(RoundedCornerShape(cornerRadius))

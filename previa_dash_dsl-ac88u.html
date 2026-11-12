@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>DSL-AC88U · prévia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#080808; --fg:#F2F2F0; --mut:#8C8C8C; --acc:#7EE3EA; --on-acc:#080808;
+  --line:rgba(242,242,240,.14); --line2:rgba(242,242,240,.45);
+  --s1:rgba(242,242,240,.05); --s2:rgba(242,242,240,.09);
+  --f-title:"Space Grotesk","Inter",system-ui,sans-serif;
+  --f-ui:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  --ease:cubic-bezier(.2,.8,.2,1); --t:200ms;
+}
+@media (prefers-color-scheme:light){
+  :root{
+    color-scheme:light;
+    --bg:#F2F2F0; --fg:#080808; --mut:#6B6B6B; --acc:#0D6C74; --on-acc:#F2F2F0;
+    --line:rgba(8,8,8,.14); --line2:rgba(8,8,8,.55);
+    --s1:transparent; --s2:rgba(8,8,8,.06);
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg)}
+body{font-family:var(--f-ui);font-size:14px;line-height:1.5;padding:56px 24px 0 264px;transition:padding-left var(--t) var(--ease)}
+body.tal-closed{padding-left:24px}
+::selection{background:var(--acc);color:var(--on-acc)}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+/* banner de previa */
+#demo-badge{position:fixed;right:16px;bottom:16px;z-index:1000;background:var(--acc);color:var(--on-acc);
+  font:500 12px var(--f-mono);letter-spacing:.04em;padding:8px 14px;border-radius:999px;box-shadow:0 4px 16px rgba(0,0,0,.35)}
+
+/* ---------- barra lateral ---------- */
+#tal-side{position:fixed;left:0;top:0;bottom:0;width:240px;background:var(--bg);border-right:1px solid var(--line);overflow:auto;z-index:900;
+  font:14px/1.4 var(--f-ui);transition:transform var(--t) var(--ease)}
+.tal-closed #tal-side{transform:translateX(-100%)}
+#tal-side .tal-brand{display:flex;align-items:center;gap:12px;height:56px;padding:0 20px;border-bottom:1px solid var(--line);
+  color:var(--fg);text-decoration:none;font:500 17px var(--f-title);letter-spacing:-.02em}
+#tal-side .tal-brand img{height:28px;width:auto;flex:none}
+.tal-d{display:inline}.tal-l{display:none}
+@media (prefers-color-scheme:light){.tal-d{display:none}.tal-l{display:inline}}
+#tal-side nav{padding:8px 8px 24px}
+#tal-side .tal-layer{margin:20px 12px 6px;font:500 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+#tal-side a.tal-link,#tal-side summary{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;color:var(--fg);
+  text-decoration:none;cursor:pointer;list-style:none;position:relative;transition:background var(--t) var(--ease)}
+#tal-side summary::-webkit-details-marker{display:none}
+#tal-side a.tal-link:hover,#tal-side summary:hover{background:var(--s2)}
+#tal-side a.tal-link:active,#tal-side summary:active{background:var(--s2);transform:scale(.985)}
+#tal-side a.tal-link.sub{padding-left:40px;font-size:13px;color:var(--mut)}
+#tal-side a.tal-link.sub:hover{color:var(--fg)}
+#tal-side a.tal-link.on{color:var(--acc);background:var(--s2)}
+#tal-side a.tal-link.on::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:2px;border-radius:2px;background:var(--acc)}
+#tal-side .tal-ic{width:18px;height:18px;flex:none}
+#tal-side .tal-ic svg,#tal-tg svg{width:100%;height:100%;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+#tal-side summary i{margin-left:auto;transition:transform var(--t) var(--ease);font-style:normal;color:var(--mut)}
+#tal-side summary i::before{content:"\203A";font-size:18px;line-height:1}
+#tal-side details[open]>summary i{transform:rotate(90deg)}
+
+/* ---------- cabecalho ---------- */
+#tal-head{position:fixed;left:240px;right:0;top:0;height:56px;background:var(--bg);border-bottom:1px solid var(--line);display:flex;align-items:center;
+  gap:16px;padding:0 24px;z-index:800;font:14px var(--f-ui);transition:left var(--t) var(--ease)}
+.tal-closed #tal-head{left:0}
+#tal-head a{color:var(--mut);text-decoration:none;padding:6px 10px;border-radius:8px;transition:background var(--t) var(--ease),color var(--t) var(--ease)}
+#tal-head a:hover{color:var(--fg);background:var(--s2)}
+#tal-head .tal-sp{flex:1}
+#tal-title{font:500 18px var(--f-title);letter-spacing:-.02em;color:var(--fg)}
+#tal-tg{width:36px;height:36px;padding:8px;border:0;background:transparent;color:var(--fg);cursor:pointer;border-radius:8px}
+#tal-tg:hover{background:var(--s2)}
+#tal-tg:active{transform:scale(.94)}
+#tal-bd{display:none}
+@media (max-width:900px){
+  body{padding-left:16px;padding-right:16px}
+  #tal-head{left:0;padding:0 12px}
+  body:not(.tal-closed) #tal-bd{display:block;position:fixed;inset:0;background:rgba(8,8,8,.6);z-index:850}
+}
+
+/* ---------- rodape ---------- */
+#tal-foot{margin:40px 0 0;padding:16px 0 24px;border-top:1px solid var(--line);font:400 12px var(--f-mono);color:var(--mut)}
+
+/* ---------- painel ---------- */
+#tal-main{max-width:1100px}
+.tal-h1{font:500 28px/1.15 var(--f-title);letter-spacing:-.02em;margin:24px 0 20px}
+.tal-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:0 0 12px}
+.tal-stat{border:1px solid var(--line);background:var(--s1);border-radius:12px;padding:16px 18px}
+.tal-stat .k{font:500 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--mut);display:flex;align-items:center;gap:8px}
+.tal-stat .v{font:500 24px/1.2 var(--f-title);letter-spacing:-.02em;margin-top:8px;word-break:break-word}
+.tal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin:0 0 12px}
+.tal-card{border:1px solid var(--line);background:var(--s1);border-radius:12px;padding:18px 20px;min-width:0}
+.tal-card h2{font:500 15px var(--f-title);letter-spacing:-.01em;margin:0 0 12px}
+.tal-card p{margin:0 0 8px;color:var(--mut)}
+.tal-kv{display:grid;grid-template-columns:minmax(7rem,38%) 1fr;gap:8px 16px;margin:0}
+.tal-kv dt{color:var(--mut)}
+.tal-kv dd{margin:0;font:400 13px var(--f-mono);word-break:break-all}
+.tal-pre{font:400 12px/1.5 var(--f-mono);margin:0;max-height:14rem;overflow:auto;white-space:pre-wrap;word-break:break-all}
+.tal-seal{font:500 12px var(--f-mono);letter-spacing:.08em;color:var(--mut);margin-top:8px}
+.tal-dot{display:inline-block;width:8px;height:8px;border-radius:50%;border:1.5px solid var(--mut);box-sizing:border-box;flex:none;margin-right:8px}
+.tal-dot.on{background:var(--acc);border-color:var(--acc)}
+.tal-stat .tal-dot{margin:0}
+
+@media (prefers-reduced-motion:reduce){
+  body,#tal-side,#tal-head,#tal-side a,#tal-side summary i{transition:none!important}
+  #tal-side a.tal-link:active,#tal-tg:active{transform:none!important}
+}
+</style>
+</head>
+<body>
+<div id="tal-bd"></div>
+<aside id="tal-side">
+  <a class="tal-brand" href="#">
+    <img class="tal-d" alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 217.8 310.0'%3E%3Cg transform='translate(56.961524 185)'%3E%3Cpolygon points='0.00,-180.00 51.96,-150.00 0.00,-120.00 -51.96,-150.00' fill='%23080808' stroke='%23F2F2F0' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolygon points='51.96,30.00 0.00,60.00 0.00,-120.00 51.96,-150.00' fill='%23080808' stroke='%23F2F2F0' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolygon points='-51.96,30.00 0.00,60.00 0.00,-120.00 -51.96,-150.00' fill='%23080808' stroke='%23F2F2F0' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolyline points='-24.44,-150.00 0.00,-164.11' fill='none' stroke='%23F2F2F0' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolyline points='-12.22,-157.06 13.09,-142.44' fill='none' stroke='%23F2F2F0' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolygon points='51.96,-90.00 103.92,-60.00 51.96,-30.00 0.00,-60.00' fill='%23080808' stroke='%23F2F2F0' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolygon points='103.92,60.00 51.96,90.00 51.96,-30.00 103.92,-60.00' fill='%23080808' stroke='%23F2F2F0' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolygon points='0.00,60.00 51.96,90.00 51.96,-30.00 0.00,-60.00' fill='%23080808' stroke='%23F2F2F0' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolyline points='53.71,-45.89 38.87,-67.56 76.40,-58.99' fill='none' stroke='%23F2F2F0' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolyline points='48.03,-54.71 61.13,-62.27' fill='none' stroke='%23F2F2F0' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolygon points='103.92,0.00 155.88,30.00 103.92,60.00 51.96,30.00' fill='%23080808' stroke='%23F2F2F0' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolygon points='155.88,90.00 103.92,120.00 103.92,60.00 155.88,30.00' fill='%23080808' stroke='%23F2F2F0' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolygon points='51.96,90.00 103.92,120.00 103.92,60.00 51.96,30.00' fill='%23080808' stroke='%23F2F2F0' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolyline points='82.10,27.48 108.29,42.60 127.49,31.51' fill='none' stroke='%23F2F2F0' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/g%3E%3C/svg%3E">
+    <img class="tal-l" alt="" src="data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 217.8 310.0'%3E%3Cg transform='translate(56.961524 185)'%3E%3Cpolygon points='0.00,-180.00 51.96,-150.00 0.00,-120.00 -51.96,-150.00' fill='%23F2F2F0' stroke='%23080808' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolygon points='51.96,30.00 0.00,60.00 0.00,-120.00 51.96,-150.00' fill='%23F2F2F0' stroke='%23080808' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolygon points='-51.96,30.00 0.00,60.00 0.00,-120.00 -51.96,-150.00' fill='%23F2F2F0' stroke='%23080808' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolyline points='-24.44,-150.00 0.00,-164.11' fill='none' stroke='%23080808' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolyline points='-12.22,-157.06 13.09,-142.44' fill='none' stroke='%23080808' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolygon points='51.96,-90.00 103.92,-60.00 51.96,-30.00 0.00,-60.00' fill='%23F2F2F0' stroke='%23080808' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolygon points='103.92,60.00 51.96,90.00 51.96,-30.00 103.92,-60.00' fill='%23F2F2F0' stroke='%23080808' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolygon points='0.00,60.00 51.96,90.00 51.96,-30.00 0.00,-60.00' fill='%23F2F2F0' stroke='%23080808' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolyline points='53.71,-45.89 38.87,-67.56 76.40,-58.99' fill='none' stroke='%23080808' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolyline points='48.03,-54.71 61.13,-62.27' fill='none' stroke='%23080808' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpolygon points='103.92,0.00 155.88,30.00 103.92,60.00 51.96,30.00' fill='%23F2F2F0' stroke='%23080808' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolygon points='155.88,90.00 103.92,120.00 103.92,60.00 155.88,30.00' fill='%23F2F2F0' stroke='%23080808' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolygon points='51.96,90.00 103.92,120.00 103.92,60.00 51.96,30.00' fill='%23F2F2F0' stroke='%23080808' stroke-width='5' stroke-linejoin='round'/%3E%3Cpolyline points='82.10,27.48 108.29,42.60 127.49,31.51' fill='none' stroke='%23080808' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/g%3E%3C/svg%3E">
+    <span>DSL-AC88U</span>
+  </a>
+  <nav id="tal-nav"></nav>
+</aside>
+<header id="tal-head">
+  <button id="tal-tg" type="button" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+  <span id="tal-title">Painel</span>
+  <span class="tal-sp"></span>
+  <a href="#" id="tal-lang">EN</a>
+  <a href="#" onclick="return false">Sair</a>
+</header>
+<main id="tal-main">
+  <h1 class="tal-h1">Painel</h1>
+  <section class="tal-stats">
+    <div class="tal-stat"><div class="k"><span class="tal-dot on"></span>Link</div><div class="v">conectado</div></div>
+    <div class="tal-stat"><div class="k"><span class="tal-dot on"></span>DSL</div><div class="v">Showtime</div></div>
+    <div class="tal-stat"><div class="k"><span class="tal-dot on"></span>Wi-Fi</div><div class="v">2,4 GHz 5 GHz</div></div>
+    <div class="tal-stat"><div class="k">Tempo de sincronismo</div><div class="v">4d 11:32:07</div></div>
+  </section>
+  <section class="tal-grid">
+    <article class="tal-card"><h2>Internet</h2><dl class="tal-kv">
+      <dt>Link</dt><dd><span class="tal-dot on"></span>conectado</dd>
+      <dt>DSL</dt><dd>Showtime</dd>
+      <dt>Tempo de sincronismo</dt><dd>4d 11:32:07</dd>
+      <dt>Modulação</dt><dd>VDSL2 Profile 17a</dd>
+      <dt>IP da WAN</dt><dd>203.0.113.42</dd>
+    </dl></article>
+    <article class="tal-card"><h2>Wi-Fi</h2><dl class="tal-kv">
+      <dt>2,4 GHz</dt><dd><span class="tal-dot on"></span>TARKAS-2G</dd>
+      <dt>5 GHz</dt><dd><span class="tal-dot on"></span>TARKAS-5G</dd>
+    </dl></article>
+    <article class="tal-card"><h2>Tráfego desde o boot</h2><dl class="tal-kv">
+      <dt>LAN RX / TX</dt><dd>18.4 GB / 3.1 GB</dd>
+      <dt>Wi-Fi 2,4 GHz</dt><dd>2.7 GB / 0.6 GB</dd>
+      <dt>Wi-Fi 5 GHz</dt><dd>41.2 GB / 9.8 GB</dd>
+      <dt>DSL (ATM+PTM)</dt><dd>52.9 GB / 11.3 GB</dd>
+    </dl></article>
+    <article class="tal-card"><h2>Sistema</h2><dl class="tal-kv">
+      <dt>Modelo</dt><dd>DSL-AC88U</dd>
+      <dt>Firmware</dt><dd>T.A.L. custom · 6.12.8</dd>
+      <dt>Bootloader</dt><dd>CFE 1.0.39-118.8</dd>
+      <dt>MAC</dt><dd>B0:6E:BF:88:63:F0</dd>
+    </dl></article>
+  </section>
+  <section class="tal-grid">
+    <article class="tal-card">
+      <h2>Engenharia</h2>
+      <p>Valores brutos lidos do roteador.</p>
+      <pre class="tal-pre">current_link = "up"
+connect_status = "2"
+--- dsl_data ---
+dslstatus = "Showtime"
+uptime = "4d 11:32:07"
+modulation = "VDSL2 Profile 17a"
+snr_margin_down = "6.2"
+snr_margin_up = "7.8"
+attenuation_down = "12.4"
+attenuation_up = "9.1"</pre>
+    </article>
+    <article class="tal-card">
+      <h2>Sobre</h2>
+      <p>Developed by Totally Accurate Labs.</p>
+      <div class="tal-seal">MADE BY T.A.L.</div>
+    </article>
+  </section>
+</main>
+<footer id="tal-foot">© 2026 Totally Accurate Labs · MADE BY T.A.L.</footer>
+<div id="demo-badge">PRÉVIA · dados de exemplo, roteador não conectado</div>
+<script>
+/* Mesmo menu de tres camadas do painel real (js/tal-menu.js), sem backend - so pra navegacao visual. */
+var MENU=[
+ {layer:"essential",id:"Internet",ic:"net",items:[["#","WAN"],["#","DSL"],["#","DDNS"]]},
+ {layer:"essential",id:"Rede local",ic:"lan",items:[["#","Dispositivos"],["#","LAN"],["#","DHCP"]]},
+ {layer:"essential",id:"Wi-Fi",ic:"wifi",items:[["#","Wi-Fi"],["#","Segurança"],["#","Convidados"]]},
+ {layer:"essential",id:"Sistema",ic:"sys",items:[["#","Administração"],["#","Firmware"],["#","Backup"]]},
+ {layer:"advanced",id:"Wi-Fi avançado",ic:"wifi",items:[["#","WPS"],["#","MAC ACL"],["#","Profissional"]]},
+ {layer:"advanced",id:"Linha e roteamento",ic:"line",items:[["#","ADSL"],["#","VDSL"],["#","Modem"],["#","WAN Port"],["#","Rotas"],["#","IPTV"]]},
+ {layer:"advanced",id:"Segurança",ic:"sec",items:[["#","Firewall"],["#","URL"],["#","Palavras"],["#","Controle parental"]]},
+ {layer:"advanced",id:"NAT e portas",ic:"nat",items:[["#","Virtual Server"],["#","DMZ"],["#","Port Trigger"]]},
+ {layer:"advanced",id:"VPN",ic:"vpn",items:[["#","OpenVPN"],["#","PPTP"],["#","VPN Client"]]},
+ {layer:"advanced",id:"USB e aplicativos",ic:"usb",items:[["#","Samba"],["#","FTP"],["#","Apps"]]},
+ {layer:"advanced",id:"QoS",ic:"qos",items:[["#","QoS"],["#","Regras"]]},
+ {layer:"engineering",id:"Diagnóstico",ic:"diag",items:[["#","Log"],["#","Status DSL"],["#","Conexões"],["#","Concessões DHCP"],["#","Status Wi-Fi"],["#","Ping / Traceroute"]]}
+];
+var ICON={
+ net:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>',
+ lan:'<rect x="9" y="3" width="6" height="5"/><rect x="3" y="16" width="6" height="5"/><rect x="15" y="16" width="6" height="5"/><path d="M12 8v4M6 16v-4h12v4"/>',
+ wifi:'<path d="M2 9a15 15 0 0120 0M5 13a10 10 0 0114 0M8.5 16.5a5 5 0 017 0"/><circle cx="12" cy="20" r="1"/>',
+ sys:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
+ sec:'<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
+ nat:'<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
+ vpn:'<rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V8a4 4 0 018 0v3"/>',
+ usb:'<path d="M12 3v14M8 7l4-4 4 4M7 13v3a2 2 0 002 2h6a2 2 0 002-2v-3"/>',
+ qos:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+ line:'<path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/>',
+ diag:'<path d="M3 12h4l2-6 4 12 2-6h6"/>'
+};
+function svg(n){return '<svg viewBox="0 0 24 24" aria-hidden="true">'+(ICON[n]||'')+'</svg>';}
+var LAYER_LABEL={essential:"Essencial",advanced:"Avançado",engineering:"Engenharia"};
+var html='<a class="tal-link on" href="#"><span class="tal-ic">'+svg("sys")+'</span>Painel</a>';
+["essential","advanced","engineering"].forEach(function(ly){
+  html+='<p class="tal-layer">'+LAYER_LABEL[ly]+'</p>';
+  MENU.filter(function(g){return g.layer===ly;}).forEach(function(g){
+    html+='<details'+(ly==="essential"?' open':'')+'><summary><span class="tal-ic">'+svg(g.ic)+'</span>'+g.id+'<i></i></summary>';
+    g.items.forEach(function(i){html+='<a class="tal-link sub" href="'+i[0]+'" onclick="return false">'+i[1]+'</a>';});
+    html+='</details>';
+  });
+});
+document.getElementById("tal-nav").innerHTML=html;
+
+var body=document.body;
+if(innerWidth<900)body.classList.add("tal-closed");
+document.getElementById("tal-tg").addEventListener("click",function(){
+  body.classList.toggle("tal-closed");
+});
+document.getElementById("tal-bd").addEventListener("click",function(){body.classList.add("tal-closed");});
+document.getElementById("tal-lang").addEventListener("click",function(e){e.preventDefault();});
+</script>
+</body>
+</html>

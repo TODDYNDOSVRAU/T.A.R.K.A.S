@@ -1,10 +1,22 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Equalizer
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import com.example.ui.theme.rememberReducedMotion
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -50,12 +62,11 @@ fun TrackArtwork(
   ) {
     val url = track.artworkUrl
     if (url == null) {
-      Icon(
-        imageVector = if (playing) Icons.Rounded.Equalizer else Icons.Rounded.MusicNote,
-        contentDescription = null,
-        tint = if (playing) colors.primary else colors.onSurfaceVariant,
-        modifier = Modifier.size(iconSize)
-      )
+      if (playing) {
+        PlayingBars(color = colors.primary, size = iconSize)
+      } else {
+        Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(iconSize))
+      }
     } else {
       Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(iconSize))
       // The cover fades in over the placeholder instead of popping in.
@@ -70,8 +81,50 @@ fun TrackArtwork(
       if (playing) {
         // A scrim over the artwork itself, so the glyph stays legible on any cover.
         Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.45f)))
-        Icon(Icons.Rounded.Equalizer, contentDescription = null, tint = Color.White, modifier = Modifier.size(iconSize))
+        PlayingBars(color = Color.White, size = iconSize)
       }
+    }
+  }
+}
+
+/**
+ * Three bars that rise and fall while the track plays. Only the height (a scale) moves, each bar on its
+ * own period so they do not march together. With reduced motion they stand still at different heights.
+ * It is drawn only while playing, so a paused or off-screen row runs no animation.
+ */
+@Composable
+private fun PlayingBars(color: Color, size: Dp) {
+  val reduced = rememberReducedMotion()
+  val still = floatArrayOf(0.55f, 1f, 0.7f)
+  val periods = intArrayOf(520, 680, 600)
+  val transition = rememberInfiniteTransition(label = "playingBars")
+  Row(
+    modifier = Modifier.size(size * 0.8f),
+    horizontalArrangement = Arrangement.spacedBy(size * 0.08f),
+    verticalAlignment = Alignment.Bottom
+  ) {
+    for (i in 0..2) {
+      val level = if (reduced) {
+        still[i]
+      } else {
+        transition.animateFloat(
+          initialValue = 0.3f,
+          targetValue = 1f,
+          animationSpec = infiniteRepeatable(tween(periods[i], easing = LinearEasing), RepeatMode.Reverse),
+          label = "bar$i"
+        ).value
+      }
+      Box(
+        Modifier
+          .weight(1f)
+          .fillMaxHeight()
+          .graphicsLayer {
+            transformOrigin = TransformOrigin(0.5f, 1f)
+            scaleY = level
+          }
+          .clip(com.example.ui.theme.Shapes.pill)
+          .background(color)
+      )
     }
   }
 }

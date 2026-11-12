@@ -64,6 +64,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
+import com.example.R
 import com.example.data.model.AssistantMessage
 import com.example.data.model.LocalTimer
 import com.example.data.model.MessageSender
@@ -79,25 +81,32 @@ import com.example.ui.theme.Space
 import com.example.ui.theme.rememberReducedMotion
 import java.util.Locale
 
-/** Ready-made requests: (label shown, command sent). Curiosities live only in the player and notification. */
+/**
+ * Ready-made requests: (label resource, command sent). The label follows the system language; the command
+ * stays Portuguese because the local command parser in AssistantEngine only understands Portuguese
+ * (plus "help"). Curiosities live only in the player and notification.
+ */
 private val SuggestionCommands = listOf(
-  "Próxima faixa" to "próxima faixa",
-  "Aleatório" to "aleatório",
-  "Repetir" to "repetir",
-  "Favoritar" to "favoritar",
-  "Diagnóstico de áudio" to "diagnóstico de áudio",
-  "Equalizador flat" to "equalizador flat",
-  "Timer de 15 min" to "timer de 15 minutos",
-  "Ajuda" to "help"
+  R.string.assistant_suggestion_next to "próxima faixa",
+  R.string.assistant_suggestion_shuffle to "aleatório",
+  R.string.assistant_suggestion_repeat to "repetir",
+  R.string.assistant_suggestion_favorite to "favoritar",
+  R.string.assistant_suggestion_diagnostics to "diagnóstico de áudio",
+  R.string.assistant_suggestion_eq_flat to "equalizador flat",
+  R.string.assistant_suggestion_timer to "timer de 15 minutos",
+  R.string.assistant_suggestion_help to "help"
 )
 
 /** Who said it, for screen readers ("Você: …", "Assistente: …"). */
-private fun MessageSender.spokenName(): String = when (this) {
-  MessageSender.USER -> "Você"
-  MessageSender.ASSISTANT -> "Assistente"
-  MessageSender.TOOL -> "Ação"
-  MessageSender.SYSTEM -> "Aviso"
-}
+@Composable
+private fun MessageSender.spokenName(): String = stringResource(
+  when (this) {
+    MessageSender.USER -> R.string.assistant_sender_user
+    MessageSender.ASSISTANT -> R.string.assistant_sender_assistant
+    MessageSender.TOOL -> R.string.assistant_sender_tool
+    MessageSender.SYSTEM -> R.string.assistant_sender_system
+  }
+)
 
 /**
  * The assistant as a plain conversation: messages as bubbles (yours on the right in the accent, the
@@ -121,9 +130,14 @@ fun AssistantScreen(
   var textInput by rememberSaveable { mutableStateOf("") }
   var isListening by rememberSaveable { mutableStateOf(false) }
   var voiceError by rememberSaveable { mutableStateOf<String?>(null) }
+  var enableHelpShown by rememberSaveable { mutableStateOf(false) }
   val listState = rememberLazyListState()
   val reduced = rememberReducedMotion()
   val colors = MaterialTheme.colorScheme
+  // Resolved here because launchVoiceInput() below is not composable.
+  val voicePrompt = stringResource(R.string.assistant_voice_prompt)
+  val voiceUnavailable = stringResource(R.string.assistant_voice_unavailable)
+  val voiceFailed = stringResource(R.string.assistant_voice_failed)
 
   val speechLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
     isListening = false
@@ -140,15 +154,15 @@ fun AssistantScreen(
       val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
         putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-        putExtra(RecognizerIntent.EXTRA_PROMPT, "Peça uma análise, troque de faixa ou ajuste o som")
+        putExtra(RecognizerIntent.EXTRA_PROMPT, voicePrompt)
       }
       speechLauncher.launch(intent)
     } catch (_: ActivityNotFoundException) {
       isListening = false
-      voiceError = "Este aparelho não tem reconhecimento de voz. Digite o pedido abaixo."
+      voiceError = voiceUnavailable
     } catch (_: Exception) {
       isListening = false
-      voiceError = "Não foi possível abrir o reconhecimento de voz. Digite o pedido abaixo."
+      voiceError = voiceFailed
     }
   }
 
@@ -166,12 +180,16 @@ fun AssistantScreen(
     }
   }
 
+  val listeningText = stringResource(R.string.assistant_listening)
+  val thinkingText = stringResource(R.string.assistant_thinking)
+  val lastReply = messages.lastOrNull()?.takeIf { it.sender != MessageSender.USER }
+  val lastReplySpoken = lastReply?.let {
+    stringResource(R.string.assistant_message_spoken, it.sender.spokenName(), lightMarkdown(it.text).text)
+  }
   val announcement = when {
-    isListening -> "Ouvindo"
-    isProcessing -> "Pensando"
-    else -> messages.lastOrNull()?.takeIf { it.sender != MessageSender.USER }
-      ?.let { "${it.sender.spokenName()}: ${lightMarkdown(it.text).text}" }
-      .orEmpty()
+    isListening -> listeningText
+    isProcessing -> thinkingText
+    else -> lastReplySpoken.orEmpty()
   }
 
   Column(modifier = modifier.fillMaxSize().padding(bottom = LocalBarInset.current)) {
@@ -192,22 +210,51 @@ fun AssistantScreen(
     ) {
       item {
         Column(Modifier.fillMaxWidth()) {
-          Text(
-            if (hasGeminiKey) "Comandos locais e IA online (Gemini)." else "Comandos locais. Sem IA online.",
-            style = AppText.Footnote,
-            color = colors.onSurfaceVariant
-          )
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+              stringResource(if (hasGeminiKey) R.string.assistant_status_online else R.string.assistant_status_local),
+              style = AppText.Footnote,
+              color = colors.onSurfaceVariant,
+              modifier = Modifier.weight(1f)
+            )
+            // Without a key the only way to turn the online AI on is at build time; say so on demand.
+            if (!hasGeminiKey) {
+              Box(
+                modifier = Modifier
+                  .minimumInteractiveComponentSize()
+                  .clip(Shapes.pill)
+                  .highlightClickable(onClick = { enableHelpShown = !enableHelpShown })
+                  .padding(horizontal = Space.s)
+                  .testTag("assistant_enable_help"),
+                contentAlignment = Alignment.Center
+              ) {
+                Text(
+                  stringResource(if (enableHelpShown) R.string.assistant_enable_hide else R.string.assistant_enable_action),
+                  style = AppText.Footnote,
+                  color = colors.primary
+                )
+              }
+            }
+          }
+          if (!hasGeminiKey && enableHelpShown) {
+            Text(
+              stringResource(R.string.assistant_enable_body),
+              style = AppText.Footnote,
+              color = colors.onSurfaceVariant,
+              modifier = Modifier.fillMaxWidth().padding(bottom = Space.xs)
+            )
+          }
           if (messages.isEmpty()) {
             Spacer(Modifier.height(Space.xxl))
             Text(
-              "Como posso ajudar?",
+              stringResource(R.string.assistant_empty_title),
               style = AppText.Title3,
               color = colors.onSurface,
               textAlign = TextAlign.Center,
               modifier = Modifier.fillMaxWidth()
             )
             Text(
-              "Peça para trocar de faixa, ajustar o equalizador ou marcar um timer. Toque no microfone para falar.",
+              stringResource(R.string.assistant_empty_body),
               style = AppText.Subhead,
               color = colors.onSurfaceVariant,
               textAlign = TextAlign.Center,
@@ -239,7 +286,7 @@ fun AssistantScreen(
 
       if (isProcessing) {
         item {
-          Text("Pensando…", style = AppText.Footnote, color = colors.onSurfaceVariant, modifier = Modifier.padding(start = Space.s))
+          Text(stringResource(R.string.assistant_thinking_visible), style = AppText.Footnote, color = colors.onSurfaceVariant, modifier = Modifier.padding(start = Space.s))
         }
       }
     }
@@ -260,14 +307,14 @@ fun AssistantScreen(
       )
       IconAction(
         icon = Icons.Rounded.Mic,
-        contentDescription = if (isListening) "Ouvindo" else "Falar com o assistente",
+        contentDescription = stringResource(if (isListening) R.string.assistant_listening else R.string.assistant_mic_idle),
         onClick = ::launchVoiceInput,
         tint = colors.primary,
         modifier = Modifier.testTag("siri_voice_orb")
       )
       IconAction(
         icon = Icons.Rounded.ArrowUpward,
-        contentDescription = "Enviar",
+        contentDescription = stringResource(R.string.assistant_send),
         onClick = ::send,
         tint = if (textInput.isBlank()) colors.onSurfaceVariant.copy(alpha = 0.5f) else colors.primary,
         filled = true,
@@ -296,14 +343,14 @@ private fun TimerRow(timer: LocalTimer, onCancel: () -> Unit) {
     )
     Spacer(Modifier.width(Space.m))
     Text(
-      "${timer.label}: ${timer.formattedTime()}",
+      stringResource(R.string.assistant_timer_line, timer.label, timer.formattedTime()),
       style = AppText.Body,
       color = colors.onSurface,
       modifier = Modifier.weight(1f)
     )
     IconAction(
       icon = Icons.Rounded.Close,
-      contentDescription = "Cancelar timer ${timer.label}",
+      contentDescription = stringResource(R.string.assistant_timer_cancel, timer.label),
       onClick = onCancel,
       tint = colors.onSurfaceVariant
     )
@@ -315,11 +362,12 @@ private fun MessageBubble(message: AssistantMessage) {
   val colors = MaterialTheme.colorScheme
   val isUser = message.sender == MessageSender.USER
   val text = lightMarkdown(message.text)
+  val spoken = stringResource(R.string.assistant_message_spoken, message.sender.spokenName(), text.text)
   val shape = RoundedCornerShape(
-    topStart = 18.dp,
-    topEnd = 18.dp,
-    bottomStart = if (isUser) 18.dp else 6.dp,
-    bottomEnd = if (isUser) 6.dp else 18.dp
+    topStart = com.example.ui.theme.Radius.l,
+    topEnd = com.example.ui.theme.Radius.l,
+    bottomStart = if (isUser) com.example.ui.theme.Radius.l else com.example.ui.theme.Radius.xs,
+    bottomEnd = if (isUser) com.example.ui.theme.Radius.xs else com.example.ui.theme.Radius.l
   )
   Column(
     modifier = Modifier.fillMaxWidth(),
@@ -334,7 +382,7 @@ private fun MessageBubble(message: AssistantMessage) {
         .clip(shape)
         .background(if (isUser) colors.primary else colors.surfaceContainer)
         .padding(horizontal = 14.dp, vertical = 10.dp)
-        .semantics { contentDescription = "${message.sender.spokenName()}: ${text.text}" }
+        .semantics { contentDescription = spoken }
         .testTag(if (isUser) "message_user" else "message_assistant")
     )
     message.toolReport?.let { report ->
@@ -353,7 +401,7 @@ private fun Suggestions(onSendMessage: (String) -> Unit) {
     contentPadding = PaddingValues(horizontal = Space.page),
     modifier = Modifier.fillMaxWidth()
   ) {
-    items(SuggestionCommands) { (label, command) ->
+    items(SuggestionCommands) { (labelRes, command) ->
       // The 48 dp touch area is the outer box; the visible pill stays small inside it.
       Box(
         modifier = Modifier
@@ -371,7 +419,7 @@ private fun Suggestions(onSendMessage: (String) -> Unit) {
             .padding(horizontal = 14.dp, vertical = 7.dp),
           contentAlignment = Alignment.Center
         ) {
-          Text(label, style = AppText.Subhead, color = colors.onSurface, maxLines = 1)
+          Text(stringResource(labelRes), style = AppText.Subhead, color = colors.onSurface, maxLines = 1)
         }
       }
     }
@@ -382,7 +430,8 @@ private fun Suggestions(onSendMessage: (String) -> Unit) {
 @Composable
 private fun ComposerField(value: String, onValueChange: (String) -> Unit, onSend: () -> Unit, modifier: Modifier = Modifier) {
   val colors = MaterialTheme.colorScheme
-  val placeholder = "Peça algo ou digite \"ajuda\""
+  val placeholder = stringResource(R.string.assistant_composer_placeholder)
+  val fieldDescription = stringResource(R.string.assistant_composer_description)
   Box(
     modifier = modifier
       .heightIn(min = 44.dp)
@@ -404,7 +453,7 @@ private fun ComposerField(value: String, onValueChange: (String) -> Unit, onSend
       keyboardActions = KeyboardActions(onSend = { onSend() }),
       modifier = Modifier
         .fillMaxWidth()
-        .semantics { contentDescription = "Mensagem para o assistente" }
+        .semantics { contentDescription = fieldDescription }
     )
   }
 }

@@ -42,12 +42,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.R
 import com.example.data.model.Playlist
 import com.example.data.model.Track
 import com.example.ui.components.EmptyState
@@ -181,7 +184,7 @@ fun HomeScreen(
       SearchField(
         value = searchQuery,
         onValueChange = { searchQuery = it },
-        placeholder = "Artistas, músicas, álbuns",
+        placeholder = stringResource(R.string.home_search_placeholder),
         modifier = Modifier
           .padding(horizontal = Space.page)
           .testTag("home_search_input")
@@ -191,7 +194,7 @@ fun HomeScreen(
     if (searchQuery.isBlank()) {
       item(key = "trending") {
         CatalogSection(
-          title = "Em alta no Audius",
+          title = stringResource(R.string.home_trending_title),
           service = "Audius",
           state = trending,
           onRetry = onRetryTrending,
@@ -203,7 +206,7 @@ fun HomeScreen(
       }
       item(key = "jamendo_popular") {
         CatalogSection(
-          title = "Popular no Jamendo",
+          title = stringResource(R.string.home_jamendo_popular_title),
           service = "Jamendo",
           state = jamendoPopular,
           onRetry = onRetryJamendoPopular,
@@ -215,15 +218,15 @@ fun HomeScreen(
       }
 
       item(key = "mine_header") {
-        SectionHeader("Suas músicas", modifier = Modifier.padding(top = Space.section, bottom = Space.s))
+        SectionHeader(stringResource(R.string.home_mine_header), modifier = Modifier.padding(top = Space.section, bottom = Space.s))
       }
       if (myTracks.isEmpty()) {
         item(key = "mine_empty") {
           EmptyState(
             icon = Icons.Rounded.LibraryMusic,
-            title = "Nenhuma música sua ainda",
-            message = "Busque uma música acima ou importe um arquivo do aparelho na Biblioteca.",
-            actionLabel = "Abrir Biblioteca",
+            title = stringResource(R.string.home_mine_empty_title),
+            message = stringResource(R.string.home_mine_empty_message),
+            actionLabel = stringResource(R.string.home_mine_empty_action),
             onAction = onOpenLibrary,
             modifier = Modifier.padding(horizontal = Space.page).testTag("home_empty")
           )
@@ -247,9 +250,9 @@ fun HomeScreen(
       }
     } else {
       // While searching: the library first, then the same query on each service. All of it plays here.
-      item(key = "search_lib_header") { ResultsHeader("Na sua biblioteca", searching = false) }
+      item(key = "search_lib_header") { ResultsHeader(stringResource(R.string.home_search_library_header), searching = false) }
       if (searchMatches.isEmpty()) {
-        item(key = "search_lib_empty") { Note("Nada na sua biblioteca para “$searchQuery”.") }
+        item(key = "search_lib_empty") { Note(stringResource(R.string.home_search_library_empty, searchQuery)) }
       }
       songs(searchMatches, "lib", "lib_track", showSource = true, stagger = false, onClick = onPlayTrack)
 
@@ -260,14 +263,14 @@ fun HomeScreen(
           if (audiusOffline) {
             EmptyState(
               icon = Icons.Rounded.CloudOff,
-              title = "Sem conexão com o Audius",
-              message = "Confira a internet e tente de novo.",
-              actionLabel = "Tentar de novo",
+              title = stringResource(R.string.home_offline_title, "Audius"),
+              message = stringResource(R.string.home_offline_message),
+              actionLabel = stringResource(R.string.home_retry),
               onAction = { onSearchAudiusOnline(searchQuery) },
               modifier = Modifier.padding(horizontal = Space.page).testTag("audius_offline")
             )
           } else {
-            Note("Nada encontrado no Audius.")
+            Note(stringResource(R.string.home_nothing_found, "Audius"))
           }
         }
       }
@@ -277,26 +280,22 @@ fun HomeScreen(
       if (jamendo.results.isEmpty() && !jamendo.searching) {
         item(key = "jamendo_empty") {
           when {
-            jamendo.notConfigured -> Note(JamendoMissingKey, Modifier.testTag("jamendo_not_configured"))
+            jamendo.notConfigured -> Note(stringResource(R.string.home_jamendo_missing_key), Modifier.testTag("jamendo_not_configured"))
             jamendo.offline -> EmptyState(
               icon = Icons.Rounded.CloudOff,
-              title = "Sem conexão com o Jamendo",
-              message = "Confira a internet e tente de novo.",
-              actionLabel = "Tentar de novo",
+              title = stringResource(R.string.home_offline_title, "Jamendo"),
+              message = stringResource(R.string.home_offline_message),
+              actionLabel = stringResource(R.string.home_retry),
               onAction = { onSearchJamendoOnline(searchQuery) },
               modifier = Modifier.padding(horizontal = Space.page).testTag("jamendo_offline")
             )
-            else -> Note("Nada encontrado no Jamendo.", Modifier.testTag("jamendo_empty"))
+            else -> Note(stringResource(R.string.home_nothing_found, "Jamendo"), Modifier.testTag("jamendo_empty"))
           }
         }
       }
     }
   }
 }
-
-/** Said where Jamendo results would be, when the build has no client id for it. */
-private const val JamendoMissingKey =
-  "O Jamendo precisa de uma chave do app (client id). Sem ela, a busca usa só o Audius."
 
 /**
  * A catalogue's row of Início ("Em alta no Audius", "Popular no Jamendo"): the covers, a skeleton
@@ -328,13 +327,13 @@ private fun CatalogSection(
       )
       state.offline -> EmptyState(
         icon = Icons.Rounded.CloudOff,
-        title = "Sem conexão com o $service",
-        message = "Confira a internet e tente de novo. Suas músicas do aparelho continuam tocando.",
-        actionLabel = "Tentar de novo",
+        title = stringResource(R.string.home_offline_title, service),
+        message = stringResource(R.string.home_offline_catalog_message),
+        actionLabel = stringResource(R.string.home_retry),
         onAction = onRetry,
         modifier = Modifier.padding(horizontal = Space.page).testTag("${tagPrefix}_offline")
       )
-      !state.loading -> Note("O $service não mandou nada agora.")
+      !state.loading -> Note(stringResource(R.string.home_catalog_empty, service))
     }
   }
 }
@@ -345,6 +344,7 @@ private const val SPINNER_DELAY_MS = 1500L
 /** A section title over search results, with a small spinner while that service is still answering. */
 @Composable
 private fun ResultsHeader(title: String, searching: Boolean) {
+  val searchingDescription = stringResource(R.string.home_searching)
   Row(
     modifier = Modifier
       .fillMaxWidth()
@@ -365,7 +365,7 @@ private fun ResultsHeader(title: String, searching: Boolean) {
       CircularProgressIndicator(
         modifier = Modifier
           .size(Size.iconSmall)
-          .semantics { stateDescription = "Buscando" },
+          .semantics { stateDescription = searchingDescription },
         strokeWidth = 2.dp,
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )
@@ -387,20 +387,21 @@ private fun Note(text: String, modifier: Modifier = Modifier) {
 /** The row that folds the demo tracks in and out, announced with its state. */
 @Composable
 private fun DemoToggle(count: Int, expanded: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+  val toggleState = stringResource(if (expanded) R.string.home_demo_state_open else R.string.home_demo_state_closed)
   Row(
     modifier = modifier
       .fillMaxWidth()
       .heightIn(min = Size.row)
-      .highlightClickable(role = Role.Button, onClickLabel = if (expanded) "Esconder" else "Mostrar", onClick = onToggle)
-      .semantics { stateDescription = if (expanded) "Aberto" else "Fechado" }
+      .highlightClickable(role = Role.Button, onClickLabel = stringResource(if (expanded) R.string.home_demo_hide else R.string.home_demo_show), onClick = onToggle)
+      .semantics { stateDescription = toggleState }
       .padding(horizontal = Space.page, vertical = Space.s)
       .testTag("home_demo_toggle"),
     verticalAlignment = Alignment.CenterVertically
   ) {
     Column(modifier = Modifier.weight(1f)) {
-      Text("Faixas de demonstração", style = AppText.Body, color = MaterialTheme.colorScheme.onSurface)
+      Text(stringResource(R.string.home_demo_title), style = AppText.Body, color = MaterialTheme.colorScheme.onSurface)
       Text(
-        "$count trechos curtos gerados pelo app, para testar o som e o equalizador",
+        pluralStringResource(R.plurals.home_demo_summary, count, count),
         style = AppText.Subhead,
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )
@@ -435,12 +436,13 @@ private fun TrendingRow(
   ) {
     itemsIndexed(tracks.take(12), key = { _, t -> "${tagPrefix}_${t.id}" }) { index, track ->
       val isCurrent = currentTrack?.id == track.id
+      val playLabel = stringResource(R.string.home_play_track, track.title)
       Column(
         modifier = Modifier
           .width(TileWidth)
           .listEntrance(index)
           .opensPlayer()
-          .pressClickable(pressedScale = 0.97f, onClickLabel = "Tocar ${track.title}") { onPlay(track) }
+          .pressClickable(pressedScale = 0.97f, onClickLabel = playLabel) { onPlay(track) }
           .testTag("${tagPrefix}_track_${track.id}")
       ) {
         TrackArtwork(
@@ -482,6 +484,7 @@ private fun TrendingRow(
 /** Tiles of the same size as the carousel's while trending loads; still, with nothing sweeping. */
 @Composable
 private fun TrendingSkeleton() {
+  val loadingDescription = stringResource(R.string.home_loading)
   val fill = MaterialTheme.colorScheme.surfaceContainer
   Row(
     horizontalArrangement = Arrangement.spacedBy(Space.m),
@@ -490,7 +493,7 @@ private fun TrendingSkeleton() {
       .fillMaxWidth()
       .wrapContentWidth(Alignment.Start, unbounded = true)
       .padding(horizontal = Space.page)
-      .semantics { stateDescription = "Carregando" }
+      .semantics { stateDescription = loadingDescription }
       .testTag("trending_loading")
   ) {
     repeat(3) {

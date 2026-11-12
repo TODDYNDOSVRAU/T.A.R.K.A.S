@@ -1,5 +1,9 @@
 package com.example.ui.screens.audio
 
+import com.example.data.model.FilterType
+import androidx.compose.runtime.Composable
+import com.example.R
+import androidx.compose.ui.res.stringResource
 import com.example.data.model.EqBand
 import java.util.Locale
 import kotlin.math.abs
@@ -78,23 +82,38 @@ internal fun formatQ(q: Float): String = String.format(NumberLocale, "%.2f", q)
 /** "48.0 kHz" for the output line. */
 internal fun formatSampleRate(hz: Int): String = String.format(NumberLocale, "%.1f kHz", hz / 1000f)
 
+/** The filter type's name. [FilterType.label] stays as is in data/model; the UI maps the type to a string. */
+@Composable
+internal fun filterTypeLabel(type: FilterType): String = stringResource(
+  when (type) {
+    FilterType.PEAK -> R.string.audio_filter_peak
+    FilterType.LOW_SHELF -> R.string.audio_filter_low_shelf
+    FilterType.HIGH_SHELF -> R.string.audio_filter_high_shelf
+    FilterType.HIGH_PASS -> R.string.audio_filter_high_pass
+    FilterType.LOW_PASS -> R.string.audio_filter_low_pass
+  }
+)
+
+@Composable
 internal fun balanceText(b: Float): String = when {
-  abs(b) < 0.01f -> "Centro"
-  b < 0 -> "Esquerda ${(abs(b) * 100).roundToInt()}%"
-  else -> "Direita ${(b * 100).roundToInt()}%"
+  abs(b) < 0.01f -> stringResource(R.string.audio_balance_center)
+  b < 0 -> stringResource(R.string.audio_balance_left, (abs(b) * 100).roundToInt())
+  else -> stringResource(R.string.audio_balance_right, (b * 100).roundToInt())
 }
 
+@Composable
 internal fun widthText(w: Float): String = when {
-  w < 0.02f -> "Mono"
-  abs(w - 1f) < 0.01f -> "Original"
+  w < 0.02f -> stringResource(R.string.audio_width_mono)
+  abs(w - 1f) < 0.01f -> stringResource(R.string.audio_width_original)
   else -> "${(w * 100).roundToInt()}%"
 }
 
+@Composable
 internal fun usageLabel(usage: String?): String = when (usage) {
-  "USAGE_MEDIA" -> "Música ou vídeo"
-  "USAGE_GAME" -> "Jogo"
-  "USAGE_VOICE_COMMUNICATION" -> "Chamada de voz"
-  "USAGE_ASSISTANT" -> "Assistente"
-  "USAGE_NOTIFICATION", "USAGE_ASSISTANCE_SONIFICATION" -> "Som do sistema"
-  else -> "Tocando agora"
+  "USAGE_MEDIA" -> stringResource(R.string.audio_usage_media)
+  "USAGE_GAME" -> stringResource(R.string.audio_usage_game)
+  "USAGE_VOICE_COMMUNICATION" -> stringResource(R.string.audio_usage_voice)
+  "USAGE_ASSISTANT" -> stringResource(R.string.audio_usage_assistant)
+  "USAGE_NOTIFICATION", "USAGE_ASSISTANCE_SONIFICATION" -> stringResource(R.string.audio_usage_system)
+  else -> stringResource(R.string.audio_usage_playing)
 }

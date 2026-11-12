@@ -41,7 +41,7 @@
 
 ## Installation
 
-Download the APK from the [latest release](https://github.com/TODDYNDOSVRAU/T.A.R.K.A.S/releases/latest) and install it. Updates install over the previous version without data loss.
+Download the APK from the [latest release](https://github.com/TODDYNDOSVRAU/T.A.R.K.A.S/releases/latest) and install it. Updates install over the previous version without data loss. The app also checks GitHub Releases by itself and downloads and installs updates; see [docs/ATUALIZACOES.md](docs/ATUALIZACOES.md) for what needs a tap and how to publish a release it recognises.
 
 The app interface is in Brazilian Portuguese.
 

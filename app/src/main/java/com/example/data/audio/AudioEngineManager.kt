@@ -32,12 +32,14 @@ import androidx.media3.extractor.metadata.id3.InternalFrame
 import androidx.media3.extractor.metadata.id3.TextInformationFrame
 import androidx.media3.extractor.metadata.vorbis.VorbisComment
 import com.example.data.audio.dsp.EqDsp
+import com.example.data.audio.dsp.FloatPcmAudioProcessor
 import com.example.data.audio.loudness.LoudnessMeterProcessor
 import com.example.data.audio.loudness.LoudnessNormalization
 import com.example.data.audio.loudness.LoudnessStore
 import com.example.data.audio.loudness.LoudnessUi
 import com.example.data.audio.loudness.NormalizationMode
 import com.example.data.audio.loudness.TaggedLoudness
+import com.example.data.audio.dsp.OwnAudioProcessorChain
 import com.example.data.audio.dsp.ParametricEqAudioProcessor
 import com.example.data.model.AudioCapabilities
 import com.example.data.model.EqSettings
@@ -432,7 +434,7 @@ class AudioEngineManager(private val context: Context) {
         enableFloatOutput: Boolean,
         enableAudioTrackPlaybackParams: Boolean
       ): AudioSink = DefaultAudioSink.Builder(context)
-        .setAudioProcessors(arrayOf(loudnessMeter, spatialProcessor, eqProcessor))
+        .setAudioProcessorChain(OwnAudioProcessorChain(arrayOf(FloatPcmAudioProcessor(), loudnessMeter, spatialProcessor, eqProcessor)))
         .build()
     }
     val media3Attributes = androidx.media3.common.AudioAttributes.Builder()
@@ -831,7 +833,9 @@ class AudioEngineManager(private val context: Context) {
       val dsp = EqDsp().also { it.update(processedSettings()) }
       val renderers = object : DefaultRenderersFactory(context) {
         override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
-          DefaultAudioSink.Builder(context).setAudioProcessors(arrayOf(ParametricEqAudioProcessor(dsp))).build()
+          DefaultAudioSink.Builder(context)
+            .setAudioProcessorChain(OwnAudioProcessorChain(arrayOf(FloatPcmAudioProcessor(), ParametricEqAudioProcessor(dsp))))
+            .build()
       }
       val attributes = androidx.media3.common.AudioAttributes.Builder()
         .setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build()
