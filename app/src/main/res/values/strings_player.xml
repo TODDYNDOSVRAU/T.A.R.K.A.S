@@ -370,4 +370,5 @@
     <string name="onboarding_done_tip_eq">The equalizer is in the Audio tab, with correction for over 8,000 headphones.</string>
     <string name="onboarding_done_tip_permissions">Notifications and microphone are asked for only when you use the feature.</string>
     <string name="onboarding_done_tip_settings">Appearance, privacy and About are in Settings, at the top of Home.</string>
+    <string name="player_sheet_handle">Drag to close</string>
 </resources>

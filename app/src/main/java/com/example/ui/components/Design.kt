@@ -316,7 +316,11 @@ fun ListRow(
     title = title,
     subtitle = subtitle,
     icon = icon,
-    iconTint = if (destructive) colors.error else iconTint,
+    iconTint = when {
+      !enabled -> colors.onSurface.copy(alpha = 0.38f)
+      destructive -> colors.error
+      else -> iconTint
+    },
     titleColor = when {
       !enabled -> colors.onSurface.copy(alpha = 0.38f)
       destructive -> colors.error

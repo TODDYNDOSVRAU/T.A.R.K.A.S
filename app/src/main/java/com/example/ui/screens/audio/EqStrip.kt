@@ -26,7 +26,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -269,7 +271,9 @@ private fun FaderColumn(
       style = AppText.Caption1,
       color = if (enabled) colors.onSurface else colors.onSurfaceVariant,
       maxLines = 1,
-      textAlign = TextAlign.Center
+      textAlign = TextAlign.Center,
+      // The fader is 48 dp wide; a name wider than that spills evenly instead of being cut.
+      modifier = Modifier.wrapContentWidth(unbounded = true)
     )
     Text(
       readout,
@@ -279,8 +283,10 @@ private fun FaderColumn(
       maxLines = 1,
       textAlign = TextAlign.Center,
       modifier = Modifier
+        .wrapContentWidth(unbounded = true)
         .then(
           if (edit != null && enabled) Modifier
+            .widthIn(min = Size.touch)
             .heightIn(min = Size.touch)
             .clip(Shapes.pill)
             .clickable(onClickLabel = stringResource(R.string.audio_enter_value)) { editing = true }
@@ -496,6 +502,8 @@ private fun BandCard(
         verticalArrangement = Arrangement.SpaceBetween
       ) {
         FilterTypeButton(index, band.type, enabled = live) { picked -> onChange { b -> b.copy(type = picked) } }
+        // Q and frequency side by side: stacked they needed more height than the strip has.
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
           EqKnob(
             value = qToKnob(band.q),
@@ -537,6 +545,7 @@ private fun BandCard(
             ) else null
           )
         }
+        }
       }
     }
   }
@@ -552,8 +561,10 @@ private fun Readout(name: String, value: String, active: Boolean, edit: NumberEd
     horizontalAlignment = Alignment.CenterHorizontally,
     modifier = Modifier
       .padding(top = Space.xs)
+      .wrapContentWidth(unbounded = true)
       .then(
         if (edit != null) Modifier
+          .widthIn(min = Size.touch)
           .heightIn(min = Size.touch)
           .clip(Shapes.pill)
           .clickable(onClickLabel = stringResource(R.string.audio_enter_value_for, name)) { editing = true }

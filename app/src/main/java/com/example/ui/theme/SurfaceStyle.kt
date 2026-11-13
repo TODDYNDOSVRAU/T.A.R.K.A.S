@@ -78,7 +78,7 @@ fun Modifier.glassSurface(shape: Shape = RectangleShape): Modifier {
     frosted && isDark -> 0.58f
     frosted -> 0.62f
     isDark -> 0.34f
-    else -> 0.42f
+    else -> 0.8f
   }
   val hazeStyle = HazeStyle(
     backgroundColor = colors.surface,
@@ -100,8 +100,9 @@ val LocalBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }
 val liquidGlassSupported: Boolean get() = Build.VERSION.SDK_INT >= 33
 
 private fun Modifier.liquidGlass(shape: CornerBasedShape, backdrop: LayerBackdrop, isDark: Boolean, surface: Color): Modifier {
-  // A thin tint keeps text readable over busy artwork without hiding the refraction.
-  val tint = surface.copy(alpha = if (isDark) 0.42f else 0.50f)
+  // A thin tint keeps text readable over busy artwork without hiding the refraction. On the light theme
+  // the veil is denser: dark text over a dark cover seen through a 50% veil missed AA contrast.
+  val tint = surface.copy(alpha = if (isDark) 0.42f else 0.82f)
   return this.drawBackdrop(
     backdrop = backdrop,
     shape = { shape },

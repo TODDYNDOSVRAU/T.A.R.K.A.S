@@ -293,7 +293,7 @@ internal fun EqGraph(
       listOf("20", "100", "1k", "10k", "20k").forEach { Text(it, style = AppText.Caption2, color = label) }
     }
     Text(
-      "+12 dB",
+      "+${GRAPH_DB_RANGE.toInt()} dB",
       style = AppText.Caption2,
       color = label,
       modifier = Modifier

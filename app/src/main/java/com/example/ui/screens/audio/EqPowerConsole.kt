@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -100,6 +101,34 @@ internal fun EqPowerConsole(
     val below = RESPONSE_HEIGHT + STATUS_HEIGHT + CONTROLS_HEIGHT + Space.s * 3
     val stripHeight = (maxHeight - below).coerceAtLeast(MIN_STRIP_HEIGHT)
 
+    // Landscape: the faders take the width and everything under them moves to a column on the right,
+    // so the faders keep the height instead of the page scrolling past them.
+    if (maxWidth > maxHeight && maxWidth >= SIDE_MIN_WIDTH) {
+      val rowHeight = maxOf(maxHeight, SIDE_MIN_HEIGHT)
+      Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+        Row(modifier = Modifier.fillMaxWidth().height(rowHeight)) {
+          BandStrip(
+            settings = eqSettings,
+            mode = mode,
+            selectedBand = bandIndex,
+            graphicView = graphicView,
+            paramView = paramView,
+            onSelectBand = onSelectBand,
+            onUpdateBand = onUpdateBand,
+            onUpdateEq = onUpdateEq,
+            modifier = Modifier.weight(1f).fillMaxHeight()
+          )
+          Column(modifier = Modifier.width(SIDE_WIDTH).fillMaxHeight()) {
+            ConsoleBelow(
+              capabilities, eqSettings, mode, bandIndex, activePreset, eqModified, isPlaying, spectrumBars, spectrumAllowed,
+              onAllowSpectrum, onSetEnabled, onUpdateEq, presetActions, onOpenAdvanced, onOpenSpatial, onCompare, graphicView, paramView
+            )
+          }
+        }
+      }
+      return@BoxWithConstraints
+    }
+
     Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
       BandStrip(
         settings = eqSettings,
@@ -113,6 +142,42 @@ internal fun EqPowerConsole(
         modifier = Modifier.height(stripHeight)
       )
 
+      ConsoleBelow(
+        capabilities, eqSettings, mode, bandIndex, activePreset, eqModified, isPlaying, spectrumBars, spectrumAllowed,
+        onAllowSpectrum, onSetEnabled, onUpdateEq, presetActions, onOpenAdvanced, onOpenSpatial, onCompare, graphicView, paramView
+      )
+    }
+  }
+}
+
+private val SIDE_WIDTH = 380.dp
+private val SIDE_MIN_WIDTH = 600.dp
+private val SIDE_MIN_HEIGHT = 340.dp
+
+/** Under the faders: the response curve, the status line, the spectrum notice and the control row. */
+@Composable
+private fun ConsoleBelow(
+  capabilities: AudioCapabilities,
+  eqSettings: EqSettings,
+  mode: EqMode,
+  bandIndex: Int,
+  activePreset: EqPreset?,
+  eqModified: Boolean,
+  isPlaying: Boolean,
+  spectrumBars: () -> List<Float>,
+  spectrumAllowed: Boolean,
+  onAllowSpectrum: () -> Unit,
+  onSetEnabled: (Boolean) -> Unit,
+  onUpdateEq: ((EqSettings) -> EqSettings) -> Unit,
+  presetActions: PresetActions,
+  onOpenAdvanced: () -> Unit,
+  onOpenSpatial: (() -> Unit)?,
+  onCompare: (Boolean) -> Unit,
+  graphicView: StripView,
+  paramView: StripView
+) {
+  val colors = MaterialTheme.colorScheme
+  Column {
       EqGraph(
         settings = eqSettings,
         selectedBand = if (mode == EqMode.PARAMETRIC) bandIndex else -1,
@@ -158,14 +223,14 @@ internal fun EqPowerConsole(
         modifier = Modifier.padding(horizontal = Space.page).padding(top = Space.s)
       )
       Spacer(Modifier.height(Space.s))
-    }
   }
 }
 
 private val RESPONSE_HEIGHT = 80.dp
 private val STATUS_HEIGHT = 52.dp
-private val CONTROLS_HEIGHT = 176.dp
-private val LEFT_COLUMN_WIDTH = 132.dp
+// Switch row 48 + gap 4 + switch row 48 + gap 4 + two 48 dp segments with 2 dp padding each side.
+private val CONTROLS_HEIGHT = 204.dp
+private val LEFT_COLUMN_WIDTH = 160.dp
 private val MIN_STRIP_HEIGHT = 260.dp
 
 /**
@@ -313,9 +378,9 @@ private fun ModeSegments(parametric: Boolean, onSelect: (Boolean) -> Unit) {
       Box(
         modifier = Modifier
           .fillMaxWidth()
-          .heightIn(min = Size.touch - 4.dp)
+          .heightIn(min = Size.touch)
           .clip(Shapes.pill)
-          .background(if (chosen) colors.primary.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent)
+          .background(if (chosen) colors.primary.copy(alpha = 0.24f) else androidx.compose.ui.graphics.Color.Transparent)
           .selectable(selected = chosen, role = Role.RadioButton, onClick = { onSelect(isParam) })
           .testTag(if (isParam) "eq_mode_parametric" else "eq_mode_graphic"),
         contentAlignment = Alignment.Center
@@ -323,7 +388,8 @@ private fun ModeSegments(parametric: Boolean, onSelect: (Boolean) -> Unit) {
         Text(
           name,
           style = AppText.Caption1.copy(fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal),
-          color = if (chosen) colors.primary else colors.onSurfaceVariant,
+          // Text on the accent wash stays in the surface text colour: the accent on its own wash is under 4.5:1 on light.
+          color = if (chosen) colors.onSurface else colors.onSurfaceVariant,
           maxLines = 1
         )
       }

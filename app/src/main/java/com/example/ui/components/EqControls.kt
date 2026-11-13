@@ -18,6 +18,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -92,7 +93,8 @@ fun EqFader(
   val track = colors.onSurface.copy(alpha = 0.12f)
   val tick = colors.onSurface.copy(alpha = 0.24f)
   val accent = if (enabled) tint ?: colors.primary else colors.onSurface.copy(alpha = 0.24f)
-  val handle = if (enabled) colors.surfaceContainerHighest else colors.surfaceContainerHigh
+  // surfaceContainerHighest is not set by the theme (it falls back to Material's lavender); a tone from the base colours instead.
+  val handle = colors.onSurface.copy(alpha = if (enabled) 0.16f else 0.06f).compositeOver(colors.surface)
   val dash = if (enabled) colors.onSurface else colors.onSurface.copy(alpha = 0.38f)
 
   Canvas(

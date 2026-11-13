@@ -5,9 +5,9 @@
     <!-- Header status -->
     <string name="assistant_status_online">Local commands and online AI (Gemini).</string>
     <string name="assistant_status_local">Local commands. No online AI.</string>
-    <string name="assistant_enable_action">How to enable</string>
+    <string name="assistant_enable_action">Details</string>
     <string name="assistant_enable_hide">Hide</string>
-    <string name="assistant_enable_body">Online AI needs a Gemini key (GEMINI_API_KEY) in the .env file, included when the app is built. There is no setting for it inside the app.</string>
+    <string name="assistant_enable_body">Online replies (Gemini) are not available in this version of the app. Local commands, such as changing track or adjusting the sound, work normally.</string>
 
     <!-- Empty state -->
     <string name="assistant_empty_title">How can I help?</string>

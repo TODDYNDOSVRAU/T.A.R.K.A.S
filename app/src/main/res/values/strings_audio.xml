@@ -18,10 +18,10 @@
   <string name="audio_adv_correction_auto_footer">The correction chosen with headphones connected is saved for them and comes back by itself when they reconnect. On the speaker, no correction, unless you choose one while it plays. Wired headphones are treated as one, because the connector does not report the model.</string>
   <string name="audio_adv_correction_manual_footer">The chosen correction stays the same on any output.</string>
   <string name="audio_adv_crossfade">Crossfade</string>
-  <string name="audio_adv_crossfade_footer">Consecutive tracks of the same album change with no gap and no crossfade, so the album sounds whole. There is also no crossfade on tracks shorter than twice the chosen duration, with Repeat one, with T.A.R.K.A.S. Spatial on, or when there is narrated curiosity. Pausing, dragging the bar or skipping during the transition ends the crossfade at once.</string>
+  <string name="audio_adv_crossfade_footer">Consecutive tracks of the same album change with no gap and no crossfade, so the album sounds whole. There is also no crossfade on tracks shorter than twice the chosen duration, with Repeat one, with Tarkas Spatial on, or when there is narrated curiosity. Pausing, dragging the bar or skipping during the transition ends the crossfade at once.</string>
   <string name="audio_adv_crossfade_off">Off: songs change with no gap and no overlap</string>
   <string name="audio_adv_crossfade_on">The next song comes in while the current one goes out, over %1$d s</string>
-  <string name="audio_adv_crossfade_spatial">With T.A.R.K.A.S. Spatial on, songs change without crossfade: the spatial effect follows one song at a time.</string>
+  <string name="audio_adv_crossfade_spatial">With Tarkas Spatial on, songs change without crossfade: Tarkas Spatial follows one song at a time.</string>
   <string name="audio_adv_device_reduces">The headphone correction already lowers %1$s dB to avoid distortion.</string>
   <string name="audio_adv_dump_apps">To see which apps are playing, grant the DUMP permission once. Android only grants it from a computer, with this command. It is how ADB mode finds the other apps to equalize.</string>
   <string name="audio_adv_dump_missing">DUMP permission missing</string>
@@ -124,14 +124,14 @@
   </plurals>
   <string name="audio_device_for_output">For %1$s</string>
   <plurals name="audio_device_results">
-    <item quantity="one">%1$d headphone</item>
-    <item quantity="other">%1$d headphones</item>
+    <item quantity="one">%2$s headphone</item>
+    <item quantity="other">%2$s headphones</item>
   </plurals>
   <string name="audio_device_suggest_sub">Headphones like “%1$s” measured by AutoEq</string>
   <string name="audio_device_suggest_title">Corrections for %1$s</string>
   <plurals name="audio_device_total">
-    <item quantity="one">%1$d headphone measured. Search for your model.</item>
-    <item quantity="other">%1$d headphones measured. Search for your model.</item>
+    <item quantity="one">%2$s headphone measured. Search for your model.</item>
+    <item quantity="other">%2$s headphones measured. Search for your model.</item>
   </plurals>
   <string name="audio_enter_value">Enter the value</string>
   <string name="audio_enter_value_for">Enter the value of %1$s</string>
@@ -190,14 +190,14 @@
   <string name="audio_spatial_intensity">Intensity</string>
   <string name="audio_spatial_others_active">Also active in other apps (%1$d)</string>
   <string name="audio_spatial_others_app">Other apps (Spotify, YouTube): turn on ADB or root mode in Advanced</string>
-  <string name="audio_spatial_others_unsupported">This device does not allow spatial audio in other apps</string>
+  <string name="audio_spatial_others_unsupported">This device does not allow Tarkas Spatial in other apps</string>
   <string name="audio_spatial_others_waiting">In other apps as soon as one plays</string>
   <string name="audio_spatial_reset_mode">Restore mode values</string>
   <string name="audio_spatial_status_active">Active</string>
   <string name="audio_spatial_status_not_stereo">This track is not stereo</string>
   <string name="audio_spatial_status_off">Opens the music around your head</string>
   <string name="audio_spatial_status_preparing">Preparing…</string>
-  <string name="audio_spatial_title">Spatial audio</string>
+  <string name="audio_spatial_title">Tarkas Spatial</string>
   <string name="audio_spatial_tune_close">Close settings for %1$s</string>
   <string name="audio_spatial_tune_open">Settings for %1$s</string>
   <string name="audio_spatial_tuned">Adjusted by you</string>
@@ -227,4 +227,12 @@
   <string name="audio_usage_voice">Voice call</string>
   <string name="audio_width_mono">Mono</string>
   <string name="audio_width_original">Original</string>
+  <string name="audio_empty_title">No match for “%1$s”</string>
+  <string name="audio_empty_hint">Check the spelling, try only the brand or the model, or switch the filter to All.</string>
+  <string name="audio_search_clear">Clear search</string>
+  <string name="audio_empty_mine_title">Nothing here yet</string>
+  <string name="audio_empty_mine_hint">Save a curve from the menu next to the preset and it will appear here.</string>
+  <string name="audio_form_in_ear">In-ear</string>
+  <string name="audio_form_earbud">Earbud</string>
+  <string name="audio_form_over_ear">Over-ear</string>
 </resources>

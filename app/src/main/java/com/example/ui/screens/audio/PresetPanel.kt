@@ -216,6 +216,28 @@ internal fun PresetPanel(
       modifier = Modifier.fillMaxWidth().heightIn(max = 560.dp),
       contentPadding = PaddingValues(bottom = Space.xl + navBar)
     ) {
+      val nothing = !deviceSearch.loading && deviceSearch.error == null &&
+        (!showMine || mine.isEmpty()) && (!showBuiltIn || builtIn.isEmpty()) && (!showFones || fones.isEmpty())
+      if (nothing && (words.isNotEmpty() || filter == PresetFilter.MINE)) {
+        item(key = "empty") {
+          Column(modifier = Modifier.fillMaxWidth().padding(horizontal = Space.page, vertical = Space.l).testTag("preset_empty")) {
+            Text(
+              if (words.isNotEmpty()) stringResource(R.string.audio_empty_title, query.trim()) else stringResource(R.string.audio_empty_mine_title),
+              style = AppText.Headline,
+              color = colors.onSurface
+            )
+            Text(
+              stringResource(if (words.isNotEmpty()) R.string.audio_empty_hint else R.string.audio_empty_mine_hint),
+              style = AppText.Footnote,
+              color = colors.onSurfaceVariant,
+              modifier = Modifier.padding(top = Space.xs)
+            )
+            if (words.isNotEmpty()) {
+              TextAction(stringResource(R.string.audio_search_clear), onClick = { onSearchDevices("", deviceSearch.source) })
+            }
+          }
+        }
+      }
       if (showMine && mine.isNotEmpty()) {
         item(key = "h_mine") { ListSection(stringResource(R.string.audio_section_mine)) }
         items(mine, key = { "p_" + it.id }) { p ->
@@ -250,8 +272,8 @@ internal fun PresetPanel(
                   Text(deviceSearch.error, style = AppText.Footnote, color = colors.error, modifier = Modifier.padding(horizontal = Space.page))
                 }
                 Text(
-                  if (words.isEmpty()) pluralStringResource(R.plurals.audio_device_total, deviceSearch.total, deviceSearch.total)
-                  else pluralStringResource(R.plurals.audio_device_results, deviceSearch.results.size, deviceSearch.results.size),
+                  if (words.isEmpty()) pluralStringResource(R.plurals.audio_device_total, deviceSearch.total, deviceSearch.total, java.text.NumberFormat.getIntegerInstance().format(deviceSearch.total))
+                  else pluralStringResource(R.plurals.audio_device_results, deviceSearch.results.size, deviceSearch.results.size, java.text.NumberFormat.getIntegerInstance().format(deviceSearch.results.size)),
                   style = AppText.Footnote,
                   color = colors.onSurfaceVariant,
                   modifier = Modifier.padding(horizontal = Space.page, vertical = Space.xxs)
@@ -336,7 +358,7 @@ private fun FoneRow(entry: AutoEqEntry, selected: Boolean, applying: Boolean, on
   val colors = MaterialTheme.colorScheme
   PickRow(
     title = entry.name,
-    subtitle = "${entry.source} · ${entry.form}",
+    subtitle = "${entry.source} · ${formLabel(entry.form)}",
     selected = selected,
     onClick = onClick,
     modifier = modifier,
@@ -382,3 +404,13 @@ private fun CurveThumb(settings: EqSettings) {
     drawPath(path, line, style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round))
   }
 }
+
+/** AutoEq's form factor comes from the data layer in fixed words; the screen says it in the interface language. */
+@Composable
+private fun formLabel(form: String): String = stringResource(
+  when (form) {
+    "Intra-auricular" -> R.string.audio_form_in_ear
+    "Earbud" -> R.string.audio_form_earbud
+    else -> R.string.audio_form_over_ear
+  }
+)

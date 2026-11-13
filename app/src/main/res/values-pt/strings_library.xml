@@ -27,6 +27,7 @@
     <string name="library_search_empty_title">Nada encontrado</string>
     <string name="library_search_empty_songs">Nenhuma música combina com “%1$s”. Confira a escrita ou tente o nome de um artista ou de um álbum.</string>
     <string name="library_search_empty_favorites">Nenhum favorito combina com “%1$s”. Confira a escrita ou limpe a busca para ver todos.</string>
+    <string name="library_letter_strip">Ir para a letra</string>
     <string name="library_search_clear">Limpar busca</string>
     <string name="library_search_no_playlist">Nenhuma playlist com “%1$s”.</string>
 

@@ -3,6 +3,7 @@ package com.example.ui.components
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -64,7 +65,14 @@ fun SleepTimerDialog(
     onDismissRequest = onDismiss,
     title = { Text(stringResource(R.string.player_sleep_title), style = AppText.Title3) },
     text = {
-      Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+      // The list is capped at half the window height, so in landscape the dialog keeps clear of the
+      // screen edges and its title and buttons stay in view while only the options scroll.
+      val maxListHeight = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.5f).dp
+      Column(
+        modifier = Modifier
+          .heightIn(max = maxListHeight)
+          .verticalScroll(rememberScrollState())
+      ) {
         if (label != null) {
           Text(
             stringResource(R.string.player_sleep_pauses_in, label),

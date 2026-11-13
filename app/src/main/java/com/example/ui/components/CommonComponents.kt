@@ -794,7 +794,8 @@ fun MiniPlayerBar(
           translationX = swipe
           alpha = 1f - (kotlin.math.abs(swipe) / size.width.coerceAtLeast(1f)).coerceIn(0f, 0.6f)
         }
-        .padding(start = Space.s + Space.xxs, end = Space.xs, top = Space.s, bottom = Space.s),
+        // The start gap clears the capsule's round end, so the thumbnail's corners stay inside it.
+        .padding(start = Space.m, end = Space.xs, top = Space.s, bottom = Space.s),
       verticalAlignment = Alignment.CenterVertically
     ) {
       TrackArtwork(

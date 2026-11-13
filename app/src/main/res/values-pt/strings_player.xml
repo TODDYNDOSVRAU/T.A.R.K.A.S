@@ -28,7 +28,7 @@
   <string name="player_menu_add_queue">Adicionar à fila</string>
   <string name="player_menu_add_playlist">Adicionar a uma playlist</string>
   <string name="player_menu_about">Sobre a faixa</string>
-  <string name="player_menu_sleep_timer">Timer de dormir</string>
+  <string name="player_menu_sleep_timer">Timer de sono</string>
   <string name="player_menu_new_playlist_item">Nova playlist…</string>
   <string name="player_menu_new_playlist">Nova playlist</string>
   <string name="player_menu_create">Criar</string>
@@ -164,7 +164,7 @@
 <!-- SleepTimerDialog.kt -->
 <string name="player_sleep_label_end_of_track">fim da faixa</string>
 <string name="player_sleep_label_minutes">%1$d min</string>
-<string name="player_sleep_title">Timer de dormir</string>
+<string name="player_sleep_title">Timer de sono</string>
 <string name="player_sleep_pauses_in">A música pausa em %1$s.</string>
 <plurals name="player_sleep_minutes">
   <item quantity="one">%1$d minutos</item>
@@ -370,4 +370,5 @@
     <string name="onboarding_done_tip_eq">O equalizador fica na aba Áudio, com correção para mais de 8 mil fones.</string>
     <string name="onboarding_done_tip_permissions">Notificações e microfone são pedidos só quando você usa o recurso.</string>
     <string name="onboarding_done_tip_settings">Aparência, privacidade e Sobre ficam em Ajustes, no alto do Início.</string>
+    <string name="player_sheet_handle">Arrastar para fechar</string>
 </resources>

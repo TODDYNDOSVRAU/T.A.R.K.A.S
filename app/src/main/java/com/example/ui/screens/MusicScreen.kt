@@ -26,6 +26,11 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -472,6 +477,7 @@ fun MusicScreen(
       .background(pageTop)
       .coverBackdrop(coverBlur, coverClock)
       .statusBarsPadding()
+      .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
       // No tab bar under the player: the controls clear the system bar, plus any banner that floats
       // over the page (LocalBarInset).
       .navigationBarsPadding()
@@ -1584,8 +1590,11 @@ private fun rememberStreamVolume(): StreamVolume {
 
 // ---- artwork colour ----
 
-/** Shown while the artwork's colour is unknown and after it fails: a calm blue-grey ink. */
-private val NeutralTint = Color(0xFF30363C)
+/**
+ * Shown while the artwork's colour is unknown and after it fails: a neutral grey from the identity
+ * palette (Precision White at 12% over Absolute Black = #242424), with no hue of its own.
+ */
+private val NeutralTint = Color(0xFF242424)
 
 /**
  * The colour the page is tinted with. It comes from the artwork's pixels: [Track.colorHex] is not the
@@ -1692,7 +1701,7 @@ private fun pageTopFor(tint: Color): Color {
   var c = tint
   repeat(16) { if (c.luminance() > 0.08f) c = lerp(c, Color.Black, 0.15f) }
   // A black cover would make a hole; lift it to a dark grey with a trace of its hue.
-  if (c.luminance() < 0.012f) c = lerp(c, Color(0xFF2A2C30), 0.6f)
+  if (c.luminance() < 0.012f) c = lerp(c, NeutralTint, 0.6f)
   return c
 }
 

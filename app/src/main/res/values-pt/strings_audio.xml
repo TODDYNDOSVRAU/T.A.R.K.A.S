@@ -21,7 +21,7 @@
   <string name="audio_adv_crossfade_footer">Faixas seguidas de um mesmo álbum trocam sem pausa e sem crossfade, para o álbum soar inteiro. Também não há crossfade em faixas com menos que o dobro da duração escolhida, com Repetir uma, com o Tarkas Spatial ligado ou quando há curiosidade narrada. Pausar, arrastar a barra ou pular durante a transição termina o crossfade na hora.</string>
   <string name="audio_adv_crossfade_off">Desligado: as músicas trocam sem pausa e sem sobreposição</string>
   <string name="audio_adv_crossfade_on">A próxima música entra enquanto a atual sai, em %1$d s</string>
-  <string name="audio_adv_crossfade_spatial">Com o Tarkas Spatial ligado, as músicas trocam sem crossfade: o espacial acompanha uma música por vez.</string>
+  <string name="audio_adv_crossfade_spatial">Com o Tarkas Spatial ligado, as músicas trocam sem crossfade: o Tarkas Spatial acompanha uma música por vez.</string>
   <string name="audio_adv_device_reduces">A correção do fone já reduz %1$s dB para não distorcer.</string>
   <string name="audio_adv_dump_apps">Para ver quais apps estão tocando, libere a permissão DUMP uma vez. O Android só a concede por computador, com este comando. É com ela que o modo ADB encontra os outros apps para equalizar.</string>
   <string name="audio_adv_dump_missing">Falta a permissão DUMP</string>
@@ -124,14 +124,14 @@
   </plurals>
   <string name="audio_device_for_output">Para %1$s</string>
   <plurals name="audio_device_results">
-    <item quantity="one">%1$d fone</item>
-    <item quantity="other">%1$d fones</item>
+    <item quantity="one">%2$s fone</item>
+    <item quantity="other">%2$s fones</item>
   </plurals>
   <string name="audio_device_suggest_sub">Fones como “%1$s” medidos no AutoEq</string>
   <string name="audio_device_suggest_title">Correções para %1$s</string>
   <plurals name="audio_device_total">
-    <item quantity="one">%1$d fone medido. Pesquise o modelo do seu.</item>
-    <item quantity="other">%1$d fones medidos. Pesquise o modelo do seu.</item>
+    <item quantity="one">%2$s fone medido. Pesquise o modelo do seu.</item>
+    <item quantity="other">%2$s fones medidos. Pesquise o modelo do seu.</item>
   </plurals>
   <string name="audio_enter_value">Digitar o valor</string>
   <string name="audio_enter_value_for">Digitar o valor de %1$s</string>
@@ -190,14 +190,14 @@
   <string name="audio_spatial_intensity">Intensidade</string>
   <string name="audio_spatial_others_active">Também ativo em outros apps (%1$d)</string>
   <string name="audio_spatial_others_app">Outros apps (Spotify, YouTube): ligue o modo ADB ou root em Avançado</string>
-  <string name="audio_spatial_others_unsupported">Este aparelho não deixa aplicar o espacial em outros apps</string>
+  <string name="audio_spatial_others_unsupported">Este aparelho não deixa aplicar o Tarkas Spatial em outros apps</string>
   <string name="audio_spatial_others_waiting">Nos outros apps assim que algum tocar</string>
   <string name="audio_spatial_reset_mode">Restaurar valores do modo</string>
   <string name="audio_spatial_status_active">Ativo</string>
   <string name="audio_spatial_status_not_stereo">Esta faixa não é estéreo</string>
   <string name="audio_spatial_status_off">Abre a música ao redor da cabeça</string>
   <string name="audio_spatial_status_preparing">Preparando…</string>
-  <string name="audio_spatial_title">Áudio espacial</string>
+  <string name="audio_spatial_title">Tarkas Spatial</string>
   <string name="audio_spatial_tune_close">Fechar ajustes de %1$s</string>
   <string name="audio_spatial_tune_open">Ajustes de %1$s</string>
   <string name="audio_spatial_tuned">Ajustado por você</string>
@@ -227,4 +227,12 @@
   <string name="audio_usage_voice">Chamada de voz</string>
   <string name="audio_width_mono">Mono</string>
   <string name="audio_width_original">Original</string>
+  <string name="audio_empty_title">Nada encontrado para “%1$s”</string>
+  <string name="audio_empty_hint">Confira a grafia, tente só a marca ou o modelo, ou mude o filtro para Todas.</string>
+  <string name="audio_search_clear">Limpar busca</string>
+  <string name="audio_empty_mine_title">Ainda não há nada aqui</string>
+  <string name="audio_empty_mine_hint">Salve uma curva pelo menu ao lado da predefinição e ela aparece aqui.</string>
+  <string name="audio_form_in_ear">Intra-auricular</string>
+  <string name="audio_form_earbud">Earbud</string>
+  <string name="audio_form_over_ear">Circum-auricular</string>
 </resources>

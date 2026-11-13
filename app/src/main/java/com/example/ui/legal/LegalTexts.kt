@@ -114,6 +114,13 @@ object LegalTexts {
     title = "Novidades",
     subtitle = "O que mudou em cada versão",
     sections = listOf(
+      "1.16" to
+        "• Paisagem: mini player e abas numa linha só, mais espaço na biblioteca e no player, e a área da câmera coberta.\n" +
+        "• Biblioteca: menu da faixa nas Músicas, faixa A-Z maior e acessível, e a ordem escolhida sempre à vista.\n" +
+        "• Equalizador: rótulos sem corte, layout em paisagem, seletor maior e aviso quando a busca de perfis não acha nada.\n" +
+        "• Assistente: a conversa rola até a resposta nova, e a ajuda explica o que fazer no app.\n" +
+        "• Sobre e Novidades não ficam mais sob a barra de status, e Ajustes volta na mesma posição.\n" +
+        "• Ajustes de leitura e contraste em vários pontos.",
       "1.15" to
         "• Novo: atualização pelo GitHub. O app avisa quando sai uma versão nova e, na versão final, baixa, confere e instala.\n" +
         "• Novo: correções AutoEq offline, com 8.849 perfis de fones no app, e cada fone guarda a própria correção.\n" +

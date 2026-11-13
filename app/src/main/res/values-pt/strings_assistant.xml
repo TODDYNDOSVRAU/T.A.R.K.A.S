@@ -5,9 +5,9 @@
     <!-- Estado no topo -->
     <string name="assistant_status_online">Comandos locais e IA online (Gemini).</string>
     <string name="assistant_status_local">Comandos locais. Sem IA online.</string>
-    <string name="assistant_enable_action">Como ativar</string>
+    <string name="assistant_enable_action">Detalhes</string>
     <string name="assistant_enable_hide">Ocultar</string>
-    <string name="assistant_enable_body">A IA online precisa de uma chave do Gemini (GEMINI_API_KEY) no arquivo .env, incluída ao compilar o app. Não há ajuste para isso dentro do app.</string>
+    <string name="assistant_enable_body">As respostas online (Gemini) não estão disponíveis nesta versão do app. Os comandos locais, como trocar de faixa ou ajustar o som, funcionam normalmente.</string>
 
     <!-- Estado vazio -->
     <string name="assistant_empty_title">Como posso ajudar?</string>

@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
@@ -60,7 +61,8 @@ fun TrackDetailsSheet(
     onDismissRequest = onDismiss,
     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     containerColor = MaterialTheme.colorScheme.surfaceContainer,
-    shape = RoundedCornerShape(topStart = Radius.l, topEnd = Radius.l)
+    shape = RoundedCornerShape(topStart = Radius.l, topEnd = Radius.l),
+    dragHandle = { SheetHandle() }
   ) {
     Column(
       modifier = Modifier
@@ -87,7 +89,16 @@ fun TrackDetailsSheet(
         }
       }
       Hairline(Modifier.padding(vertical = Space.s))
-      GroupHeader(stringResource(R.string.player_details_header), Modifier.padding(top = Space.s))
+      // The rows of this sheet run the full width, so the header aligns with them (GroupHeader is indented
+      // for rows inside a card).
+      Text(
+        stringResource(R.string.player_details_header),
+        style = AppText.Footnote,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+          .padding(start = Space.page, end = Space.page, top = Space.s, bottom = Space.s)
+          .semantics { heading() }
+      )
 
       when {
         state.loading -> Box(

@@ -74,6 +74,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -99,6 +100,7 @@ import com.example.ui.components.SearchField
 import com.example.ui.components.SubPageHeader
 import com.example.ui.components.TextAction
 import com.example.ui.components.TrackArtwork
+import com.example.ui.components.TrackActionsMenu
 import com.example.ui.components.TrackRow
 import com.example.ui.components.highlightClickable
 import com.example.ui.screens.library.PlayShuffleRow
@@ -166,6 +168,11 @@ fun LibraryScreen(
   onDeletePlaylist: (String) -> Unit,
   onRemoveFromPlaylist: (String, String) -> Unit,
   onToggleFavorite: (Track) -> Unit,
+  /** The track menu in the song and favourite rows. */
+  onPlayNext: (Track) -> Unit = {},
+  onAddToQueue: (Track) -> Unit = {},
+  onAddToPlaylist: (String, Track) -> Unit = { _, _ -> },
+  onCreatePlaylistWith: (String, Track) -> Unit = { _, _ -> },
   onPlayQueueItem: (Int) -> Unit,
   onRemoveQueueItem: (Int) -> Unit,
   onClearQueue: () -> Unit,
@@ -188,6 +195,9 @@ fun LibraryScreen(
     com.example.data.playback.LibrarySort.sorted(deviceTracks, songOrder, playCounts)
   }
   LaunchedEffect(songOrder) { if (songOrder == com.example.data.playback.SongOrder.MOST_PLAYED) onNeedPlayCounts() }
+  val favoriteIds = remember(favoriteTracks) { favoriteTracks.map { it.id }.toSet() }
+  // Landscape leaves little height once the bars are on: the search and the order chips share a line.
+  val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 480
   // Search inside Músicas and Favoritos: the sorted list is filtered, so the chosen order holds in the
   // result. The folded text of a song is made the first time a search needs it, not on every keystroke.
   var songQuery by rememberSaveable { mutableStateOf("") }
@@ -331,21 +341,58 @@ fun LibraryScreen(
               onShuffle = { onShuffleList(shownSongs) },
               header = {
                 if (musicAllowed && deviceTracks.isNotEmpty()) {
-                  item(key = "song_search") {
-                    SearchField(
-                      value = songQuery,
-                      onValueChange = { songQuery = it },
-                      placeholder = stringResource(R.string.library_search_songs_hint),
-                      modifier = Modifier
-                        .padding(horizontal = Space.page)
-                        .padding(top = Space.s, bottom = Space.xs)
-                        .testTag("library_search_songs")
-                    )
-                  }
-                  item(key = "song_order") {
-                    SongOrderRow(songOrder, onChange = { songOrder = it; onSongOrderChange(it) })
+                  if (compact) {
+                    item(key = "song_search") {
+                      Row(
+                        modifier = Modifier.padding(top = Space.s, bottom = Space.xs),
+                        verticalAlignment = Alignment.CenterVertically
+                      ) {
+                        SearchField(
+                          value = songQuery,
+                          onValueChange = { songQuery = it },
+                          placeholder = stringResource(R.string.library_search_songs_hint),
+                          modifier = Modifier
+                            .weight(1f)
+                            .padding(start = Space.page)
+                            .testTag("library_search_songs")
+                        )
+                        SongOrderRow(
+                          songOrder,
+                          onChange = { songOrder = it; onSongOrderChange(it) },
+                          modifier = Modifier.weight(1f)
+                        )
+                      }
+                    }
+                  } else {
+                    item(key = "song_search") {
+                      SearchField(
+                        value = songQuery,
+                        onValueChange = { songQuery = it },
+                        placeholder = stringResource(R.string.library_search_songs_hint),
+                        modifier = Modifier
+                          .padding(horizontal = Space.page)
+                          .padding(top = Space.s, bottom = Space.xs)
+                          .testTag("library_search_songs")
+                      )
+                    }
+                    item(key = "song_order") {
+                      SongOrderRow(songOrder, onChange = { songOrder = it; onSongOrderChange(it) })
+                    }
                   }
                 }
+              },
+              trailing = { track ->
+                TrackActionsMenu(
+                  track = track,
+                  isFavorite = track.id in favoriteIds,
+                  playlists = playlists,
+                  onToggleFavorite = { onToggleFavorite(track) },
+                  onPlayNext = { onPlayNext(track) },
+                  onAddToQueue = { onAddToQueue(track) },
+                  onAddToPlaylist = { id -> onAddToPlaylist(id, track) },
+                  onCreatePlaylist = { name -> onCreatePlaylistWith(name, track) },
+                  modifier = Modifier.trailingEdge()
+                )
               },
               index = { com.example.data.playback.LibrarySort.section(it, songOrder) },
               subtitle = { t ->
@@ -644,19 +691,27 @@ private fun TrackList(
       firsts.entries.map { it.key to it.value }
     }
   }
+  // Only worth it for a long list with several letters, and only where there is height for 26 of them.
+  val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 480
+  val showStrip = letters.size >= 3 && tracks.size >= 30 && !compact
   Box(modifier = Modifier.fillMaxSize()) {
   LazyColumn(
     state = listState,
     modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
+    // With the strip on, rows and their dividers stop before it instead of running under it.
+    contentPadding = PaddingValues(
+      end = if (showStrip) LetterStripWidth else 0.dp,
+      bottom = LocalBarInset.current + Space.l
+    )
   ) {
     header()
     if (tracks.isEmpty()) {
-      // Centered in the space the list has, below whatever the header holds.
+      // Centered in the space the list has above the bars, below whatever the header holds. With little
+      // height (landscape) it starts at the top, so the text is not pushed behind the mini player.
       item(key = "empty") {
         Box(
-          modifier = Modifier.fillMaxWidth().fillParentMaxHeight(0.8f),
-          contentAlignment = Alignment.Center
+          modifier = Modifier.fillMaxWidth().fillParentMaxHeight(if (compact) 0.6f else 0.8f),
+          contentAlignment = if (compact) Alignment.TopCenter else Alignment.Center
         ) { empty() }
       }
     } else {
@@ -677,8 +732,7 @@ private fun TrackList(
       }
     }
   }
-  // Only worth it for a long list with several letters.
-  if (letters.size >= 3 && tracks.size >= 30) {
+  if (showStrip) {
     // The tracks are the list's last items: header rows and the play row come before them.
     LetterStrip(
       letters = letters.map { it.first },
@@ -697,8 +751,17 @@ private fun TrackList(
 
 /** The order of the device's songs: title, artist, album or newest first. */
 @Composable
-private fun SongOrderRow(order: com.example.data.playback.SongOrder, onChange: (com.example.data.playback.SongOrder) -> Unit) {
+private fun SongOrderRow(
+  order: com.example.data.playback.SongOrder,
+  onChange: (com.example.data.playback.SongOrder) -> Unit,
+  modifier: Modifier = Modifier
+) {
+  val rowState = androidx.compose.foundation.lazy.rememberLazyListState()
+  // The chosen chip comes into view: the last ones sit past the right edge on a narrow screen.
+  LaunchedEffect(order) { rowState.animateScrollToItem(order.ordinal) }
   androidx.compose.foundation.lazy.LazyRow(
+    state = rowState,
+    modifier = modifier,
     horizontalArrangement = Arrangement.spacedBy(Space.xs),
     contentPadding = PaddingValues(horizontal = Space.page - Space.xs, vertical = Space.xs)
   ) {
@@ -714,14 +777,18 @@ private fun SongOrderRow(order: com.example.data.playback.SongOrder, onChange: (
   }
 }
 
+/** Width of the A–Z strip: a touch target close to the 48 dp minimum; sliding makes the height forgiving. */
+private val LetterStripWidth = 44.dp
+
 /**
  * A–Z strip on the list's right edge: touching or sliding along it jumps to the first track of the
  * letter under the finger, with a tick per letter and the letter shown large beside it.
- * TalkBack users scroll the list itself, so the strip is hidden from it.
+ * TalkBack reads it as one element; users of it scroll the list itself.
  */
 @Composable
 private fun LetterStrip(letters: List<String>, onLetter: (String) -> Unit, modifier: Modifier = Modifier) {
   val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+  val stripDescription = stringResource(R.string.library_letter_strip)
   var active by remember { mutableStateOf<String?>(null) }
   var height by remember { mutableStateOf(1) }
   fun pick(y: Float) {
@@ -765,7 +832,7 @@ private fun LetterStrip(letters: List<String>, onLetter: (String) -> Unit, modif
     }
     Column(
       modifier = Modifier
-        .padding(end = Space.xxs)
+        .width(LetterStripWidth)
         .onSizeChanged { height = it.height.coerceAtLeast(1) }
         .pointerInput(letters) {
           awaitEachGesture {
@@ -782,7 +849,8 @@ private fun LetterStrip(letters: List<String>, onLetter: (String) -> Unit, modif
             active = null
           }
         }
-        .clearAndSetSemantics {}
+        // One element for TalkBack; the list itself scrolls with its own gestures.
+        .clearAndSetSemantics { contentDescription = stripDescription }
         .testTag("letter_strip"),
       horizontalAlignment = Alignment.CenterHorizontally
     ) {

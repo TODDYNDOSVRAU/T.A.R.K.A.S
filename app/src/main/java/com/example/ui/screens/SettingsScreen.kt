@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -138,6 +139,8 @@ fun SettingsScreen(
   // Where the open text was reached from, so back returns there (Terms and Privacy open from both).
   var textOrigin by rememberSaveable { mutableStateOf(SettingsPage.MAIN) }
   val reduced = rememberReducedMotion()
+  // Kept here, outside the page switch, so coming back from Sobre lands where the list was left.
+  val mainListState = androidx.compose.foundation.lazy.rememberLazyListState()
   LaunchedEffect(page) { onSubPageChange(page != SettingsPage.MAIN) }
 
   fun openText(target: SettingsPage, from: SettingsPage) {
@@ -168,7 +171,8 @@ fun SettingsScreen(
         onOpenAudio, cacheSizeBytes, onClearCache, onExportData, onEraseAllData,
         onOpenAbout = { page = SettingsPage.ABOUT },
         onOpenTerms = { openText(SettingsPage.TERMS, SettingsPage.MAIN) },
-        onOpenPrivacy = { openText(SettingsPage.PRIVACY, SettingsPage.MAIN) }
+        onOpenPrivacy = { openText(SettingsPage.PRIVACY, SettingsPage.MAIN) },
+        listState = mainListState
       )
       SettingsPage.ABOUT -> AboutPage(
         termsAcceptedAt = termsAcceptedAt,
@@ -176,10 +180,11 @@ fun SettingsScreen(
         onOpen = { openText(it, SettingsPage.ABOUT) },
         onRestartOnboarding = onRestartOnboarding
       )
-      SettingsPage.TERMS -> LegalScreen(LegalTexts.terms, textOrigin.backLabel(), onBack = ::back)
-      SettingsPage.PRIVACY -> LegalScreen(LegalTexts.privacy, textOrigin.backLabel(), onBack = ::back)
-      SettingsPage.LICENSES -> LegalScreen(LegalTexts.licenses, textOrigin.backLabel(), onBack = ::back)
-      SettingsPage.CHANGELOG -> LegalScreen(LegalTexts.changelog, textOrigin.backLabel(), onBack = ::back)
+      // These pages draw their own header, so they keep it below the status bar themselves.
+      SettingsPage.TERMS -> LegalScreen(LegalTexts.terms, textOrigin.backLabel(), onBack = ::back, modifier = Modifier.statusBarsPadding())
+      SettingsPage.PRIVACY -> LegalScreen(LegalTexts.privacy, textOrigin.backLabel(), onBack = ::back, modifier = Modifier.statusBarsPadding())
+      SettingsPage.LICENSES -> LegalScreen(LegalTexts.licenses, textOrigin.backLabel(), onBack = ::back, modifier = Modifier.statusBarsPadding())
+      SettingsPage.CHANGELOG -> LegalScreen(LegalTexts.changelog, textOrigin.backLabel(), onBack = ::back, modifier = Modifier.statusBarsPadding())
     }
   }
 }
@@ -226,7 +231,8 @@ private fun MainSettings(
   onEraseAllData: () -> Unit,
   onOpenAbout: () -> Unit,
   onOpenTerms: () -> Unit,
-  onOpenPrivacy: () -> Unit
+  onOpenPrivacy: () -> Unit,
+  listState: androidx.compose.foundation.lazy.LazyListState
 ) {
   val colors = MaterialTheme.colorScheme
   val context = LocalContext.current
@@ -249,6 +255,7 @@ private fun MainSettings(
   }
 
   LazyColumn(
+    state = listState,
     modifier = Modifier.fillMaxSize(),
     contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
   ) {
@@ -499,7 +506,7 @@ private fun AboutPage(
   }
 
   LazyColumn(
-    modifier = Modifier.fillMaxSize().testTag("settings_about_page"),
+    modifier = Modifier.statusBarsPadding().fillMaxSize().testTag("settings_about_page"),
     contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
   ) {
     item {

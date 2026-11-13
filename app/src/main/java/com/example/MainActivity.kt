@@ -433,7 +433,9 @@ fun TarkasAppContent(
       }
     )
     var barHeightPx by remember { mutableIntStateOf(0) }
-    val barInset = with(LocalDensity.current) { barHeightPx.toDp() }
+    // The full player has no bars, only short messages floating over it: they must not push its layout
+    // up while they show (they float over the controls instead).
+    val barInset = if (currentTab == TarkasNavTab.MUSIC) 0.dp else with(LocalDensity.current) { barHeightPx.toDp() }
     // Scrolling a page down draws the tab capsule back; scrolling up (or changing tab) restores it.
     var navCollapsed by remember { mutableStateOf(false) }
     LaunchedEffect(currentTab) { navCollapsed = false }
@@ -459,7 +461,6 @@ fun TarkasAppContent(
     Box(
       modifier = Modifier
         .fillMaxSize()
-        .padding(contentPadding)
         .then(if (blurAllowed) Modifier.hazeSource(hazeState) else Modifier)
         .then(if (liquidOn) Modifier.layerBackdrop(backdrop) else Modifier)
         .nestedScroll(navScroll)
@@ -490,6 +491,9 @@ fun TarkasAppContent(
       Column(
         modifier = Modifier
           .fillMaxSize()
+          // The pages keep clear of the side insets (camera cutout in landscape); the full player does
+          // not, so its background reaches the screen edge and only its content keeps clear.
+          .padding(contentPadding)
           .then(
             when (screen) {
               // The growing shape takes the colour read from the artwork (PlayerOrigin.tint, set by the
@@ -599,6 +603,10 @@ fun TarkasAppContent(
             onDeletePlaylist = { id -> viewModel.deletePlaylist(id) },
             onRemoveFromPlaylist = { id, trackId -> viewModel.removeFromPlaylist(id, trackId) },
             onToggleFavorite = { track -> viewModel.toggleFavorite(track) },
+            onPlayNext = { track -> viewModel.playNext(track) },
+            onAddToQueue = { track -> viewModel.addToQueue(track) },
+            onAddToPlaylist = { id, track -> viewModel.addToPlaylist(id, track) },
+            onCreatePlaylistWith = { name, track -> viewModel.createPlaylist(name, track) },
             onPlayQueueItem = { index ->
               viewModel.playFromQueue(index)
               viewModel.setTab(TarkasNavTab.MUSIC)
@@ -975,7 +983,12 @@ fun TarkasAppContent(
         // alpha taken from the player's shrink progress, so shrink and appearance are one movement.
         val miniFromPlayer = com.example.ui.theme.PlayerOrigin.progress != null &&
           currentTab != TarkasNavTab.MUSIC && !com.example.ui.theme.rememberReducedMotion()
+        // In landscape (under 480 dp tall) the mini player and the tab bar share one row, so they take
+        // one bar's height instead of two. Portrait keeps them stacked, as before.
+        val compactBars = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 480
+        val bars: @Composable (Modifier, Modifier) -> Unit = { miniSlot, navSlot ->
         AnimatedVisibility(
+          modifier = miniSlot,
           visible = currentTab != TarkasNavTab.MUSIC && currentTrack != null && !imeVisible && !barsHidden,
           enter = if (miniFromPlayer || com.example.ui.theme.rememberReducedMotion()) androidx.compose.animation.EnterTransition.None
             else androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220, delayMillis = 60)) +
@@ -1010,6 +1023,7 @@ fun TarkasAppContent(
 
         // The full player covers the tab bar, as in Apple Music; it slides back when the player closes.
         AnimatedVisibility(
+          modifier = navSlot,
           visible = currentTab != TarkasNavTab.MUSIC && !imeVisible && !barsHidden,
           enter = if (reducedChrome) androidx.compose.animation.EnterTransition.None
             else androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200, delayMillis = 80)) +
@@ -1029,6 +1043,15 @@ fun TarkasAppContent(
             },
             collapsed = navCollapsed
           )
+        }
+        }
+        if (compactBars) {
+          Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Bottom
+          ) { bars(Modifier.weight(1f), Modifier.width(360.dp)) }
+        } else {
+          bars(Modifier, Modifier)
         }
        }
       }

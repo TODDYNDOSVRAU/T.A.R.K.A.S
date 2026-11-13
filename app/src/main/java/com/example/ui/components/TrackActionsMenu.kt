@@ -115,7 +115,8 @@ fun TrackActionsMenu(
       onDismissRequest = { expanded = false; showPlaylists = false },
       sheetState = sheetState,
       containerColor = MaterialTheme.colorScheme.surfaceContainer,
-      shape = RoundedCornerShape(topStart = Radius.l, topEnd = Radius.l)
+      shape = RoundedCornerShape(topStart = Radius.l, topEnd = Radius.l),
+      dragHandle = { SheetHandle() }
     ) {
       Column(
         modifier = Modifier
@@ -244,7 +245,8 @@ fun QueueItemMenu(
       onDismissRequest = { expanded = false },
       sheetState = sheetState,
       containerColor = MaterialTheme.colorScheme.surfaceContainer,
-      shape = RoundedCornerShape(topStart = Radius.l, topEnd = Radius.l)
+      shape = RoundedCornerShape(topStart = Radius.l, topEnd = Radius.l),
+      dragHandle = { SheetHandle() }
     ) {
       Column(
         modifier = Modifier

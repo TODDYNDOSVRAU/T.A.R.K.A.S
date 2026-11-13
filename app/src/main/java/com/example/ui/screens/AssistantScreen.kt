@@ -174,9 +174,12 @@ fun AssistantScreen(
   }
 
   // Keep the newest message in view: index 0 is the header, messages follow.
-  LaunchedEffect(messages.size) {
-    if (messages.isNotEmpty()) {
-      if (reduced) listState.scrollToItem(messages.size) else listState.animateScrollToItem(messages.size)
+  // The last item is the "thinking" line while a reply is pending, otherwise the newest message. Scrolling to
+  // the message index alone left that line below the fold after sending (F23).
+  val lastIndex = messages.size + (if (isProcessing) 1 else 0)
+  LaunchedEffect(messages.size, isProcessing) {
+    if (messages.isNotEmpty() || isProcessing) {
+      if (reduced) listState.scrollToItem(lastIndex) else listState.animateScrollToItem(lastIndex)
     }
   }
 
