@@ -133,6 +133,7 @@ fun SettingsScreen(
   cacheSizeBytes: suspend () -> Long = { 0L },
   onClearCache: (onDone: () -> Unit) -> Unit = {},
   onExportData: (Uri) -> Unit = {},
+  onRestoreData: (Uri) -> Unit = {},
   onExportDiagnostics: (Uri) -> Unit = {},
   onEraseAllData: () -> Unit = {},
   onRestartOnboarding: () -> Unit = {},
@@ -175,7 +176,7 @@ fun SettingsScreen(
           if (onSetRepeatMode != null) onSetRepeatMode(target)
           else repeat((target.ordinal - repeatMode.ordinal + RepeatMode.entries.size) % RepeatMode.entries.size) { onCycleRepeat() }
         },
-        onOpenAudio, cacheSizeBytes, onClearCache, onExportData, onExportDiagnostics, onEraseAllData,
+        onOpenAudio, cacheSizeBytes, onClearCache, onExportData, onRestoreData, onExportDiagnostics, onEraseAllData,
         onOpenAbout = { page = SettingsPage.ABOUT },
         onOpenTerms = { openText(SettingsPage.TERMS, SettingsPage.MAIN) },
         onOpenPrivacy = { openText(SettingsPage.PRIVACY, SettingsPage.MAIN) },
@@ -237,6 +238,7 @@ private fun MainSettings(
   cacheSizeBytes: suspend () -> Long,
   onClearCache: (onDone: () -> Unit) -> Unit,
   onExportData: (Uri) -> Unit,
+  onRestoreData: (Uri) -> Unit,
   onExportDiagnostics: (Uri) -> Unit,
   onEraseAllData: () -> Unit,
   onOpenAbout: () -> Unit,
@@ -253,7 +255,10 @@ private fun MainSettings(
   val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
     if (uri != null) onExportData(uri)
   }
-  val diagnosticsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+  val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    if (uri != null) onRestoreData(uri)
+  }
+  val diagnosticsLauncher =rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
     if (uri != null) onExportDiagnostics(uri)
   }
   val languageHeader = stringResource(R.string.settings_language)
@@ -466,6 +471,13 @@ private fun MainSettings(
       )
       GroupDivider()
       ListRow(title = stringResource(R.string.settings_export), onClick = { exportLauncher.launch("tarkas-meus-dados.json") }, modifier = Modifier.testTag("settings_export"))
+      GroupDivider()
+      ListRow(
+        title = stringResource(R.string.settings_restore),
+        subtitle = stringResource(R.string.settings_restore_subtitle),
+        onClick = { restoreLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
+        modifier = Modifier.testTag("settings_restore")
+      )
       GroupDivider()
       ListRow(title = stringResource(R.string.settings_privacy_policy), onClick = onOpenPrivacy, modifier = Modifier.testTag("settings_privacy"))
       GroupDivider()

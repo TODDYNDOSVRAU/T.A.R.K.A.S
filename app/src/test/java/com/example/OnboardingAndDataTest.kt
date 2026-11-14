@@ -66,7 +66,8 @@ class OnboardingAndDataTest {
   @Test
   fun theOldAccentChoiceIsDropped() {
     val context = ApplicationProvider.getApplicationContext<Context>()
-    context.getSharedPreferences("tarkas_prefs", Context.MODE_PRIVATE).edit().putString("accent", "lilac").commit()
+    // A file from before versions existed: no prefs_version, and the old accent still in it.
+    context.getSharedPreferences("tarkas_prefs", Context.MODE_PRIVATE).edit().remove("prefs_version").putString("accent", "lilac").commit()
     val exported = PreferencesRepository(context).exportAll()
     assertFalse(exported.containsKey("accent"))
   }

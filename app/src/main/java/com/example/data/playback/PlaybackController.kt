@@ -3,6 +3,8 @@ package com.example.data.playback
 import android.content.Context
 import androidx.annotation.StringRes
 import com.example.R
+import com.example.data.db.AppDatabase
+import com.example.data.library.LibraryMigration
 import com.example.data.diagnostics.Diagnostics
 import com.example.data.assistant.CuriositySpeechManager
 import com.example.data.audio.AudioEngineManager
@@ -59,10 +61,11 @@ class PlaybackController(
   private val curiosityRepository: CuriosityRepository,
   private val audioEngine: AudioEngineManager,
   private val preferences: PreferencesRepository,
-  private val speech: CuriositySpeechManager
+  private val speech: CuriositySpeechManager,
+  private val database: AppDatabase
 ) {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-  private val store = context.getSharedPreferences("tarkas_playback", Context.MODE_PRIVATE)
+  private val store = PlaybackStateStore(database.playback())
 
   val currentTrack: StateFlow<Track?> get() = musicRepository.currentTrack
 
@@ -75,7 +78,7 @@ class PlaybackController(
   val crossfadeSeconds: StateFlow<Int> = _crossfadeSeconds.asStateFlow()
 
   // Play and skip counters (declared before init, which restores the last track).
-  private val stats = PlayStatsStore(context)
+  private val stats = PlayStatsStore(database.playStats())
   /** The track whose end is not recorded yet: set when its audio starts, cleared when it ends. */
   private var unrecorded: Track? = null
   private val _playCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
@@ -149,6 +152,18 @@ class PlaybackController(
 
   init {
     restore()
+    // The play counters of the old preferences file are copied once, before anything is counted.
+    scope.launch {
+      try {
+        stats.migrateFrom(
+          context.getSharedPreferences(PlayStatsStore.FILE, Context.MODE_PRIVATE),
+          context.getSharedPreferences(PlaybackStateStore.FLAGS_FILE, Context.MODE_PRIVATE),
+          database
+        )
+      } catch (e: Exception) {
+        Diagnostics.record("playback.migrate", "Play statistics migration failed", e)
+      }
+    }
     // Playing from the whole library, its neighbours change when the library is (re)loaded.
     scope.launch {
       musicRepository.tracks.drop(1).collect { if (contextTracks == null) refreshNeighbors() }
@@ -198,7 +213,7 @@ class PlaybackController(
   fun loadPlayCounts() {
     if (playCountsLoaded) return
     playCountsLoaded = true
-    scope.launch { _playCounts.value = withContext(Dispatchers.IO) { stats.allPlays() } }
+    scope.launch { _playCounts.value = stats.allPlays() }
   }
 
   /** Records how the current track ended (see [PlayRules]); nothing when it was recorded already. */
@@ -208,8 +223,10 @@ class PlaybackController(
     if (t.isDemo) return
     val duration = t.durationMs.takeIf { it > 0 } ?: durationMs.value
     val played = if (reason == EndReason.NATURAL) duration else positionMs.value
-    val after = stats.record(t.id, reason, played, duration)
-    if (playCountsLoaded && _playCounts.value[t.id] != after.plays) _playCounts.value = _playCounts.value + (t.id to after.plays)
+    scope.launch {
+      val after = stats.record(t.id, reason, played, duration)
+      if (playCountsLoaded && _playCounts.value[t.id] != after.plays) _playCounts.value = _playCounts.value + (t.id to after.plays)
+    }
   }
 
   /**
@@ -682,37 +699,65 @@ class PlaybackController(
   private fun save() {
     val current = musicRepository.currentTrack.value
     if (current == null) {
-      store.edit().clear().apply()
+      store.clear()
       return
     }
     val o = JSONObject()
       .put("current", TrackJson.toJson(current))
       .put("queue", TrackJson.listToJson(_queue.value))
     contextTracks?.let { o.put("context", TrackJson.listToJson(it)) }
-    store.edit()
-      .putString(KEY_STATE, o.toString())
-      .putLong(KEY_POSITION, positionMs.value)
-      .putString(KEY_POSITION_TRACK, current.id)
-      .apply()
+    store.save(o.toString(), positionMs.value, current.id)
   }
 
   /** The position goes with the track it belongs to, so a lost write never moves another track. */
   private fun savePosition() {
     val current = musicRepository.currentTrack.value ?: return
-    store.edit().putLong(KEY_POSITION, positionMs.value).putString(KEY_POSITION_TRACK, current.id).apply()
+    store.savePosition(positionMs.value, current.id)
   }
 
   /** Puts back the track, its position, the queue and the list it came from, paused. */
   private fun restore() {
-    val raw = try { store.getString(KEY_STATE, null) } catch (_: Exception) { null }
-    val owner = try { store.getString(KEY_POSITION_TRACK, null) } catch (_: Exception) { null }
-    val storedPosition = try { if (store.contains(KEY_POSITION)) store.getLong(KEY_POSITION, 0L) else null } catch (_: Exception) { null }
-    when (val outcome = PlaybackRestore.read(raw, owner, storedPosition)) {
+    // The old preferences are copied first, then the row is read; both wait their turn behind any write,
+    // and the player stays as it is (paused, nothing selected) until the answer comes.
+    scope.launch {
+      val row = try {
+        store.migrateFrom(
+          context.getSharedPreferences(PlaybackStateStore.OLD_FILE, Context.MODE_PRIVATE),
+          context.getSharedPreferences(PlaybackStateStore.FLAGS_FILE, Context.MODE_PRIVATE)
+        )
+        remapPickedIds()
+        store.load()
+      } catch (e: Exception) {
+        Diagnostics.record("playback.restore", "Saved playback could not be read from the database", e)
+        null
+      }
+      // Something was already chosen while the row was being read: that choice wins.
+      if (musicRepository.currentTrack.value != null) return@launch
+      applyOutcome(PlaybackRestore.read(row?.stateJson, row?.positionTrackId, row?.positionMs?.takeIf { it >= 0 }))
+    }
+  }
+
+  /** Once the library has moved to its new ids, what the player stored under the old ones follows. */
+  private suspend fun remapPickedIds() {
+    val flags = context.getSharedPreferences(PlaybackStateStore.FLAGS_FILE, Context.MODE_PRIVATE)
+    try {
+      LibraryMigration.ensure(context, database)
+      val map = LibraryMigration.idMap(database)
+      stats.migrateFrom(context.getSharedPreferences(PlayStatsStore.FILE, Context.MODE_PRIVATE), flags, database)
+      store.remapIds(map, flags)
+      stats.remapIds(map, flags, database)
+    } catch (e: Exception) {
+      Diagnostics.record("playback.migrate", "Old picked-file ids could not be rewritten; will try again", e)
+    }
+  }
+
+  private fun applyOutcome(outcome: RestoreOutcome) {
+    when (outcome) {
       RestoreOutcome.Nothing -> return
       is RestoreOutcome.Unreadable -> {
         // Only what cannot be read is cleared; the message carries no title or path.
         Diagnostics.record("playback.restore", "Saved playback cleared: ${outcome.reason}")
-        store.edit().clear().apply()
+        store.clear()
         return
       }
       is RestoreOutcome.Restored -> {
@@ -771,9 +816,6 @@ class PlaybackController(
     const val RESTART_THRESHOLD_MS = 3000L
     const val SAVE_EVERY_MS = 10_000L
     const val SLEEP_FADE_MS = 6000L
-    const val KEY_STATE = "state"
-    const val KEY_POSITION = "pos"
-    const val KEY_POSITION_TRACK = "pos_track"
     /** How many of the list's next tracks the queue screen shows after the queue. */
     const val UPCOMING_SHOWN = 20
   }

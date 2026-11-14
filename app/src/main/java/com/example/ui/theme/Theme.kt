@@ -96,15 +96,11 @@ fun TarkasTheme(
   themeMode: String = "system",
   content: @Composable () -> Unit
 ) {
-  val isDark = when (themeMode) {
-    "amoled" -> true
-    "dark" -> true
-    "light" -> false
-    else -> isSystemInDarkTheme()
-  }
+  val systemDark = isSystemInDarkTheme()
+  val isDark = ThemeMode.isDark(themeMode) { systemDark }
 
   val colorScheme = when {
-    themeMode == "amoled" -> TarkasAmoledColorScheme
+    ThemeMode.isAmoled(themeMode) -> TarkasAmoledColorScheme
     isDark -> TarkasDarkColorScheme
     else -> TarkasLightColorScheme
   }

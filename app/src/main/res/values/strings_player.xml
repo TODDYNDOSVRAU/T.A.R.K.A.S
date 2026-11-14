@@ -377,6 +377,10 @@
     <string name="player_sheet_handle">Drag to close</string>
     <string name="player_export_saved">Your data was saved.</string>
     <string name="player_export_failed">Could not save the file.</string>
+    <string name="settings_restore">Restore my data</string>
+    <string name="settings_restore_subtitle">Replaces what is in the app with a file from Export my data.</string>
+    <string name="player_restore_done">Data restored. The app is reopening.</string>
+    <string name="player_restore_failed">Could not restore: %1$s. Nothing was changed.</string>
     <string name="player_notice_skipped">Could not play “%1$s”. Skipping to the next.</string>
     <string name="player_notice_offline">No connection to play “%1$s”. Check the internet and tap Try again.</string>
     <string name="player_notice_failed">Could not play “%1$s”.</string>

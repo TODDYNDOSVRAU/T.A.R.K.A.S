@@ -5,6 +5,7 @@ import android.content.Context
 /** What the updater remembers between runs: the two switches, the last check and the release waiting. */
 class UpdateStore(context: Context) {
   private val prefs = context.getSharedPreferences("tarkas_update", Context.MODE_PRIVATE)
+    .also { com.example.data.storage.PrefsVersion.upgrade(it, listOf({ _ -> })) }
 
   /** Automatic checks (periodic and on opening the app). Manual checks always work. */
   var autoEnabled: Boolean

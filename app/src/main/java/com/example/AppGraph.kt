@@ -24,6 +24,10 @@ object AppGraph {
   lateinit var libraryRepository: LibraryRepository private set
   lateinit var playback: PlaybackController private set
 
+  /** The one database (Fase 3). Opened on first use; every access runs off the main thread. */
+  val database: com.example.data.db.AppDatabase by lazy { com.example.data.db.AppDatabase.open(appContext) }
+  private lateinit var appContext: Context
+
   /** Where the player reads each track's waveform; the library side replaces it once it can calculate them. */
   @Volatile var waveformSource: com.example.data.repository.WaveformSource = com.example.data.repository.WaveformSource.None
 
@@ -33,9 +37,20 @@ object AppGraph {
   @Synchronized
   fun init(context: Context) {
     if (initialized) return
+    // Named so the opening cost can be read in a system trace and compared between versions.
+    android.os.Trace.beginSection("AppGraph.init")
+    try {
+      initGraph(context)
+    } finally {
+      android.os.Trace.endSection()
+    }
+  }
+
+  private fun initGraph(context: Context) {
     val app = context.applicationContext
+    appContext = app
     com.example.data.diagnostics.Diagnostics.install(app)
-    musicRepository = MusicRepository(app)
+    musicRepository = MusicRepository(app, lazy { database })
     curiosityRepository = CuriosityRepository(app)
     audioEngineManager = AudioEngineManager(app)
     preferencesRepository = PreferencesRepository(app)
@@ -49,7 +64,7 @@ object AppGraph {
     )
     curiositySpeechManager = CuriositySpeechManager(app)
     com.example.data.model.Placeholders.init(app)
-    libraryRepository = LibraryRepository(app)
+    libraryRepository = LibraryRepository(app, database)
     waveforms = com.example.data.waveform.WaveformRepository(
       app, kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
     )
@@ -60,7 +75,8 @@ object AppGraph {
       curiosityRepository = curiosityRepository,
       audioEngine = audioEngineManager,
       preferences = preferencesRepository,
-      speech = curiositySpeechManager
+      speech = curiositySpeechManager,
+      database = database
     )
     initialized = true
   }

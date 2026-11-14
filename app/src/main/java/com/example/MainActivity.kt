@@ -221,11 +221,8 @@ class MainActivity : ComponentActivity() {
       }
 
       // Status and navigation bar icons must follow the app theme, not only the system theme.
-      val isDarkApp = when (themeMode) {
-        "amoled", "dark" -> true
-        "light" -> false
-        else -> isSystemInDarkTheme()
-      }
+      val systemDark = isSystemInDarkTheme()
+      val isDarkApp = com.example.ui.theme.ThemeMode.isDark(themeMode) { systemDark }
       SideEffect {
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         controller.isAppearanceLightNavigationBars = !isDarkApp
@@ -390,11 +387,8 @@ fun TarkasAppContent(
 
   // Status bar icons follow the app theme, except on the Now Playing page, which is always a dark tint.
   val hostView = LocalView.current
-  val isDarkTheme = when (themeMode) {
-    "amoled", "dark" -> true
-    "light" -> false
-    else -> isSystemInDarkTheme()
-  }
+  val systemDarkTheme = isSystemInDarkTheme()
+  val isDarkTheme = com.example.ui.theme.ThemeMode.isDark(themeMode) { systemDarkTheme }
   val statusOverDarkPage = currentTab == TarkasNavTab.MUSIC && !overlayOpen
   SideEffect {
     val activityWindow = (hostView.context as? android.app.Activity)?.window ?: return@SideEffect
@@ -746,6 +740,7 @@ fun TarkasAppContent(
             cacheSizeBytes = { viewModel.cacheSizeBytes() },
             onClearCache = { done -> viewModel.clearCache(done) },
             onExportData = { uri -> viewModel.writeExport(uri) },
+            onRestoreData = { uri -> viewModel.restoreFrom(uri) },
             onExportDiagnostics = { uri -> viewModel.writeDiagnostics(uri) },
             onEraseAllData = { viewModel.eraseAllData() },
             onRestartOnboarding = { viewModel.restartOnboarding() },

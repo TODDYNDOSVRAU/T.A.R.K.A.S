@@ -2,6 +2,7 @@ package com.example.data.audio.loudness
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.example.data.storage.PrefsVersion
 
 /**
  * The normalization mode and the loudness measured for each track, in a preferences file of their own:
@@ -13,6 +14,7 @@ class LoudnessStore(context: Context) {
 
   private val prefs: SharedPreferences =
     context.getSharedPreferences("tarkas_loudness", Context.MODE_PRIVATE)
+      .also { PrefsVersion.upgrade(it, listOf({ _ -> })) }
 
   var mode: NormalizationMode
     get() = prefs.getString(KEY_MODE, null)

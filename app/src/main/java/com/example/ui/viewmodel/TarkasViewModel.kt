@@ -856,36 +856,54 @@ class TarkasViewModel(
     }
   }
 
-  /** Everything the app keeps about the user, as JSON (LGPD: access and portability). */
-  fun exportUserDataJson(): String {
-    fun prefsJson(name: String) = org.json.JSONObject().apply {
-      context.getSharedPreferences(name, android.content.Context.MODE_PRIVATE).all.toSortedMap().forEach { (k, v) ->
-        // Lists and objects are stored as JSON text: put them back as JSON, not as quoted strings.
-        val parsed = (v as? String)?.trim()?.let { s ->
-          runCatching { if (s.startsWith("{")) org.json.JSONObject(s) else if (s.startsWith("[")) org.json.JSONArray(s) else null }.getOrNull()
-        }
-        put(k, parsed ?: v)
-      }
-    }
-    return org.json.JSONObject()
-      .put("app", "T.A.R.K.A.S.")
-      .put("version", com.example.BuildConfig.VERSION_NAME)
-      .put("exportedAt", java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.US).format(java.util.Date()))
-      .put("preferences", prefsJson("tarkas_prefs"))
-      .put("library", prefsJson("tarkas_library"))
-      // Per track: "plays|skips|last played ms|last skipped ms".
-      .put("playStats", prefsJson(com.example.data.playback.PlayStatsStore.FILE))
-      .toString(2)
+  private val userDataBackup by lazy {
+    com.example.data.backup.UserDataBackup(graph.database) { context.getSharedPreferences(it, android.content.Context.MODE_PRIVATE) }
   }
+
+  /** Everything the app keeps about the user, as JSON (LGPD: access and portability; also what Restore reads). */
+  suspend fun exportUserDataJson(): String =
+    userDataBackup.export(
+      com.example.BuildConfig.VERSION_NAME,
+      java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", java.util.Locale.US).format(java.util.Date())
+    ).toString(2)
 
   fun writeExport(uri: android.net.Uri) {
     viewModelScope.launch {
       val ok = withContext(Dispatchers.IO) {
         runCatching {
-          context.contentResolver.openOutputStream(uri)?.use { it.write(exportUserDataJson().toByteArray()) } != null
+          val text = exportUserDataJson()
+          context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } != null
         }.getOrDefault(false)
       }
       showNotice(Notice(context.getString(if (ok) com.example.R.string.player_export_saved else com.example.R.string.player_export_failed)))
+    }
+  }
+
+  /** Restores a file made by [writeExport]. A file that is not valid changes nothing; a valid one reopens the app. */
+  fun restoreFrom(uri: android.net.Uri) {
+    viewModelScope.launch {
+      val failure = withContext(Dispatchers.IO) {
+        try {
+          val text = context.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+            ?: return@withContext "the file could not be read"
+          userDataBackup.restore(text)
+          null
+        } catch (e: com.example.data.backup.RestoreException) {
+          e.reason
+        } catch (e: java.io.IOException) {
+          "the file could not be read"
+        }
+      }
+      if (failure != null) {
+        showNotice(Notice(context.getString(com.example.R.string.player_restore_failed, failure)))
+        return@launch
+      }
+      showNotice(Notice(context.getString(com.example.R.string.player_restore_done)))
+      // Every screen and the player read their data at start-up: reopen the process on the restored data.
+      kotlinx.coroutines.delay(1200)
+      val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+      if (launch != null) context.startActivity(launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK))
+      Runtime.getRuntime().exit(0)
     }
   }
 

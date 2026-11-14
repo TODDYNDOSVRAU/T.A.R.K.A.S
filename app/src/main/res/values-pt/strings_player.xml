@@ -377,6 +377,10 @@
     <string name="player_sheet_handle">Arrastar para fechar</string>
     <string name="player_export_saved">Seus dados foram salvos.</string>
     <string name="player_export_failed">Não foi possível salvar o arquivo.</string>
+    <string name="settings_restore">Restaurar meus dados</string>
+    <string name="settings_restore_subtitle">Substitui o que está no app por um arquivo de Exportar meus dados.</string>
+    <string name="player_restore_done">Dados restaurados. O app vai reabrir.</string>
+    <string name="player_restore_failed">Não foi possível restaurar: %1$s. Nada foi alterado.</string>
     <string name="player_notice_skipped">Não foi possível tocar “%1$s”. Pulando para a próxima.</string>
     <string name="player_notice_offline">Sem conexão para tocar “%1$s”. Confira a internet e toque em Tentar de novo.</string>
     <string name="player_notice_failed">Não foi possível tocar “%1$s”.</string>

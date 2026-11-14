@@ -6,6 +6,7 @@ import com.example.data.model.AudioProfile
 import com.example.data.model.EqPreset
 import com.example.data.model.EqPresets
 import com.example.data.model.EqSettings
+import com.example.data.storage.PrefsVersion
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -102,7 +103,7 @@ class PreferencesRepository(context: Context) {
   init {
     // The accent picker is gone (the colours follow the T.A.L. palette); drop the old choice so it
     // does not linger in the settings export.
-    if (prefs.contains("accent")) prefs.edit().remove("accent").apply()
+    PrefsVersion.upgrade(prefs, listOf({ e -> e.remove("accent") }))
   }
 
   /** First-run setup finished, and which version of the terms the user accepted, and when. */
