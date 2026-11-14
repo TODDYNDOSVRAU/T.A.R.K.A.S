@@ -713,7 +713,8 @@ fun TarkasAppContent(
             hasGeminiKey = viewModel.assistantEngine.hasGeminiKey,
             activeTimers = activeTimers,
             onSendMessage = { text -> viewModel.sendAssistantMessage(text) },
-            onCancelTimer = { id -> viewModel.cancelTimer(id) }
+            onCancelTimer = { id -> viewModel.cancelTimer(id) },
+            onRetry = { id -> viewModel.retryAssistantReply(id) }
           )
         }
 
@@ -744,6 +745,7 @@ fun TarkasAppContent(
             cacheSizeBytes = { viewModel.cacheSizeBytes() },
             onClearCache = { done -> viewModel.clearCache(done) },
             onExportData = { uri -> viewModel.writeExport(uri) },
+            onExportDiagnostics = { uri -> viewModel.writeDiagnostics(uri) },
             onEraseAllData = { viewModel.eraseAllData() },
             onRestartOnboarding = { viewModel.restartOnboarding() },
             termsAcceptedAt = viewModel.termsAcceptedAt

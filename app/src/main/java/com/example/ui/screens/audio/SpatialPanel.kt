@@ -56,6 +56,7 @@ private fun spatialStatusText(status: SpatialStatus): String = when (status) {
   SpatialStatus.PREPARING -> stringResource(R.string.audio_spatial_status_preparing)
   SpatialStatus.ACTIVE -> stringResource(R.string.audio_spatial_status_active)
   SpatialStatus.NOT_STEREO -> stringResource(R.string.audio_spatial_status_not_stereo)
+  SpatialStatus.FAILED -> stringResource(R.string.audio_spatial_status_failed)
 }
 
 /**

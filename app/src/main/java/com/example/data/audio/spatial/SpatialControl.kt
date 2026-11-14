@@ -15,7 +15,9 @@ enum class SpatialStatus {
   /** Processing the music. */
   ACTIVE,
   /** The playing track is not stereo (mono or multichannel). */
-  NOT_STEREO
+  NOT_STEREO,
+  /** The effect failed while playing (or while preparing) and the music plays without it. */
+  FAILED
 }
 
 /**
@@ -30,6 +32,12 @@ object SpatialControl {
   /** The user's intensity, 0.2..1, applied on top of the preset's own. */
   @Volatile var userIntensity = 1.0; private set
   @Volatile private var stereoInput = true
+  /**
+   * The effect failed and the processor plays the dry sound. Latched: set once ([reportFailure] says
+   * whether this call was the first), cleared when the user switches the effect off or the processor
+   * is flushed (next track or a seek), which is when the effect is tried again.
+   */
+  @Volatile var failed = false; private set
   /** Values the listener set by hand on top of each preset (only the ones that differ). */
   @Volatile private var tunings: Map<SpatialPreset, Map<SpatialKnob, Double>> = emptyMap()
 
@@ -74,6 +82,8 @@ object SpatialControl {
     this.enabled = enabled
     this.preset = preset
     this.userIntensity = intensity.coerceIn(0.0, 1.0)
+    // Switching it off and on again is how the listener tries after a failure.
+    if (!enabled) failed = false
     val params = targetParams()
     // New tables are built off the UI thread; the engine keeps gliding to the right intensity.
     worker.execute {
@@ -105,6 +115,22 @@ object SpatialControl {
   /** Only the intensity changed (a slider drag): no new tables, just a new target. */
   fun setIntensity(intensity: Double) {
     userIntensity = intensity.coerceIn(0.0, 1.0)
+    update()
+  }
+
+  /** True only for the call that moved the effect to the failed state: the caller records that one. */
+  @Synchronized
+  internal fun reportFailure(): Boolean {
+    if (failed) return false
+    failed = true
+    update()
+    return true
+  }
+
+  /** A new stream (next track, seek): the effect gets another try. */
+  internal fun clearFailure() {
+    if (!failed) return
+    failed = false
     update()
   }
 
@@ -155,6 +181,7 @@ object SpatialControl {
     _otherAppsStrength.value = if (enabled) (preset.virtualizerStrength * userIntensity).toInt().coerceIn(1, 1000) else 0
     _status.value = when {
       !enabled -> SpatialStatus.OFF
+      failed -> SpatialStatus.FAILED
       !stereoInput -> SpatialStatus.NOT_STEREO
       preparingRate != 0 -> SpatialStatus.PREPARING
       else -> SpatialStatus.ACTIVE
@@ -213,6 +240,7 @@ object SpatialControl {
       } catch (e: Throwable) {
         // Out of memory or anything else: the effect stays off, the music keeps playing.
         Log.w(TAG, "Could not prepare the spatial engine", e)
+        if (reportFailure()) com.example.data.diagnostics.Diagnostics.record("spatial.prepare", "Could not prepare the spatial engine for $sampleRate Hz", e)
       } finally {
         if (preparingRate == sampleRate) preparingRate = 0
         update()

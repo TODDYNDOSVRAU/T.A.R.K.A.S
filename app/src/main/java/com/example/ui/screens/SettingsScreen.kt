@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
@@ -130,6 +131,7 @@ fun SettingsScreen(
   cacheSizeBytes: suspend () -> Long = { 0L },
   onClearCache: (onDone: () -> Unit) -> Unit = {},
   onExportData: (Uri) -> Unit = {},
+  onExportDiagnostics: (Uri) -> Unit = {},
   onEraseAllData: () -> Unit = {},
   onRestartOnboarding: () -> Unit = {},
   termsAcceptedAt: Long = 0L,
@@ -171,7 +173,7 @@ fun SettingsScreen(
           if (onSetRepeatMode != null) onSetRepeatMode(target)
           else repeat((target.ordinal - repeatMode.ordinal + RepeatMode.entries.size) % RepeatMode.entries.size) { onCycleRepeat() }
         },
-        onOpenAudio, cacheSizeBytes, onClearCache, onExportData, onEraseAllData,
+        onOpenAudio, cacheSizeBytes, onClearCache, onExportData, onExportDiagnostics, onEraseAllData,
         onOpenAbout = { page = SettingsPage.ABOUT },
         onOpenTerms = { openText(SettingsPage.TERMS, SettingsPage.MAIN) },
         onOpenPrivacy = { openText(SettingsPage.PRIVACY, SettingsPage.MAIN) },
@@ -233,6 +235,7 @@ private fun MainSettings(
   cacheSizeBytes: suspend () -> Long,
   onClearCache: (onDone: () -> Unit) -> Unit,
   onExportData: (Uri) -> Unit,
+  onExportDiagnostics: (Uri) -> Unit,
   onEraseAllData: () -> Unit,
   onOpenAbout: () -> Unit,
   onOpenTerms: () -> Unit,
@@ -248,6 +251,12 @@ private fun MainSettings(
   val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
     if (uri != null) onExportData(uri)
   }
+  val diagnosticsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+    if (uri != null) onExportDiagnostics(uri)
+  }
+  val diagnosticsHeader = stringResource(R.string.settings_diagnostics)
+  val diagnosticsFooter = stringResource(R.string.settings_diagnostics_footer)
+  val savedCrashes = remember { com.example.data.diagnostics.Diagnostics.crashCount() }
   fun openSystem(intent: Intent) {
     runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
   }
@@ -462,6 +471,18 @@ private fun MainSettings(
         checked = waveformBar,
         onCheckedChange = onWaveformBarChange,
         modifier = Modifier.testTag("settings_waveform")
+      )
+    }
+    // Diagnóstico
+    settingsGroup(
+      diagnosticsHeader,
+      footer = diagnosticsFooter
+    ) {
+      ListRow(
+        title = stringResource(R.string.settings_diagnostics_export),
+        subtitle = pluralStringResource(R.plurals.settings_diagnostics_crashes, savedCrashes, savedCrashes),
+        onClick = { diagnosticsLauncher.launch("tarkas-diagnostics.txt") },
+        modifier = Modifier.testTag("settings_diagnostics_export")
       )
     }
     settingsGroup(header = null, footer = context.getString(R.string.settings_erase_footer)) {

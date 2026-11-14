@@ -222,6 +222,7 @@
   <string name="audio_spatial_others_waiting">Nos outros apps assim que algum tocar</string>
   <string name="audio_spatial_reset_mode">Restaurar valores do modo</string>
   <string name="audio_spatial_status_active">Ativo</string>
+  <string name="audio_spatial_status_failed">O efeito falhou e a música toca sem ele. Desligue e ligue de novo, ou passe para a próxima faixa, para tentar outra vez.</string>
   <string name="audio_spatial_status_not_stereo">Esta faixa não é estéreo nem 5.1</string>
   <string name="audio_spatial_status_off">Abre a música ao redor da cabeça</string>
   <string name="audio_spatial_status_preparing">Preparando…</string>

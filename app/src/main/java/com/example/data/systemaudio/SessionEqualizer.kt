@@ -45,6 +45,10 @@ class SessionEqualizer {
     } catch (e: Exception) {
       // The session ended between reading it and attaching, or the device refuses this session.
       Log.w(TAG, "Cannot attach to session $sessionId: ${e.javaClass.simpleName}")
+      // Once per session: the service retries a few times and each try fails the same way.
+      if (attachFailures.add(sessionId)) {
+        com.example.data.diagnostics.Diagnostics.record("eq.session.attach", "Cannot attach the equalizer to audio session $sessionId", e)
+      }
       return false
     }
     effects[sessionId] = effect
@@ -67,7 +71,11 @@ class SessionEqualizer {
   private val noControl = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
   val sessionsWithoutControl: Int get() = noControl.count { it in effects }
 
+  /** Sessions whose failed attach was already recorded, so a retry loop leaves one line, not many. */
+  private val attachFailures = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
+
   fun detach(sessionId: Int) {
+    attachFailures.remove(sessionId)
     noControl.remove(sessionId)
     sent.remove(sessionId)
     effects.remove(sessionId)?.let { runCatching { it.release() } }
@@ -116,6 +124,7 @@ class SessionEqualizer {
   }
 
   fun releaseAll() {
+    attachFailures.clear()
     effects.values.forEach { runCatching { it.release() } }
     effects.clear()
     sent.clear()

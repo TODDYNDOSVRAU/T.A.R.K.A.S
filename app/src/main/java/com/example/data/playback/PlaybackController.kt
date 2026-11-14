@@ -1,6 +1,7 @@
 package com.example.data.playback
 
 import android.content.Context
+import com.example.data.diagnostics.Diagnostics
 import com.example.data.assistant.CuriositySpeechManager
 import com.example.data.audio.AudioEngineManager
 import com.example.data.model.Curiosity
@@ -693,37 +694,53 @@ class PlaybackController(
 
   /** Puts back the track, its position, the queue and the list it came from, paused. */
   private fun restore() {
-    val raw = store.getString(KEY_STATE, null) ?: return
-    try {
-      val o = JSONObject(raw)
-      val track = TrackJson.fromJson(o.getJSONObject("current")) ?: return
-      // The demo tones are generated at first launch and are not worth a restore.
-      if (track.isDemo) return
-      _queue.value = TrackJson.listFromJson(o.optJSONArray("queue"))
-      contextTracks = o.optJSONArray("context")?.let { TrackJson.listFromJson(it) }
-      musicRepository.selectTrack(track)
-      refreshNeighbors()
-      _activeCuriosity.value = curiosityRepository.getCuriosityForTrack(track)
-      val path = track.filePath
-      if (path != null) {
-        // Resumed later, it counts like any other track.
-        unrecorded = track
-        audioEngine.playTrack(
-          path,
-          onCompletion = { onTrackPlaybackCompleted(track) },
-          // A file that is gone since: forget it quietly instead of skipping through the list.
-          onError = { audioEngine.stopPlayback() },
-          // Older saves kept the position inside the JSON.
-          // Saves before the track id was kept with the position are trusted as they are.
-          startPositionMs = store.getString(KEY_POSITION_TRACK, null)
-            .let { owner -> if (owner == null || owner == track.id) store.getLong(KEY_POSITION, o.optLong("pos", 0L)) else 0L },
-          autoStart = false,
-          loudnessKey = track.id
-        )
-        refreshUpNext()
+    val raw = try { store.getString(KEY_STATE, null) } catch (_: Exception) { null }
+    val owner = try { store.getString(KEY_POSITION_TRACK, null) } catch (_: Exception) { null }
+    val storedPosition = try { if (store.contains(KEY_POSITION)) store.getLong(KEY_POSITION, 0L) else null } catch (_: Exception) { null }
+    when (val outcome = PlaybackRestore.read(raw, owner, storedPosition)) {
+      RestoreOutcome.Nothing -> return
+      is RestoreOutcome.Unreadable -> {
+        // Only what cannot be read is cleared; the message carries no title or path.
+        Diagnostics.record("playback.restore", "Saved playback cleared: ${outcome.reason}")
+        store.edit().clear().apply()
+        return
       }
-    } catch (_: Exception) {
-      store.edit().clear().apply()
+      is RestoreOutcome.Restored -> {
+        val state = outcome.state
+        if (state.problems.isNotEmpty()) {
+          Diagnostics.record("playback.restore", "Saved playback partly restored: ${state.problems.joinToString("; ")}")
+        }
+        try {
+          applyRestored(state)
+        } catch (e: Exception) {
+          // The state was read but could not be put back; it stays saved for the next start.
+          Diagnostics.record("playback.restore", "Saved playback could not be applied", e)
+        }
+      }
+    }
+  }
+
+  private fun applyRestored(state: SavedPlayback) {
+    val track = state.track
+    _queue.value = state.queue
+    contextTracks = state.context
+    musicRepository.selectTrack(track)
+    refreshNeighbors()
+    _activeCuriosity.value = curiosityRepository.getCuriosityForTrack(track)
+    val path = track.filePath
+    if (path != null) {
+      // Resumed later, it counts like any other track.
+      unrecorded = track
+      audioEngine.playTrack(
+        path,
+        onCompletion = { onTrackPlaybackCompleted(track) },
+        // A file that is gone since: forget it quietly instead of skipping through the list.
+        onError = { audioEngine.stopPlayback() },
+        startPositionMs = state.positionMs,
+        autoStart = false,
+        loudnessKey = track.id
+      )
+      refreshUpNext()
     }
   }
 

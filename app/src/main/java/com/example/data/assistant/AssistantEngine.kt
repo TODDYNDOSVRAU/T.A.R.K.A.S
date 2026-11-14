@@ -1,8 +1,9 @@
 package com.example.data.assistant
 
-import android.util.Log
 import com.example.BuildConfig
 import com.example.data.audio.AudioEngineManager
+import com.example.data.diagnostics.Diagnostics
+import com.example.data.model.AssistantFailure
 import com.example.data.model.AssistantMessage
 import com.example.data.model.AudioProfile
 import com.example.data.model.Curiosity
@@ -14,6 +15,7 @@ import com.example.data.model.ToolExecutionReport
 import com.example.data.model.VerificationStatus
 import com.example.data.repository.CuriosityRepository
 import com.example.data.repository.MusicRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.CoroutineContext
@@ -22,9 +24,42 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
+import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+
+/** Raised when the online reply cannot be used. The reason decides the message the user sees. */
+class AssistantFailureException(val failure: AssistantFailure, cause: Throwable? = null) : Exception(failure.name, cause)
+
+/** Maps an HTTP status from the online service to the reason shown to the user. */
+internal fun failureForHttpStatus(code: Int): AssistantFailure = when (code) {
+  401, 403 -> AssistantFailure.KEY_REFUSED
+  429 -> AssistantFailure.QUOTA
+  else -> AssistantFailure.SERVER
+}
+
+/**
+ * Reads the reply text from a generateContent response body.
+ * Throws AssistantFailureException when there is no usable text, or when the answer was cut off
+ * at the output limit: a partial answer is discarded rather than shown.
+ */
+internal fun geminiReplyText(body: String): String {
+  val json = try {
+    JSONObject(body)
+  } catch (_: JSONException) {
+    throw AssistantFailureException(AssistantFailure.NO_REPLY)
+  }
+  val candidate = json.optJSONArray("candidates")?.optJSONObject(0)
+    ?: throw AssistantFailureException(AssistantFailure.NO_REPLY)
+  if (candidate.optString("finishReason") == "MAX_TOKENS") {
+    throw AssistantFailureException(AssistantFailure.CUT_OFF)
+  }
+  val text = candidate.optJSONObject("content")?.optJSONArray("parts")?.optJSONObject(0)?.optString("text")
+  if (text.isNullOrBlank()) throw AssistantFailureException(AssistantFailure.NO_REPLY)
+  return text.trim()
+}
 
 /** Player actions the assistant can trigger. The app runs them and reports what really happened. */
 enum class PlayerCommand { NEXT, PREVIOUS, PLAY, PAUSE, TOGGLE_SHUFFLE, CYCLE_REPEAT, FAVORITE }
@@ -97,15 +132,19 @@ class AssistantEngine(
       return@withContext localToolExecution
     }
 
-    // 2. If Gemini is available, query Gemini with tool instructions
+    // 2. If Gemini is available, ask it. A failure gets its own message; it is not hidden as "did not understand".
     if (useGeminiIfAvailable && hasGeminiKey) {
-      try {
-        val geminiResponse = callGeminiApi(trimmed)
-        if (geminiResponse != null) {
-          return@withContext geminiResponse
-        }
+      return@withContext try {
+        callGeminiApi(trimmed)
+      } catch (e: AssistantFailureException) {
+        Diagnostics.record(TAG, "online reply failed: ${e.failure.name}")
+        failureMessage(e.failure)
+      } catch (e: CancellationException) {
+        throw e
       } catch (e: Exception) {
-        Log.e(TAG, "Gemini call failed, fallback to local", e)
+        // Only the exception type is recorded: its message could carry text from the request.
+        Diagnostics.record(TAG, "online reply failed: unexpected ${e.javaClass.simpleName}")
+        failureMessage(AssistantFailure.SERVER)
       }
     }
 
@@ -364,10 +403,18 @@ class AssistantEngine(
     )
   }
 
-  // Optional Gemini API execution
-  private fun callGeminiApi(prompt: String): AssistantMessage? {
+  private fun failureMessage(failure: AssistantFailure) = AssistantMessage(
+    id = UUID.randomUUID().toString(),
+    sender = MessageSender.ASSISTANT,
+    text = "",
+    failure = failure
+  )
+
+  // Optional Gemini API execution. Throws AssistantFailureException with the reason when no reply arrives.
+  private fun callGeminiApi(prompt: String): AssistantMessage {
     val apiKey = BuildConfig.GEMINI_API_KEY
-    if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") return null
+    // processUserMessage only calls this when a key is set, so a blank key here is a build problem.
+    if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") throw AssistantFailureException(AssistantFailure.KEY_REFUSED)
 
     val currentTrack = musicRepository.currentTrack.value
 
@@ -400,24 +447,18 @@ class AssistantEngine(
     val body = payload.toString().toRequestBody("application/json".toMediaType())
     val request = Request.Builder().url(url).header("x-goog-api-key", apiKey).post(body).build()
 
-    val respBody = okHttpClient.newCall(request).execute().use { response ->
-      if (!response.isSuccessful) return null
-      response.body?.string()
-    } ?: return null
-    val jsonResp = JSONObject(respBody)
-    val candidates = jsonResp.optJSONArray("candidates") ?: return null
-    if (candidates.length() == 0) return null
-
-    val content = candidates.getJSONObject(0).optJSONObject("content")
-    val parts = content?.optJSONArray("parts")
-    val text = parts?.getJSONObject(0)?.optString("text")
-
-    if (text.isNullOrBlank()) return null
-
-    return AssistantMessage(
-      id = UUID.randomUUID().toString(),
-      sender = MessageSender.ASSISTANT,
-      text = text.trim()
-    )
+    return try {
+      okHttpClient.newCall(request).execute().use { response ->
+        if (!response.isSuccessful) throw AssistantFailureException(failureForHttpStatus(response.code))
+        val respBody = response.body?.string() ?: throw AssistantFailureException(AssistantFailure.NO_REPLY)
+        AssistantMessage(
+          id = UUID.randomUUID().toString(),
+          sender = MessageSender.ASSISTANT,
+          text = geminiReplyText(respBody)
+        )
+      }
+    } catch (e: IOException) {
+      throw AssistantFailureException(AssistantFailure.NO_CONNECTION, e)
+    }
   }
 }

@@ -253,4 +253,45 @@ class SpatialAudioProcessorTest {
     // After the switch-off it is the delayed input again.
     for (i in 150 * block until 158 * block) assertEquals(ref[2 * (i - DELAY)], out[2 * i], 1e-6f)
   }
+
+  @Test
+  fun aFailureKeepsThePlayingPublishesFailedAndRecordsOnce() {
+    SpatialControl.configure(true, SpatialPreset.STANDARD, 1.0)
+    val records = mutableListOf<String>()
+    val boom = object : com.example.data.audio.spatial.SpatialStage {
+      override val latency = 0
+      override var targetIntensity = 1.0
+      override val currentIntensity = 0.0
+      override fun reset(startIntensity: Double) {}
+      override fun process(input: FloatArray, offset: Int, frames: Int, output: FloatArray): Int =
+        throw IllegalStateException("forced")
+    }
+    val p = SpatialAudioProcessor(stageFor = { _, _ -> boom }, recordFailure = { tag, _, _ -> records += tag })
+    p.configure(format)
+    p.flush()
+    val block = 1024
+    var heard = 0.0
+    for (b in 0 until 6) {
+      val input = signal(block, b * block)
+      val out = run(p, input)
+      assertEquals("every block still comes out", input.size, out.size)
+      assertTrue("no NaN", out.none { it.isNaN() })
+      if (b == 0) for (i in input.indices) assertEquals("the failing block plays the input", input[i], out[i], 1e-6f)
+      if (b >= 3) heard += out.sumOf { abs(it.toDouble()) }
+    }
+    assertTrue("the music is still there after the failure", heard > 1.0)
+    assertEquals(listOf("spatial.bypass"), records)
+    assertEquals(com.example.data.audio.spatial.SpatialStatus.FAILED, SpatialControl.status.value)
+
+    // A new stream (next track, seek) gives the effect another try: the state is back to working.
+    p.flush()
+    assertTrue(SpatialControl.status.value != com.example.data.audio.spatial.SpatialStatus.FAILED)
+    run(p, signal(block))
+    assertEquals("the same fault again is a new occurrence", 2, records.size)
+
+    // Switching it off and on again also clears it.
+    SpatialControl.configure(false, SpatialPreset.STANDARD, 1.0)
+    SpatialControl.configure(true, SpatialPreset.STANDARD, 1.0)
+    assertTrue(SpatialControl.status.value != com.example.data.audio.spatial.SpatialStatus.FAILED)
+  }
 }

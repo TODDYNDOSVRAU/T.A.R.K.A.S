@@ -38,6 +38,7 @@ import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -124,6 +125,8 @@ fun AssistantScreen(
   activeTimers: List<LocalTimer>,
   onSendMessage: (String) -> Unit,
   onCancelTimer: (String) -> Unit,
+  // Asks again after a failed online reply; the argument is the error message's id.
+  onRetry: (String) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   // Saveable: a half-typed request and the voice state survive rotation and process death.
@@ -285,7 +288,7 @@ fun AssistantScreen(
         }
       }
 
-      items(messages, key = { it.id }) { message -> MessageBubble(message) }
+      items(messages, key = { it.id }) { message -> MessageBubble(message, onRetry) }
 
       if (isProcessing) {
         item {
@@ -361,7 +364,7 @@ private fun TimerRow(timer: LocalTimer, onCancel: () -> Unit) {
 }
 
 @Composable
-private fun MessageBubble(message: AssistantMessage) {
+private fun MessageBubble(message: AssistantMessage, onRetry: (String) -> Unit) {
   val colors = MaterialTheme.colorScheme
   val isUser = message.sender == MessageSender.USER
   val text = lightMarkdown(message.text)
@@ -391,6 +394,16 @@ private fun MessageBubble(message: AssistantMessage) {
     message.toolReport?.let { report ->
       Spacer(Modifier.height(Space.xs))
       ToolReportCard(report = report, modifier = Modifier.widthIn(max = 320.dp))
+    }
+    if (message.failure?.retryable == true) {
+      TextButton(
+        onClick = { onRetry(message.id) },
+        modifier = Modifier
+          .minimumInteractiveComponentSize()
+          .testTag("assistant_retry")
+      ) {
+        Text(stringResource(R.string.assistant_retry), style = AppText.Footnote)
+      }
     }
   }
 }

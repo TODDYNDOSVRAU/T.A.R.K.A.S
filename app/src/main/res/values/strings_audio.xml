@@ -222,6 +222,7 @@
   <string name="audio_spatial_others_waiting">In other apps as soon as one plays</string>
   <string name="audio_spatial_reset_mode">Restore mode values</string>
   <string name="audio_spatial_status_active">Active</string>
+  <string name="audio_spatial_status_failed">The effect failed and the music plays without it. Switch it off and on, or play the next track, to try again.</string>
   <string name="audio_spatial_status_not_stereo">This track is not stereo or 5.1</string>
   <string name="audio_spatial_status_off">Opens the music around your head</string>
   <string name="audio_spatial_status_preparing">Preparing…</string>

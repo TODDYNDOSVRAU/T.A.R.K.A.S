@@ -34,6 +34,7 @@ object AppGraph {
   fun init(context: Context) {
     if (initialized) return
     val app = context.applicationContext
+    com.example.data.diagnostics.Diagnostics.install(app)
     musicRepository = MusicRepository(app)
     curiosityRepository = CuriosityRepository()
     audioEngineManager = AudioEngineManager(app)

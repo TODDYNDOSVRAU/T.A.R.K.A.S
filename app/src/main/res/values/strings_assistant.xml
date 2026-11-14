@@ -63,4 +63,13 @@
     <string name="assistant_result_repeat_one">Repeating one track</string>
     <string name="assistant_result_favorite_added">%1$s added to favorites</string>
     <string name="assistant_result_favorite_removed">%1$s removed from favorites</string>
+
+    <!-- Online reply failures: what happened and what to do -->
+    <string name="assistant_error_no_connection">No connection to the online service. Check your internet and try again.</string>
+    <string name="assistant_error_key_refused">The online service refused this app\'s key, so online replies are off. Local commands still work.</string>
+    <string name="assistant_error_quota">The online service has reached its usage limit for now. Wait a little, then try again.</string>
+    <string name="assistant_error_cut_off">The reply was too long and was cut off, so it was not shown. Ask a shorter question and try again.</string>
+    <string name="assistant_error_no_reply">The online service did not return a reply to this question. Try again.</string>
+    <string name="assistant_error_server">The online service did not answer correctly. Try again in a moment.</string>
+    <string name="assistant_retry">Try again</string>
 </resources>

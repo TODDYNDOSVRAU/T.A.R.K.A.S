@@ -63,4 +63,13 @@
     <string name="assistant_result_repeat_one">Repetindo uma faixa</string>
     <string name="assistant_result_favorite_added">%1$s nos favoritos</string>
     <string name="assistant_result_favorite_removed">%1$s fora dos favoritos</string>
+
+    <!-- Falhas da resposta online: o que houve e o que fazer -->
+    <string name="assistant_error_no_connection">Sem conexão com o serviço online. Verifique a internet e tente de novo.</string>
+    <string name="assistant_error_key_refused">O serviço online recusou a chave deste app, então as respostas online estão desligadas. Os comandos locais continuam funcionando.</string>
+    <string name="assistant_error_quota">O serviço online atingiu o limite de uso por agora. Espere um pouco e tente de novo.</string>
+    <string name="assistant_error_cut_off">A resposta ficou longa demais e foi cortada, então não foi mostrada. Faça uma pergunta mais curta e tente de novo.</string>
+    <string name="assistant_error_no_reply">O serviço online não devolveu resposta a esta pergunta. Tente de novo.</string>
+    <string name="assistant_error_server">O serviço online não respondeu corretamente. Tente de novo em instantes.</string>
+    <string name="assistant_retry">Tentar de novo</string>
 </resources>

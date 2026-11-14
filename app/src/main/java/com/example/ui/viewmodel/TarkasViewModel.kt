@@ -56,8 +56,13 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import com.example.data.diagnostics.Diagnostics
+import com.example.data.model.AssistantFailure
 import java.util.UUID
 
 /** State of the fone picker: the downloaded list, the current search and what is being applied. */
@@ -886,6 +891,19 @@ class TarkasViewModel(
    * Erases everything the app keeps on this device (LGPD art. 18: elimination). Android clears the
    * app's storage and closes it; the next launch starts from the first-run setup.
    */
+  /** Saves the failure record (crashes, process exits, recovered errors) where the user chose. */
+  fun writeDiagnostics(uri: android.net.Uri) {
+    viewModelScope.launch {
+      val ok = withContext(Dispatchers.IO) {
+        runCatching {
+          val text = com.example.data.diagnostics.Diagnostics.report(context)
+          context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } != null
+        }.getOrDefault(false)
+      }
+      showNotice(Notice(context.getString(if (ok) com.example.R.string.settings_diagnostics_saved else com.example.R.string.player_export_failed)))
+    }
+  }
+
   fun eraseAllData() {
     val am = context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as android.app.ActivityManager
     am.clearApplicationUserData()
@@ -1126,6 +1144,10 @@ class TarkasViewModel(
     preferencesRepository.saveThemeMode(mode)
   }
 
+  // Replies run one at a time, in the order they were asked (see enqueueAssistantReply).
+  private val assistantReplyMutex = Mutex()
+  private var assistantRepliesPending = 0
+
   fun sendAssistantMessage(text: String) {
     if (text.isBlank()) return
 
@@ -1135,12 +1157,51 @@ class TarkasViewModel(
       text = text
     )
     _assistantMessages.value = _assistantMessages.value + userMsg
-    _isAssistantProcessing.value = true
+    enqueueAssistantReply(text)
+  }
 
+  // "Try again" on a failed reply: the error line goes away and the same question is asked again.
+  // The user's line is not repeated in the conversation.
+  fun retryAssistantReply(errorMessageId: String) {
+    val list = _assistantMessages.value
+    val index = list.indexOfFirst { it.id == errorMessageId }
+    if (index < 0) return
+    val question = list.take(index).lastOrNull { it.sender == MessageSender.USER }?.text ?: return
+    _assistantMessages.value = list.filterNot { it.id == errorMessageId }
+    enqueueAssistantReply(question)
+  }
+
+  // Policy for a message sent while another is pending: it waits in line. Cancelling the earlier one
+  // would drop a reply the user is still waiting for, and could stop a player command halfway.
+  // Every message gets its answer, in order. "Thinking" stays on until the line is empty.
+  private fun enqueueAssistantReply(text: String) {
+    assistantRepliesPending++
+    _isAssistantProcessing.value = true
     viewModelScope.launch {
-      val reply = assistantEngine.processUserMessage(text)
-      _assistantMessages.value = _assistantMessages.value + reply
-      _isAssistantProcessing.value = false
+      try {
+        assistantReplyMutex.withLock {
+          val reply = try {
+            assistantEngine.processUserMessage(text)
+          } catch (e: CancellationException) {
+            throw e
+          } catch (e: Exception) {
+            Diagnostics.record("assistant", "reply failed: unexpected ${e.javaClass.simpleName}")
+            AssistantMessage(
+              id = UUID.randomUUID().toString(),
+              sender = MessageSender.ASSISTANT,
+              text = "",
+              failure = AssistantFailure.SERVER
+            )
+          }
+          val failure = reply.failure
+          val shown = if (failure == null) reply else reply.copy(text = context.getString(failure.textRes))
+          _assistantMessages.value = _assistantMessages.value + shown
+        }
+      } finally {
+        // Runs on success, on failure and on cancellation, so "thinking" always ends.
+        assistantRepliesPending--
+        if (assistantRepliesPending == 0) _isAssistantProcessing.value = false
+      }
     }
   }
 

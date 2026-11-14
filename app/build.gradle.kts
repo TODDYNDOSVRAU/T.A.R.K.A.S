@@ -61,6 +61,8 @@ android {
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
+  // Errors that existed before the CI are listed in the baseline; a new one fails the build.
+  lint { baseline = file("lint-baseline.xml") }
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true

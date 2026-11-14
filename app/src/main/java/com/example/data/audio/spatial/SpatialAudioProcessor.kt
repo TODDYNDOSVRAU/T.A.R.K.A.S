@@ -20,7 +20,19 @@ import java.nio.ByteBuffer
  * Any failure falls back to the dry sound; the player never stops because of this effect.
  */
 @OptIn(UnstableApi::class)
-class SpatialAudioProcessor : BaseAudioProcessor() {
+class SpatialAudioProcessor(
+  /** The stage for this layout and rate (the control's, or null while it is being built). */
+  private val stageFor: (surround: Boolean, sampleRate: Int) -> SpatialStage? = { surround, rate ->
+    when {
+      surround -> SpatialControl.surroundFor(rate)
+      SpatialControl.preset.virtual51 -> SpatialControl.cinemaFor(rate)
+      else -> SpatialControl.engineFor(rate)
+    }
+  },
+  /** Where a failure is noted, once per occurrence (never per audio block). */
+  private val recordFailure: (tag: String, message: String, error: Throwable) -> Unit =
+    { tag, message, error -> com.example.data.diagnostics.Diagnostics.record(tag, message, error) }
+) : BaseAudioProcessor() {
 
   companion object {
     /** Frames between input and output: the engine's latency plus one hop of buffering (~23 ms at 48 kHz). */
@@ -122,11 +134,9 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
       // Always ask the control: it drops its engines a moment after the effect is switched off and builds
       // new ones on demand, so an engine kept from before would never hear a later switch-on again.
       val surround = inChannels == 6
-      val current: SpatialStage? = when {
-        surround -> SpatialControl.surroundFor(sampleRate)
-        SpatialControl.preset.virtual51 -> SpatialControl.cinemaFor(sampleRate)
-        else -> SpatialControl.engineFor(sampleRate)
-      }
+      // After a failure no stage is asked for: the dry sound plays (through the same delay line, so there is
+      // no jump in time) until the failure is cleared by a flush or by switching the effect off.
+      val current: SpatialStage? = if (SpatialControl.failed) null else stageFor(surround, sampleRate)
       if (current !== engine && (current != null || !running)) {
         val old = engine
         if (old != null && running && current != null && old.currentIntensity > 0.0) {
@@ -193,7 +203,10 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
     } catch (t: Throwable) {
       // Never let the effect stop the music: play the input as it is.
       running = false
+      engine = null
       System.arraycopy(input, 0, output, 0, frames * 2)
+      // Say so, once: the control publishes "failed" for the panel and the later blocks take the dry path.
+      if (SpatialControl.reportFailure()) recordFailure("spatial.bypass", "Spatial audio failed and is bypassed", t)
     }
   }
 
@@ -279,6 +292,8 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
     fifoStart = 0; fifoCount = 0
     running = false
     tailQueued = false
+    // A new stream or a seek: the effect gets another try (the control publishes it as working again).
+    SpatialControl.clearFailure()
     engine?.reset()
     adoptActiveFormat()
   }
