@@ -198,6 +198,7 @@ object LegalTexts {
       "Backdrop (AndroidLiquidGlass)" to "Kyant · Apache License 2.0",
       "OkHttp" to "Square · Apache License 2.0",
       "AutoEq" to "Jaakko Pasanen · MIT License · curvas de correção de fones",
+      "SADIE II (HRTF medida, Neumann KU100)" to "Copyright 2018, University of York · Apache License 2.0 · respostas da cabeça usadas na virtualização 5.1",
       "Inter" to "The Inter Project Authors · SIL Open Font License 1.1",
       "Space Grotesk" to "The Space Grotesk Project Authors · SIL Open Font License 1.1",
       "JetBrains Mono" to "The JetBrains Mono Project Authors · SIL Open Font License 1.1",

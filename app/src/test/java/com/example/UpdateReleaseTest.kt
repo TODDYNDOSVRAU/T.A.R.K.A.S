@@ -139,20 +139,34 @@ class UpdateReleaseTest {
     assertFalse(Signers.compatible(emptySet(), setOf("a")))
   }
 
+  private fun stringsOf(dir: String): Map<String, String> {
+    val xml = java.io.File("src/main/res/$dir/strings_update.xml").readText()
+    return Regex("<string name=\"([a-z_0-9]+)\">(.*?)</string>", RegexOption.DOT_MATCHES_ALL)
+      .findAll(xml).associate { it.groupValues[1] to it.groupValues[2] }
+  }
+
   @Test fun theDevelopmentBuildNeverInstallsAndSaysWhy() {
     // Unit tests run the debug variant, signed with the developer's key.
     assertFalse(com.example.data.update.UpdateManager.installsUpdates)
-    val notice = com.example.data.update.UpdateManager.DEV_BUILD_NOTICE
-    assertFalse(notice.contains('!'))
-    assertTrue(notice.contains("outra chave"))
+    for (dir in listOf("values", "values-pt")) {
+      val notice = stringsOf(dir)["update_dev_build_notice"]
+      assertNotNull(dir, notice)
+      assertFalse(dir, notice!!.contains('!'))
+    }
+    assertTrue(stringsOf("values-pt")["update_dev_build_notice"]!!.contains("outra chave"))
   }
 
-  @Test fun everyProblemSaysWhatHappenedAndHasNoExclamation() {
-    UpdateProblem.entries.forEach {
-      assertTrue(it.name, it.message.length > 30)
-      assertFalse(it.name, it.message.contains('!'))
-      assertTrue(it.name, it.message.endsWith("."))
-      assertNotNull(it.message)
+  @Test fun everyProblemSaysWhatHappenedAndHasNoExclamationInBothLanguages() {
+    for (dir in listOf("values", "values-pt")) {
+      val strings = stringsOf(dir)
+      UpdateProblem.entries.forEach {
+        val label = "$dir ${it.name}"
+        val text = strings["update_problem_" + it.name.lowercase()]
+        assertNotNull(label, text)
+        assertTrue(label, text!!.length > 30)
+        assertFalse(label, text.contains('!'))
+        assertTrue(label, text.endsWith("."))
+      }
     }
   }
 }

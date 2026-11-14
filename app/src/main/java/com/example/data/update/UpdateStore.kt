@@ -29,4 +29,14 @@ class UpdateStore(context: Context) {
   var verifiedTag: String?
     get() = prefs.getString("verified_tag", null)
     set(v) = prefs.edit().putString("verified_tag", v).apply()
+
+  /** The install-permission explanation was shown once; it is not repeated on every launch. */
+  var installPromptAsked: Boolean
+    get() = prefs.getBoolean("install_prompt_asked", false)
+    set(v) = prefs.edit().putBoolean("install_prompt_asked", v).apply()
+
+  /** Tag of the release whose popup was closed with "Depois"; the next release asks again. */
+  var dismissedTag: String?
+    get() = prefs.getString("dismissed_tag", null)
+    set(v) = prefs.edit().putString("dismissed_tag", v).apply()
 }

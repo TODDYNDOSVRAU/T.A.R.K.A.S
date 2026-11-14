@@ -24,6 +24,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -154,8 +155,8 @@ internal fun EqConsolePage(
 @Composable
 internal fun CurveStatusRow(settings: EqSettings, capabilities: AudioCapabilities, onCompare: (Boolean) -> Unit) {
   val colors = MaterialTheme.colorScheme
-  val headroom = EqDsp.totalPreampDb(settings)
-  val onSpeaker = capabilities.activeRouteType == "ALTO-FALANTE INTEGRADO"
+  val headroom = EqDsp.totalPreampDb(settings, rememberSpatialStage())
+  val onSpeaker = capabilities.activeRouteType == com.example.data.model.AudioCapabilities.ROUTE_BUILTIN_SPEAKER
   var comparing by remember { mutableStateOf(false) }
   var latched by remember { mutableStateOf(false) }
   val latestCompare by rememberUpdatedState(onCompare)
@@ -237,4 +238,14 @@ internal fun CurveStatusRow(settings: EqSettings, capabilities: AudioCapabilitie
       )
     }
   }
+}
+
+/**
+ * True while the spatial stage is on, so the preamp shown is the one applied: the automatic preamp lowers the
+ * level [EqDsp.SPATIAL_HEADROOM_DB] more then. Recomposes when the effect is switched or its state changes.
+ */
+@Composable
+internal fun rememberSpatialStage(): Boolean {
+  val status by com.example.data.audio.spatial.SpatialControl.status.collectAsState()
+  return status.let { com.example.data.audio.spatial.SpatialControl.active }
 }

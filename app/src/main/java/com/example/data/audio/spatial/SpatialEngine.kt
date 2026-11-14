@@ -84,11 +84,19 @@ enum class SpatialKnob(
 fun SpatialParams.tuned(values: Map<SpatialKnob, Double>): SpatialParams =
   values.entries.fold(this) { p, (k, v) -> k.write(p, k.clamp(v)) }
 
-/** The three listening presets of the prototype. */
-enum class SpatialPreset(val key: String, val label: String, val params: SpatialParams, val virtualizerStrength: Int) {
+/**
+ * The listening presets. The first three are the prototype's: [SpatialEngine], a continuous azimuth per
+ * sound. [CINEMA] is the other path: the stereo is split into five speakers ([UpmixVirtualizer]); it has no
+ * [params] of its own to tune ([virtual51] marks it), and the intensity slider blends it with the original.
+ */
+enum class SpatialPreset(
+  val key: String, val label: String, val params: SpatialParams, val virtualizerStrength: Int,
+  val virtual51: Boolean = false
+) {
   SUBTLE("sutil", "Sutil", SpatialParams(intensity = 0.7, width = 1.3, height = 12.0, ambienceHeight = 0.3, room = 0.6, voiceFocus = 0.9), 450),
   STANDARD("padrao", "Padrão", SpatialParams(), 750),
-  WIDE("amplo", "Amplo", SpatialParams(width = 2.4, height = 35.0, ambienceHeight = 0.8, room = 1.4, voiceFocus = 0.8), 1000);
+  WIDE("amplo", "Amplo", SpatialParams(width = 2.4, height = 35.0, ambienceHeight = 0.8, room = 1.4, voiceFocus = 0.8), 1000),
+  CINEMA("cinema", "Cinema 5.1", SpatialParams(), 750, virtual51 = true);
 
   companion object {
     fun fromKey(key: String?): SpatialPreset = entries.firstOrNull { it.key == key } ?: STANDARD
@@ -109,7 +117,7 @@ class SpatialEngine(
   val sampleRate: Int,
   private val hrtf: SphericalHeadHrtf,
   params: SpatialParams = SpatialParams()
-) {
+) : SpatialStage {
   companion object {
     const val WIN = 1024
     const val NFFT = 2048
@@ -158,11 +166,13 @@ class SpatialEngine(
     targetIntensity = p.intensity
   }
 
+  override val latency: Int get() = LATENCY
+
   /**
    * The intensity the engine glides to. Changing it alone needs no new tables, so it is cheap: the
    * player sets it to 0 to switch the effect off without a click.
    */
-  @Volatile var targetIntensity: Double = params.intensity
+  @Volatile override var targetIntensity: Double = params.intensity
 
   val params: SpatialParams get() = config.p
 
@@ -223,7 +233,7 @@ class SpatialEngine(
   }
 
   /** Clears every state (a seek, a new track). [startIntensity] lets a switch glide in from the dry sound. */
-  fun reset(startIntensity: Double = targetIntensity) {
+  override fun reset(startIntensity: Double) {
     pll.fill(0.0); prr.fill(0.0); plrRe.fill(0.0); plrIm.fill(0.0); prevMag.fill(0.0)
     transient = 0.0
     eDry = 1e-12; eWet = 1e-12
@@ -240,7 +250,7 @@ class SpatialEngine(
   }
 
   /** The intensity heard now (it glides towards the settings' one). */
-  val currentIntensity: Double get() = intensity
+  override val currentIntensity: Double get() = intensity
 
   /** How many output frames a call with [frames] input frames will produce at most. */
   fun outputFramesFor(frames: Int): Int = ((pending + frames) / HOP) * HOP
@@ -249,7 +259,7 @@ class SpatialEngine(
    * Processes [frames] interleaved stereo frames of [input] (from [offset]) and writes the output,
    * interleaved, to [output]. Returns the number of frames written (whole hops only).
    */
-  fun process(input: FloatArray, offset: Int, frames: Int, output: FloatArray): Int {
+  override fun process(input: FloatArray, offset: Int, frames: Int, output: FloatArray): Int {
     var written = 0
     for (i in 0 until frames) {
       var l = input[offset + 2 * i].toDouble()

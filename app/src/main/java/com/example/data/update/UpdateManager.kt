@@ -67,13 +67,17 @@ object UpdateManager {
    */
   val installsUpdates: Boolean get() = !BuildConfig.DEBUG
 
-  const val DEV_BUILD_NOTICE =
-    "Esta é a versão de desenvolvimento, assinada com outra chave que a versão publicada. " +
-      "Por isso ela não se atualiza sozinha: o Android recusaria a instalação ou apagaria os dados. " +
-      "Ela só avisa quando há versão nova. Para atualizá-la, instale pelo adb."
-
   val autoEnabled: Boolean get() = store.autoEnabled
   val wifiOnly: Boolean get() = store.wifiOnly
+
+  /** Startup prompts: the permission explanation shows once, the update popup once per release. */
+  var installPromptAsked: Boolean
+    get() = store.installPromptAsked
+    set(v) { store.installPromptAsked = v }
+
+  var dismissedTag: String?
+    get() = store.dismissedTag
+    set(v) { store.dismissedTag = v }
 
   fun setAutoEnabled(on: Boolean) {
     store.autoEnabled = on

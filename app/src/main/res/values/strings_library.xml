@@ -81,4 +81,20 @@
     <string name="library_playlist_empty_message">Use “Add to a playlist” in a song’s menu to put it here.</string>
     <string name="library_playlist_remove">Remove %1$s from the playlist</string>
     <string name="library_audio_fallback_name">Local audio</string>
+    <string name="library_folders_chip">Folders</string>
+    <string name="library_folders_title">Folders</string>
+    <string name="library_folders_note">Choose which folders of this phone count as your library. Nothing is moved or deleted; unticked folders are only left out of the lists.</string>
+    <string name="library_folders_empty_title">No folders yet</string>
+    <string name="library_folders_empty_message">Folders appear here once the music on this device has been found.</string>
+    <string name="library_folders_root">Main storage folder</string>
+    <string name="library_folders_state_on">In the library</string>
+    <string name="library_folders_state_off">Left out</string>
+    <string name="library_folders_state_partial">Partly in the library</string>
+    <string name="library_folders_expand">Show folders inside %1$s</string>
+    <string name="library_folders_collapse">Hide folders inside %1$s</string>
+    <string name="library_folders_all_out_title">All folders are left out</string>
+    <string name="library_folders_all_out_message">Every folder with music is unticked, so there are no songs to show. Open Folders to put some back.</string>
+    <string name="library_notice_play_next">“%1$s” plays next.</string>
+    <string name="library_notice_added_to_queue">“%1$s” added to the queue.</string>
+    <string name="library_notice_already_in_playlist">“%1$s” is already in %2$s.</string>
 </resources>

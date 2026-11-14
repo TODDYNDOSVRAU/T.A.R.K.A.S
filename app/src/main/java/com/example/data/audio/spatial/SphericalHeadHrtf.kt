@@ -20,12 +20,12 @@ import kotlin.math.sqrt
  * Building the table takes a moment (about a million complex values per ear): do it off the audio thread.
  */
 class SphericalHeadHrtf(
-  val sampleRate: Int,
+  override val sampleRate: Int,
   val nfft: Int = SpatialEngine.NFFT,
   val delaySamples: Int = SpatialEngine.HRTF_DELAY,
   private val headRadius: Double = 0.0875,
   private val speedOfSound: Double = 343.0
-) {
+) : HrtfSource {
   val bins = nfft / 2 + 1
   private val freqs = DoubleArray(bins) { it * sampleRate.toDouble() / nfft }
 
@@ -126,7 +126,7 @@ class SphericalHeadHrtf(
   }
 
   /** Normalised HRTF (same scale as the grid) for an exact direction: (re, im) interleaved, per ear. */
-  fun response(azDeg: Double, elDeg: Double): Pair<DoubleArray, DoubleArray> {
+  override fun response(azDeg: Double, elDeg: Double): Pair<DoubleArray, DoubleArray> {
     val hl = DoubleArray(bins * 2)
     val hr = DoubleArray(bins * 2)
     evaluate(azDeg, elDeg, hl, hr)

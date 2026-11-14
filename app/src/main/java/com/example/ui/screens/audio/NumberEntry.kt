@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
+import com.example.ui.components.TarkasAlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -67,7 +67,7 @@ internal fun NumberEntryDialog(
   onApply: (Float) -> Unit,
   onDismiss: () -> Unit
 ) {
-  fun show(v: Float) = String.format(Locale.US, "%.${decimals}f", v)
+  fun show(v: Float) = formatNumber(v, decimals)
   var text by remember { mutableStateOf(show(value)) }
   val parsed = parseNumberInput(text, min, max, allowK)
   val decreaseLabel = stringResource(R.string.audio_number_decrease)
@@ -77,7 +77,7 @@ internal fun NumberEntryDialog(
     val base = parsed ?: value
     text = show((base + by).coerceIn(min, max))
   }
-  AlertDialog(
+  TarkasAlertDialog(
     onDismissRequest = onDismiss,
     title = { Text(title, style = AppText.Title3) },
     text = {

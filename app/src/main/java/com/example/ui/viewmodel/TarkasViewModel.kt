@@ -53,6 +53,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -68,6 +69,8 @@ data class DeviceSearchState(
   val source: String? = null,
   val sources: List<String> = emptyList(),
   val total: Int = 0,
+  /** How many of [total] exist only in the online index (the rest come with the app and work offline). */
+  val onlineOnly: Int = 0,
   val results: List<com.example.data.autoeq.AutoEqEntry> = emptyList(),
   /** Path of the entry whose curve is downloading, to show a spinner on its row. */
   val applyingPath: String? = null
@@ -111,13 +114,14 @@ data class TrackDetailsState(
   val offline: Boolean = false
 )
 
-enum class TarkasNavTab(val label: String) {
-  HOME("Início"),
-  MUSIC("Música"),
-  LIBRARY("Biblioteca"),
-  AUDIO("Áudio"),
-  ASSISTANT("Assistente"),
-  SETTINGS("Ajustes")
+/** The pages; [labelRes] is the title, in the system language. */
+enum class TarkasNavTab(@androidx.annotation.StringRes val labelRes: Int) {
+  HOME(com.example.R.string.player_common_tab_home),
+  MUSIC(com.example.R.string.player_common_tab_music),
+  LIBRARY(com.example.R.string.player_common_tab_library),
+  AUDIO(com.example.R.string.player_common_tab_audio),
+  ASSISTANT(com.example.R.string.player_common_tab_assistant),
+  SETTINGS(com.example.R.string.player_common_settings)
 }
 
 @OptIn(FlowPreview::class)
@@ -260,43 +264,49 @@ class TarkasViewModel(
     when (command) {
       PlayerCommand.NEXT -> {
         playNextTrack()
-        musicRepository.currentTrack.value?.let { "Tocando ${it.title}" }
+        musicRepository.currentTrack.value?.let { context.getString(com.example.R.string.assistant_result_now_playing, it.title) }
       }
       PlayerCommand.PREVIOUS -> {
         playPreviousTrack()
-        musicRepository.currentTrack.value?.let { "Tocando ${it.title}" }
+        musicRepository.currentTrack.value?.let { context.getString(com.example.R.string.assistant_result_now_playing, it.title) }
       }
       PlayerCommand.PLAY -> {
         if (track == null) {
           null
         } else {
           if (!isPlaying.value) togglePlayPause()
-          "Reproduzindo ${track.title}"
+          context.getString(com.example.R.string.assistant_result_playing, track.title)
         }
       }
       PlayerCommand.PAUSE -> {
         if (isPlaying.value) {
           togglePlayPause()
-          "Pausado"
+          context.getString(com.example.R.string.assistant_result_paused)
         } else {
-          "Já estava pausado"
+          context.getString(com.example.R.string.assistant_result_already_paused)
         }
       }
       PlayerCommand.TOGGLE_SHUFFLE -> {
         toggleShuffle()
-        if (shuffle.value) "Aleatório ligado" else "Aleatório desligado"
+        context.getString(if (shuffle.value) com.example.R.string.assistant_result_shuffle_on else com.example.R.string.assistant_result_shuffle_off)
       }
       PlayerCommand.CYCLE_REPEAT -> {
         cycleRepeatMode()
-        when (repeatMode.value) {
-          RepeatMode.OFF -> "Repetir desligado"
-          RepeatMode.ALL -> "Repetindo a lista toda"
-          RepeatMode.ONE -> "Repetindo uma faixa"
-        }
+        context.getString(
+          when (repeatMode.value) {
+            RepeatMode.OFF -> com.example.R.string.assistant_result_repeat_off
+            RepeatMode.ALL -> com.example.R.string.assistant_result_repeat_all
+            RepeatMode.ONE -> com.example.R.string.assistant_result_repeat_one
+          }
+        )
       }
       PlayerCommand.FAVORITE -> track?.let {
         toggleFavorite(it)
-        if (libraryRepository.isFavorite(it.id)) "${it.title} nos favoritos" else "${it.title} fora dos favoritos"
+        if (libraryRepository.isFavorite(it.id)) {
+          context.getString(com.example.R.string.assistant_result_favorite_added, it.title)
+        } else {
+          context.getString(com.example.R.string.assistant_result_favorite_removed, it.title)
+        }
       }
     }
   }
@@ -330,7 +340,7 @@ class TarkasViewModel(
       AssistantMessage(
         id = UUID.randomUUID().toString(),
         sender = MessageSender.ASSISTANT,
-        text = "Como posso ajudar com sua música ou áudio hoje?"
+        text = context.getString(com.example.R.string.assistant_greeting)
       )
     )
   }
@@ -454,12 +464,12 @@ class TarkasViewModel(
 
   fun playNext(track: Track) {
     playback.playNext(track)
-    showNotice(Notice("“${track.title}” toca em seguida."))
+    showNotice(Notice(context.getString(com.example.R.string.library_notice_play_next, track.title)))
   }
 
   fun addToQueue(track: Track) {
     playback.addToQueue(track)
-    showNotice(Notice("“${track.title}” adicionada à fila."))
+    showNotice(Notice(context.getString(com.example.R.string.library_notice_added_to_queue, track.title)))
   }
 
   /** Removes a queue item, with an undo on the notice. */
@@ -495,7 +505,7 @@ class TarkasViewModel(
   fun addToPlaylist(playlistId: String, track: Track) {
     val playlist = playlists.value.firstOrNull { it.id == playlistId } ?: return
     if (track.id in playlist.trackIds) {
-      showNotice(Notice("“${track.title}” já está em ${playlist.name}."))
+      showNotice(Notice(context.getString(com.example.R.string.library_notice_already_in_playlist, track.title, playlist.name)))
       return
     }
     libraryRepository.addToPlaylist(playlistId, track)
@@ -703,14 +713,14 @@ class TarkasViewModel(
   }
 
   private fun offerEqUndo(text: String, snapshot: EqSnapshot) =
-    showNotice(Notice(text, actionLabel = "Desfazer", action = { snapshot.restore() }))
+    showNotice(Notice(text, actionLabel = context.getString(com.example.R.string.audio_action_undo), action = { snapshot.restore() }))
 
   /** Loads a preset; edits not saved to the one in use are offered back with "Desfazer". */
   fun selectEqPreset(preset: EqPreset) {
     val snapshot = EqSnapshot()
     val discards = _eqModified.value && preset.id != _activePresetId.value
     loadEqPreset(preset)
-    if (discards) offerEqUndo("Predefinição \"${preset.name}\" carregada. Os ajustes não salvos foram descartados.", snapshot)
+    if (discards) offerEqUndo(context.getString(com.example.R.string.audio_notice_preset_loaded, preset.name), snapshot)
   }
 
   /** Loads a preset. The on/off switch stays as it is. */
@@ -732,13 +742,13 @@ class TarkasViewModel(
     val wasParametric = audioEngineManager.eqSettings.value.parametric
     loadEqPreset(EqPresets.FLAT)
     if (wasParametric) updateEq { it.copy(parametric = true, paramBands = EqSettings.DEFAULT_PARAM_BANDS) }
-    offerEqUndo("Equalizador restaurado ao padrão.", snapshot)
+    offerEqUndo(context.getString(com.example.R.string.audio_notice_eq_reset), snapshot)
   }
 
   fun saveEqPresetAs(name: String) {
     val preset = EqPreset(
       id = "custom_${System.currentTimeMillis()}",
-      name = name.trim().ifBlank { "Meu preset" },
+      name = name.trim().ifBlank { context.getString(com.example.R.string.audio_preset_default_name) },
       settings = audioEngineManager.eqSettings.value.userCurve,
       isCustom = true
     )
@@ -769,7 +779,7 @@ class TarkasViewModel(
       _activePresetId.value = EqPresets.FLAT.id
       _eqModified.value = true
     }
-    if (name != null) offerEqUndo("Predefinição \"$name\" excluída.", snapshot)
+    if (name != null) offerEqUndo(context.getString(com.example.R.string.audio_notice_preset_deleted, name), snapshot)
   }
 
   private fun userPresets(): List<EqPreset> = _eqPresets.value.filter { it.isCustom }
@@ -834,7 +844,7 @@ class TarkasViewModel(
         }
         clearableCacheFiles().forEach { it.deleteRecursively() }
       }
-      showNotice(Notice("Cache limpo. As capas e a lista de fones voltam a ser baixadas quando precisar."))
+      showNotice(Notice(context.getString(com.example.R.string.audio_notice_cache_cleared)))
       onDone()
     }
   }
@@ -868,7 +878,7 @@ class TarkasViewModel(
           context.contentResolver.openOutputStream(uri)?.use { it.write(exportUserDataJson().toByteArray()) } != null
         }.getOrDefault(false)
       }
-      showNotice(Notice(if (ok) "Seus dados foram salvos." else "Não foi possível salvar o arquivo."))
+      showNotice(Notice(context.getString(if (ok) com.example.R.string.player_export_saved else com.example.R.string.player_export_failed)))
     }
   }
 
@@ -917,10 +927,10 @@ class TarkasViewModel(
         val sources = deviceIndex.groupingBy { it.source }.eachCount().entries
           .sortedWith(compareBy({ preferred.indexOf(it.key).let { i -> if (i < 0) Int.MAX_VALUE else i } }, { -it.value }))
           .map { it.key }
-        _deviceSearch.value = _deviceSearch.value.copy(loading = false, sources = sources, total = deviceIndex.size)
+        _deviceSearch.value = _deviceSearch.value.copy(loading = false, sources = sources, total = deviceIndex.size, onlineOnly = deviceIndex.size - autoEq.bundledCount)
         searchDevices(_deviceSearch.value.query, _deviceSearch.value.source)
       } catch (e: Exception) {
-        _deviceSearch.value = _deviceSearch.value.copy(loading = false, error = "Sem conexão para baixar a lista de fones.")
+        _deviceSearch.value = _deviceSearch.value.copy(loading = false, error = context.getString(com.example.R.string.audio_error_device_list))
       }
     }
   }
@@ -948,7 +958,7 @@ class TarkasViewModel(
         _deviceSearch.value = _deviceSearch.value.copy(applyingPath = null)
         onDone()
       } catch (e: Exception) {
-        _deviceSearch.value = _deviceSearch.value.copy(applyingPath = null, error = "Não foi possível baixar a curva de ${entry.name}.")
+        _deviceSearch.value = _deviceSearch.value.copy(applyingPath = null, error = context.getString(com.example.R.string.audio_error_device_curve, entry.name))
       }
     }
   }
@@ -1020,7 +1030,7 @@ class TarkasViewModel(
     if (decision.correction != audioEngineManager.eqSettings.value.device) {
       updateEq { it.copy(device = decision.correction) }
       if (announce) {
-        showNotice(Notice(decision.correction?.let { "Correção do fone: ${it.name}." } ?: "Sem correção de fone em ${out.name}."))
+        showNotice(Notice(decision.correction?.let { context.getString(com.example.R.string.audio_notice_correction_on, it.name) } ?: context.getString(com.example.R.string.audio_notice_correction_off, out.name)))
       }
     }
     if (out.isExternal && out.key !in outputBindings) suggestCorrection(out)
@@ -1050,12 +1060,12 @@ class TarkasViewModel(
       val only = found.entries.singleOrNull()
       showNotice(
         if (found.exact && only != null) {
-          Notice("Há correção para ${only.name}, medida por ${only.source}.", actionLabel = "Aplicar", action = { applyDevice(only) {} })
+          Notice(context.getString(com.example.R.string.audio_notice_suggest_one, only.name, only.source), actionLabel = context.getString(com.example.R.string.audio_action_apply), action = { applyDevice(only) {} })
         } else {
           // Only part of the name matched, or several models: the user picks the right one.
           Notice(
-            "Há correções para fones como “${found.query}”. Escolha o modelo do seu.",
-            actionLabel = "Escolher",
+            context.getString(com.example.R.string.audio_notice_suggest_many, found.query),
+            actionLabel = context.getString(com.example.R.string.audio_action_choose),
             action = { openDevicePickerFor(found.query) }
           )
         }
@@ -1075,6 +1085,23 @@ class TarkasViewModel(
   fun devicePickerOpened() {
     _devicePickerRequest.value = null
   }
+
+  private val _waveformBar = MutableStateFlow(preferencesRepository.getWaveformBar())
+  /** Advanced: draw the player progress as the track.s waveform when it is known. */
+  val waveformBar: StateFlow<Boolean> = _waveformBar.asStateFlow()
+
+  fun setWaveformBar(on: Boolean) {
+    _waveformBar.value = on
+    preferencesRepository.saveWaveformBar(on)
+    if (on) graph.waveforms.prepare(deviceTracks.value) else graph.waveforms.cancel()
+  }
+
+  /** The playing track's 100 amplitudes while the setting is on and they are known; null otherwise. */
+  @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+  val currentWaveform: StateFlow<ByteArray?> = combine(_waveformBar, musicRepository.currentTrack) { on, track -> if (on) track else null }
+    .distinctUntilChanged { a, b -> a?.id == b?.id }
+    .flatMapLatest { track -> if (track == null) kotlinx.coroutines.flow.flowOf(null) else graph.waveformSource.waveform(track) }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
   private val _reduceMotion = MutableStateFlow(preferencesRepository.getReduceMotion().also { AppMotion.userReduced = it })
   val reduceMotion: StateFlow<Boolean> = _reduceMotion.asStateFlow()
@@ -1309,6 +1336,16 @@ class TarkasViewModel(
 
   val deviceTracks: StateFlow<List<Track>> = musicRepository.deviceTracks
 
+  /** Songs per folder on the device, and which folders are in the library. */
+  val deviceFolders: StateFlow<Map<String, Int>> = musicRepository.deviceFolders
+  val folderRules: StateFlow<com.example.data.library.FolderRules> = musicRepository.folderRules
+
+  fun setFolderIncluded(folder: String, included: Boolean) {
+    val rules = musicRepository.folderRules.value.with(folder, included)
+    preferencesRepository.saveFolderRules(rules.encode())
+    musicRepository.setFolderRules(rules)
+  }
+
   private val _deviceScanning = MutableStateFlow(false)
   val deviceScanning: StateFlow<Boolean> = _deviceScanning.asStateFlow()
 
@@ -1319,6 +1356,8 @@ class TarkasViewModel(
     viewModelScope.launch {
       try {
         musicRepository.scanDevice()
+        graph.waveforms.retain(deviceTracks.value)
+        if (_waveformBar.value) graph.waveforms.prepare(deviceTracks.value)
       } finally {
         _deviceScanning.value = false
       }
@@ -1398,16 +1437,12 @@ class TarkasViewModel(
   // ---- permissions asked when they are needed ----
 
   private val _askNotifications = MutableStateFlow(false)
-  /** True once something plays and the notification permission was never asked. */
+  /** True while the notification permission was never asked; the dialog waits for the opening animation. */
   val askNotifications: StateFlow<Boolean> = _askNotifications.asStateFlow()
 
   init {
-    // The first time something plays, the app explains and asks for the notification permission.
-    viewModelScope.launch {
-      musicRepository.currentTrack.collect { track ->
-        if (track != null && !preferencesRepository.getNotificationsAsked()) _askNotifications.value = true
-      }
-    }
+    // Asked as soon as the app opens (once), because updates and downloads notify too.
+    if (!preferencesRepository.getNotificationsAsked()) _askNotifications.value = true
   }
 
   fun notificationsAsked() {

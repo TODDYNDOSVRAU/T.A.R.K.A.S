@@ -18,7 +18,10 @@ data class OutputDevice(val key: String, val kind: OutputKind, val name: String)
   val isExternal: Boolean get() = kind != OutputKind.SPEAKER
 
   companion object {
-    val SPEAKER = OutputDevice("speaker", OutputKind.SPEAKER, "Alto-falante do aparelho")
+    /** The loudspeaker with a neutral name; the engine builds the displayed one from resources ([speaker]). */
+    val SPEAKER = OutputDevice("speaker", OutputKind.SPEAKER, "Device speaker")
+
+    fun speaker(name: String) = OutputDevice("speaker", OutputKind.SPEAKER, name)
 
     fun keyFor(kind: OutputKind, address: String?, productName: String?): String {
       val id = address?.trim()?.takeIf { it.isNotEmpty() } ?: productName?.trim()?.lowercase().orEmpty()

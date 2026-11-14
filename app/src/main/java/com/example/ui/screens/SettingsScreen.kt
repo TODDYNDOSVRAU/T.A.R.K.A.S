@@ -33,7 +33,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Palette
-import androidx.compose.material3.AlertDialog
+import com.example.ui.components.TarkasAlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -120,6 +120,8 @@ fun SettingsScreen(
   onListAnimationChange: (com.example.ui.theme.ListAnimation) -> Unit = {},
   reduceTransparency: Boolean = false,
   onReduceTransparencyChange: (Boolean) -> Unit = {},
+  waveformBar: Boolean = false,
+  onWaveformBarChange: (Boolean) -> Unit = {},
   isShuffle: Boolean = false,
   repeatMode: RepeatMode = RepeatMode.OFF,
   onToggleShuffle: () -> Unit = {},
@@ -162,6 +164,7 @@ fun SettingsScreen(
       SettingsPage.MAIN -> MainSettings(
         themeMode, capabilities, onThemeModeChange, curiosityConfig, onOpenCuriositySettings, hasGeminiKey,
         surfaceStyle, onSurfaceStyleChange, reduceMotion, onReduceMotionChange, onListAnimationChange, reduceTransparency, onReduceTransparencyChange,
+        waveformBar, onWaveformBarChange,
         isShuffle, repeatMode, onToggleShuffle,
         onSetRepeatMode = { target ->
           // Without a direct setter, step the cycle (Desligado → Lista → Faixa) until it lands on the choice.
@@ -220,6 +223,8 @@ private fun MainSettings(
   onListAnimationChange: (ListAnimation) -> Unit,
   reduceTransparency: Boolean,
   onReduceTransparencyChange: (Boolean) -> Unit,
+  waveformBar: Boolean,
+  onWaveformBarChange: (Boolean) -> Unit,
   isShuffle: Boolean,
   repeatMode: RepeatMode,
   onToggleShuffle: () -> Unit,
@@ -282,7 +287,7 @@ private fun MainSettings(
       ) {
         ListAnimation.entries.forEach { style ->
           com.example.ui.components.FilterChip(
-            label = style.label,
+            label = stringResource(style.labelRes),
             selected = AppMotion.listAnimation == style,
             onClick = { onListAnimationChange(style) },
             modifier = Modifier.testTag("list_animation_${style.key}")
@@ -448,6 +453,17 @@ private fun MainSettings(
       GroupDivider()
       ListRow(title = stringResource(R.string.settings_terms), onClick = onOpenTerms, modifier = Modifier.testTag("settings_terms"))
     }
+    settingsGroup(
+      context.getString(R.string.settings_advanced),
+      footer = context.getString(R.string.settings_waveform_footer)
+    ) {
+      SwitchRow(
+        title = stringResource(R.string.settings_waveform),
+        checked = waveformBar,
+        onCheckedChange = onWaveformBarChange,
+        modifier = Modifier.testTag("settings_waveform")
+      )
+    }
     settingsGroup(header = null, footer = context.getString(R.string.settings_erase_footer)) {
       ListRow(
         title = stringResource(R.string.settings_erase),
@@ -471,7 +487,7 @@ private fun MainSettings(
 
   // Outside the list, so a dialog never closes because its row scrolled out of composition.
   if (confirmErase) {
-    AlertDialog(
+    TarkasAlertDialog(
       onDismissRequest = { confirmErase = false },
       title = { Text(stringResource(R.string.settings_erase_dialog_title), style = AppText.Title3) },
       text = { Text(stringResource(R.string.settings_erase_dialog_text)) },
@@ -692,7 +708,7 @@ internal fun SurfaceOptionRows(surfaceStyle: SurfaceStyle, onSurfaceStyle: (Surf
     SurfaceStyle.entries.forEachIndexed { i, style ->
       if (i > 0) GroupDivider()
       RadioRow(
-        title = style.label,
+        title = stringResource(style.labelRes),
         subtitle = style.shortDescription(),
         selected = surfaceStyle == style,
         onClick = { onSurfaceStyle(style) },

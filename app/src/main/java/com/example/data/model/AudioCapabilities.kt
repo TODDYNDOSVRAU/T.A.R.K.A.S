@@ -5,6 +5,7 @@ data class AudioCapabilities(
   val androidVersion: String,
   val apiLevel: Int,
   val activeRouteName: String,
+  /** One of the ROUTE_* ids: a code to compare against, never shown. */
   val activeRouteType: String,
   val sampleRateHz: Int,
   val channelCount: Int,
@@ -20,6 +21,13 @@ data class AudioCapabilities(
   /** The output's highest rate is below the track's: Android lowers the rate before it plays. */
   val outputBelowTrackRate: Boolean = false,
   /** The output's highest rate, when it reports one. */
-  val outputMaxRateHz: Int? = null,
-  val systemDisclaimer: String = "Sem root, o equalizador processa só o áudio do T.A.R.K.A.S. Nos modos ADB e root, ele também se liga à sessão de áudio de cada app que está tocando, como o Poweramp Equalizer."
-)
+  val outputMaxRateHz: Int? = null
+) {
+  companion object {
+    const val ROUTE_WIRED = "WIRED"
+    const val ROUTE_BLUETOOTH = "BLUETOOTH"
+    const val ROUTE_USB = "USB"
+    const val ROUTE_BUILTIN_SPEAKER = "BUILTIN_SPEAKER"
+    const val ROUTE_OTHER = "OTHER"
+  }
+}

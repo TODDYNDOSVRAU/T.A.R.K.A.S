@@ -102,6 +102,30 @@ class MusicRepository(private val context: Context) {
   /** The music on the device, from Android's media library (needs the music permission). */
   val deviceTracks: StateFlow<List<Track>> = _deviceTracks.asStateFlow()
 
+  /** Every song the media library has, before the folder choice; the folder of each by track id. */
+  private var allDeviceTracks: List<Track> = emptyList()
+  private var folderOf: Map<String, String> = emptyMap()
+
+  private val _deviceFolders = MutableStateFlow<Map<String, Int>>(emptyMap())
+  /** How many songs each folder holds on the device, counting the ones the folder choice leaves out. */
+  val deviceFolders: StateFlow<Map<String, Int>> = _deviceFolders.asStateFlow()
+
+  private val _folderRules = MutableStateFlow(com.example.data.library.FolderRules.None)
+  /** Which folders are in the library. */
+  val folderRules: StateFlow<com.example.data.library.FolderRules> = _folderRules.asStateFlow()
+
+  /** Applies the folder choice to the songs already read, without reading the media library again. */
+  fun setFolderRules(rules: com.example.data.library.FolderRules) {
+    _folderRules.value = rules
+    applyFolderRules()
+  }
+
+  private fun applyFolderRules() {
+    val rules = _folderRules.value
+    _deviceTracks.value = allDeviceTracks.filter { rules.isIncluded(folderOf[it.id].orEmpty()) }
+    publish()
+  }
+
   /** The library: files picked one by one, the device's music, then the demo tones. */
   private fun publish() {
     _tracks.value = pickedTracks + _deviceTracks.value + demoTracks
@@ -126,9 +150,11 @@ class MusicRepository(private val context: Context) {
       MediaStore.Audio.Media.DURATION,
       MediaStore.Audio.Media.YEAR,
       MediaStore.Audio.Media.TRACK,
-      MediaStore.Audio.Media.DATE_ADDED
+      MediaStore.Audio.Media.DATE_ADDED,
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Audio.Media.DATA
     )
     val found = ArrayList<Track>()
+    val folders = HashMap<String, String>()
     try {
       context.contentResolver.query(
         collection, projection,
@@ -145,8 +171,15 @@ class MusicRepository(private val context: Context) {
         val year = c.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
         val trackNo = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
         val added = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
+        val where = c.getColumnIndexOrThrow(
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) MediaStore.Audio.Media.RELATIVE_PATH else MediaStore.Audio.Media.DATA
+        )
         while (c.moveToNext()) {
           val mediaId = c.getLong(id)
+          val folder = c.getString(where).let {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) com.example.data.library.FolderPaths.normalize(it) else com.example.data.library.FolderPaths.ofFile(it)
+          }
+          folders["ms:$mediaId"] = folder
           val artistName = c.getString(artist)?.takeUnless { it == MediaStore.UNKNOWN_STRING } ?: "Artista desconhecido"
           val (disc, number) = com.example.data.playback.AlbumOrder.discAndTrack(c.getInt(trackNo))
           found += Track(
@@ -175,7 +208,10 @@ class MusicRepository(private val context: Context) {
     // Sorted here, as people read titles (accents and case ignored); the media library refuses a locale sort.
     val collator = java.text.Collator.getInstance().apply { strength = java.text.Collator.PRIMARY }
     found.sortWith { a, b -> collator.compare(a.title, b.title) }
-    _deviceTracks.value = found
+    allDeviceTracks = found
+    folderOf = folders
+    _deviceFolders.value = found.groupingBy { folders[it.id].orEmpty() }.eachCount()
+    applyFolderRules()
     publish()
     found.size
   }

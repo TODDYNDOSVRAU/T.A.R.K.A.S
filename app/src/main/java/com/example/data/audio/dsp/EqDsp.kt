@@ -41,7 +41,9 @@ class EqDsp {
 
   @Volatile private var settings: EqSettings = EqSettings()
   @Volatile private var sampleRate = DEFAULT_RATE
-  @Volatile private var plan: Plan = buildPlan(settings, DEFAULT_RATE)
+  /** True while the spatial stage (which runs before this equalizer) is on; see [SPATIAL_HEADROOM_DB]. */
+  @Volatile private var spatialStage = false
+  @Volatile private var plan: Plan = buildPlan(settings, DEFAULT_RATE, false)
 
   private var channels = 2
 
@@ -80,13 +82,23 @@ class EqDsp {
     releaseCoef = releaseCoefFor(sampleRate)
     lookahead = lookaheadFor(sampleRate)
     this.sampleRate = sampleRate
-    plan = buildPlan(settings, sampleRate)
+    plan = buildPlan(settings, sampleRate, spatialStage)
     reset()
   }
 
   fun update(newSettings: EqSettings) {
     settings = newSettings
-    plan = buildPlan(newSettings, sampleRate)
+    plan = buildPlan(newSettings, sampleRate, spatialStage)
+  }
+
+  /**
+   * Tells the equalizer whether the spatial stage is on. With the automatic preamp on, the level then drops
+   * by [SPATIAL_HEADROOM_DB] more; the preamp glides to it like to any other change, so switching the
+   * effect while music plays does not click.
+   */
+  fun setSpatialStage(on: Boolean) {
+    spatialStage = on
+    plan = buildPlan(settings, sampleRate, on)
   }
 
   /** Clears filter memory, e.g. after a seek, so old samples do not ring into new ones. */
@@ -112,7 +124,7 @@ class EqDsp {
     var p = plan
     if (p.sampleRate != sampleRate) {
       // A plan built for the previous rate (an update raced with configure): rebuild for this one.
-      p = buildPlan(settings, sampleRate)
+      p = buildPlan(settings, sampleRate, spatialStage)
       plan = p
     }
     if (!p.enabled && mix <= 0f) return
@@ -254,6 +266,14 @@ class EqDsp {
     /** Below this, the automatic preamp leaves the level alone. */
     private const val AUTO_PREAMP_MIN_DB = 0.05
 
+    /**
+     * Extra attenuation of the automatic preamp while the spatial stage is on, in dB. The owner decided it
+     * (2026-11-13) from one measurement: on a real 44.1 kHz track the upmix and virtualizer with the room at
+     * 0.35 raised the peak by up to 3.33 dB (sample peak) and 2.16 dB (true peak, 4x oversampled); see
+     * tools/spatial_proto/peak_headroom.py. A single track, so it is a decision, not a guarantee.
+     */
+    const val SPATIAL_HEADROOM_DB = 3.5f
+
     private fun releaseCoefFor(rate: Int): Float = (1.0 - exp(-1.0 / (RELEASE_SECONDS * rate))).toFloat()
     private fun smoothCoefFor(rate: Int): Double = 1.0 - exp(-1.0 / (SMOOTH_SECONDS * rate))
     private fun lookaheadFor(rate: Int): Int = (LOOKAHEAD_SECONDS * rate).toInt().coerceAtLeast(1)
@@ -305,11 +325,11 @@ class EqDsp {
       return out
     }
 
-    private fun buildPlan(s: EqSettings, sampleRate: Int): Plan = Plan(
+    private fun buildPlan(s: EqSettings, sampleRate: Int, spatialStage: Boolean): Plan = Plan(
       sampleRate = sampleRate,
       enabled = s.enabled,
       coefs = slotCoefficients(s, sampleRate),
-      preampGain = dbToGain(totalPreampDb(s)),
+      preampGain = dbToGain(totalPreampDb(s, spatialStage)),
       leftGain = min(1f, 1f - s.balance),
       rightGain = min(1f, 1f + s.balance),
       width = s.stereoWidth,
@@ -329,13 +349,21 @@ class EqDsp {
     }
 
     /** The user's preamp, the headroom the fone correction asks for and, if on, the automatic preamp. */
-    fun totalPreampDb(s: EqSettings): Float = cached(s, DEFAULT_RATE).second
+    fun totalPreampDb(s: EqSettings, spatialStage: Boolean = false): Float =
+      cached(s, DEFAULT_RATE).second + spatialHeadroomDb(s, spatialStage)
+
+    /** What the spatial stage adds to the automatic preamp: [SPATIAL_HEADROOM_DB] lower, only with the automatic preamp on. */
+    private fun spatialHeadroomDb(s: EqSettings, spatialStage: Boolean): Float =
+      if (spatialStage && s.autoPreamp) -SPATIAL_HEADROOM_DB else 0f
 
     /**
      * How much the automatic preamp lowers the level: the loudest boost of the curve, so the curve never
      * goes above 0 dB and the limiter has nothing to do with ordinary music. 0 when nothing is boosted.
      */
-    fun autoPreampDb(s: EqSettings): Float {
+    fun autoPreampDb(s: EqSettings, spatialStage: Boolean = false): Float =
+      curveAutoPreampDb(s) + spatialHeadroomDb(s, spatialStage)
+
+    private fun curveAutoPreampDb(s: EqSettings): Float {
       if (!s.autoPreamp) return 0f
       val filters = activeFilters(s, DEFAULT_RATE)
       if (filters.isEmpty()) return 0f
@@ -355,7 +383,7 @@ class EqDsp {
 
     private fun cached(s: EqSettings, sampleRate: Int): Pair<List<BiquadCoefficients>, Float> {
       cache?.let { if (it.rate == sampleRate && it.settings == s) return it.filters to it.preamp }
-      val preamp = s.preampDb + (s.device?.preampDb ?: 0f) + autoPreampDb(s)
+      val preamp = s.preampDb + (s.device?.preampDb ?: 0f) + curveAutoPreampDb(s)
       val c = Cache(s, sampleRate, activeFilters(s, sampleRate), preamp)
       cache = c
       return c.filters to c.preamp

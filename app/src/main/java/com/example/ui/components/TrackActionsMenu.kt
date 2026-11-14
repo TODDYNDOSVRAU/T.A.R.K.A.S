@@ -19,7 +19,6 @@ import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.SkipNext
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -324,7 +323,7 @@ fun NamePlaylistDialog(
 ) {
   // Saved, so a rotation does not wipe what was typed; keyed, so renaming another playlist starts fresh.
   var name by rememberSaveable(initialName) { mutableStateOf(initialName) }
-  AlertDialog(
+  TarkasAlertDialog(
     onDismissRequest = onDismiss,
     title = { Text(title, style = AppText.Title3) },
     text = {

@@ -122,6 +122,7 @@
 <!-- CommonComponents.kt -->
 <string name="player_common_back">Voltar</string>
 <string name="player_common_settings">Ajustes</string>
+<string name="player_common_tab_music">Música</string>
 <string name="player_common_tab_home">Início</string>
 <string name="player_common_tab_library">Biblioteca</string>
 <string name="player_common_tab_audio">Áudio</string>
@@ -188,6 +189,9 @@
     <string name="settings_reduce_motion">Reduzir animações</string>
     <string name="settings_reduce_motion_hint">Troca de tela sem movimento</string>
     <string name="settings_playback">Reprodução</string>
+    <string name="settings_advanced">Avançado</string>
+    <string name="settings_waveform">Barra de progresso em onda</string>
+    <string name="settings_waveform_footer">Desenha a forma de onda da faixa como barra de progresso no player. A onda é calculada em segundo plano na primeira vez que uma música deste aparelho toca; até lá, e nas músicas por streaming, a barra fina continua.</string>
     <string name="settings_shuffle">Aleatório</string>
     <string name="settings_repeat">Repetir</string>
     <string name="settings_repeat_footer">A música pausa sozinha quando o fone com fio ou Bluetooth desconecta, para não sair pelo alto-falante.</string>
@@ -371,4 +375,6 @@
     <string name="onboarding_done_tip_permissions">Notificações e microfone são pedidos só quando você usa o recurso.</string>
     <string name="onboarding_done_tip_settings">Aparência, privacidade e Sobre ficam em Ajustes, no alto do Início.</string>
     <string name="player_sheet_handle">Arrastar para fechar</string>
+    <string name="player_export_saved">Seus dados foram salvos.</string>
+    <string name="player_export_failed">Não foi possível salvar o arquivo.</string>
 </resources>

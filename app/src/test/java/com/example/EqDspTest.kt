@@ -216,4 +216,50 @@ class EqDspTest {
     assertTrue("peak came out at $outPeak", outPeak in 2001..2200)
     assertTrue(abs(buf[outPeak]) <= ceiling + 1e-4f)
   }
+
+  @Test
+  fun spatialStageLowersTheAutomaticPreampBy3point5dB() {
+    val boosted = EqSettings(bands = listOf(EqBand(freqHz = 1000f, gainDb = 6f, q = 1f)))
+    assertEquals(3.5f, EqDsp.SPATIAL_HEADROOM_DB, 0f)
+    // Spatial on: what the curve already asks for, minus 3.5 dB.
+    assertEquals(EqDsp.autoPreampDb(boosted) - 3.5f, EqDsp.autoPreampDb(boosted, spatialStage = true), 1e-4f)
+    assertEquals(EqDsp.totalPreampDb(boosted) - 3.5f, EqDsp.totalPreampDb(boosted, spatialStage = true), 1e-4f)
+    // The manual preamp and the fone's headroom stay in the sum.
+    val withManual = boosted.copy(preampDb = -2f)
+    assertEquals(EqDsp.totalPreampDb(withManual) - 3.5f, EqDsp.totalPreampDb(withManual, true), 1e-4f)
+    // A flat equalizer: the spatial stage alone asks for the 3.5 dB.
+    assertEquals(-3.5f, EqDsp.autoPreampDb(EqSettings(), true), 1e-4f)
+    // Spatial off: same as before.
+    assertEquals(EqDsp.autoPreampDb(boosted), EqDsp.autoPreampDb(boosted, false), 0f)
+    assertEquals(EqDsp.totalPreampDb(boosted), EqDsp.totalPreampDb(boosted, false), 0f)
+  }
+
+  @Test
+  fun manualPreampIsLeftAloneBySpatialStage() {
+    val manual = EqSettings(preampDb = -4f, autoPreamp = false)
+    assertEquals(0f, EqDsp.autoPreampDb(manual, true), 0f)
+    assertEquals(-4f, EqDsp.totalPreampDb(manual, true), 0f)
+    assertEquals(EqDsp.totalPreampDb(manual), EqDsp.totalPreampDb(manual, true), 0f)
+  }
+
+  @Test
+  fun spatialStageChangesTheLevelByGlidingNotByAStep() {
+    val dsp = EqDsp().apply { configure(48000, 1) }
+    dsp.update(EqSettings(limiterEnabled = false))
+    val settle = FloatArray(4800) { 0.5f }
+    dsp.process(settle, settle.size)
+    assertEquals(0.5f, settle.last(), 1e-3f)
+    dsp.setSpatialStage(true)
+    val on = FloatArray(9600) { 0.5f }
+    dsp.process(on, on.size)
+    val target = 0.5f * Math.pow(10.0, -3.5 / 20.0).toFloat()
+    assertEquals(target, on.last(), 2e-3f)
+    var step = 0f
+    for (i in 1 until on.size) step = maxOf(step, abs(on[i] - on[i - 1]))
+    assertTrue("largest step between samples $step", step < 2e-3f)
+    dsp.setSpatialStage(false)
+    val off = FloatArray(9600) { 0.5f }
+    dsp.process(off, off.size)
+    assertEquals(0.5f, off.last(), 2e-3f)
+  }
 }

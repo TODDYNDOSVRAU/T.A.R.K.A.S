@@ -272,7 +272,10 @@ internal fun PresetPanel(
                   Text(deviceSearch.error, style = AppText.Footnote, color = colors.error, modifier = Modifier.padding(horizontal = Space.page))
                 }
                 Text(
-                  if (words.isEmpty()) pluralStringResource(R.plurals.audio_device_total, deviceSearch.total, deviceSearch.total, java.text.NumberFormat.getIntegerInstance().format(deviceSearch.total))
+                  if (words.isEmpty() && deviceSearch.onlineOnly > 0) {
+                    val nf = java.text.NumberFormat.getIntegerInstance()
+                    pluralStringResource(R.plurals.audio_device_total_online, deviceSearch.total, deviceSearch.total, nf.format(deviceSearch.total), nf.format(deviceSearch.total - deviceSearch.onlineOnly), nf.format(deviceSearch.onlineOnly))
+                  } else if (words.isEmpty()) pluralStringResource(R.plurals.audio_device_total, deviceSearch.total, deviceSearch.total, java.text.NumberFormat.getIntegerInstance().format(deviceSearch.total))
                   else pluralStringResource(R.plurals.audio_device_results, deviceSearch.results.size, deviceSearch.results.size, java.text.NumberFormat.getIntegerInstance().format(deviceSearch.results.size)),
                   style = AppText.Footnote,
                   color = colors.onSurfaceVariant,

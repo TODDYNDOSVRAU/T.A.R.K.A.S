@@ -144,4 +144,113 @@ class SpatialAudioProcessorTest {
     }
     assertTrue("the effect never came back, mean difference $differs", differs >= 0.01)
   }
+
+  // ---- 5.1 source: comes out as stereo ----
+
+  private val format51 = AudioProcessor.AudioFormat(fs, 6, C.ENCODING_PCM_FLOAT)
+
+  private fun signal51(frames: Int, start: Int = 0) = FloatArray(frames * 6) {
+    val n = start + it / 6
+    val ch = it % 6
+    (0.1 * sin(2 * PI * (200.0 + 170 * ch) * n / fs)).toFloat()
+  }
+
+  private fun ready51(): SpatialAudioProcessor {
+    val p = SpatialAudioProcessor()
+    val out = p.configure(format51)
+    assertEquals(AudioProcessor.AudioFormat(fs, 2, C.ENCODING_PCM_FLOAT), out)
+    p.flush()
+    return p
+  }
+
+  @Test
+  fun surroundSourceIsAcceptedAndComesOutAsStereo() {
+    SpatialControl.configure(false, SpatialPreset.STANDARD, 1.0)
+    val p = ready51()
+    val out = run(p, signal51(4096))
+    assertEquals(4096 * 2, out.size)
+    assertTrue(SpatialControl.status.value != com.example.data.audio.spatial.SpatialStatus.NOT_STEREO)
+  }
+
+  @Test
+  fun surroundOffIsTheDownmixDelayedExactly() {
+    SpatialControl.configure(false, SpatialPreset.STANDARD, 1.0)
+    val p = ready51()
+    val input = signal51(8192)
+    val dm = FloatArray(8192 * 2)
+    com.example.data.audio.spatial.SurroundVirtualizer.downmix(input, 0, 8192, dm)
+    val out = run(p, input)
+    for (i in 0 until DELAY * 2) assertEquals(0f, out[i], 0f)
+    for (i in DELAY * 2 until out.size) assertEquals(dm[i - DELAY * 2], out[i], 0f)
+  }
+
+  @Test
+  fun surroundOnRendersBinauralAndOffReturnsToTheDownmix() {
+    SpatialControl.configure(true, SpatialPreset.STANDARD, 1.0)
+    val p = ready51()
+    val deadline = System.currentTimeMillis() + 20_000
+    var pos = 0
+    val block = 2048
+    val outs = ArrayList<Float>()
+    val dms = ArrayList<Float>()
+    fun chunk() {
+      val input = signal51(block, pos)
+      val dm = FloatArray(block * 2)
+      com.example.data.audio.spatial.SurroundVirtualizer.downmix(input, 0, block, dm)
+      dm.forEach { dms += it }
+      run(p, input).forEach { outs += it }
+      pos += block
+    }
+    // Until the filters are built the processor plays the downmix; then it must leave it.
+    while (System.currentTimeMillis() < deadline && SpatialControl.surroundFor(fs) == null) { chunk(); Thread.sleep(5) }
+    assertTrue("virtualizer not ready", SpatialControl.surroundFor(fs) != null)
+    repeat(40) { chunk() }
+    var diff = 0.0
+    val from = (outs.size / 2) - 10 * block
+    for (i in from until outs.size / 2) diff += abs(outs[2 * i] - dms[2 * (i - DELAY)])
+    assertTrue("never rendered (diff $diff)", diff / (10 * block) > 0.005)
+    assertTrue(outs.all { it.isFinite() })
+    SpatialControl.configure(false, SpatialPreset.STANDARD, 1.0)
+    repeat(40) { chunk() }
+    for (i in outs.size / 2 - 4 * block until outs.size / 2) assertEquals(dms[2 * (i - DELAY)], outs[2 * i], 1e-6f)
+  }
+
+  // ---- Cinema preset: stereo spread over five virtual speakers ----
+
+  @Test
+  fun cinemaRendersAndSwitchingPathsNeverClicks() {
+    assertTrue(SpatialPreset.CINEMA.virtual51)
+    assertTrue(SpatialPreset.entries.count { it.virtual51 } == 1)
+    SpatialControl.configure(true, SpatialPreset.STANDARD, 1.0)
+    waitForEngine()
+    val deadline = System.currentTimeMillis() + 20_000
+    while (SpatialControl.cinemaFor(fs) == null && System.currentTimeMillis() < deadline) Thread.sleep(20)
+    assertTrue("cinema stage not ready", SpatialControl.cinemaFor(fs) != null)
+    val p = processorReady()
+    val block = 1000
+    val outputs = ArrayList<Float>()
+    var pos = 0
+    // Standard, then Cinema, then Standard again, then off: every change glides through the dry sound.
+    repeat(160) { i ->
+      when (i) {
+        30 -> SpatialControl.configure(true, SpatialPreset.CINEMA, 1.0)
+        90 -> SpatialControl.configure(true, SpatialPreset.STANDARD, 1.0)
+        130 -> SpatialControl.configure(false, SpatialPreset.STANDARD, 1.0)
+      }
+      run(p, signal(block, pos)).forEach { outputs += it }
+      pos += block
+    }
+    val out = outputs.toFloatArray()
+    assertTrue(out.all { it.isFinite() })
+    var maxStep = 0f
+    for (ch in 0..1) for (i in 1 until out.size / 2) maxStep = max(maxStep, abs(out[2 * i + ch] - out[2 * (i - 1) + ch]))
+    assertTrue("step $maxStep", maxStep < 0.15f)
+    val ref = signal(160 * block)
+    // Well inside the Cinema stretch (blocks 30..90) the output is no longer the delayed input.
+    var diff = 0.0
+    for (i in 60 * block until 85 * block) diff += abs(out[2 * i] - ref[2 * (i - DELAY)]) + abs(out[2 * i + 1] - ref[2 * (i - DELAY) + 1])
+    assertTrue("cinema never rendered (diff $diff)", diff / (25 * block) > 0.01)
+    // After the switch-off it is the delayed input again.
+    for (i in 150 * block until 158 * block) assertEquals(ref[2 * (i - DELAY)], out[2 * i], 1e-6f)
+  }
 }

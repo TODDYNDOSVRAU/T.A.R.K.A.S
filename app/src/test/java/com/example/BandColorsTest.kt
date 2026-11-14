@@ -37,4 +37,21 @@ class BandColorsTest {
     assertEquals(BandColors.of(0, true), BandColors.of(BandColors.ON_DARK.size, true))
     assertEquals(BandColors.of(7, true), BandColors.of(-1, true))
   }
+
+  /** Every tone is the accent over the surface at some opacity: nothing outside the identity's palette. */
+  @Test fun everyToneIsTheAccentAtSomeOpacity() {
+    fun check(set: List<Color>, accent: Color, bg: Color) = set.forEachIndexed { i, c ->
+      val a = (c.red - bg.red) / (accent.red - bg.red)
+      assertTrue("band $i alpha $a", a in 0.4f..1.001f)
+      assertEquals("band $i green", bg.green + a * (accent.green - bg.green), c.green, 0.004f)
+      assertEquals("band $i blue", bg.blue + a * (accent.blue - bg.blue), c.blue, 0.004f)
+    }
+    check(BandColors.ON_DARK, Color(0xFF7EE3EA), Color(0xFF080808))
+    check(BandColors.ON_LIGHT, Color(0xFF0D6C74), Color(0xFFF2F2F0))
+  }
+
+  /** Neighbouring bands differ, including where the eight tones wrap around. */
+  @Test fun neighboursDiffer() {
+    for (dark in listOf(true, false)) for (i in 0 until 16) assertTrue(BandColors.of(i, dark) != BandColors.of(i + 1, dark))
+  }
 }

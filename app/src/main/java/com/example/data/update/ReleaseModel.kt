@@ -119,23 +119,23 @@ data class Version(val parts: List<Int>, val preRelease: String?) : Comparable<V
 }
 
 /** Everything that can stop an update, each with what happened and what to do (T.A.L. voice). */
-enum class UpdateProblem(val message: String) {
-  NO_NETWORK("Não foi possível verificar atualizações: sem conexão com a internet. Conecte-se e tente de novo."),
-  RATE_LIMITED("Não foi possível verificar atualizações: o GitHub limitou as consultas deste aparelho. Tente de novo em cerca de uma hora."),
-  SERVER("Não foi possível verificar atualizações: o GitHub não respondeu como esperado. Tente de novo mais tarde."),
-  UNREADABLE("Não foi possível ler a resposta do GitHub sobre a última versão. Tente de novo mais tarde; se continuar, baixe o APK pela página de versões."),
-  NO_APK("A versão publicada não traz um arquivo APK que o app possa instalar. Baixe pela página de versões, se quiser."),
-  METERED("A atualização espera por uma rede Wi-Fi. Conecte-se a uma, ou desligue \"Só no Wi-Fi\" para baixar agora."),
-  DOWNLOAD("Não foi possível baixar a atualização: a conexão foi interrompida. Tente de novo."),
-  DISK("Não foi possível baixar a atualização: não há espaço livre suficiente. Libere espaço e tente de novo."),
-  CHECKSUM("O arquivo baixado não confere com o checksum publicado e foi descartado. Tente de novo; se repetir, avise a T.A.L."),
-  NOT_AN_APK("O arquivo baixado não é um APK válido e foi descartado. Tente de novo; se repetir, avise a T.A.L."),
-  WRONG_PACKAGE("O arquivo baixado é de outro app e foi descartado. Nada foi instalado."),
-  NOT_NEWER("O arquivo baixado não é mais novo que a versão instalada e foi descartado. Nada foi instalado."),
-  SIGNATURE("O arquivo baixado foi assinado com outra chave, e o Android não o instalaria por cima. Nada foi alterado. Instale a nova versão manualmente, mantendo ou apagando os dados."),
-  NOT_ALLOWED("Para instalar atualizações, permita que o T.A.R.K.A.S. instale apps. Abra a permissão, ative e volte."),
-  INSTALL_FAILED("O Android recusou a instalação da atualização. Nada foi alterado; tente de novo."),
-  BUSY_PLAYING("A atualização está pronta e espera a música parar para não interromper a reprodução. Toque em \"Instalar agora\" quando quiser.")
+enum class UpdateProblem(@androidx.annotation.StringRes val messageRes: Int) {
+  NO_NETWORK(com.example.R.string.update_problem_no_network),
+  RATE_LIMITED(com.example.R.string.update_problem_rate_limited),
+  SERVER(com.example.R.string.update_problem_server),
+  UNREADABLE(com.example.R.string.update_problem_unreadable),
+  NO_APK(com.example.R.string.update_problem_no_apk),
+  METERED(com.example.R.string.update_problem_metered),
+  DOWNLOAD(com.example.R.string.update_problem_download),
+  DISK(com.example.R.string.update_problem_disk),
+  CHECKSUM(com.example.R.string.update_problem_checksum),
+  NOT_AN_APK(com.example.R.string.update_problem_not_an_apk),
+  WRONG_PACKAGE(com.example.R.string.update_problem_wrong_package),
+  NOT_NEWER(com.example.R.string.update_problem_not_newer),
+  SIGNATURE(com.example.R.string.update_problem_signature),
+  NOT_ALLOWED(com.example.R.string.update_problem_not_allowed),
+  INSTALL_FAILED(com.example.R.string.update_problem_install_failed),
+  BUSY_PLAYING(com.example.R.string.update_problem_busy_playing)
 }
 
 /** What the update screen shows. [problem] is set only after a failure. */

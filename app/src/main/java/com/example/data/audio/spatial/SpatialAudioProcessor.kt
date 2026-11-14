@@ -43,7 +43,10 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
   private var fifoStart = 0
   private var fifoCount = 0
 
-  private var engine: SpatialEngine? = null
+  private var engine: SpatialStage? = null
+  /** Channels of the audio coming in: 2, or 6 (5.1, which this processor turns into stereo). */
+  private var inChannels = 2
+  private var input6 = FloatArray(0)
   private var running = false
   /** Engine output frames to drop after a start (they come from before it saw any input). */
   private var skipEngine = 0
@@ -57,10 +60,11 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
    * audio is still coming through (a gapless change drains it first), in the previous format.
    */
   override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-    val supported = inputAudioFormat.channelCount == 2 &&
+    val supported = (inputAudioFormat.channelCount == 2 || inputAudioFormat.channelCount == 6) &&
       (inputAudioFormat.encoding == C.ENCODING_PCM_16BIT || inputAudioFormat.encoding == C.ENCODING_PCM_FLOAT)
     if (!supported) return AudioProcessor.AudioFormat.NOT_SET // inactive: passed through untouched
-    return inputAudioFormat
+    // 5.1 comes out as stereo (binaural when on, the plain downmix when off); stereo keeps its format.
+    return AudioProcessor.AudioFormat(inputAudioFormat.sampleRate, 2, inputAudioFormat.encoding)
   }
 
   /** The format the audio now coming in has (set by the flush that made it current). */
@@ -69,6 +73,12 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
     SpatialControl.setStereoInput(format != AudioProcessor.AudioFormat.NOT_SET)
     if (format == AudioProcessor.AudioFormat.NOT_SET) return
     encoding = format.encoding
+    if (inChannels != format.channelCount) {
+      // The renderer of the other layout is not this one.
+      engine = null
+      running = false
+      inChannels = format.channelCount
+    }
     if (sampleRate != format.sampleRate) {
       // Another rate needs its own engine (the HRTF tables depend on it).
       engine = null
@@ -80,15 +90,24 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
   override fun queueInput(inputBuffer: ByteBuffer) {
     val bytes = inputBuffer.remaining()
     if (bytes == 0) return
-    val frames = if (encoding == C.ENCODING_PCM_16BIT) bytes / 4 else bytes / 8
+    val bytesPerSample = if (encoding == C.ENCODING_PCM_16BIT) 2 else 4
+    val frames = bytes / (bytesPerSample * inChannels)
     ensureCapacity(frames)
-    if (encoding == C.ENCODING_PCM_16BIT) {
+    if (inChannels == 6) {
+      if (encoding == C.ENCODING_PCM_16BIT) {
+        for (i in 0 until frames * 6) input6[i] = inputBuffer.getShort() / 32768f
+      } else {
+        for (i in 0 until frames * 6) input6[i] = inputBuffer.getFloat()
+      }
+      // The dry sound (the delay line, and what plays when the effect is off) is the downmix.
+      SurroundVirtualizer.downmix(input6, 0, frames, input)
+    } else if (encoding == C.ENCODING_PCM_16BIT) {
       for (i in 0 until frames * 2) input[i] = inputBuffer.getShort() / 32768f
     } else {
       for (i in 0 until frames * 2) input[i] = inputBuffer.getFloat()
     }
     render(frames)
-    val out = replaceOutputBuffer(bytes)
+    val out = replaceOutputBuffer(frames * 2 * bytesPerSample)
     if (encoding == C.ENCODING_PCM_16BIT) {
       for (i in 0 until frames * 2) out.putShort((output[i] * 32767f).toInt().coerceIn(-32768, 32767).toShort())
     } else {
@@ -102,10 +121,21 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
     try {
       // Always ask the control: it drops its engines a moment after the effect is switched off and builds
       // new ones on demand, so an engine kept from before would never hear a later switch-on again.
-      val current = SpatialControl.engineFor(sampleRate)
+      val surround = inChannels == 6
+      val current: SpatialStage? = when {
+        surround -> SpatialControl.surroundFor(sampleRate)
+        SpatialControl.preset.virtual51 -> SpatialControl.cinemaFor(sampleRate)
+        else -> SpatialControl.engineFor(sampleRate)
+      }
       if (current !== engine && (current != null || !running)) {
-        engine = current
-        running = false
+        val old = engine
+        if (old != null && running && current != null && old.currentIntensity > 0.0) {
+          // Another preset path was chosen while the old one plays: the control has sent it to 0, and the
+          // new one takes over once it is back at the dry sound, so the change never clicks.
+        } else {
+          engine = current
+          running = false
+        }
       }
       // An engine the control no longer holds (it dropped them while the music was paused) hears none of
       // the later changes. Once it has glided back to the dry sound, let go of it; the next block starts
@@ -119,7 +149,7 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
         // Start from the dry sound and glide in.
         e.reset(startIntensity = 0.0)
         running = true
-        skipEngine = LATENCY
+        skipEngine = e.latency
         fromRing = DELAY
         fifoStart = 0; fifoCount = 0
       } else if (e != null && running && !SpatialControl.active && e.currentIntensity <= 0.0) {
@@ -135,7 +165,7 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
       }
 
       if (running && e != null) {
-        val w = e.process(input, 0, frames, engineOut)
+        val w = e.process(if (surround) input6 else input, 0, frames, engineOut)
         var from = 0
         if (skipEngine > 0) {
           from = minOf(skipEngine, w)
@@ -199,6 +229,7 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
       output = FloatArray(frames * 2)
       engineOut = FloatArray((frames + HOP) * 2)
     }
+    if (inChannels == 6 && input6.size < frames * 6) input6 = FloatArray(frames * 6)
     val needRing = DELAY + frames
     if (ringFrames() < needRing) {
       // Keep the frames already in the ring, in order, at the start of the bigger one.
@@ -229,6 +260,7 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
     val frames = DELAY
     ensureCapacity(frames)
     input.fill(0f, 0, frames * 2)
+    if (inChannels == 6) input6.fill(0f, 0, frames * 6)
     render(frames)
     val bytesPerFrame = if (encoding == C.ENCODING_PCM_16BIT) 4 else 8
     val out = replaceOutputBuffer(frames * bytesPerFrame)
@@ -255,6 +287,7 @@ class SpatialAudioProcessor : BaseAudioProcessor() {
     onFlush()
     engine = null
     encoding = C.ENCODING_INVALID
+    inChannels = 2; input6 = FloatArray(0)
     ring = FloatArray(0); input = FloatArray(0); output = FloatArray(0); engineOut = FloatArray(0); fifo = FloatArray(0)
   }
 }

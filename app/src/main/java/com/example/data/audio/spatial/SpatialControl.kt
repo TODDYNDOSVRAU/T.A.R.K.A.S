@@ -46,11 +46,25 @@ object SpatialControl {
   /** True when the processor should be rendering (otherwise it glides to the dry sound). */
   val active: Boolean get() = enabled && stereoInput
 
+  /** Called (from any thread) when [active] changes; the equalizer uses it to keep its headroom right. */
+  @Volatile var onActiveChanged: ((Boolean) -> Unit)? = null
+  private var lastActive = false
+
+  /**
+   * Opens an asset by name (set once by the app at start). Without it, or without a usable file for the
+   * sample rate, the virtualizer keeps the spherical head.
+   */
+  @Volatile var assetOpener: ((String) -> java.io.InputStream?)? = null
+
   private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "tarkas-spatial").apply { priority = Thread.NORM_PRIORITY - 1 } }
   private val hrtfs = mutableMapOf<Int, SphericalHeadHrtf>()
   @Volatile private var preparingRate = 0
   /** Engines built for the processor, by sample rate. */
   private val engines = java.util.concurrent.ConcurrentHashMap<Int, SpatialEngine>()
+  /** 5.1 virtualizers for the processor, by sample rate (built with the engine, from the same HRTF). */
+  private val surrounds = java.util.concurrent.ConcurrentHashMap<Int, SurroundVirtualizer>()
+  /** Stereo-to-five-speakers stages for the processor (the Cinema preset), by sample rate. */
+  private val cinemas = java.util.concurrent.ConcurrentHashMap<Int, UpmixVirtualizer>()
 
   fun configure(
     enabled: Boolean, preset: SpatialPreset, intensity: Double,
@@ -81,6 +95,8 @@ object SpatialControl {
       Thread.sleep(RELEASE_AFTER_MS)
       if (!enabled) {
         engines.clear()
+        surrounds.clear()
+        cinemas.clear()
         synchronized(hrtfs) { hrtfs.clear() }
       }
     }
@@ -116,12 +132,26 @@ object SpatialControl {
   private fun targetParams(): SpatialParams =
     paramsFor(preset, tunings[preset].orEmpty()).let { it.copy(intensity = it.intensity * userIntensity) }
 
-  /** What the engines glide to now: the preset's intensity when active, 0 (dry) otherwise. */
-  private fun targetIntensity(): Double = if (active) targetParams().intensity else 0.0
+  /**
+   * What the stereo engines glide to now: the preset's intensity when active, 0 (dry) otherwise, and also 0
+   * while the Cinema preset is chosen (that preset is the other path's, see [cinemaTarget]).
+   */
+  private fun targetIntensity(): Double = if (active && !preset.virtual51) targetParams().intensity else 0.0
+
+  /** What the Cinema stage glides to: the user's intensity (a blend with the original) while it is chosen and active. */
+  private fun cinemaTarget(): Double = if (active && preset.virtual51) userIntensity else 0.0
 
   private fun update() {
+    val nowActive = active
+    if (nowActive != lastActive) {
+      lastActive = nowActive
+      onActiveChanged?.invoke(nowActive)
+    }
     val target = targetIntensity()
     engines.values.forEach { it.targetIntensity = target }
+    cinemas.values.forEach { it.targetIntensity = cinemaTarget() }
+    // A 5.1 source has no intensity to scale: it is the virtualizer or the plain downmix.
+    surrounds.values.forEach { it.targetIntensity = if (active) 1.0 else 0.0 }
     _otherAppsStrength.value = if (enabled) (preset.virtualizerStrength * userIntensity).toInt().coerceIn(1, 1000) else 0
     _status.value = when {
       !enabled -> SpatialStatus.OFF
@@ -141,6 +171,20 @@ object SpatialControl {
     return null
   }
 
+  /** The 5.1 virtualizer for [sampleRate], or null while it is being built (the processor plays the downmix meanwhile). */
+  fun surroundFor(sampleRate: Int): SurroundVirtualizer? {
+    surrounds[sampleRate]?.let { return it }
+    if (enabled && preparingRate != sampleRate) prepare(sampleRate)
+    return null
+  }
+
+  /** The Cinema stage for [sampleRate], or null while it is being built (the processor plays the dry sound meanwhile). */
+  fun cinemaFor(sampleRate: Int): UpmixVirtualizer? {
+    cinemas[sampleRate]?.let { return it }
+    if (enabled && preparingRate != sampleRate) prepare(sampleRate)
+    return null
+  }
+
   private fun prepare(sampleRate: Int) {
     preparingRate = sampleRate
     update()
@@ -151,8 +195,19 @@ object SpatialControl {
         val engine = SpatialEngine(sampleRate, hrtf, targetParams())
         engine.targetIntensity = targetIntensity()
         engines[sampleRate] = engine
+        // The measured head when there is a file for this rate (44.1, 48 and 96 kHz), otherwise the spherical one;
+        // the virtual room (level 0.35) is always on.
+        val filters = SurroundFilters.production(sampleRate, hrtf, assetOpener) { Log.w(TAG, it) }
+        val surround = SurroundVirtualizer(filters)
+        surround.targetIntensity = if (active) 1.0 else 0.0
+        surrounds[sampleRate] = surround
+        val cinema = UpmixVirtualizer(sampleRate, filters)
+        cinema.targetIntensity = cinemaTarget()
+        cinemas[sampleRate] = cinema
         // Only the rate in use is kept: a library mixing 44.1, 48 and 96 kHz would otherwise hold them all.
         engines.keys.filter { it != sampleRate }.forEach { engines.remove(it) }
+        surrounds.keys.filter { it != sampleRate }.forEach { surrounds.remove(it) }
+        cinemas.keys.filter { it != sampleRate }.forEach { cinemas.remove(it) }
         synchronized(hrtfs) { hrtfs.keys.retainAll(setOf(sampleRate)) }
         Log.i(TAG, "Spatial engine ready for $sampleRate Hz in ${(System.nanoTime() - started) / 1_000_000} ms")
       } catch (e: Throwable) {

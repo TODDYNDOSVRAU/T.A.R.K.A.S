@@ -30,7 +30,9 @@ class TextMatchAndErrorsTest {
 
   @Test
   fun theTrackFormatReadsPlainlyAndWarnsOnlyWhenTheOutputIsBelowIt() {
-    assertEquals("FLAC · 96 kHz · 24 bits · estéreo", com.example.data.audio.TrackFormat("FLAC", 96000, 2, 24).describe())
+    assertEquals("FLAC · 96 kHz · 24-bit · stereo", com.example.data.audio.TrackFormat("FLAC", 96000, 2, 24).describe())
+    val pt = com.example.data.audio.TrackFormat.Labels({ "$it bits" }, "mono", "estéreo", { "$it canais" })
+    assertEquals("FLAC · 96 kHz · 24 bits · estéreo", com.example.data.audio.TrackFormat("FLAC", 96000, 2, 24).describe(pt))
     assertEquals("MP3 · 44.1 kHz · mono", com.example.data.audio.TrackFormat("MP3", 44100, 1).describe())
     assertEquals("FLAC", com.example.data.audio.TrackFormat.codecName("audio/flac"))
     assertTrue(com.example.data.audio.TrackFormat.outputBelowTrack(96000, intArrayOf(44100, 48000)))

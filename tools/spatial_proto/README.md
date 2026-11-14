@@ -61,3 +61,24 @@ python -m unittest discover -s tests -v
 1. Escuta A/B com músicas reais: preset preferido, profundidade do notch, largura máxima.
 2. Trocar o modelo esférico por uma HRTF medida (SADIE II KU100), depois de confirmar a licença.
 3. Portar `engine.py` para C++. Os testes em `tests/` viram a especificação do núcleo nativo.
+
+## Sala virtual (primeiras reflexões)
+
+`python virtualize_render.py musica.flac --room 0.35` soma ao som direto as primeiras reflexões de
+uma sala de 6 x 5 x 2,8 m (detalhes no cabeçalho de `tarkas_spatial/virtualize.py`). Nível
+escolhido pelo dono em 2026-11-13, ouvindo A/B: **0,35** (0,5 soou com eco; 0,2 não testado). No protótipo o padrão continua 0 (sem
+sala), para os testes anecoicos. Pendente: port para o app (sessão Equalizador).
+
+## HRTF medida (SOFA)
+
+`--hrtf <arquivo.sofa>` troca a cabeça esférica por uma HRTF medida (`tarkas_spatial/sofa_hrtf.py`,
+precisa de `h5py`). Testado com o SADIE II, sujeito D1 (Neumann KU100), 48 kHz, licença Apache 2.0:
+https://zenodo.org/records/12092466, arquivo `D1_HRIR_SOFA.zip`, extraído em `data/sadie2/`
+(fora do git). A saída ganha o sufixo `_medida`.
+
+    python virtualize_render.py musica.flac --room 0.35 --hrtf data/sadie2/D1_HRIR_SOFA/D1_48K_24bit_256tap_FIR_SOFA.sofa
+
+Limites: usa a medida mais próxima de cada direção, sem interpolar; a taxa do arquivo tem de
+ser a do áudio (só o de 48 kHz foi baixado); os primeiros 36 samples de cada resposta (pré-eco
+da própria medida, -36,8 dB da energia) são cortados para manter a latência de 576 amostras.
+Estado em 2026-11-13: testes passam; escolha entre medida e esférica depende de escuta, pendente.

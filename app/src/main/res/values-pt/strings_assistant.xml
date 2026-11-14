@@ -47,4 +47,20 @@
     <string name="assistant_composer_placeholder">Peça algo ou digite \"ajuda\"</string>
     <string name="assistant_timer_line">%1$s: %2$s</string>
     <string name="assistant_timer_cancel">Cancelar timer %1$s</string>
+
+    <!-- Saudação ao abrir a aba -->
+    <string name="assistant_greeting">Como posso ajudar com sua música ou áudio hoje?</string>
+
+    <!-- Resultados dos comandos locais do player, mostrados na conversa -->
+    <string name="assistant_result_now_playing">Tocando %1$s</string>
+    <string name="assistant_result_playing">Reproduzindo %1$s</string>
+    <string name="assistant_result_paused">Pausado</string>
+    <string name="assistant_result_already_paused">Já estava pausado</string>
+    <string name="assistant_result_shuffle_on">Aleatório ligado</string>
+    <string name="assistant_result_shuffle_off">Aleatório desligado</string>
+    <string name="assistant_result_repeat_off">Repetir desligado</string>
+    <string name="assistant_result_repeat_all">Repetindo a lista toda</string>
+    <string name="assistant_result_repeat_one">Repetindo uma faixa</string>
+    <string name="assistant_result_favorite_added">%1$s nos favoritos</string>
+    <string name="assistant_result_favorite_removed">%1$s fora dos favoritos</string>
 </resources>

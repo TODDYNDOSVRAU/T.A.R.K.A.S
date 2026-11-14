@@ -5,14 +5,15 @@ import com.example.data.model.Track
 import java.text.Collator
 
 /** How the device's songs are listed in Biblioteca. */
-enum class SongOrder(val key: String, val label: String) {
-  TITLE("title", "Título"),
-  ARTIST("artist", "Artista"),
-  ALBUM("album", "Álbum"),
+/** [key] is what is saved in preferences; the name shown comes from the library_order_* strings. */
+enum class SongOrder(val key: String) {
+  TITLE("title"),
+  ARTIST("artist"),
+  ALBUM("album"),
   /** Newest files first. */
-  RECENT("recent", "Recentes"),
+  RECENT("recent"),
   /** Most plays first (counted on this device, see PlayRules). */
-  MOST_PLAYED("most_played", "Mais tocadas");
+  MOST_PLAYED("most_played");
 
   companion object {
     fun fromKey(key: String?): SongOrder = entries.firstOrNull { it.key == key } ?: TITLE

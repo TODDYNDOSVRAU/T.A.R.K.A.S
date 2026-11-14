@@ -33,13 +33,13 @@ class UpdateInstallReceiver : BroadcastReceiver() {
   private fun notify(context: Context, confirm: Intent) {
     val nm = context.getSystemService(NotificationManager::class.java)
     if (Build.VERSION.SDK_INT >= 26) {
-      nm.createNotificationChannel(NotificationChannel(CHANNEL, "Atualizações", NotificationManager.IMPORTANCE_DEFAULT))
+      nm.createNotificationChannel(NotificationChannel(CHANNEL, context.getString(R.string.update_channel_name), NotificationManager.IMPORTANCE_DEFAULT))
     }
     val pending = PendingIntent.getActivity(context, 1, confirm, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     val n = NotificationCompat.Builder(context, CHANNEL)
       .setSmallIcon(R.drawable.ic_notification)
-      .setContentTitle("Atualização do T.A.R.K.A.S. pronta")
-      .setContentText("Toque para confirmar a instalação.")
+      .setContentTitle(context.getString(R.string.update_ready_title))
+      .setContentText(context.getString(R.string.update_ready_text))
       .setContentIntent(pending)
       .setAutoCancel(true)
       .build()

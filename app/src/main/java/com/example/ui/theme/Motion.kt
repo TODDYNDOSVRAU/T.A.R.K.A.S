@@ -80,10 +80,11 @@ object Motion {
   /**
    * The player opening and closing run on time, not a spring: a spring is fastest in its first frames,
    * which read as a jolt for a movement this large. Slow in, slow out: starts gently, glides through the
-   * middle and lands softly, the same curve both ways so closing is the opening played back.
+   * middle and lands softly, the same curve both ways so closing is the opening played back. Durations
+   * sit inside the identity's 150–300 ms (owner's request, 2026-11-13; they were 620 and 520 ms).
    */
-  const val ExpandMillis = 620
-  const val CollapseMillis = 520
+  const val ExpandMillis = 300
+  const val CollapseMillis = 260
   val PlayerEasing = androidx.compose.animation.core.CubicBezierEasing(0.45f, 0f, 0.15f, 1f)
   const val CollapseStiffness = 130f
 
@@ -227,14 +228,14 @@ fun sectionTransition(fromIndex: Int, toIndex: Int, reduced: Boolean): ContentTr
  * The ways a row can arrive as it scrolls into view, like the list animations of the WhatsApp mods
  * (GB, WA Enhancer). Each one moves and fades the row in; none changes its layout.
  */
-enum class ListAnimation(val key: String, val label: String) {
-  NONE("none", "Nenhuma"),
-  SLIDE("slide", "Deslizar"),
-  FADE("fade", "Esmaecer"),
-  ZOOM("zoom", "Zoom"),
-  SIDE("side", "Lateral"),
-  FLIP("flip", "Virar"),
-  BOUNCE("bounce", "Quicar");
+enum class ListAnimation(val key: String, @androidx.annotation.StringRes val labelRes: Int) {
+  NONE("none", com.example.R.string.list_anim_none),
+  SLIDE("slide", com.example.R.string.list_anim_slide),
+  FADE("fade", com.example.R.string.list_anim_fade),
+  ZOOM("zoom", com.example.R.string.list_anim_zoom),
+  SIDE("side", com.example.R.string.list_anim_side),
+  FLIP("flip", com.example.R.string.list_anim_flip),
+  BOUNCE("bounce", com.example.R.string.list_anim_bounce);
 
   companion object {
     fun fromKey(key: String?): ListAnimation = entries.firstOrNull { it.key == key } ?: SLIDE

@@ -1,5 +1,6 @@
 package com.example.data.audio
 
+import com.example.R
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -167,6 +168,9 @@ class AudioEngineManager(private val context: Context) {
 
   init {
     updateCapabilities()
+    // The automatic preamp lowers the level more while the spatial stage is on.
+    com.example.data.audio.spatial.SpatialControl.onActiveChanged = { eqDsp.setSpatialStage(it) }
+    eqDsp.setSpatialStage(com.example.data.audio.spatial.SpatialControl.active)
     runCatching { audioManager.registerAudioDeviceCallback(deviceCallback, android.os.Handler(android.os.Looper.getMainLooper())) }
       .onFailure { Log.w(TAG, "No output change events", it) }
   }
@@ -394,7 +398,7 @@ class AudioEngineManager(private val context: Context) {
       applyNormalization()
       currentFormat = format?.let { f ->
         TrackFormat(
-          codec = TrackFormat.codecName(f.sampleMimeType),
+          codec = TrackFormat.codecName(f.sampleMimeType, context.getString(R.string.audio_format_codec_unknown)),
           sampleRateHz = f.sampleRate.takeIf { it > 0 } ?: 0,
           channels = f.channelCount.takeIf { it > 0 } ?: 0,
           bits = when (f.pcmEncoding) {
@@ -1040,12 +1044,21 @@ class AudioEngineManager(private val context: Context) {
   }
 
   private fun friendlyRouteName(type: Int): String = when (type) {
-    AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Fone com fio"
-    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "Fone Bluetooth"
-    AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> "Áudio USB"
-    AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "Auricular do aparelho"
-    else -> "Alto-falante do aparelho"
+    AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> context.getString(R.string.audio_route_wired)
+    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> context.getString(R.string.audio_route_bluetooth)
+    AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> context.getString(R.string.audio_route_usb)
+    AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> context.getString(R.string.audio_route_earpiece)
+    else -> context.getString(R.string.audio_route_speaker)
   }
+
+  private fun speakerOutput() = OutputDevice.speaker(context.getString(R.string.audio_route_speaker))
+
+  private fun trackLabels() = TrackFormat.Labels(
+    bits = { context.getString(R.string.audio_format_bits, it) },
+    mono = context.getString(R.string.audio_format_mono),
+    stereo = context.getString(R.string.audio_format_stereo),
+    channels = { context.getString(R.string.audio_format_channels, it) }
+  )
 
   /** Where music goes now, or null when Android does not say. */
   private fun activeOutputDevice(): AudioDeviceInfo? {
@@ -1074,19 +1087,19 @@ class AudioEngineManager(private val context: Context) {
   private fun detectOutput(): OutputDevice = try {
     activeOutputDevice()?.let { dev ->
       val kind = kindOf(dev.type)
-      if (kind == OutputKind.SPEAKER) return@let OutputDevice.SPEAKER
+      if (kind == OutputKind.SPEAKER) return@let speakerOutput()
       // The jack reports the phone's model as its name: a wired fone is just "Fone com fio".
       val product = if (kind == OutputKind.WIRED) null else dev.productName?.toString()?.ifBlank { null }
       val address = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) dev.address else null
       OutputDevice(OutputDevice.keyFor(kind, address, product), kind, product ?: friendlyRouteName(dev.type))
-    } ?: OutputDevice.SPEAKER
+    } ?: speakerOutput()
   } catch (e: Exception) {
     Log.w(TAG, "Error detecting the output", e)
-    OutputDevice.SPEAKER
+    speakerOutput()
   }
 
   private fun detectCapabilities(sessionId: Int): AudioCapabilities {
-    var routeName = "Alto-falante do Dispositivo"
+    var routeName = context.getString(R.string.audio_route_speaker)
     var routeType = "SPEAKER"
     var outputRates = IntArray(0)
 
@@ -1095,11 +1108,11 @@ class AudioEngineManager(private val context: Context) {
         activeOutputDevice()?.let { dev ->
           outputRates = dev.sampleRates ?: IntArray(0)
           routeType = when (dev.type) {
-            AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> "FONE CABEADO (3.5mm)"
-            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "BLUETOOTH A2DP"
-            AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> "ÁUDIO DIGITAL USB"
-            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "ALTO-FALANTE INTEGRADO"
-            else -> "SAÍDA PADRÃO"
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> AudioCapabilities.ROUTE_WIRED
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> AudioCapabilities.ROUTE_BLUETOOTH
+            AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> AudioCapabilities.ROUTE_USB
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> AudioCapabilities.ROUTE_BUILTIN_SPEAKER
+            else -> AudioCapabilities.ROUTE_OTHER
           }
           // Built-in outputs report the phone's model code as their product name (e.g. "sdk_gphone64_x86_64"),
           // which means nothing to a listener; only external devices get their own name.
@@ -1149,8 +1162,8 @@ class AudioEngineManager(private val context: Context) {
       activeRouteType = routeType,
       sampleRateHz = sampleRate,
       channelCount = currentFormat?.channels ?: 2,
-      channelFormat = currentFormat?.describe() ?: "Nenhuma faixa carregada",
-      trackFormat = currentFormat?.describe(),
+      channelFormat = currentFormat?.describe(trackLabels()) ?: context.getString(R.string.audio_format_none),
+      trackFormat = currentFormat?.describe(trackLabels()),
       outputBelowTrackRate = currentFormat?.let { TrackFormat.outputBelowTrack(it.sampleRateHz, outputRates) } ?: false,
       outputMaxRateHz = outputRates.maxOrNull(),
       isAudioSessionActive = sessionId != 0 && (_isPlaying.value),

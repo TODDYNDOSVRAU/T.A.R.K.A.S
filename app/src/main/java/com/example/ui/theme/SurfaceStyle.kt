@@ -30,10 +30,10 @@ import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
 
 /** How floating surfaces (bottom bar, player buttons) are drawn. Chosen in Ajustes. */
-enum class SurfaceStyle(val key: String, val label: String, val description: String) {
-  SOLID("solid", "Sólido", "Cor do app, sem transparência. É o mais leve para a bateria."),
-  FROSTED("frosted", "Vidro fosco", "Desfoca o que passa por trás da barra."),
-  LIQUID("liquid", "Liquid glass", "Vidro que curva o que passa por trás, com borda iluminada (Android 13 ou mais novo). Usa mais a GPU.");
+enum class SurfaceStyle(val key: String, @androidx.annotation.StringRes val labelRes: Int) {
+  SOLID("solid", com.example.R.string.settings_surface_solid),
+  FROSTED("frosted", com.example.R.string.settings_surface_frosted),
+  LIQUID("liquid", com.example.R.string.settings_surface_liquid);
 
   companion object {
     fun fromKey(key: String?): SurfaceStyle = entries.firstOrNull { it.key == key } ?: SOLID

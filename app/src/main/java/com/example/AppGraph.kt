@@ -24,6 +24,12 @@ object AppGraph {
   lateinit var libraryRepository: LibraryRepository private set
   lateinit var playback: PlaybackController private set
 
+  /** Where the player reads each track's waveform; the library side replaces it once it can calculate them. */
+  @Volatile var waveformSource: com.example.data.repository.WaveformSource = com.example.data.repository.WaveformSource.None
+
+  /** The shape of every local track, measured in the background and saved in the app folder. */
+  lateinit var waveforms: com.example.data.waveform.WaveformRepository private set
+
   @Synchronized
   fun init(context: Context) {
     if (initialized) return
@@ -32,6 +38,8 @@ object AppGraph {
     curiosityRepository = CuriosityRepository()
     audioEngineManager = AudioEngineManager(app)
     preferencesRepository = PreferencesRepository(app)
+    musicRepository.setFolderRules(com.example.data.library.FolderRules.decode(preferencesRepository.getFolderRules()))
+    com.example.data.audio.spatial.SpatialControl.assetOpener = { name -> runCatching { app.assets.open(name) }.getOrNull() }
     com.example.data.audio.spatial.SpatialControl.configure(
       enabled = preferencesRepository.getSpatialEnabled(),
       preset = com.example.data.audio.spatial.SpatialPreset.fromKey(preferencesRepository.getSpatialPreset()),
@@ -40,6 +48,10 @@ object AppGraph {
     )
     curiositySpeechManager = CuriositySpeechManager(app)
     libraryRepository = LibraryRepository(app)
+    waveforms = com.example.data.waveform.WaveformRepository(
+      app, kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+    )
+    waveformSource = com.example.data.repository.WaveformSource { waveforms.observe(it) }
     playback = PlaybackController(
       context = app,
       musicRepository = musicRepository,

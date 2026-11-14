@@ -85,11 +85,16 @@ internal fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modi
             GroupDivider()
             RadioRow(
               title = p.label,
-              subtitle = if (ui.tuning[p].orEmpty().isNotEmpty()) stringResource(R.string.audio_spatial_tuned) else null,
+              subtitle = when {
+                p.virtual51 -> stringResource(R.string.audio_spatial_cinema_hint)
+                ui.tuning[p].orEmpty().isNotEmpty() -> stringResource(R.string.audio_spatial_tuned)
+                else -> null
+              },
               selected = ui.preset == p,
               onClick = { actions.onPreset(p) },
               modifier = Modifier.testTag("spatial_preset_${p.key}"),
-              accessory = {
+              // The Cinema preset has no room or azimuth settings to tune: no button for it.
+              accessory = if (p.virtual51) null else ({
                 val turn by animateFloatAsState(if (open) 180f else 0f, tween(if (reduced) 0 else 200), label = "tuning_arrow")
                 IconAction(
                   icon = Icons.Rounded.ExpandMore,
@@ -101,7 +106,7 @@ internal fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modi
                   },
                   modifier = Modifier.rotate(turn).testTag("spatial_tune_${p.key}")
                 )
-              }
+              })
             )
             AnimatedVisibility(
               visible = open,
@@ -147,7 +152,7 @@ private fun SpatialTuning(preset: SpatialPreset, ui: SpatialUi, actions: Spatial
       val v = knob.read(shown)
       SliderRow(
         label = knob.label,
-        valueText = String.format(Locale.US, "%.${knob.decimals}f", v) + knob.unit,
+        valueText = formatNumber(v.toFloat(), knob.decimals) + knob.unit,
         value = v.toFloat(),
         range = knob.min.toFloat()..knob.max.toFloat(),
         onChange = { actions.onKnob(preset, knob, it.toDouble()) },

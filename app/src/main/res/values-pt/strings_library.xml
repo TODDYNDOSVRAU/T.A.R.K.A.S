@@ -81,4 +81,20 @@
     <string name="library_playlist_empty_message">Use “Adicionar a uma playlist” no menu de uma música para colocá-la aqui.</string>
     <string name="library_playlist_remove">Remover %1$s da playlist</string>
     <string name="library_audio_fallback_name">Áudio Local</string>
+    <string name="library_folders_chip">Pastas</string>
+    <string name="library_folders_title">Pastas</string>
+    <string name="library_folders_note">Escolha quais pastas do celular fazem parte da biblioteca. Nada é movido nem apagado; as pastas desmarcadas só ficam fora das listas.</string>
+    <string name="library_folders_empty_title">Nenhuma pasta ainda</string>
+    <string name="library_folders_empty_message">As pastas aparecem aqui quando a música do aparelho for encontrada.</string>
+    <string name="library_folders_root">Pasta principal do armazenamento</string>
+    <string name="library_folders_state_on">Na biblioteca</string>
+    <string name="library_folders_state_off">Fora da biblioteca</string>
+    <string name="library_folders_state_partial">Em parte na biblioteca</string>
+    <string name="library_folders_expand">Mostrar as pastas dentro de %1$s</string>
+    <string name="library_folders_collapse">Ocultar as pastas dentro de %1$s</string>
+    <string name="library_folders_all_out_title">Todas as pastas estão fora</string>
+    <string name="library_folders_all_out_message">Todas as pastas com música estão desmarcadas, então não há músicas para mostrar. Abra Pastas para recolocar alguma.</string>
+    <string name="library_notice_play_next">“%1$s” toca em seguida.</string>
+    <string name="library_notice_added_to_queue">“%1$s” adicionada à fila.</string>
+    <string name="library_notice_already_in_playlist">“%1$s” já está em %2$s.</string>
 </resources>

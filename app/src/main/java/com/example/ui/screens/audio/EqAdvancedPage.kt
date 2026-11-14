@@ -196,10 +196,13 @@ internal fun EqAdvancedPage(
             onChange = { v -> onUpdateEq { it.copy(preampDb = snap(v)) } }
           )
           GroupDivider()
-          val auto = EqDsp.autoPreampDb(eqSettings)
+          val spatialStage = rememberSpatialStage()
+          val auto = EqDsp.autoPreampDb(eqSettings, spatialStage)
           SwitchRow(
             title = stringResource(R.string.audio_adv_auto_preamp),
-            subtitle = if (eqSettings.autoPreamp && auto < 0f) stringResource(R.string.audio_adv_auto_preamp_lowers, formatDb(-auto))
+            subtitle = if (eqSettings.autoPreamp && auto < 0f) {
+              stringResource(if (spatialStage) R.string.audio_adv_auto_preamp_lowers_spatial else R.string.audio_adv_auto_preamp_lowers, formatDb(-auto))
+            }
             else stringResource(R.string.audio_adv_auto_preamp_idle),
             checked = eqSettings.autoPreamp,
             onCheckedChange = { on -> onUpdateEq { it.copy(autoPreamp = on) } },

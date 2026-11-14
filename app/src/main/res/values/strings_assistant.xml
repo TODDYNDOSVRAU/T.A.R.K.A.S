@@ -47,4 +47,20 @@
     <string name="assistant_composer_placeholder">Ask for something or type \"help\"</string>
     <string name="assistant_timer_line">%1$s: %2$s</string>
     <string name="assistant_timer_cancel">Cancel timer %1$s</string>
+
+    <!-- Greeting when the tab opens -->
+    <string name="assistant_greeting">How can I help with your music or audio today?</string>
+
+    <!-- Results of local player commands, shown in the conversation -->
+    <string name="assistant_result_now_playing">Now playing %1$s</string>
+    <string name="assistant_result_playing">Playing %1$s</string>
+    <string name="assistant_result_paused">Paused</string>
+    <string name="assistant_result_already_paused">Already paused</string>
+    <string name="assistant_result_shuffle_on">Shuffle on</string>
+    <string name="assistant_result_shuffle_off">Shuffle off</string>
+    <string name="assistant_result_repeat_off">Repeat off</string>
+    <string name="assistant_result_repeat_all">Repeating the whole list</string>
+    <string name="assistant_result_repeat_one">Repeating one track</string>
+    <string name="assistant_result_favorite_added">%1$s added to favorites</string>
+    <string name="assistant_result_favorite_removed">%1$s removed from favorites</string>
 </resources>

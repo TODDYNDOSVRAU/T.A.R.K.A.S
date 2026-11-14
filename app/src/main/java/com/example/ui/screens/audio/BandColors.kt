@@ -3,24 +3,27 @@ package com.example.ui.screens.audio
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 
 /**
- * One colour per parametric band, so a band is recognised by colour across its card, its point and its
- * own curve on the graph, as in hardware-style equalizers. The first is the app accent. This is the one
- * place the interface leaves the T.A.L. palette, on purpose: eight hues are needed to tell bands apart.
- * Each set keeps at least 3:1 against its own background (non-text contrast, WCAG AA): the bright set is
- * for dark surfaces and the deep set for light ones.
+ * One tone per parametric band, from the identity's accent only: Ice on dark, Deep Teal on light, with the
+ * intermediate tones made by opacity over the surface, as the identity asks. Neighbouring bands alternate
+ * between a strong and a weaker tone so a band stands out from the ones beside it; what names a band is its
+ * number and frequency, which every card and point also carry. Each set keeps at least 3:1 against its own
+ * background (non-text contrast, WCAG AA), which is why the weakest tone is lower on dark than on light.
  */
 internal object BandColors {
-  val ON_DARK: List<Color> = listOf(
-    Color(0xFF7EE3EA), Color(0xFFF2A65A), Color(0xFFB794F6), Color(0xFF86E3A0),
-    Color(0xFFF27C7C), Color(0xFFF2D45A), Color(0xFF7FA8F5), Color(0xFFE58AD0)
-  )
-  val ON_LIGHT: List<Color> = listOf(
-    Color(0xFF0D6C74), Color(0xFFB35F0C), Color(0xFF6B3FC4), Color(0xFF1E7A3C),
-    Color(0xFFB3322F), Color(0xFF7A5F00), Color(0xFF2B5BC4), Color(0xFFA32B8A)
-  )
+  private val ICE = Color(0xFF7EE3EA)
+  private val DEEP_TEAL = Color(0xFF0D6C74)
+  private val BLACK = Color(0xFF080808)
+  private val WHITE = Color(0xFFF2F2F0)
+
+  private val ALPHA_ON_DARK = floatArrayOf(1.00f, 0.55f, 0.85f, 0.62f, 0.93f, 0.58f, 0.76f, 0.68f)
+  private val ALPHA_ON_LIGHT = floatArrayOf(1.00f, 0.76f, 0.92f, 0.80f, 0.96f, 0.78f, 0.88f, 0.84f)
+
+  val ON_DARK: List<Color> = ALPHA_ON_DARK.map { ICE.copy(alpha = it).compositeOver(BLACK) }
+  val ON_LIGHT: List<Color> = ALPHA_ON_LIGHT.map { DEEP_TEAL.copy(alpha = it).compositeOver(WHITE) }
 
   fun of(index: Int, onDark: Boolean): Color {
     val set = if (onDark) ON_DARK else ON_LIGHT

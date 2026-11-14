@@ -4,9 +4,10 @@ import os, shutil, struct, subprocess, tempfile
 import numpy as np
 
 
-def read(path):
+def read(path, stereo=True):
+    """stereo=False mantém os canais do arquivo (5.1 etc.) em vez de reduzir a 2."""
     if not path.lower().endswith(".wav"):
-        return _read_ffmpeg(path)
+        return _read_ffmpeg(path, stereo)
     with open(path, "rb") as f:
         data = f.read()
     if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
@@ -41,7 +42,7 @@ def read(path):
     else:
         raise ValueError(f"{path}: formato WAV não suportado (tag {tag}, {bits} bits)")
     x = x[:len(x) // ch * ch].reshape(-1, ch)
-    return _to_stereo(x, path), fs
+    return (_to_stereo(x, path) if stereo else x), fs
 
 
 def _to_stereo(x, path):
@@ -53,15 +54,15 @@ def _to_stereo(x, path):
                      "(alto-falantes virtuais multicanal são a fase 4).")
 
 
-def _read_ffmpeg(path):
+def _read_ffmpeg(path, stereo=True):
     exe = shutil.which("ffmpeg")
     if not exe:
         raise ValueError(f"{path}: só WAV é lido sem ffmpeg. Converta antes ou instale o ffmpeg.")
     with tempfile.TemporaryDirectory() as d:
         tmp = os.path.join(d, "in.wav")
-        subprocess.run([exe, "-v", "error", "-y", "-i", path, "-ac", "2", "-c:a", "pcm_f32le", tmp],
+        subprocess.run([exe, "-v", "error", "-y", "-i", path, *(["-ac", "2"] if stereo else []), "-c:a", "pcm_f32le", tmp],
                        check=True)
-        return read(tmp)
+        return read(tmp, stereo)
 
 
 def write(path, x, fs, bits=16):

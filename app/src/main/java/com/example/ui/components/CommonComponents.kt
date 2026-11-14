@@ -39,7 +39,6 @@ import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SkipNext
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -57,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
@@ -234,9 +234,25 @@ fun TarkasLargeTitle(
   showSettings: Boolean = true,
   onBack: (() -> Unit)? = null
 ) {
+  val page = MaterialTheme.colorScheme.background
   Row(
     modifier = modifier
-      .background(MaterialTheme.colorScheme.background)
+      // Above the list that scrolls under it, with a short fade below, so content leaves under the
+      // title instead of being cut in a straight line.
+      .zIndex(1f)
+      .drawBehind {
+        val fade = 14.dp.toPx()
+        drawRect(
+          brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+            colors = listOf(page, page.copy(alpha = 0f)),
+            startY = size.height,
+            endY = size.height + fade
+          ),
+          topLeft = Offset(0f, size.height),
+          size = Size(size.width, fade)
+        )
+      }
+      .background(page)
       .statusBarsPadding()
       .fillMaxWidth()
       .heightIn(min = Sizes.touch + Space.m + Space.s)
@@ -974,7 +990,7 @@ fun CuriosityDetailDialog(
   onDismiss: () -> Unit
 ) {
   val colors = MaterialTheme.colorScheme
-  AlertDialog(
+  TarkasAlertDialog(
     onDismissRequest = onDismiss,
     title = {
       Column {

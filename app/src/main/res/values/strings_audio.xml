@@ -12,6 +12,7 @@
   <string name="audio_adv_auto_preamp">Automatic preamp</string>
   <string name="audio_adv_auto_preamp_idle">Lowers the volume as much as the curve boosts, to avoid distortion</string>
   <string name="audio_adv_auto_preamp_lowers">Lowers %1$s dB so the boosts do not distort</string>
+  <string name="audio_adv_auto_preamp_lowers_spatial">Lowers %1$s dB so the boosts and the spatial effect do not distort</string>
   <string name="audio_adv_back">Audio</string>
   <string name="audio_adv_balance">Balance</string>
   <string name="audio_adv_bass_freq">Bass frequency</string>
@@ -133,6 +134,33 @@
     <item quantity="one">%2$s headphone measured. Search for your model.</item>
     <item quantity="other">%2$s headphones measured. Search for your model.</item>
   </plurals>
+  <plurals name="audio_device_total_online">
+    <item quantity="one">%2$s headphone: %3$s in the app (works offline), %4$s only in the online list. Search for your model.</item>
+    <item quantity="other">%2$s headphones: %3$s in the app (work offline), %4$s only in the online list. Search for your model.</item>
+  </plurals>
+  <string name="audio_route_wired">Wired headphones</string>
+  <string name="audio_route_bluetooth">Bluetooth headphones</string>
+  <string name="audio_route_usb">USB audio</string>
+  <string name="audio_route_earpiece">Device earpiece</string>
+  <string name="audio_route_speaker">Device speaker</string>
+  <string name="audio_format_bits">%1$d-bit</string>
+  <string name="audio_format_mono">mono</string>
+  <string name="audio_format_stereo">stereo</string>
+  <string name="audio_format_channels">%1$d channels</string>
+  <string name="audio_format_none">No track loaded</string>
+  <string name="audio_format_codec_unknown">Audio</string>
+  <string name="audio_action_undo">Undo</string>
+  <string name="audio_action_choose">Choose</string>
+  <string name="audio_notice_preset_loaded">Preset “%1$s” loaded. Unsaved changes were discarded.</string>
+  <string name="audio_notice_eq_reset">Equalizer restored to default.</string>
+  <string name="audio_notice_preset_deleted">Preset “%1$s” deleted.</string>
+  <string name="audio_notice_cache_cleared">Cache cleared. Covers and the headphone list will be downloaded again when needed.</string>
+  <string name="audio_error_device_list">No connection to download the headphone list.</string>
+  <string name="audio_error_device_curve">Could not download the curve of %1$s.</string>
+  <string name="audio_notice_correction_on">Headphone correction: %1$s.</string>
+  <string name="audio_notice_correction_off">No headphone correction on %1$s.</string>
+  <string name="audio_notice_suggest_one">There is a correction for %1$s, measured by %2$s.</string>
+  <string name="audio_notice_suggest_many">There are corrections for headphones like “%1$s”. Choose your model.</string>
   <string name="audio_enter_value">Enter the value</string>
   <string name="audio_enter_value_for">Enter the value of %1$s</string>
   <string name="audio_filter_all">All</string>
@@ -186,7 +214,7 @@
   <string name="audio_section_mine">Mine</string>
   <string name="audio_spatial_copy_header">Mode %1$s (intensity %2$s)\n</string>
   <string name="audio_spatial_copy_values">Copy values</string>
-  <string name="audio_spatial_footer">Works on any output, best on headphones. Mono or multichannel tracks play as they are.</string>
+  <string name="audio_spatial_footer">Works on any output, best on headphones. Stereo and 5.1 tracks are processed; mono and other layouts play as they are.</string>
   <string name="audio_spatial_intensity">Intensity</string>
   <string name="audio_spatial_others_active">Also active in other apps (%1$d)</string>
   <string name="audio_spatial_others_app">Other apps (Spotify, YouTube): turn on ADB or root mode in Advanced</string>
@@ -194,13 +222,14 @@
   <string name="audio_spatial_others_waiting">In other apps as soon as one plays</string>
   <string name="audio_spatial_reset_mode">Restore mode values</string>
   <string name="audio_spatial_status_active">Active</string>
-  <string name="audio_spatial_status_not_stereo">This track is not stereo</string>
+  <string name="audio_spatial_status_not_stereo">This track is not stereo or 5.1</string>
   <string name="audio_spatial_status_off">Opens the music around your head</string>
   <string name="audio_spatial_status_preparing">Preparing…</string>
   <string name="audio_spatial_title">Tarkas Spatial</string>
   <string name="audio_spatial_tune_close">Close settings for %1$s</string>
   <string name="audio_spatial_tune_open">Settings for %1$s</string>
   <string name="audio_spatial_tuned">Adjusted by you</string>
+  <string name="audio_spatial_cinema_hint">Stereo spread over five virtual speakers. Not tuned by ear yet.</string>
   <string name="audio_speaker_warning">The headphone correction is on, but the sound plays through the speaker.</string>
   <string name="audio_spectrum_permission">The live spectrum needs the microphone permission. The app records nothing.</string>
   <string name="audio_spectrum_show">Show spectrum</string>

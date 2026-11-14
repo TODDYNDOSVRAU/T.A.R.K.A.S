@@ -18,11 +18,17 @@ import kotlin.math.roundToInt
  */
 
 /**
- * The one locale every number on this screen is printed with. Mixing the device locale ("1,5") with
- * Locale.US ("1.5") put a comma in one readout and a dot in the next; numbers here always use a dot,
- * as audio gear and the AutoEq data do.
+ * Every number on this screen is printed in the language of the interface ("48,0 kHz" in Portuguese,
+ * "48.0 kHz" in English), read at the moment of printing so a change of language shows at once. Text typed
+ * into a number field accepts both separators, and text meant for the clipboard stays in Locale.US.
  */
-private val NumberLocale: Locale = Locale.US
+internal fun numberLocale(): Locale = Locale.getDefault()
+
+/** The decimal separator of [numberLocale], for trimming "1.0k" to "1k" in either language. */
+private fun decimalMark(): String = java.text.DecimalFormatSymbols.getInstance(numberLocale()).decimalSeparator.toString()
+
+/** [v] with [decimals] places, in the interface language. */
+internal fun formatNumber(v: Float, decimals: Int): String = String.format(numberLocale(), "%.${decimals}f", v)
 
 internal const val MIN_F = 20f
 internal const val MAX_F = 20000f
@@ -60,27 +66,27 @@ internal fun snap(db: Float): Float {
 /** "+3.5", "0.0", "-2.0": a sign on boosts, so a glance tells up from down. */
 internal fun formatDb(db: Float): String {
   val rounded = (db * 10f).roundToInt() / 10f
-  val text = String.format(NumberLocale, "%.1f", rounded)
+  val text = formatNumber(rounded, 1)
   return if (rounded > 0f) "+$text" else text
 }
 
 /** "63", "1.6k", "16k": the short form printed under a band. */
 internal fun formatHz(f: Float): String = when {
   f >= 10000f -> "${(f / 1000f).roundToInt()}k"
-  f >= 1000f -> String.format(NumberLocale, "%.1fk", f / 1000f).replace(".0k", "k")
+  f >= 1000f -> formatNumber(f / 1000f, 1).let { if (it.endsWith("${decimalMark()}0")) it.dropLast(2) else it } + "k"
   else -> "${f.roundToInt()}"
 }
 
 /** The same frequency for a screen reader, with its unit spoken. */
 internal fun spokenHz(f: Float): String = when {
-  f >= 1000f -> String.format(NumberLocale, "%.1f kHz", f / 1000f).replace(".0 kHz", " kHz")
+  f >= 1000f -> formatNumber(f / 1000f, 1).let { if (it.endsWith("${decimalMark()}0")) it.dropLast(2) else it } + " kHz"
   else -> "${f.roundToInt()} Hz"
 }
 
-internal fun formatQ(q: Float): String = String.format(NumberLocale, "%.2f", q)
+internal fun formatQ(q: Float): String = formatNumber(q, 2)
 
 /** "48.0 kHz" for the output line. */
-internal fun formatSampleRate(hz: Int): String = String.format(NumberLocale, "%.1f kHz", hz / 1000f)
+internal fun formatSampleRate(hz: Int): String = formatNumber(hz / 1000f, 1) + " kHz"
 
 /** The filter type's name. [FilterType.label] stays as is in data/model; the UI maps the type to a string. */
 @Composable

@@ -279,7 +279,7 @@ class MainActivity : ComponentActivity() {
         }
         // Asked once, after the opening animation, the first time something plays.
         if (askNotifications && notificationsMissing && !showBoot && !showOnboarding) {
-          androidx.compose.material3.AlertDialog(
+          com.example.ui.components.TarkasAlertDialog(
             onDismissRequest = { viewModel.notificationsAsked() },
             title = { Text(androidx.compose.ui.res.stringResource(R.string.nav_notifications_title)) },
             text = {
@@ -296,6 +296,10 @@ class MainActivity : ComponentActivity() {
             }
           )
         }
+        // After the notification question: permission to install updates, then the "new version" popup.
+        com.example.ui.components.StartupUpdatePrompts(
+          enabled = !showBoot && !showOnboarding && !(askNotifications && notificationsMissing)
+        )
         }
       }
     }
@@ -323,6 +327,8 @@ fun TarkasAppContent(
   val tracks by viewModel.musicRepository.tracks.collectAsStateWithLifecycle()
   val currentTrack by viewModel.musicRepository.currentTrack.collectAsStateWithLifecycle()
   val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
+  val waveform by viewModel.currentWaveform.collectAsStateWithLifecycle()
+  val waveformBar by viewModel.waveformBar.collectAsStateWithLifecycle()
   val wantsToPlay by viewModel.wantsToPlay.collectAsStateWithLifecycle()
   // Values that change many times a second are kept as State and read only where they are drawn,
   // so a tick does not recompose the whole app.
@@ -481,6 +487,9 @@ fun TarkasAppContent(
       // is shown, so going back from the player lands exactly where the user left the list.
       val pageStates = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
       AnimatedContent(
+        // While the full player covers the page, a screen reader must not reach it: its nodes stay
+        // composed (for the quick close) but are removed from the accessibility tree.
+        modifier = if (currentTab == TarkasNavTab.MUSIC) Modifier.clearAndSetSemantics {} else Modifier,
         targetState = screenKey,
         transitionSpec = { screenTransition(initialState, targetState, reducedMotion) },
         label = "screen"
@@ -508,7 +517,7 @@ fun TarkasAppContent(
         // Ajustes opens from the title bar of Início only, as an account button does in Apple apps;
         // the other pages keep their title clean.
         TarkasLargeTitle(
-          title = (screen as TarkasNavTab).label,
+          title = androidx.compose.ui.res.stringResource((screen as TarkasNavTab).labelRes),
           onOpenSettings = { viewModel.setTab(TarkasNavTab.SETTINGS) },
           showSettings = screen == TarkasNavTab.HOME,
           onBack = if (screen == TarkasNavTab.SETTINGS) ({ viewModel.goBack() }) else null
@@ -587,6 +596,9 @@ fun TarkasAppContent(
             deviceScanning = viewModel.deviceScanning.collectAsStateWithLifecycle().value,
             hasMusicPermission = viewModel.hasMusicPermission(),
             onScanDevice = { viewModel.scanDeviceMusic() },
+            songsPerFolder = viewModel.deviceFolders.collectAsStateWithLifecycle().value,
+            folderRules = viewModel.folderRules.collectAsStateWithLifecycle().value,
+            onSetFolderIncluded = { folder, included -> viewModel.setFolderIncluded(folder, included) },
             queue = queue,
             currentTrack = currentTrack,
             isPlaying = pagePlaying,
@@ -717,6 +729,8 @@ fun TarkasAppContent(
             onSurfaceStyleChange = { style -> viewModel.setSurfaceStyle(style) },
             reduceMotion = reduceMotion,
             onReduceMotionChange = { viewModel.setReduceMotion(it) },
+            waveformBar = waveformBar,
+            onWaveformBarChange = { viewModel.setWaveformBar(it) },
             onListAnimationChange = { viewModel.setListAnimation(it) },
             reduceTransparency = reduceTransparency,
             onReduceTransparencyChange = { viewModel.setReduceTransparency(it) },
@@ -771,6 +785,7 @@ fun TarkasAppContent(
             coverNeighbors = viewModel.coverNeighbors.collectAsStateWithLifecycle().value,
             onPreviousFromCover = { viewModel.playPreviousTrack(force = true) },
             onSeekTo = { pos -> viewModel.seekTo(pos) },
+            waveform = waveform,
             isShuffle = isShuffle,
             repeatMode = repeatMode,
             favoriteIds = favoriteIds,
@@ -904,7 +919,7 @@ fun TarkasAppContent(
         // services), or when its action is used. Its clock waits while a full-screen page hides it.
         // Starting another list while queued songs wait: keep them (they play first) or clear them.
         viewModel.listStartPrompt.collectAsStateWithLifecycle().value?.let { p ->
-          androidx.compose.material3.AlertDialog(
+          com.example.ui.components.TarkasAlertDialog(
             onDismissRequest = { viewModel.answerListStart(null) },
             title = { Text(androidx.compose.ui.res.stringResource(R.string.nav_keep_queue_title), style = com.example.ui.theme.AppText.Title3) },
             text = {

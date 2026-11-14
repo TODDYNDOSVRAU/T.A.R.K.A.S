@@ -136,6 +136,20 @@ class PreferencesRepository(context: Context) {
     prefs.edit().putInt("crossfade_seconds", seconds).apply()
   }
 
+  /** Waveform progress bar in the player (Avançado); on by default (owner decision 2026-11-13); off keeps the thin bar. */
+  fun getWaveformBar(): Boolean = prefs.getBoolean("waveform_bar", true)
+
+  fun saveWaveformBar(on: Boolean) {
+    prefs.edit().putBoolean("waveform_bar", on).apply()
+  }
+
+  /** Which device folders are in the library ("1|path" in, "0|path" out); empty = all. */
+  fun getFolderRules(): Set<String> = prefs.getStringSet("folder_rules", emptySet()).orEmpty().toSet()
+
+  fun saveFolderRules(rules: Set<String>) {
+    prefs.edit().putStringSet("folder_rules", rules).apply()
+  }
+
   /** How Biblioteca lists the device's songs (SongOrder key). */
   fun getSongOrder(): String? = prefs.getString("song_order", null)
 

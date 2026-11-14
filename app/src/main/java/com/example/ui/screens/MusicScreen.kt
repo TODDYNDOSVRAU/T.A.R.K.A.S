@@ -164,6 +164,7 @@ import com.example.ui.components.PlayPauseIcon
 import com.example.ui.components.SleepTimerDialog
 import com.example.ui.components.TrackActionsMenu
 import com.example.ui.components.TrackDetailsSheet
+import com.example.ui.components.WaveformBar
 import com.example.ui.viewmodel.TrackDetailsState
 import com.example.ui.components.sleepTimerLabel
 import com.example.ui.theme.AppText
@@ -176,6 +177,7 @@ import com.example.ui.theme.Shapes
 import com.example.ui.theme.Size
 import com.example.ui.theme.Space
 import com.example.ui.theme.TarkasDarkOverride
+import com.example.ui.theme.TarkasIce
 import com.example.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -210,6 +212,8 @@ fun MusicScreen(
   onNextTrack: () -> Unit,
   onPreviousTrack: () -> Unit,
   onSeekTo: (Long) -> Unit,
+  /** The playing track's 100 amplitudes when the waveform bar is on and they are known; null keeps the thin bar. */
+  waveform: ByteArray? = null,
   isShuffle: Boolean,
   repeatMode: RepeatMode,
   favoriteIds: List<String>,
@@ -352,7 +356,8 @@ fun MusicScreen(
         isPlaying = isPlaying,
         reduced = reduced,
         onScrubbing = { scrubbing = it },
-        onSeekTo = onSeekTo
+        onSeekTo = onSeekTo,
+        waveform = waveform
       )
     }
   }
@@ -1401,7 +1406,8 @@ private fun PlayerProgress(
   isPlaying: Boolean,
   reduced: Boolean,
   onScrubbing: (Boolean) -> Unit,
-  onSeekTo: (Long) -> Unit
+  onSeekTo: (Long) -> Unit,
+  waveform: ByteArray? = null
 ) {
   val loadedDuration = durationMs()
   val rawPosition = positionMs()
@@ -1439,6 +1445,7 @@ private fun PlayerProgress(
       if (frac <= 0.01f || frac >= 0.99f) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
       onSeekTo((frac * loadedDuration).toLong())
     },
+    waveform = waveform,
     modifier = Modifier.testTag("music_progress_slider")
   )
   Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -1466,7 +1473,9 @@ private fun ScrubBar(
   onChange: (Float) -> Unit,
   onRelease: (Float) -> Unit,
   modifier: Modifier = Modifier,
-  enabled: Boolean = true
+  enabled: Boolean = true,
+  /** The track's 100 amplitudes; when set the bar is drawn as a waveform (played part in Ice), else the thin rail. */
+  waveform: ByteArray? = null
 ) {
   // The gesture blocks live as long as the bar, so they read the latest values through these.
   val change by rememberUpdatedState(onChange)
@@ -1481,10 +1490,25 @@ private fun ScrubBar(
   val fill = if (dragging) OnPage else OnPage.copy(alpha = 0.85f)
   val rail = OnPage.copy(alpha = 0.22f)
   val shown = fraction.coerceIn(0f, 1f)
+  var widthPx by remember { mutableStateOf(0) }
+  val density = androidx.compose.ui.platform.LocalDensity.current
+  val barPx = with(density) { WaveformBar.BAR_DP.dp.toPx() }
+  val gapPx = with(density) { WaveformBar.GAP_DP.dp.toPx() }
+  val bars = remember(waveform, widthPx) {
+    if (waveform == null || widthPx <= 0) FloatArray(0)
+    else WaveformBar.resample(waveform, WaveformBar.barCount(widthPx.toFloat(), barPx, gapPx))
+  }
+  // The waveform fades in over the thin bar when it arrives (and the thin one fades out).
+  val waveAlpha by animateFloatAsState(
+    targetValue = if (bars.isNotEmpty()) 1f else 0f,
+    animationSpec = if (reduced) snap() else tween(durationMillis = 220),
+    label = "waveformAlpha"
+  )
   Box(
     modifier = modifier
       .fillMaxWidth()
       .height(Size.touch)
+      .onSizeChanged { widthPx = it.width }
       .semantics {
         contentDescription = description
         stateDescription = stateText
@@ -1531,9 +1555,25 @@ private fun ScrubBar(
         val h = thickness.dp.toPx()
         val top = (size.height - h) / 2f
         val r = CornerRadius(h / 2f)
-        drawRoundRect(rail, topLeft = Offset(0f, top), size = androidx.compose.ui.geometry.Size(size.width, h), cornerRadius = r)
-        if (shown > 0f) {
-          drawRoundRect(fill, topLeft = Offset(0f, top), size = androidx.compose.ui.geometry.Size(size.width * shown, h), cornerRadius = r)
+        val thin = 1f - waveAlpha
+        if (thin > 0f) {
+          drawRoundRect(rail.copy(alpha = rail.alpha * thin), topLeft = Offset(0f, top), size = androidx.compose.ui.geometry.Size(size.width, h), cornerRadius = r)
+          if (shown > 0f) {
+            drawRoundRect(fill.copy(alpha = fill.alpha * thin), topLeft = Offset(0f, top), size = androidx.compose.ui.geometry.Size(size.width * shown, h), cornerRadius = r)
+          }
+        }
+        if (waveAlpha > 0f) {
+          with(WaveformBar) {
+            drawBars(
+              amplitudes = bars,
+              fraction = shown,
+              played = TarkasIce.copy(alpha = waveAlpha),
+              rest = OnPage.copy(alpha = 0.4f * waveAlpha),
+              barPx = barPx,
+              gapPx = gapPx,
+              grow = ((thickness - 4f) / 6f).coerceIn(0f, 1f)
+            )
+          }
         }
       }
   )

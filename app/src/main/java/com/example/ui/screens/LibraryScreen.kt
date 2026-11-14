@@ -46,7 +46,7 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.LibraryMusic
-import androidx.compose.material3.AlertDialog
+import com.example.ui.components.TarkasAlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -103,6 +103,7 @@ import com.example.ui.components.TrackArtwork
 import com.example.ui.components.TrackActionsMenu
 import com.example.ui.components.TrackRow
 import com.example.ui.components.highlightClickable
+import com.example.ui.screens.library.FolderPicker
 import com.example.ui.screens.library.PlayShuffleRow
 import com.example.ui.screens.library.TrackDivider
 import com.example.ui.screens.library.itemMotion
@@ -157,6 +158,9 @@ fun LibraryScreen(
   deviceScanning: Boolean = false,
   hasMusicPermission: Boolean = false,
   onScanDevice: () -> Unit = {},
+  songsPerFolder: Map<String, Int> = emptyMap(),
+  folderRules: com.example.data.library.FolderRules = com.example.data.library.FolderRules.None,
+  onSetFolderIncluded: (String, Boolean) -> Unit = { _, _ -> },
   queue: List<Track>,
   currentTrack: Track?,
   isPlaying: Boolean,
@@ -210,6 +214,7 @@ fun LibraryScreen(
   var openPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
   // Dialogs are saved by id, so a rotation keeps them open on the same playlist.
   var showNewPlaylist by rememberSaveable { mutableStateOf(false) }
+  var showFolders by rememberSaveable { mutableStateOf(false) }
   var renamingId by rememberSaveable { mutableStateOf<String?>(null) }
   var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -340,7 +345,7 @@ fun LibraryScreen(
               onPlay = { track -> onPlayFromList(track, shownSongs) },
               onShuffle = { onShuffleList(shownSongs) },
               header = {
-                if (musicAllowed && deviceTracks.isNotEmpty()) {
+                if (musicAllowed && (deviceTracks.isNotEmpty() || folderRules.isFiltering)) {
                   if (compact) {
                     item(key = "song_search") {
                       Row(
@@ -359,6 +364,8 @@ fun LibraryScreen(
                         SongOrderRow(
                           songOrder,
                           onChange = { songOrder = it; onSongOrderChange(it) },
+                          foldersActive = folderRules.isFiltering,
+                          onFolders = { showFolders = true },
                           modifier = Modifier.weight(1f)
                         )
                       }
@@ -376,7 +383,7 @@ fun LibraryScreen(
                       )
                     }
                     item(key = "song_order") {
-                      SongOrderRow(songOrder, onChange = { songOrder = it; onSongOrderChange(it) })
+                      SongOrderRow(songOrder, onChange = { songOrder = it; onSongOrderChange(it) }, foldersActive = folderRules.isFiltering, onFolders = { showFolders = true })
                     }
                   }
                 }
@@ -409,6 +416,14 @@ fun LibraryScreen(
                     onOpenSettings = openAppSettings
                   )
                   deviceScanning -> Loading(stringResource(R.string.library_loading_songs))
+                  deviceTracks.isEmpty() && songsPerFolder.isNotEmpty() -> EmptyState(
+                    icon = Icons.Rounded.SearchOff,
+                    title = stringResource(R.string.library_folders_all_out_title),
+                    message = stringResource(R.string.library_folders_all_out_message),
+                    modifier = Modifier.padding(horizontal = Space.page),
+                    actionLabel = stringResource(R.string.library_folders_chip),
+                    onAction = { showFolders = true }
+                  )
                   deviceTracks.isNotEmpty() -> NoMatch(
                     message = stringResource(R.string.library_search_empty_songs, songQuery.trim()),
                     onClear = { songQuery = "" }
@@ -489,6 +504,15 @@ fun LibraryScreen(
     }
   }
 
+  if (showFolders) {
+    FolderPicker(
+      songsPerFolder = songsPerFolder,
+      rules = folderRules,
+      onSetIncluded = onSetFolderIncluded,
+      onDismiss = { showFolders = false }
+    )
+  }
+
   if (showNewPlaylist) {
     NamePlaylistDialog(
       title = stringResource(R.string.library_new_playlist_title),
@@ -508,7 +532,7 @@ fun LibraryScreen(
     )
   }
   playlists.firstOrNull { it.id == deletingId }?.let { pl ->
-    AlertDialog(
+    TarkasAlertDialog(
       onDismissRequest = { deletingId = null },
       title = { Text(stringResource(R.string.library_delete_title, pl.name), style = AppText.Title3) },
       text = {
@@ -754,6 +778,8 @@ private fun TrackList(
 private fun SongOrderRow(
   order: com.example.data.playback.SongOrder,
   onChange: (com.example.data.playback.SongOrder) -> Unit,
+  foldersActive: Boolean,
+  onFolders: () -> Unit,
   modifier: Modifier = Modifier
 ) {
   val rowState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -772,6 +798,14 @@ private fun SongOrderRow(
         selected = o == order,
         onClick = { onChange(o) },
         modifier = Modifier.testTag("song_order_${o.key}")
+      )
+    }
+    item(key = "folders") {
+      FilterChip(
+        label = stringResource(R.string.library_folders_chip),
+        selected = foldersActive,
+        onClick = onFolders,
+        modifier = Modifier.testTag("library_folders")
       )
     }
   }

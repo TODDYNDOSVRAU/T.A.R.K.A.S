@@ -698,7 +698,7 @@ fun TrackRow(
     if (onMore != null) {
       IconAction(
         icon = Icons.Rounded.MoreHoriz,
-        contentDescription = "Mais opções para ${track.title}",
+        contentDescription = androidx.compose.ui.res.stringResource(com.example.R.string.player_more_options_for, track.title),
         onClick = onMore,
         tint = colors.onSurfaceVariant
       )

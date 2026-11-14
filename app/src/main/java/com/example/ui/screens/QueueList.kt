@@ -20,7 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DragHandle
-import androidx.compose.material3.AlertDialog
+import com.example.ui.components.TarkasAlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SwipeToDismissBox
@@ -326,7 +326,7 @@ internal fun QueueList(
   }
 
   if (confirmClear) {
-    AlertDialog(
+    TarkasAlertDialog(
       onDismissRequest = { confirmClear = false },
       title = { Text(stringResource(R.string.queue_clear_title), style = AppText.Title3) },
       text = {

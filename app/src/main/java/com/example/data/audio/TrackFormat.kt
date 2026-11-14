@@ -11,15 +11,27 @@ data class TrackFormat(
   /** Bits per sample when the file states them (lossless formats); null for lossy ones. */
   val bits: Int? = null
 ) {
-  /** "FLAC · 96 kHz · 24 bits · estéreo". */
-  fun describe(): String = listOfNotNull(
+  /** Words around the numbers, from the app's string resources ([EN] is the default). */
+  data class Labels(
+    val bits: (Int) -> String,
+    val mono: String,
+    val stereo: String,
+    val channels: (Int) -> String
+  ) {
+    companion object {
+      val EN = Labels({ "$it-bit" }, "mono", "stereo", { "$it channels" })
+    }
+  }
+
+  /** "FLAC · 96 kHz · 24-bit · stereo". */
+  fun describe(labels: Labels = Labels.EN): String = listOfNotNull(
     codec,
     if (sampleRateHz > 0) khz(sampleRateHz) else null,
-    bits?.let { "$it bits" },
+    bits?.let(labels.bits),
     when (channels) {
-      1 -> "mono"
-      2 -> "estéreo"
-      in 3..Int.MAX_VALUE -> "$channels canais"
+      1 -> labels.mono
+      2 -> labels.stereo
+      in 3..Int.MAX_VALUE -> labels.channels(channels)
       else -> null
     }
   ).joinToString(" · ")
@@ -29,8 +41,8 @@ data class TrackFormat(
       if (hz % 1000 == 0) "${hz / 1000} kHz" else String.format(java.util.Locale.ROOT, "%.1f kHz", hz / 1000.0)
 
     /** A short codec name from a MIME type ("audio/flac" → "FLAC"). */
-    fun codecName(mime: String?): String = when (mime?.lowercase()) {
-      null -> "Áudio"
+    fun codecName(mime: String?, unknown: String = "Audio"): String = when (mime?.lowercase()) {
+      null -> unknown
       "audio/flac" -> "FLAC"
       "audio/mpeg", "audio/mpeg-l2", "audio/mpeg-l1" -> "MP3"
       "audio/mp4a-latm" -> "AAC"

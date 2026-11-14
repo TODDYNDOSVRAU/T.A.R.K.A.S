@@ -6,7 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.AlertDialog
+import com.example.ui.components.TarkasAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -280,7 +280,7 @@ fun AudioScreen(
     )
   }
   if (showDelete && activePreset != null) {
-    AlertDialog(
+    TarkasAlertDialog(
       onDismissRequest = { showDelete = false },
       title = { Text(stringResource(R.string.audio_preset_delete_title, activePreset.name), style = AppText.Title3) },
       text = { Text(stringResource(R.string.audio_preset_delete_body), style = AppText.Body) },
@@ -306,7 +306,7 @@ private fun PresetNameDialog(
   onDismiss: () -> Unit
 ) {
   var name by rememberSaveable { mutableStateOf(initialName) }
-  AlertDialog(
+  TarkasAlertDialog(
     onDismissRequest = onDismiss,
     title = { Text(title, style = AppText.Title3) },
     text = {

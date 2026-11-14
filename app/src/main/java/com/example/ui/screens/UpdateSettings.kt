@@ -106,7 +106,7 @@ internal fun LazyListScope.updateSettingsGroup(header: String) {
       }
     }
     GroupDivider()
-    Footer(state.problem?.message ?: if (installs) stringResource(R.string.settings_update_explanation) else UpdateManager.DEV_BUILD_NOTICE)
+    Footer(state.problem?.let { stringResource(it.messageRes) } ?: if (installs) stringResource(R.string.settings_update_explanation) else stringResource(R.string.update_dev_build_notice))
   }
 }
 
@@ -173,4 +173,4 @@ private fun Footer(text: String) {
   )
 }
 
-private fun formatSize(bytes: Long): String = String.format(Locale.ROOT, "%.1f MB", bytes / (1024f * 1024f))
+private fun formatSize(bytes: Long): String = String.format(Locale.getDefault(), "%.1f MB", bytes / (1024f * 1024f))
