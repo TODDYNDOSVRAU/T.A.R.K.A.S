@@ -5,6 +5,10 @@
   <string name="queue_empty_title">A fila está vazia</string>
   <string name="queue_empty_message">Use “Tocar em seguida” ou “Adicionar à fila” no menu de uma música.</string>
   <string name="queue_header">Na fila</string>
+  <string name="queue_save_as_playlist">Salvar como playlist</string>
+  <string name="queue_save_title">Salvar a fila como playlist</string>
+  <string name="queue_save_confirm">Salvar</string>
+  <string name="queue_saved_notice">%1$d músicas salvas em “%2$s”.</string>
   <string name="queue_clear">Limpar</string>
   <string name="queue_cancel">Cancelar</string>
   <string name="queue_move_up">Mover para cima</string>
@@ -28,6 +32,9 @@
   <string name="player_menu_add_queue">Adicionar à fila</string>
   <string name="player_menu_add_playlist">Adicionar a uma playlist</string>
   <string name="player_menu_about">Sobre a faixa</string>
+  <string name="player_menu_share">Compartilhar</string>
+  <string name="share_chooser_title">Compartilhar faixa</string>
+  <string name="share_no_app">Nenhum app consegue compartilhar esta faixa.</string>
   <string name="player_menu_sleep_timer">Timer de sono</string>
   <string name="player_menu_new_playlist_item">Nova playlist…</string>
   <string name="player_menu_new_playlist">Nova playlist</string>
@@ -388,4 +395,18 @@
     <string name="player_notice_sleep_done">Timer de dormir: música pausada.</string>
     <string name="player_notice_removed_from_queue">“%1$s” saiu da fila.</string>
     <string name="player_notice_undo">Desfazer</string>
+    <string name="settings_home_header">Início</string>
+    <string name="settings_home_music_first">Suas músicas antes dos catálogos online</string>
+    <string name="settings_home_footer">Ligado: Tocadas recentemente e Suas músicas vêm primeiro no Início, depois Audius e Jamendo. Desligado: as linhas online vêm primeiro.</string>
+    <string name="home_recent_header">Tocadas recentemente</string>
+    <string name="home_resume_header">Continuar ouvindo</string>
+    <string name="home_resume_position">Parou em %1$s</string>
+    <string name="home_resume_position_of">Parou em %1$s de %2$s</string>
+    <string name="player_menu_lyrics">Letra</string>
+    <string name="lyrics_title">Letra</string>
+    <string name="lyrics_none">Nenhuma letra encontrada. Grave-a na tag da música ou coloque um arquivo .lrc com o mesmo nome ao lado dela.</string>
+    <string name="lyrics_not_on_device">A letra é lida de músicas guardadas neste aparelho.</string>
+    <string name="lyrics_plain_note">Esta letra não tem marcação de tempo, então não acompanha a música.</string>
+    <string name="lyrics_seek_here">Ir para esta linha</string>
+    <string name="lyrics_now">Tocando agora</string>
 </resources>

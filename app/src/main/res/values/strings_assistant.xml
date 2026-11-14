@@ -108,4 +108,37 @@
     <string name="assistant_timers_cancelled">Timers cancelled.</string>
     <string name="assistant_hello">Hello! How can I help with your music or audio today?</string>
     <string name="assistant_not_understood">I did not understand that request. Type **help** to see what I can do.</string>
+    <string name="assistant_library_none">I did not find \"%1$s\" in the library.</string>
+    <string name="assistant_library_many">More than one match: %1$s. Say the exact name.</string>
+    <string name="assistant_confirm_play">Play **%1$s** (%2$s)? Reply yes or no.</string>
+    <string name="assistant_confirm_queue_next">Play **%1$s** (%2$s) next? Reply yes or no.</string>
+    <string name="assistant_confirm_queue_end">Add **%1$s** (%2$s) to the end of the queue? Reply yes or no.</string>
+    <string name="assistant_confirm_clear_queue">Clear the queue? Reply yes or no.</string>
+    <string name="assistant_confirm_sleep">Pause the music in %1$s? Reply yes or no.</string>
+    <string name="assistant_confirm_sleep_end">Pause the music at the end of this track? Reply yes or no.</string>
+    <string name="assistant_confirm_cancel_sleep">Cancel the sleep timer? Reply yes or no.</string>
+    <string name="assistant_confirm_spatial_on">Turn spatial audio on? Reply yes or no.</string>
+    <string name="assistant_confirm_spatial_off">Turn spatial audio off? Reply yes or no.</string>
+    <string name="assistant_confirm_volume">Set the device volume to %1$d%%? Reply yes or no.</string>
+    <string name="assistant_confirm_cancelled">Cancelled.</string>
+    <string name="assistant_confirm_answer_hint">Reply yes or no.</string>
+    <string name="assistant_done_play">Playing **%1$s**.</string>
+    <string name="assistant_done_queue_next">**%1$s** will play next.</string>
+    <string name="assistant_done_queue_end">**%1$s** added to the end of the queue.</string>
+    <string name="assistant_done_clear_queue">Queue cleared.</string>
+    <string name="assistant_done_sleep">The music will pause in %1$s.</string>
+    <string name="assistant_done_sleep_end">The music will pause at the end of this track.</string>
+    <string name="assistant_done_cancel_sleep">Sleep timer cancelled.</string>
+    <string name="assistant_done_spatial_on">Spatial audio on.</string>
+    <string name="assistant_done_spatial_off">Spatial audio off.</string>
+    <string name="assistant_done_volume">Volume set to %1$d%%.</string>
+    <string name="assistant_action_unavailable">This could not be done in the app right now.</string>
+    <plurals name="assistant_minutes">
+        <item quantity="one">%d minute</item>
+        <item quantity="other">%d minutes</item>
+    </plurals>
+    <plurals name="assistant_tracks_count">
+        <item quantity="one">%d track</item>
+        <item quantity="other">%d tracks</item>
+    </plurals>
 </resources>

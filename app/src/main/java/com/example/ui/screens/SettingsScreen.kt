@@ -125,6 +125,8 @@ fun SettingsScreen(
   onReduceTransparencyChange: (Boolean) -> Unit = {},
   waveformBar: Boolean = false,
   onWaveformBarChange: (Boolean) -> Unit = {},
+  homeMusicFirst: Boolean = true,
+  onHomeMusicFirstChange: (Boolean) -> Unit = {},
   isShuffle: Boolean = false,
   repeatMode: RepeatMode = RepeatMode.OFF,
   onToggleShuffle: () -> Unit = {},
@@ -170,6 +172,7 @@ fun SettingsScreen(
         themeMode, capabilities, onThemeModeChange, curiosityConfig, onOpenCuriositySettings, hasGeminiKey,
         surfaceStyle, onSurfaceStyleChange, reduceMotion, onReduceMotionChange, onListAnimationChange, reduceTransparency, onReduceTransparencyChange,
         waveformBar, onWaveformBarChange,
+        homeMusicFirst, onHomeMusicFirstChange,
         isShuffle, repeatMode, onToggleShuffle,
         onSetRepeatMode = { target ->
           // Without a direct setter, step the cycle (Desligado → Lista → Faixa) until it lands on the choice.
@@ -230,6 +233,8 @@ private fun MainSettings(
   onReduceTransparencyChange: (Boolean) -> Unit,
   waveformBar: Boolean,
   onWaveformBarChange: (Boolean) -> Unit,
+  homeMusicFirst: Boolean,
+  onHomeMusicFirstChange: (Boolean) -> Unit,
   isShuffle: Boolean,
   repeatMode: RepeatMode,
   onToggleShuffle: () -> Unit,
@@ -484,6 +489,17 @@ private fun MainSettings(
       ListRow(title = stringResource(R.string.settings_terms), onClick = onOpenTerms, modifier = Modifier.testTag("settings_terms"))
     }
     settingsGroup(
+      context.getString(R.string.settings_home_header),
+      footer = context.getString(R.string.settings_home_footer)
+    ) {
+      SwitchRow(
+        title = stringResource(R.string.settings_home_music_first),
+        checked = homeMusicFirst,
+        onCheckedChange = onHomeMusicFirstChange,
+        modifier = Modifier.testTag("settings_home_music_first")
+      )
+    }
+    settingsGroup(
       context.getString(R.string.settings_advanced),
       footer = context.getString(R.string.settings_waveform_footer)
     ) {
@@ -559,6 +575,8 @@ private fun AboutPage(
   val colors = MaterialTheme.colorScheme
   val context = LocalContext.current
   val credits = currentLegalTexts().credits
+  val contactHeader = stringResource(R.string.settings_about_contact)
+  val restartFooter = stringResource(R.string.settings_about_restart_footer)
   var copied by remember { mutableStateOf(false) }
   fun open(url: String) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
@@ -654,7 +672,7 @@ private fun AboutPage(
         }
       }
     }
-    settingsGroup(context.getString(R.string.settings_about_contact)) {
+    settingsGroup(contactHeader) {
       ListRow(
         title = stringResource(R.string.settings_about_send_email),
         subtitle = LegalTexts.CONTACT_EMAIL,
@@ -668,7 +686,7 @@ private fun AboutPage(
       GroupDivider()
       ListRow(title = "Instagram", subtitle = LegalTexts.CONTACT_INSTAGRAM, onClick = { open(LegalTexts.INSTAGRAM_URL) })
     }
-    settingsGroup(header = null, footer = context.getString(R.string.settings_about_restart_footer)) {
+    settingsGroup(header = null, footer = restartFooter) {
       ListRow(
         title = stringResource(R.string.settings_about_restart),
         onClick = onRestartOnboarding,

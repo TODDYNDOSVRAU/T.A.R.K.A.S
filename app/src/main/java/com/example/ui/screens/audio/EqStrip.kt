@@ -345,7 +345,7 @@ private fun ParametricBands(
 ) {
   val density = LocalDensity.current
   val keys = remember { BandKeys() }
-  val ids = keys.sync(settings.paramBands.size)
+  val ids = keys.sync(settings.bands.size)
   var removed by remember { mutableStateOf<RemovedBand?>(null) }
   LaunchedEffect(removed) {
     if (removed != null) {
@@ -356,14 +356,14 @@ private fun ParametricBands(
 
   // Selecting a band brings its card to the middle of the strip.
   LaunchedEffect(selected) {
-    if (selected !in settings.paramBands.indices || view.viewport == 0) return@LaunchedEffect
+    if (selected !in settings.bands.indices || view.viewport == 0) return@LaunchedEffect
     val (step, card, start) = with(density) { Triple((CARD_WIDTH + CARD_GAP).toPx(), CARD_WIDTH.toPx(), Space.s.toPx()) }
     val target = (start + selected * step - (view.viewport - card) / 2f).roundToInt().coerceIn(0, view.scroll.maxValue)
     if (abs(target - view.scroll.value) > 4) view.scroll.animateScrollTo(target, Motion.gel())
   }
 
   ScrollingBands(view, CARD_GAP) {
-    settings.paramBands.forEachIndexed { i, band ->
+    settings.bands.forEachIndexed { i, band ->
       key(ids[i]) {
         BandCard(
           index = i,
@@ -375,7 +375,7 @@ private fun ParametricBands(
           onDelete = {
             removed = RemovedBand(i, band, i + 1)
             keys.removeAt(i)
-            onUpdateEq { s -> s.copy(paramBands = s.paramBands.filterIndexed { j, _ -> j != i }) }
+            onUpdateEq { s -> s.copy(bands = s.bands.filterIndexed { j, _ -> j != i }) }
             onSelect((i - 1).coerceAtLeast(0))
           }
         )
@@ -390,8 +390,8 @@ private fun ParametricBands(
           text = stringResource(R.string.audio_band_add),
           icon = Icons.Rounded.Add,
           onClick = {
-            onUpdateEq { s -> s.copy(paramBands = s.paramBands + EqBand(freqHz = 1000f, q = 1.4f)) }
-            onSelect(settings.paramBands.size)
+            onUpdateEq { s -> s.copy(bands = s.bands + EqBand(freqHz = 1000f, q = 1.4f)) }
+            onSelect(settings.bands.size)
           },
           modifier = Modifier.testTag("eq_add_band")
         )
@@ -400,9 +400,9 @@ private fun ParametricBands(
             text = stringResource(R.string.audio_band_undo, gone.number),
             icon = Icons.Rounded.Undo,
             onClick = {
-              val at = gone.index.coerceIn(0, settings.paramBands.size)
+              val at = gone.index.coerceIn(0, settings.bands.size)
               keys.insertAt(at)
-              onUpdateEq { s -> s.copy(paramBands = s.paramBands.toMutableList().also { it.add(at.coerceAtMost(it.size), gone.band) }) }
+              onUpdateEq { s -> s.copy(bands = s.bands.toMutableList().also { it.add(at.coerceAtMost(it.size), gone.band) }) }
               onSelect(at)
               removed = null
             },

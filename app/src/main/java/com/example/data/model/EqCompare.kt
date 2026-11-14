@@ -26,5 +26,5 @@ object EqCompare {
     }
   }
 
-  private fun EqSettings.withoutLayout() = copy(parametric = false, bands = emptyList(), paramBands = emptyList())
+  private fun EqSettings.withoutLayout() = copy(parametric = false, bands = emptyList(), otherBands = null)
 }

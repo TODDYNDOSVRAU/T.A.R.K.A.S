@@ -133,6 +133,20 @@ class LibraryRepositoryTest {
   }
 
   @Test
+  fun `a playlist made from a list keeps its order and its repeats`() {
+    val playlist = library.createPlaylist("Fila", listOf(b, a, b)); settle()
+    assertEquals(listOf("b", "a", "b"), playlist.trackIds)
+    assertEquals(listOf("b", "a", "b"), restart().playlists.value.single().trackIds)
+    assertEquals(setOf("a", "b"), restart().savedTracks.value.keys)
+  }
+
+  @Test
+  fun `a playlist made from a list with a blank name gets the default name`() {
+    val playlist = library.createPlaylist(" ", listOf(a))
+    assertEquals(context.getString(com.example.R.string.library_new_playlist_title), playlist.name)
+  }
+
+  @Test
   fun `playlists keep the order they were created in`() {
     val ids = listOf("Um", "Dois", "Tres").map { library.createPlaylist(it).id }; settle()
     assertEquals(ids, library.playlists.value.map { it.id })

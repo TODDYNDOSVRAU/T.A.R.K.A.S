@@ -5,6 +5,10 @@
   <string name="queue_empty_title">The queue is empty</string>
   <string name="queue_empty_message">Use “Play next” or “Add to queue” in a song’s menu.</string>
   <string name="queue_header">In the queue</string>
+  <string name="queue_save_as_playlist">Save as playlist</string>
+  <string name="queue_save_title">Save the queue as a playlist</string>
+  <string name="queue_save_confirm">Save</string>
+  <string name="queue_saved_notice">%1$d songs saved to “%2$s”.</string>
   <string name="queue_clear">Clear</string>
   <string name="queue_cancel">Cancel</string>
   <string name="queue_move_up">Move up</string>
@@ -28,6 +32,9 @@
   <string name="player_menu_add_queue">Add to queue</string>
   <string name="player_menu_add_playlist">Add to a playlist</string>
   <string name="player_menu_about">About the track</string>
+  <string name="player_menu_share">Share</string>
+  <string name="share_chooser_title">Share track</string>
+  <string name="share_no_app">No app can share this track.</string>
   <string name="player_menu_sleep_timer">Sleep timer</string>
   <string name="player_menu_new_playlist_item">New playlist…</string>
   <string name="player_menu_new_playlist">New playlist</string>
@@ -388,4 +395,18 @@
     <string name="player_notice_sleep_done">Sleep timer: music paused.</string>
     <string name="player_notice_removed_from_queue">“%1$s” was removed from the queue.</string>
     <string name="player_notice_undo">Undo</string>
+    <string name="settings_home_header">Home</string>
+    <string name="settings_home_music_first">Your music before online catalogues</string>
+    <string name="settings_home_footer">On: Played recently and Your music come first on Home, then Audius and Jamendo. Off: the online rows come first.</string>
+    <string name="home_recent_header">Played recently</string>
+    <string name="home_resume_header">Continue listening</string>
+    <string name="home_resume_position">Stopped at %1$s</string>
+    <string name="home_resume_position_of">Stopped at %1$s of %2$s</string>
+    <string name="player_menu_lyrics">Lyrics</string>
+    <string name="lyrics_title">Lyrics</string>
+    <string name="lyrics_none">No lyrics found. Add them to the song\'s tag, or put a .lrc file with the same name beside the song.</string>
+    <string name="lyrics_not_on_device">Lyrics are read from songs stored on this device.</string>
+    <string name="lyrics_plain_note">These lyrics have no timing, so they do not follow the song.</string>
+    <string name="lyrics_seek_here">Go to this line</string>
+    <string name="lyrics_now">Playing now</string>
 </resources>

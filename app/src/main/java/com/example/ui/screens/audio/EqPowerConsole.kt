@@ -95,7 +95,7 @@ internal fun EqPowerConsole(
 ) {
   val colors = MaterialTheme.colorScheme
   val mode = if (eqSettings.parametric) EqMode.PARAMETRIC else EqMode.GRAPHIC
-  val bandIndex = selectedBand.coerceIn(0, (eqSettings.paramBands.size - 1).coerceAtLeast(0))
+  val bandIndex = selectedBand.coerceIn(0, (eqSettings.bands.size - 1).coerceAtLeast(0))
 
   BoxWithConstraints(modifier = modifier) {
     // What sits under the faders: response strip, status line, the control row, and the gaps.
@@ -268,7 +268,7 @@ private fun ControlRow(
       )
       ModeSegments(
         parametric = mode == EqMode.PARAMETRIC,
-        onSelect = { parametric -> if (parametric != (mode == EqMode.PARAMETRIC)) onUpdateEq { it.copy(parametric = parametric) } }
+        onSelect = { parametric -> if (parametric != (mode == EqMode.PARAMETRIC)) onUpdateEq { it.withLayout(parametric) } }
       )
     }
 

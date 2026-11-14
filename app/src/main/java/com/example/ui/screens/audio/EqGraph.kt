@@ -142,9 +142,9 @@ internal fun EqGraph(
   val accent = colors.primary
   // In parametric mode each band has its colour, and its own curve is drawn under the total.
   val parametric = settings.parametric
-  val bandTints = settings.activeBands.indices.map { bandColor(it) }
+  val bandTints = settings.bands.indices.map { bandColor(it) }
   val bandCurves = remember(curveKey) {
-    if (!curveKey.parametric) emptyList() else curveKey.paramBands.map { b ->
+    if (!curveKey.parametric) emptyList() else curveKey.bands.map { b ->
       if (!b.enabled || (b.type.usesGain && kotlin.math.abs(b.gainDb) < 0.05f)) null
       else {
         val c = com.example.data.audio.dsp.BiquadCoefficients.design(b.type, b.freqHz.toDouble(), b.gainDb.toDouble(), b.q.toDouble(), 48000.0)
@@ -254,7 +254,7 @@ internal fun EqGraph(
       drawPath(path, accent.copy(alpha = dim), style = Stroke(width = Space.xxs.toPx(), cap = StrokeCap.Round))
 
       // Band nodes: the selected one filled with the accent
-      settings.activeBands.forEachIndexed { i, band ->
+      settings.bands.forEachIndexed { i, band ->
         val pos = nodePosition(curveKey, i, w, h)
         val isSel = i == selectedBand
         val r = if (isSel) EqSize.nodeSelected.toPx() else Space.xs.toPx()
@@ -345,7 +345,7 @@ private fun Modifier.overviewGestures(view: StripView, scope: CoroutineScope): M
 
 /** Where band [i] of [s] (a [responseKey]) is drawn: at its gain for peaks and shelves, on the curve for passes. */
 private fun nodePosition(s: EqSettings, i: Int, w: Float, h: Float): Offset {
-  val b = s.activeBands[i]
+  val b = s.bands[i]
   val x = freqToX(b.freqHz) * w
   val db = if (b.type.usesGain) b.gainDb
     else EqDsp.responseDb(s, b.freqHz.toDouble()).toFloat() - (EqDsp.totalPreampDb(s) - s.preampDb)

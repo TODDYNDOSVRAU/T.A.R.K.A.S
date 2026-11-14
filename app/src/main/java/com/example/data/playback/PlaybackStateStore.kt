@@ -54,6 +54,20 @@ class PlaybackStateStore(
   /** Reads the saved row once everything asked before has been written. */
   suspend fun load(): PlaybackStateEntity? = run { dao.get() }
 
+  /**
+   * Read-only summary for "Continuar ouvindo": the saved track, where it stopped and how long it is.
+   * Null when nothing valid is saved, the track is a demo tone, or the stored position belongs to another
+   * track. [ResumeInfo.durationMs] is null when the track's length is unknown.
+   */
+  suspend fun resumeInfo(): ResumeInfo? {
+    val row = try { load() } catch (e: Exception) { return null }
+    val restored = PlaybackRestore.read(row?.stateJson, row?.positionTrackId, row?.positionMs?.takeIf { it >= 0 }) as? RestoreOutcome.Restored ?: return null
+    val saved = restored.state
+    val owner = row?.positionTrackId
+    if (owner != null && owner != saved.track.id) return null
+    return ResumeInfo(saved.track.id, saved.positionMs, saved.track.durationMs.takeIf { it > 0 })
+  }
+
   /** Waits until everything asked so far has run. */
   suspend fun flush() { run { } }
 
@@ -125,3 +139,6 @@ class PlaybackStateStore(
     const val FLAGS_FILE = "tarkas_migrations"
   }
 }
+
+/** What "Continuar ouvindo" needs from the saved player state; the state's JSON stays private to the store. */
+data class ResumeInfo(val trackId: String, val positionMs: Long, val durationMs: Long?)

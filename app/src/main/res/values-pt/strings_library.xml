@@ -5,6 +5,17 @@
     <string name="library_section_songs">Músicas</string>
     <string name="library_section_playlists">Playlists</string>
     <string name="library_section_favorites">Favoritos</string>
+    <string name="library_section_auto">Automáticas</string>
+    <string name="library_auto_recently_added">Adicionadas recentemente</string>
+    <string name="library_auto_recently_played">Tocadas recentemente</string>
+    <string name="library_auto_most_played">Mais tocadas</string>
+    <string name="library_auto_open">Abrir %1$s</string>
+    <string name="library_auto_empty_title_added">Nada adicionado ainda</string>
+    <string name="library_auto_empty_message_added">As músicas aparecem aqui com a data em que entraram no aparelho.</string>
+    <string name="library_auto_empty_title_played">Nada tocado ainda</string>
+    <string name="library_auto_empty_message_played">As músicas que você ouvir aparecem aqui, a mais recente primeiro.</string>
+    <string name="library_auto_empty_title_most">Nenhuma reprodução contada ainda</string>
+    <string name="library_auto_empty_message_most">As músicas que você ouvir aparecem aqui, a mais tocada primeiro.</string>
     <string name="library_section_queue">Fila</string>
     <string name="library_section_queue_count">Fila (%1$d)</string>
     <string name="library_back_label">Biblioteca</string>
@@ -107,4 +118,21 @@
     <string name="demo_genre_ambient_modal">Música Ambiente / Modal</string>
     <string name="demo_genre_calibration">Calibração Acústica</string>
     <string name="eq_profile_custom_description">Perfil customizado pelo usuário</string>
+    <string name="library_section_albums">Álbuns</string>
+    <string name="library_section_artists">Artistas</string>
+    <string name="library_section_genres">Gêneros</string>
+    <string name="library_search_albums_hint">Buscar álbuns</string>
+    <string name="library_search_artists_hint">Buscar artistas</string>
+    <string name="library_search_genres_hint">Buscar gêneros</string>
+    <string name="library_search_no_group">Nada combina com “%1$s”. Confira a escrita ou limpe a busca.</string>
+    <string name="library_albums_empty">Nenhuma música tem nome de álbum. Os álbuns vêm das etiquetas dos seus arquivos.</string>
+    <string name="library_artists_empty">Nenhuma música tem nome de artista. Os artistas vêm das etiquetas dos seus arquivos.</string>
+    <string name="library_genres_empty">Nenhuma música tem gênero. Os gêneros vêm das etiquetas dos seus arquivos; alguns arquivos não têm.</string>
+    <string name="library_various_artists">Vários artistas</string>
+    <string name="library_open_group">Abrir %1$s</string>
+    <string name="library_group_albums_heading">Álbuns</string>
+    <plurals name="library_album_count">
+        <item quantity="one">%1$d álbum</item>
+        <item quantity="other">%1$d álbuns</item>
+    </plurals>
 </resources>

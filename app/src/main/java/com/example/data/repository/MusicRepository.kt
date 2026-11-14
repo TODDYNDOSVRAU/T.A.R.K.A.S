@@ -223,6 +223,33 @@ class MusicRepository(
   private val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= ?"
   private val selectionArgs = arrayOf(MIN_SONG_MS.toString())
 
+  /** Android 11 and later have the genre as a column of the song; earlier versions use [readGenres]. */
+  private val genreColumn: String? =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) MediaStore.Audio.Media.GENRE else null
+
+  /** Song id to genre name, from the genre tables of Android 10 and earlier. Empty when it cannot be read. */
+  private fun readGenres(): Map<Long, String> {
+    val out = HashMap<Long, String>()
+    try {
+      val genres = ArrayList<Pair<Long, String>>()
+      context.contentResolver.query(
+        MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI,
+        arrayOf(MediaStore.Audio.Genres._ID, MediaStore.Audio.Genres.NAME), null, null, null
+      )?.use { c ->
+        while (c.moveToNext()) c.getString(1)?.takeIf { it.isNotBlank() }?.let { genres += c.getLong(0) to it }
+      }
+      for ((genreId, name) in genres) {
+        context.contentResolver.query(
+          MediaStore.Audio.Genres.Members.getContentUri("external", genreId),
+          arrayOf(MediaStore.Audio.Genres.Members.AUDIO_ID), null, null, null
+        )?.use { c -> while (c.moveToNext()) out.putIfAbsent(c.getLong(0), name) }
+      }
+    } catch (e: Exception) {
+      Diagnostics.record("MusicRepository", "device genres not read", e)
+    }
+    return out
+  }
+
   /** The id and stamp of every song, cheap. Empty when the permission was taken back. */
   private fun readStamps(collection: Uri): Map<Long, Stamp> {
     val out = HashMap<Long, Stamp>()
@@ -249,8 +276,10 @@ class MusicRepository(
       MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST,
       MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.ALBUM_ID, MediaStore.Audio.Media.DURATION,
       MediaStore.Audio.Media.YEAR, MediaStore.Audio.Media.TRACK, MediaStore.Audio.Media.DATE_ADDED,
-      where, MediaStore.Audio.Media.DATE_MODIFIED, generationColumn
+      where, MediaStore.Audio.Media.DATE_MODIFIED, generationColumn, genreColumn
     ).toTypedArray()
+    // Before Android 11 the media library keeps the genre in a table of its own, read once for the whole scan.
+    val genresById = if (genreColumn == null) readGenres() else emptyMap()
     val out = ArrayList<ScannedSong>()
     val groups: List<List<Long>?> = ids?.chunked(ID_CHUNK) ?: listOf(null)
     for (group in groups) {
@@ -269,6 +298,7 @@ class MusicRepository(
           val path = c.getColumnIndexOrThrow(where)
           val modified = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
           val generation = generationColumn?.let { c.getColumnIndexOrThrow(it) }
+          val genre = genreColumn?.let { c.getColumnIndexOrThrow(it) }
           while (c.moveToNext()) {
             val mediaId = c.getLong(id)
             val folder = c.getString(path).let { if (q) FolderPaths.normalize(it) else FolderPaths.ofFile(it) }
@@ -279,7 +309,7 @@ class MusicRepository(
               artist = c.getString(artist)?.takeUnless { it == MediaStore.UNKNOWN_STRING } ?: Placeholders.unknownArtist(),
               album = c.getString(album)?.takeUnless { it == MediaStore.UNKNOWN_STRING } ?: "",
               durationMs = c.getLong(duration),
-              genre = "",
+              genre = (genre?.let { c.getString(it) } ?: genresById[mediaId]).orEmpty().trim(),
               era = c.getInt(year).takeIf { it > 0 }?.toString() ?: "",
               isLocalFile = true,
               filePath = ContentUris.withAppendedId(collection, mediaId).toString(),

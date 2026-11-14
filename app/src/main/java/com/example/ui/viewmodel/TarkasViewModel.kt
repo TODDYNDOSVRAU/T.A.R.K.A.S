@@ -247,6 +247,68 @@ class TarkasViewModel(
 
   private var timerTickerJob: Job? = null
 
+  // What the assistant may change. The engine calls these only after the user confirmed the action.
+  // Playing keeps the songs already queued (no second question), and the volume is the device's music stream,
+  // because the app has no volume control of its own.
+  private val assistantActions = object : com.example.data.assistant.AssistantActions {
+    override fun library(): com.example.data.assistant.LibrarySnapshot {
+      val tracks = musicRepository.tracks.value
+      val byId = tracks.associateBy { it.id } + savedTracks.value
+      return com.example.data.assistant.LibrarySnapshot(
+        tracks = tracks,
+        playlists = libraryRepository.playlists.value.map { p ->
+          com.example.data.assistant.LibraryPlaylist(p.name, p.trackIds.mapNotNull { byId[it] })
+        }
+      )
+    }
+
+    override fun playTracks(tracks: List<Track>): Boolean {
+      val first = tracks.firstOrNull() ?: return false
+      playback.playFromList(first, tracks, keepQueue = true)
+      return true
+    }
+
+    override fun queueTracks(tracks: List<Track>, asNext: Boolean): Boolean {
+      if (tracks.isEmpty()) return false
+      // Next-in-queue inserts at the front, so the list is added in reverse to keep its order.
+      if (asNext) tracks.asReversed().forEach { playback.playNext(it) } else tracks.forEach { playback.addToQueue(it) }
+      return true
+    }
+
+    override fun clearQueue(): Boolean {
+      playback.clearQueue()
+      return true
+    }
+
+    override fun sleepIn(minutes: Int): Boolean {
+      playback.setSleepTimer(minutes)
+      return true
+    }
+
+    override fun sleepAtEndOfTrack(): Boolean {
+      playback.setSleepAtEndOfTrack()
+      return true
+    }
+
+    override fun cancelSleep(): Boolean {
+      playback.cancelSleepTimer()
+      return true
+    }
+
+    override fun setSpatial(on: Boolean): Boolean {
+      setSpatialEnabled(on)
+      return true
+    }
+
+    override fun setVolumePercent(percent: Int): Boolean {
+      val audio = context.getSystemService(android.media.AudioManager::class.java) ?: return false
+      val stream = android.media.AudioManager.STREAM_MUSIC
+      val target = Math.round(audio.getStreamMaxVolume(stream) * percent.coerceIn(0, 100) / 100f)
+      audio.setStreamVolume(stream, target, 0)
+      return true
+    }
+  }
+
   val assistantEngine: AssistantEngine = AssistantEngine(
     context = context,
     musicRepository = musicRepository,
@@ -262,7 +324,8 @@ class TarkasViewModel(
       val r = EqSettings.TONE_RANGE_DB
       updateEq { s -> if (bass) s.copy(bassDb = (s.bassDb + delta).coerceIn(-r, r)) else s.copy(trebleDb = (s.trebleDb + delta).coerceIn(-r, r)) }
       audioEngineManager.eqSettings.value.let { if (bass) it.bassDb else it.trebleDb }
-    }
+    },
+    actions = assistantActions
   )
 
   // The assistant runs on a background dispatcher; the player must be driven from the main thread.
@@ -440,6 +503,21 @@ class TarkasViewModel(
 
   fun loadPlayCounts() = playback.loadPlayCounts()
 
+  /** Plays, skips and last play per track, read from the database for the automatic lists. */
+  suspend fun readPlayStats(): Map<String, com.example.data.playback.TrackStats> =
+    com.example.data.playback.PlayStatsStore(graph.database.playStats()).all()
+
+  // A second reader of the saved playback state, only for "Continuar ouvindo" on Início.
+  private val resumeStore by lazy { com.example.data.playback.PlaybackStateStore(graph.database.playback()) }
+
+  /** Where the saved track stopped, or null when there is nothing valid to continue. */
+  suspend fun readResumeInfo(): com.example.data.playback.ResumeInfo? = resumeStore.resumeInfo()
+
+  /** Continues the track that is loaded and paused, from where it stopped. */
+  fun resumeListening() {
+    if (!playback.isPlaying.value) playback.togglePlayPause()
+  }
+
   /** Crossfade between tracks in seconds; 0 is off. */
   val crossfadeSeconds: StateFlow<Int> get() = playback.crossfadeSeconds
 
@@ -503,6 +581,14 @@ class TarkasViewModel(
 
   fun createPlaylist(name: String, firstTrack: Track? = null) {
     libraryRepository.createPlaylist(name, firstTrack)
+  }
+
+  /** P3: the queue screen's list (playing now, queued, then what follows) saved as a new playlist. */
+  fun saveQueueAsPlaylist(name: String) {
+    val tracks = com.example.data.playback.QueueSnapshot.tracks(musicRepository.currentTrack.value, playback.queue.value, playback.upcoming.value)
+    if (tracks.isEmpty()) return
+    val playlist = libraryRepository.createPlaylist(name, tracks)
+    showNotice(Notice(context.getString(com.example.R.string.queue_saved_notice, tracks.size, playlist.name)))
   }
 
   fun renamePlaylist(id: String, name: String) = libraryRepository.renamePlaylist(id, name)
@@ -656,6 +742,29 @@ class TarkasViewModel(
   }
 
 
+  // ---- Letras ----
+
+  private val lyricsRepository = com.example.data.lyrics.LyricsRepository(context)
+  private val _lyrics = MutableStateFlow(com.example.data.lyrics.LyricsState())
+  val lyrics: StateFlow<com.example.data.lyrics.LyricsState> = _lyrics.asStateFlow()
+  private var lyricsJob: Job? = null
+
+  /** Looks for the lyrics of [track] (tag and .lrc beside the file); a repeat for the same song is free. */
+  fun loadLyrics(track: Track) {
+    val current = _lyrics.value
+    if (current.trackId == track.id) return
+    lyricsJob?.cancel()
+    _lyrics.value = com.example.data.lyrics.LyricsState(trackId = track.id, loading = true)
+    lyricsJob = viewModelScope.launch {
+      val result = lyricsRepository.load(track)
+      _lyrics.value = when (result) {
+        is com.example.data.lyrics.LyricsRepository.Result.Found -> com.example.data.lyrics.LyricsState(trackId = track.id, lyrics = result.lyrics)
+        com.example.data.lyrics.LyricsRepository.Result.NotOnDevice -> com.example.data.lyrics.LyricsState(trackId = track.id, notOnDevice = true)
+        com.example.data.lyrics.LyricsRepository.Result.None -> com.example.data.lyrics.LyricsState(trackId = track.id)
+      }
+    }
+  }
+
   fun openCuriositySettings() {
     _isShowingCuriositySettings.value = true
   }
@@ -698,9 +807,9 @@ class TarkasViewModel(
 
   /** Edits a band of the mode in use (graphic or parametric). */
   fun updateEqBand(index: Int, transform: (EqBand) -> EqBand) = updateEq { s ->
-    val bands = s.activeBands
+    val bands = s.bands
     if (index !in bands.indices) s
-    else s.withActiveBands(bands.toMutableList().also { it[index] = transform(it[index]) })
+    else s.copy(bands = bands.toMutableList().also { it[index] = transform(it[index]) })
   }
 
   /** The equalizer as it is, to put back with "Desfazer". */
@@ -735,12 +844,9 @@ class TarkasViewModel(
     val current = audioEngineManager.eqSettings.value
     _activePresetId.value = preset.id
     preferencesRepository.saveActiveProfileId(preset.id)
-    // The fone correction is its own stage: changing the preset keeps it. A graphic preset leaves
-    // the parametric bands as they were, so switching back finds them.
-    updateEq {
-      val p = preset.settings
-      p.copy(enabled = current.enabled, device = current.device, paramBands = if (p.parametric) p.paramBands else current.paramBands)
-    }
+    // The fone correction is its own stage: changing the preset keeps it. The layout the preset does
+    // not use stays remembered, so switching back finds the bands as they were.
+    updateEq { current.withCurveOf(preset.settings) }
   }
 
   /** Back to flat in the mode in use: graphic faders at zero, or the parametric back to one band. */
@@ -748,7 +854,7 @@ class TarkasViewModel(
     val snapshot = EqSnapshot()
     val wasParametric = audioEngineManager.eqSettings.value.parametric
     loadEqPreset(EqPresets.FLAT)
-    if (wasParametric) updateEq { it.copy(parametric = true, paramBands = EqSettings.DEFAULT_PARAM_BANDS) }
+    if (wasParametric) updateEq { it.withLayout(true).copy(bands = EqSettings.DEFAULT_PARAM_BANDS) }
     offerEqUndo(context.getString(com.example.R.string.audio_notice_eq_reset), snapshot)
   }
 
@@ -1124,6 +1230,15 @@ class TarkasViewModel(
     _devicePickerRequest.value = null
   }
 
+  private val _homeMusicFirst = MutableStateFlow(preferencesRepository.getHomeMusicFirst())
+  /** Início: the user's own music before (true) or after (false) the online catalogue rows. */
+  val homeMusicFirst: StateFlow<Boolean> = _homeMusicFirst.asStateFlow()
+
+  fun setHomeMusicFirst(on: Boolean) {
+    _homeMusicFirst.value = on
+    preferencesRepository.saveHomeMusicFirst(on)
+  }
+
   private val _waveformBar = MutableStateFlow(preferencesRepository.getWaveformBar())
   /** Advanced: draw the player progress as the track.s waveform when it is known. */
   val waveformBar: StateFlow<Boolean> = _waveformBar.asStateFlow()
@@ -1449,15 +1564,7 @@ class TarkasViewModel(
     if (hasMusicPermission()) scanDeviceMusic()
   }
 
-  fun hasMusicPermission(): Boolean {
-    val permission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-      android.Manifest.permission.READ_MEDIA_AUDIO
-    } else {
-      android.Manifest.permission.READ_EXTERNAL_STORAGE
-    }
-    return androidx.core.content.ContextCompat.checkSelfPermission(context, permission) ==
-      android.content.pm.PackageManager.PERMISSION_GRANTED
-  }
+  fun hasMusicPermission(): Boolean = com.example.data.library.MusicPermission.granted(context)
 
   /** Adds a file picked on the device and plays it like any other track of the library. */
   fun addLocalAudio(title: String, artist: String, uriString: String, durationMs: Long) {

@@ -32,6 +32,7 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.extractor.metadata.id3.InternalFrame
 import androidx.media3.extractor.metadata.id3.TextInformationFrame
 import androidx.media3.extractor.metadata.vorbis.VorbisComment
+import com.example.data.audio.dsp.EqActivity
 import com.example.data.audio.dsp.EqDsp
 import com.example.data.audio.dsp.FloatPcmAudioProcessor
 import com.example.data.audio.loudness.LoudnessMeterProcessor
@@ -704,6 +705,10 @@ class AudioEngineManager(private val context: Context) {
               if (!isRealFftActive) {
                 _spectrumBars.value = List(15) { 0.05f }
               }
+              // What the limiter and the clamp did in the last 100 ms, for the equalizer screen.
+              EqActivity.publish(eqDsp.takeActivity())
+            } else {
+              EqActivity.clear()
             }
           }
         } catch (_: Exception) {}
@@ -982,6 +987,7 @@ class AudioEngineManager(private val context: Context) {
   /** Applies the whole equalizer state. Takes effect on the next audio buffer (a few ms). */
   fun applyEqSettings(settings: EqSettings) {
     _eqSettings.value = settings
+    if (bypass) eqDsp.setCompareReference(processedSettings(ignoreBypass = true))
     eqDsp.update(processedSettings())
     applyVirtualizer()
   }
@@ -1007,23 +1013,14 @@ class AudioEngineManager(private val context: Context) {
   fun setBypass(on: Boolean) {
     if (bypass == on) return
     bypass = on
+    // The untouched signal plays at the volume the curve gives on average, so the A/B judges tone, not loudness.
+    eqDsp.setCompareReference(if (on) processedSettings(ignoreBypass = true) else null)
     eqDsp.update(processedSettings())
     applyVirtualizer()
   }
 
-  private fun processedSettings(): EqSettings {
-    val s = _eqSettings.value
-    if (bypass) return s.copy(enabled = false)
-    if (!coveredByOutputMix || !s.enabled) return s
-    return s.copy(
-      bands = s.bands.map { it.copy(gainDb = 0f) },
-      paramBands = s.paramBands.map { it.copy(gainDb = 0f) },
-      preampDb = 0f,
-      bassDb = 0f,
-      trebleDb = 0f,
-      device = null,
-      autoPreamp = false
-    )
+  private fun processedSettings(ignoreBypass: Boolean = false): EqSettings {
+    return EqChainState.processed(_eqSettings.value, bypass, coveredByOutputMix, ignoreBypass)
   }
 
 
@@ -1031,7 +1028,7 @@ class AudioEngineManager(private val context: Context) {
     val s = _eqSettings.value
     virtualizer?.let { virt ->
       try {
-        virt.enabled = s.enabled && !bypass && s.virtualizerStrength > 0
+        virt.enabled = EqChainState.virtualizerOn(s, bypass)
         if (virt.strengthSupported) virt.setStrength(s.virtualizerStrength.coerceIn(0, 1000).toShort())
       } catch (e: Exception) {
         Log.e(TAG, "Error setting virtualizer strength", e)
@@ -1076,22 +1073,12 @@ class AudioEngineManager(private val context: Context) {
       ?: devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER } ?: devices.firstOrNull()
   }
 
-  private fun kindOf(type: Int): OutputKind = when (type) {
-    AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> OutputKind.WIRED
-    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> OutputKind.BLUETOOTH
-    AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> OutputKind.USB
-    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> OutputKind.SPEAKER
-    else -> OutputKind.OTHER
-  }
+  private fun kindOf(type: Int): OutputKind = OutputDetection.kindOf(type)
 
   private fun detectOutput(): OutputDevice = try {
     activeOutputDevice()?.let { dev ->
-      val kind = kindOf(dev.type)
-      if (kind == OutputKind.SPEAKER) return@let speakerOutput()
-      // The jack reports the phone's model as its name: a wired fone is just "Fone com fio".
-      val product = if (kind == OutputKind.WIRED) null else dev.productName?.toString()?.ifBlank { null }
       val address = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) dev.address else null
-      OutputDevice(OutputDevice.keyFor(kind, address, product), kind, product ?: friendlyRouteName(dev.type))
+      OutputDetection.outputFor(dev.type, dev.productName?.toString(), address, speakerOutput()) { friendlyRouteName(dev.type) }
     } ?: speakerOutput()
   } catch (e: Exception) {
     Log.w(TAG, "Error detecting the output", e)

@@ -164,6 +164,8 @@ import com.example.ui.components.PlayPauseIcon
 import com.example.ui.components.SleepTimerDialog
 import com.example.ui.components.TrackActionsMenu
 import com.example.ui.components.TrackDetailsSheet
+import com.example.ui.components.LyricsSheet
+import com.example.data.lyrics.LyricsState
 import com.example.ui.components.WaveformBar
 import com.example.ui.viewmodel.TrackDetailsState
 import com.example.ui.components.sleepTimerLabel
@@ -235,6 +237,8 @@ fun MusicScreen(
   onCancelSleepTimer: () -> Unit = {},
   trackDetails: TrackDetailsState = TrackDetailsState(),
   onLoadTrackDetails: (Track) -> Unit = {},
+  lyrics: LyricsState = LyricsState(),
+  onLoadLyrics: (Track) -> Unit = {},
   /** The tracks beside the cover: what Previous and Next go to. */
   coverNeighbors: CoverNeighbors.Result = CoverNeighbors.Result(),
   /** Previous from the cover carousel: the cover of that track was swiped in, so it always moves. */
@@ -243,6 +247,7 @@ fun MusicScreen(
 ) {
   var showCuriosityDialog by remember { mutableStateOf(false) }
   var showDetails by remember { mutableStateOf(false) }
+  var showLyrics by remember { mutableStateOf(false) }
   var showSleepTimer by remember { mutableStateOf(false) }
   if (showSleepTimer) {
     SleepTimerDialog(
@@ -345,7 +350,8 @@ fun MusicScreen(
       onAddToPlaylist = onAddToPlaylist,
       onCreatePlaylist = onCreatePlaylist,
       onSleepTimer = { showSleepTimer = true },
-      onAbout = { track -> onLoadTrackDetails(track); showDetails = true }
+      onAbout = { track -> onLoadTrackDetails(track); showDetails = true },
+      onLyrics = { track -> onLoadLyrics(track); showLyrics = true }
     )
   }
   // Only this block reads the position, so the rest of the page is not recomposed as it ticks.
@@ -571,6 +577,17 @@ fun MusicScreen(
       onDismiss = { showDetails = false }
     )
     LaunchedEffect(currentTrack.id) { onLoadTrackDetails(currentTrack) }
+  }
+
+  if (showLyrics && currentTrack != null) {
+    LyricsSheet(
+      track = currentTrack,
+      state = lyrics,
+      currentPositionMs = currentPositionMs,
+      onSeek = onSeekTo,
+      onDismiss = { showLyrics = false }
+    )
+    LaunchedEffect(currentTrack.id) { onLoadLyrics(currentTrack) }
   }
 
   if (showCuriosityDialog && activeCuriosity != null) {
@@ -1251,7 +1268,8 @@ private fun TitleRow(
   onAddToPlaylist: (String, Track) -> Unit,
   onCreatePlaylist: (String, Track) -> Unit,
   onSleepTimer: () -> Unit,
-  onAbout: (Track) -> Unit
+  onAbout: (Track) -> Unit,
+  onLyrics: (Track) -> Unit
 ) {
   Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
     Column(
@@ -1303,7 +1321,8 @@ private fun TitleRow(
         icon = Icons.Rounded.MoreHoriz,
         sleepTimerLabel = sleepTimerLabel(sleepTimer),
         onSleepTimer = onSleepTimer,
-        onAbout = { onAbout(track) }
+        onAbout = { onAbout(track) },
+        onLyrics = { onLyrics(track) }
       )
     }
   }

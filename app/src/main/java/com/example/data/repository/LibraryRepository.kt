@@ -92,6 +92,24 @@ class LibraryRepository(
     return playlist
   }
 
+  /** A playlist with all of [tracks], in that order and with repeats (the queue saved as a playlist). */
+  fun createPlaylist(name: String, tracks: List<Track>): Playlist {
+    val playlist = Playlist(
+      id = TrackIds.newPlaylist(),
+      name = name.trim().ifBlank { appContext.getString(R.string.library_new_playlist_title) },
+      trackIds = tracks.map { it.id }
+    )
+    worker.submit {
+      db.withTransaction {
+        tracks.distinctBy { it.id }.forEach { remember(it) }
+        db.playlists().insert(PlaylistEntity(playlist.id, playlist.name, nextStamp()))
+        db.playlists().setTracks(playlist.id, playlist.trackIds)
+      }
+      _playlists.value = _playlists.value + playlist
+    }
+    return playlist
+  }
+
   fun renamePlaylist(playlistId: String, name: String) {
     if (name.isBlank()) return
     worker.submit {

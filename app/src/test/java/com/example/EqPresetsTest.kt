@@ -41,7 +41,7 @@ class EqPresetsTest {
   fun parametricModeAndItsBandsSurviveAJsonRoundTrip() {
     val s = EqSettings(
       parametric = true,
-      paramBands = listOf(EqBand(freqHz = 2500f, gainDb = 3f, q = 0.9f), EqBand(freqHz = 60f, gainDb = -2f, type = FilterType.LOW_SHELF))
+      bands = listOf(EqBand(freqHz = 2500f, gainDb = 3f, q = 0.9f), EqBand(freqHz = 60f, gainDb = -2f, type = FilterType.LOW_SHELF))
     )
     val back = EqPresets.settingsFromJson(JSONObject(EqPresets.settingsToJson(s).toString()))
     assertEquals(s, back)
@@ -49,27 +49,41 @@ class EqPresetsTest {
 
   @Test
   fun parametricStartsWithOneBandAndOldSettingsStayGraphic() {
-    assertEquals(1, EqSettings().paramBands.size)
+    assertEquals(1, EqSettings.DEFAULT_PARAM_BANDS.size)
     val old = EqPresets.settingsFromJson(JSONObject().put("preamp", -1.0))
     assertEquals(false, old.parametric)
-    assertEquals(EqSettings.DEFAULT_PARAM_BANDS, old.paramBands)
+    assertEquals(EqSettings.DEFAULT_PARAM_BANDS, old.bandsOf(true))
   }
 
   @Test
-  fun theUnusedBandSetNeverMakesAPresetLookEdited() {
-    val graphic = EqSettings(paramBands = listOf(EqBand(freqHz = 500f, gainDb = 6f)))
+  fun theOtherLayoutNeverMakesAPresetLookEdited() {
+    val graphic = EqSettings(otherBands = listOf(EqBand(freqHz = 500f, gainDb = 6f)))
     assertEquals(EqSettings().userCurve, graphic.userCurve)
-    val param = EqSettings(parametric = true, bands = EqSettings.withGains(List(15) { 3f }).bands)
+    val param = EqSettings(parametric = true, otherBands = EqSettings.withGains(List(15) { 3f }).bands)
     assertEquals(EqSettings(parametric = true).userCurve, param.userCurve)
   }
 
   @Test
-  fun editingGoesToTheActiveBandSet() {
-    val p = EqSettings(parametric = true)
-    val edited = p.withActiveBands(listOf(EqBand(freqHz = 4000f, gainDb = 2f)))
-    assertEquals(4000f, edited.paramBands[0].freqHz, 0f)
-    assertEquals(EqSettings.DEFAULT_BANDS, edited.bands)
+  fun editingGoesToTheBandsInUseAndSwitchingBackFindsTheOther() {
+    val g = EqSettings.withGains(List(15) { 2f })
+    val p = g.withLayout(true)
+    assertEquals(EqSettings.DEFAULT_PARAM_BANDS, p.bands)
+    val edited = p.copy(bands = listOf(EqBand(freqHz = 4000f, gainDb = 2f)))
+    assertEquals(4000f, edited.bands[0].freqHz, 0f)
+    assertEquals(g.bands, edited.withLayout(false).bands)
+    assertEquals(listOf(EqBand(freqHz = 4000f, gainDb = 2f)), edited.withLayout(false).withLayout(true).bands)
   }
+
+  @Test
+  fun loadingAPresetKeepsTheSwitchTheFoneAndTheOtherLayout() {
+    val mine = EqSettings(parametric = true, enabled = false, bands = listOf(EqBand(freqHz = 300f, gainDb = 4f)))
+    val loaded = mine.withCurveOf(EqSettings.withGains(List(15) { 1f }))
+    assertEquals(false, loaded.enabled)
+    assertEquals(false, loaded.parametric)
+    assertEquals(mine.bands, loaded.otherBands)
+    assertEquals(mine.bands, loaded.withLayout(true).bands)
+  }
+
 
   @Test
   fun userPresetsRoundTripAndComeBackAsCustom() {

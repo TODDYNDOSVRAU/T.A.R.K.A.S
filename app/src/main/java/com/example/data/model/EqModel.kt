@@ -76,28 +76,41 @@ data class EqSettings(
   val virtualizerStrength: Int = 0,
   /** Correction for the fone in use, applied before everything else. Null = none chosen. */
   val device: DeviceCorrection? = null,
-  /** True when the parametric bands are the ones heard, false for the graphic faders. */
+  /** True when the bands are parametric (any number, with Q and type), false for the 15 graphic faders. */
   val parametric: Boolean = false,
-  /** The parametric equalizer's own bands, kept apart from the graphic ones. Starts with one. */
-  val paramBands: List<EqBand> = DEFAULT_PARAM_BANDS
+  /**
+   * What the other layout had when it was left, so switching back finds it. Not part of the sound
+   * and never compared. Null = that layout's flat default.
+   */
+  val otherBands: List<EqBand>? = null
 ) {
-  /** The bands that shape the sound right now: graphic or parametric. */
-  val activeBands: List<EqBand> get() = if (parametric) paramBands else bands
+  /** The same settings in the other layout: its remembered bands become the ones heard. */
+  fun withLayout(parametricOn: Boolean): EqSettings =
+    if (parametricOn == parametric) this
+    else copy(parametric = parametricOn, bands = otherBands ?: defaultBands(parametricOn), otherBands = bands)
 
-  /** Replaces the bands of the mode in use. */
-  fun withActiveBands(list: List<EqBand>): EqSettings = if (parametric) copy(paramBands = list) else copy(bands = list)
+  /** Another curve in the layout it came with, remembering this one's other layout unless it is the same layout. */
+  fun withCurveOf(p: EqSettings): EqSettings =
+    p.copy(enabled = enabled, device = device, otherBands = if (p.parametric == parametric) otherBands else bands)
+
+  /** The layout in use back to flat: the faders at zero, or the parametric back to one band. */
+  fun flat(): EqSettings = copy(bands = defaultBands(parametric))
+
+  /** The bands of the given layout, whether or not it is the one in use. */
+  fun bandsOf(parametricLayout: Boolean): List<EqBand> =
+    if (parametricLayout == parametric) bands else otherBands ?: defaultBands(parametricLayout)
 
   /**
-   * The user's own curve, without the fone correction: what presets store and compare. The set of
-   * bands not in use is left at its default, so it never makes a preset look edited.
+   * The user's own curve, without the fone correction: what presets store and compare. The other
+   * layout's memory is left out, so it never makes a preset look edited.
    */
   val userCurve: EqSettings
-    get() = copy(enabled = true, device = null).let {
-      if (parametric) it.copy(bands = DEFAULT_BANDS) else it.copy(paramBands = DEFAULT_PARAM_BANDS)
-    }
+    get() = copy(enabled = true, device = null, otherBands = null)
 
   companion object {
     val DEFAULT_PARAM_BANDS: List<EqBand> = listOf(EqBand(freqHz = 1000f, q = 1.4f))
+
+    fun defaultBands(parametric: Boolean): List<EqBand> = if (parametric) DEFAULT_PARAM_BANDS else DEFAULT_BANDS
 
     val DEFAULT_FREQUENCIES = listOf(
       25f, 40f, 63f, 100f, 160f, 250f, 400f, 630f,
@@ -203,7 +216,7 @@ object EqPresets {
 
   fun settingsToJson(s: EqSettings): JSONObject = JSONObject()
     .put("enabled", s.enabled)
-    .put("bands", JSONArray().apply { s.bands.forEach { put(bandToJson(it)) } })
+    .put("bands", JSONArray().apply { s.bandsOf(false).forEach { put(bandToJson(it)) } })
     .put("preamp", s.preampDb.toDouble())
     .put("bass", s.bassDb.toDouble())
     .put("bassF", s.bassFreqHz.toDouble())
@@ -217,7 +230,7 @@ object EqPresets {
     .put("virt", s.virtualizerStrength)
     .apply { s.device?.let { put("device", deviceToJson(it)) } }
     .put("parametric", s.parametric)
-    .put("paramBands", JSONArray().apply { s.paramBands.forEach { put(bandToJson(it)) } })
+    .put("paramBands", JSONArray().apply { s.bandsOf(true).forEach { put(bandToJson(it)) } })
 
   fun deviceToJson(d: DeviceCorrection): JSONObject = JSONObject()
     .put("name", d.name)
@@ -251,11 +264,12 @@ object EqPresets {
     val paramBands = if (paramJson != null && paramJson.length() > 0) {
       (0 until paramJson.length()).map { bandFromJson(paramJson.getJSONObject(it)) }
     } else EqSettings.DEFAULT_PARAM_BANDS
+    val parametric = o.optBoolean("parametric", false)
     return EqSettings(
-      parametric = o.optBoolean("parametric", false),
-      paramBands = paramBands,
+      parametric = parametric,
+      bands = if (parametric) paramBands else bands,
+      otherBands = (if (parametric) bands else paramBands).takeUnless { it == EqSettings.defaultBands(!parametric) },
       enabled = o.optBoolean("enabled", true),
-      bands = bands,
       preampDb = o.finiteDouble("preamp", 0.0).toFloat().coerceIn(-EqSettings.PREAMP_RANGE_DB, EqSettings.PREAMP_RANGE_DB),
       bassDb = o.finiteDouble("bass", 0.0).toFloat().coerceIn(-EqSettings.TONE_RANGE_DB, EqSettings.TONE_RANGE_DB),
       bassFreqHz = o.finiteDouble("bassF", d.bassFreqHz.toDouble()).toFloat(),

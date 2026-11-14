@@ -180,6 +180,9 @@
   <string name="audio_gain_at">Gain at %1$s</string>
   <string name="audio_headroom_lowered">Level lowered %1$s dB to avoid distortion</string>
   <string name="audio_headroom_none">No level reduction</string>
+  <string name="audio_limiter_working">Limiter working: level lowered %1$s dB</string>
+  <string name="audio_clipping">Clipping detected. Lower the preamp.</string>
+  <string name="audio_compare_matched">Volume matched: %1$s dB</string>
   <string name="audio_menu_advanced">Advanced settings</string>
   <string name="audio_menu_copy_curve">Copy curve as text</string>
   <string name="audio_menu_delete_preset">Delete preset</string>

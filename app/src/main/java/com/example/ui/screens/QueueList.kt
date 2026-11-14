@@ -58,6 +58,7 @@ import com.example.R
 import com.example.data.model.Track
 import com.example.data.playback.PlaybackOrder
 import com.example.ui.components.EmptyState
+import com.example.ui.components.NamePlaylistDialog
 import com.example.ui.components.QueueItemMenu
 import com.example.ui.components.TextAction
 import com.example.ui.components.TrackRow
@@ -83,13 +84,15 @@ internal fun QueueList(
   onRemove: (Int) -> Unit,
   onMove: (Int, Int) -> Unit,
   onClear: () -> Unit,
-  onPlayUpcoming: (Track) -> Unit
+  onPlayUpcoming: (Track) -> Unit,
+  onSaveAsPlaylist: (String) -> Unit = {}
 ) {
   val colors = MaterialTheme.colorScheme
   val haptics = LocalHapticFeedback.current
   val listState = rememberLazyListState()
   val scope = rememberCoroutineScope()
   var confirmClear by remember { mutableStateOf(false) }
+  var savingQueue by remember { mutableStateOf(false) }
 
   // While a drag runs the rows follow a local order; the queue itself changes once, on release.
   var local by remember { mutableStateOf<List<Track>?>(null) }
@@ -182,6 +185,7 @@ internal fun QueueList(
             .weight(1f)
             .semantics { heading() }
         )
+        TextAction(stringResource(R.string.queue_save_as_playlist), onClick = { savingQueue = true }, modifier = Modifier.testTag("queue_save_playlist"))
         if (queue.isNotEmpty()) {
           TextAction(stringResource(R.string.queue_clear), onClick = { confirmClear = true }, modifier = Modifier.testTag("library_clear_queue"))
         }
@@ -324,6 +328,16 @@ internal fun QueueList(
         }
       }
     }
+  }
+
+  if (savingQueue) {
+    NamePlaylistDialog(
+      title = stringResource(R.string.queue_save_title),
+      confirmLabel = stringResource(R.string.queue_save_confirm),
+      initialName = "",
+      onConfirm = { name -> savingQueue = false; onSaveAsPlaylist(name) },
+      onDismiss = { savingQueue = false }
+    )
   }
 
   if (confirmClear) {

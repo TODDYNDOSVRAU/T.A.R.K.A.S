@@ -5,6 +5,17 @@
     <string name="library_section_songs">Songs</string>
     <string name="library_section_playlists">Playlists</string>
     <string name="library_section_favorites">Favorites</string>
+    <string name="library_section_auto">Automatic</string>
+    <string name="library_auto_recently_added">Recently added</string>
+    <string name="library_auto_recently_played">Recently played</string>
+    <string name="library_auto_most_played">Most played</string>
+    <string name="library_auto_open">Open %1$s</string>
+    <string name="library_auto_empty_title_added">Nothing added yet</string>
+    <string name="library_auto_empty_message_added">Songs appear here with the date they were added to the device.</string>
+    <string name="library_auto_empty_title_played">Nothing played yet</string>
+    <string name="library_auto_empty_message_played">Songs you listen to appear here, the latest first.</string>
+    <string name="library_auto_empty_title_most">No plays counted yet</string>
+    <string name="library_auto_empty_message_most">Songs you listen to appear here, the most played first.</string>
     <string name="library_section_queue">Queue</string>
     <string name="library_section_queue_count">Queue (%1$d)</string>
     <string name="library_back_label">Library</string>
@@ -107,4 +118,21 @@
     <string name="demo_genre_ambient_modal">Ambient / Modal music</string>
     <string name="demo_genre_calibration">Acoustic calibration</string>
     <string name="eq_profile_custom_description">Custom profile made by the user</string>
+    <string name="library_section_albums">Albums</string>
+    <string name="library_section_artists">Artists</string>
+    <string name="library_section_genres">Genres</string>
+    <string name="library_search_albums_hint">Search albums</string>
+    <string name="library_search_artists_hint">Search artists</string>
+    <string name="library_search_genres_hint">Search genres</string>
+    <string name="library_search_no_group">Nothing matches “%1$s”. Check the spelling or clear the search.</string>
+    <string name="library_albums_empty">No song has an album name. Albums come from the tags of your files.</string>
+    <string name="library_artists_empty">No song has an artist name. Artists come from the tags of your files.</string>
+    <string name="library_genres_empty">No song has a genre. Genres come from the tags of your files; some files have none.</string>
+    <string name="library_various_artists">Various artists</string>
+    <string name="library_open_group">Open %1$s</string>
+    <string name="library_group_albums_heading">Albums</string>
+    <plurals name="library_album_count">
+        <item quantity="one">%1$d album</item>
+        <item quantity="other">%1$d albums</item>
+    </plurals>
 </resources>

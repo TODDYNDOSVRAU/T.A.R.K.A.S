@@ -79,7 +79,7 @@ class DpCurveTest {
   }
 
   private fun parametric(vararg bands: EqBand) =
-    EqSettings(parametric = true, paramBands = bands.toList(), autoPreamp = false, limiterEnabled = false)
+    EqSettings(parametric = true, bands = bands.toList(), autoPreamp = false, limiterEnabled = false)
 
   @Test
   fun blockIsAbout85Milliseconds() {

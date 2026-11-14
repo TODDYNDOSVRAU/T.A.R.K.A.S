@@ -93,7 +93,7 @@ object EqTextFormat {
 
   /** The curve in use as an APO / AutoEq text, preamp included. Gains below 0.05 dB are written as they are. */
   fun export(s: EqSettings): String = buildString {
-    val bands = s.activeBands.filter { !it.type.usesGain || abs(it.gainDb) >= 0.0005f }
+    val bands = s.bands.filter { !it.type.usesGain || abs(it.gainDb) >= 0.0005f }
     val preamp = s.preampDb + (s.device?.preampDb ?: 0f)
     append("Preamp: ").append(fmt(preamp)).append(" dB\n")
     var n = 1
@@ -121,12 +121,11 @@ object EqTextFormat {
   /** Settings with [result] applied: parametric bands switch the parametric mode on, GraphicEQ the graphic one. */
   fun apply(base: EqSettings, result: Result): EqSettings = when (result) {
     // Export writes bass/treble as shelf filters, so they come back as bands; keeping them too would apply them twice.
-    is Result.Parametric -> base.copy(
-      parametric = true, paramBands = result.bands, preampDb = result.preampDb, device = null,
+    is Result.Parametric -> base.withLayout(true).copy(
+      bands = result.bands, preampDb = result.preampDb, device = null,
       bassDb = 0f, trebleDb = 0f
     )
-    is Result.Graphic -> base.copy(
-      parametric = false,
+    is Result.Graphic -> base.withLayout(false).copy(
       bands = EqSettings.DEFAULT_FREQUENCIES.mapIndexed { i, f -> EqBand(freqHz = f, gainDb = result.gainsDb[i]) }
     )
   }

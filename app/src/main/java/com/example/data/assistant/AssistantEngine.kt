@@ -15,6 +15,7 @@ import com.example.data.model.EqPresets
 import com.example.data.model.LocalTimer
 import com.example.data.model.MessageSender
 import com.example.data.model.ToolExecutionReport
+import com.example.data.model.Track
 import com.example.data.model.VerificationStatus
 import com.example.data.repository.CuriosityRepository
 import com.example.data.repository.MusicRepository
@@ -83,6 +84,10 @@ internal fun playerCommandFor(lower: String): Pair<PlayerCommand, String>? {
   }
 }
 
+// Answers to a pending confirmation, compared after normalizeForSearch (lowercase, no accents).
+private val CONFIRM_WORDS = setOf("sim", "s", "yes", "y", "ok", "confirmo", "confirmar", "confirm", "pode")
+private val DECLINE_WORDS = setOf("nao", "n", "no", "cancelar", "cancela", "cancele", "cancel")
+
 class AssistantEngine(
   // Reply texts come from the app's resources, so they follow the system language.
   private val context: Context,
@@ -105,10 +110,22 @@ class AssistantEngine(
     if (bass) next.bassDb else next.trebleDb
   },
   // Where the callbacks above run: they change screen state, so the app keeps them on the main thread.
-  private val callbackContext: CoroutineContext = Dispatchers.Main.immediate
+  private val callbackContext: CoroutineContext = Dispatchers.Main.immediate,
+  // What the assistant can change in the app. Only runs after the user confirms it.
+  private val actions: AssistantActions = NoAssistantActions
 ) {
   private val TAG = "AssistantEngine"
   private val okHttpClient = Http.client
+
+  // A state-changing request waiting for "sim" or "não". Only one at a time; a new request replaces it.
+  private class PendingAction(
+    val request: AssistantRequest,
+    val label: String,
+    val tracks: List<Track>,
+    val question: String
+  )
+
+  @Volatile private var pending: PendingAction? = null
 
   val hasGeminiKey: Boolean
     get() {
@@ -125,6 +142,9 @@ class AssistantEngine(
     useGeminiIfAvailable: Boolean = true
   ): AssistantMessage = withContext(Dispatchers.IO) {
     val trimmed = userInput.trim()
+
+    // 0. A confirmation is answered before anything else, so "sim" never reaches the other rules.
+    answerPending(trimmed)?.let { return@withContext it }
 
     // 1. Check for deterministic local commands first
     val localToolExecution = tryParseLocalTool(trimmed)
@@ -163,6 +183,11 @@ class AssistantEngine(
         sender = MessageSender.ASSISTANT,
         text = context.getString(R.string.assistant_help_body)
       )
+    }
+
+    // State-changing requests (library, queue, sleep timer, spatial, volume): asked for confirmation first.
+    assistantRequestFor(lower)?.let { request ->
+      return requestReply(request)
     }
 
     // Player controls: run through the app and report the real result
@@ -377,6 +402,123 @@ class AssistantEngine(
     }
 
     return null
+  }
+
+  private fun reply(text: String, report: ToolExecutionReport? = null) = AssistantMessage(
+    id = UUID.randomUUID().toString(),
+    sender = MessageSender.ASSISTANT,
+    text = text,
+    toolReport = report
+  )
+
+  private fun minutesText(minutes: Int): String =
+    context.resources.getQuantityString(R.plurals.assistant_minutes, minutes, minutes)
+
+  private fun tracksText(count: Int): String =
+    context.resources.getQuantityString(R.plurals.assistant_tracks_count, count, count)
+
+  // Asks for confirmation. Nothing changes until the user answers "sim".
+  private fun requestReply(request: AssistantRequest): AssistantMessage = when (request) {
+    is AssistantRequest.PlayLibrary -> libraryRequest(request, request.query, asNext = null)
+    is AssistantRequest.QueueLibrary -> libraryRequest(request, request.query, asNext = request.asNext)
+    else -> {
+      val question = simpleQuestion(request)
+      pending = PendingAction(request, label = "", tracks = emptyList(), question = question)
+      reply(question)
+    }
+  }
+
+  private fun libraryRequest(request: AssistantRequest, query: String, asNext: Boolean?): AssistantMessage {
+    val library = actions.library()
+    val matches = findInLibrary(query, library.tracks, library.playlists)
+    if (matches.isEmpty()) return reply(context.getString(R.string.assistant_library_none, query))
+    if (matches.size > 1) {
+      // Several matches: the user picks a name, the engine never guesses one.
+      val options = matches.take(5).joinToString(", ") { it.label }
+      return reply(context.getString(R.string.assistant_library_many, options))
+    }
+    val match = matches.single()
+    val count = tracksText(match.tracks.size)
+    val question = when (asNext) {
+      null -> context.getString(R.string.assistant_confirm_play, match.label, count)
+      true -> context.getString(R.string.assistant_confirm_queue_next, match.label, count)
+      false -> context.getString(R.string.assistant_confirm_queue_end, match.label, count)
+    }
+    pending = PendingAction(request, match.label, match.tracks, question)
+    return reply(question)
+  }
+
+  private fun simpleQuestion(request: AssistantRequest): String = when (request) {
+    AssistantRequest.ClearQueue -> context.getString(R.string.assistant_confirm_clear_queue)
+    is AssistantRequest.SleepIn -> context.getString(R.string.assistant_confirm_sleep, minutesText(request.minutes))
+    AssistantRequest.SleepAtEndOfTrack -> context.getString(R.string.assistant_confirm_sleep_end)
+    AssistantRequest.CancelSleep -> context.getString(R.string.assistant_confirm_cancel_sleep)
+    is AssistantRequest.Spatial -> context.getString(
+      if (request.on) R.string.assistant_confirm_spatial_on else R.string.assistant_confirm_spatial_off
+    )
+    is AssistantRequest.Volume -> context.getString(R.string.assistant_confirm_volume, request.percent)
+    is AssistantRequest.PlayLibrary, is AssistantRequest.QueueLibrary -> ""
+  }
+
+  // Answers a waiting confirmation. Anything other than yes or no repeats the question and keeps it waiting.
+  private suspend fun answerPending(input: String): AssistantMessage? {
+    val current = pending ?: return null
+    val answer = normalizeForSearch(input).trim().trimEnd('.', '!', '?').trim()
+    return when (answer) {
+      in CONFIRM_WORDS -> {
+        pending = null
+        // The app is changed on the main thread, like the other callbacks.
+        reply(withContext(callbackContext) { execute(current) })
+      }
+      in DECLINE_WORDS -> {
+        pending = null
+        reply(context.getString(R.string.assistant_confirm_cancelled))
+      }
+      else -> reply(current.question + " " + context.getString(R.string.assistant_confirm_answer_hint))
+    }
+  }
+
+  private fun execute(action: PendingAction): String {
+    val ok: Boolean
+    val done: String
+    when (val r = action.request) {
+      is AssistantRequest.PlayLibrary -> {
+        ok = actions.playTracks(action.tracks)
+        done = context.getString(R.string.assistant_done_play, action.label)
+      }
+      is AssistantRequest.QueueLibrary -> {
+        ok = actions.queueTracks(action.tracks, r.asNext)
+        done = context.getString(
+          if (r.asNext) R.string.assistant_done_queue_next else R.string.assistant_done_queue_end,
+          action.label
+        )
+      }
+      AssistantRequest.ClearQueue -> {
+        ok = actions.clearQueue()
+        done = context.getString(R.string.assistant_done_clear_queue)
+      }
+      is AssistantRequest.SleepIn -> {
+        ok = actions.sleepIn(r.minutes)
+        done = context.getString(R.string.assistant_done_sleep, minutesText(r.minutes))
+      }
+      AssistantRequest.SleepAtEndOfTrack -> {
+        ok = actions.sleepAtEndOfTrack()
+        done = context.getString(R.string.assistant_done_sleep_end)
+      }
+      AssistantRequest.CancelSleep -> {
+        ok = actions.cancelSleep()
+        done = context.getString(R.string.assistant_done_cancel_sleep)
+      }
+      is AssistantRequest.Spatial -> {
+        ok = actions.setSpatial(r.on)
+        done = context.getString(if (r.on) R.string.assistant_done_spatial_on else R.string.assistant_done_spatial_off)
+      }
+      is AssistantRequest.Volume -> {
+        ok = actions.setVolumePercent(r.percent)
+        done = context.getString(R.string.assistant_done_volume, r.percent)
+      }
+    }
+    return if (ok) done else context.getString(R.string.assistant_action_unavailable)
   }
 
   private fun generateLocalRuleResponse(input: String): AssistantMessage {

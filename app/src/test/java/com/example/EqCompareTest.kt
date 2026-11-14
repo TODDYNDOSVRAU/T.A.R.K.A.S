@@ -23,7 +23,7 @@ class EqCompareTest {
   fun aBandThatMovesIsAnEdit() {
     val flat = EqSettings()
     assertTrue(EqCompare.edited(flat.copy(bands = flat.bands.mapIndexed { i, b -> if (i == 5) b.copy(gainDb = 2f) else b }), flat))
-    assertTrue(EqCompare.edited(flat.copy(parametric = true, paramBands = listOf(EqBand(freqHz = 1000f, gainDb = 3f))), flat))
+    assertTrue(EqCompare.edited(flat.copy(parametric = true, bands = listOf(EqBand(freqHz = 1000f, gainDb = 3f))), flat))
   }
 
   @Test

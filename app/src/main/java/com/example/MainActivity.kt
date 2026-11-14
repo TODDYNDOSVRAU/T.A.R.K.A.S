@@ -105,6 +105,8 @@ import com.example.ui.screens.AudioScreen
 import com.example.ui.screens.PrefetchCarouselCovers
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LibraryScreen
+import com.example.ui.screens.library.LibraryActions
+import com.example.ui.screens.library.LibraryState
 import com.example.ui.screens.MusicScreen
 import com.example.ui.screens.MusicalCuriositySettingsScreen
 import com.example.ui.screens.OnboardingScreen
@@ -327,6 +329,7 @@ fun TarkasAppContent(
   val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
   val waveform by viewModel.currentWaveform.collectAsStateWithLifecycle()
   val waveformBar by viewModel.waveformBar.collectAsStateWithLifecycle()
+  val homeMusicFirst by viewModel.homeMusicFirst.collectAsStateWithLifecycle()
   val wantsToPlay by viewModel.wantsToPlay.collectAsStateWithLifecycle()
   // Values that change many times a second are kept as State and read only where they are drawn,
   // so a tick does not recompose the whole app.
@@ -535,6 +538,13 @@ fun TarkasAppContent(
       when (screen as TarkasNavTab) {
         TarkasNavTab.HOME -> {
           HomeScreen(
+            musicFirst = homeMusicFirst,
+            onLoadPlayStats = { viewModel.readPlayStats() },
+            onLoadResume = { viewModel.readResumeInfo() },
+            onResume = {
+              viewModel.resumeListening()
+              viewModel.setTab(TarkasNavTab.MUSIC)
+            },
             currentTrack = currentTrack,
             tracks = tracks,
             isPlaying = pagePlaying,
@@ -583,55 +593,61 @@ fun TarkasAppContent(
 
         TarkasNavTab.LIBRARY -> {
           LibraryScreen(
-            playlists = playlists,
-            favoriteTracks = favoriteTracks,
-            savedTracks = savedTracks,
-            allTracks = tracks,
-            deviceTracks = viewModel.deviceTracks.collectAsStateWithLifecycle().value,
-            deviceScanning = viewModel.deviceScanning.collectAsStateWithLifecycle().value,
-            hasMusicPermission = viewModel.hasMusicPermission(),
-            onScanDevice = { viewModel.scanDeviceMusic() },
-            songsPerFolder = viewModel.deviceFolders.collectAsStateWithLifecycle().value,
-            folderRules = viewModel.folderRules.collectAsStateWithLifecycle().value,
-            onSetFolderIncluded = { folder, included -> viewModel.setFolderIncluded(folder, included) },
-            queue = queue,
-            currentTrack = currentTrack,
-            isPlaying = pagePlaying,
-            onPlayFromList = { track, list ->
-              // With songs waiting in the queue it asks first; the player opens once it plays.
-              if (viewModel.playFromList(track, list)) viewModel.setTab(TarkasNavTab.MUSIC)
-            },
-            onShuffleList = { list -> viewModel.shuffleFrom(list) },
-            onCreatePlaylist = { name -> viewModel.createPlaylist(name) },
-            onAddLocalTrack = { title, artist, uri, dur ->
-              viewModel.addLocalAudio(title, artist, uri, dur)
-            },
-            onRenamePlaylist = { id, name -> viewModel.renamePlaylist(id, name) },
-            onDeletePlaylist = { id -> viewModel.deletePlaylist(id) },
-            onRemoveFromPlaylist = { id, trackId -> viewModel.removeFromPlaylist(id, trackId) },
-            onToggleFavorite = { track -> viewModel.toggleFavorite(track) },
-            onPlayNext = { track -> viewModel.playNext(track) },
-            onAddToQueue = { track -> viewModel.addToQueue(track) },
-            onAddToPlaylist = { id, track -> viewModel.addToPlaylist(id, track) },
-            onCreatePlaylistWith = { name, track -> viewModel.createPlaylist(name, track) },
-            onPlayQueueItem = { index ->
-              viewModel.playFromQueue(index)
-              viewModel.setTab(TarkasNavTab.MUSIC)
-            },
-            onRemoveQueueItem = { index -> viewModel.removeFromQueue(index) },
-            onClearQueue = { viewModel.clearQueue() },
-            upcoming = viewModel.upcoming.collectAsStateWithLifecycle().value,
-            initialSongOrder = viewModel.songOrder,
-            onSongOrderChange = { viewModel.setSongOrder(it) },
-            playCounts = viewModel.playCounts.collectAsStateWithLifecycle().value,
-            onNeedPlayCounts = { viewModel.loadPlayCounts() },
-            onMoveQueueItem = { from, to -> viewModel.moveInQueue(from, to) },
-            onPlayUpcoming = { track ->
-              viewModel.playFromCurrentList(track)
-              viewModel.setTab(TarkasNavTab.MUSIC)
-            },
-            openQueue = openQueueRequest,
-            onQueueOpened = { viewModel.queueOpened() }
+            state = LibraryState(
+              playlists = playlists,
+              favoriteTracks = favoriteTracks,
+              savedTracks = savedTracks,
+              allTracks = tracks,
+              deviceTracks = viewModel.deviceTracks.collectAsStateWithLifecycle().value,
+              deviceScanning = viewModel.deviceScanning.collectAsStateWithLifecycle().value,
+              hasMusicPermission = viewModel.hasMusicPermission(),
+              songsPerFolder = viewModel.deviceFolders.collectAsStateWithLifecycle().value,
+              folderRules = viewModel.folderRules.collectAsStateWithLifecycle().value,
+              queue = queue,
+              currentTrack = currentTrack,
+              isPlaying = pagePlaying,
+              upcoming = viewModel.upcoming.collectAsStateWithLifecycle().value,
+              initialSongOrder = viewModel.songOrder,
+              playCounts = viewModel.playCounts.collectAsStateWithLifecycle().value,
+              openQueue = openQueueRequest
+            ),
+            actions = LibraryActions(
+              onScanDevice = { viewModel.scanDeviceMusic() },
+              onSetFolderIncluded = { folder, included -> viewModel.setFolderIncluded(folder, included) },
+              onPlayFromList = { track, list ->
+                // With songs waiting in the queue it asks first; the player opens once it plays.
+                if (viewModel.playFromList(track, list)) viewModel.setTab(TarkasNavTab.MUSIC)
+              },
+              onShuffleList = { list -> viewModel.shuffleFrom(list) },
+              onCreatePlaylist = { name -> viewModel.createPlaylist(name) },
+              onAddLocalTrack = { title, artist, uri, dur ->
+                viewModel.addLocalAudio(title, artist, uri, dur)
+              },
+              onRenamePlaylist = { id, name -> viewModel.renamePlaylist(id, name) },
+              onDeletePlaylist = { id -> viewModel.deletePlaylist(id) },
+              onRemoveFromPlaylist = { id, trackId -> viewModel.removeFromPlaylist(id, trackId) },
+              onToggleFavorite = { track -> viewModel.toggleFavorite(track) },
+              onPlayNext = { track -> viewModel.playNext(track) },
+              onAddToQueue = { track -> viewModel.addToQueue(track) },
+              onAddToPlaylist = { id, track -> viewModel.addToPlaylist(id, track) },
+              onCreatePlaylistWith = { name, track -> viewModel.createPlaylist(name, track) },
+              onPlayQueueItem = { index ->
+                viewModel.playFromQueue(index)
+                viewModel.setTab(TarkasNavTab.MUSIC)
+              },
+              onRemoveQueueItem = { index -> viewModel.removeFromQueue(index) },
+              onClearQueue = { viewModel.clearQueue() },
+              onSaveQueueAsPlaylist = { viewModel.saveQueueAsPlaylist(it) },
+              onSongOrderChange = { viewModel.setSongOrder(it) },
+              onNeedPlayCounts = { viewModel.loadPlayCounts() },
+              onLoadPlayStats = { viewModel.readPlayStats() },
+              onMoveQueueItem = { from, to -> viewModel.moveInQueue(from, to) },
+              onPlayUpcoming = { track ->
+                viewModel.playFromCurrentList(track)
+                viewModel.setTab(TarkasNavTab.MUSIC)
+              },
+              onQueueOpened = { viewModel.queueOpened() }
+            )
           )
         }
 
@@ -727,6 +743,8 @@ fun TarkasAppContent(
             onReduceMotionChange = { viewModel.setReduceMotion(it) },
             waveformBar = waveformBar,
             onWaveformBarChange = { viewModel.setWaveformBar(it) },
+            homeMusicFirst = homeMusicFirst,
+            onHomeMusicFirstChange = { viewModel.setHomeMusicFirst(it) },
             onListAnimationChange = { viewModel.setListAnimation(it) },
             reduceTransparency = reduceTransparency,
             onReduceTransparencyChange = { viewModel.setReduceTransparency(it) },
@@ -802,6 +820,8 @@ fun TarkasAppContent(
             onCancelSleepTimer = { viewModel.cancelSleepTimer() },
             trackDetails = viewModel.trackDetails.collectAsStateWithLifecycle().value,
             onLoadTrackDetails = { track -> viewModel.loadTrackDetails(track) },
+            lyrics = viewModel.lyrics.collectAsStateWithLifecycle().value,
+            onLoadLyrics = { track -> viewModel.loadLyrics(track) },
             onClose = { viewModel.goBack() }
           )
           }

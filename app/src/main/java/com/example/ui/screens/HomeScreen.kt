@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -83,6 +84,14 @@ private const val SearchDebounceMs = 350L
 /** Width of a tile in the trending carousel: two and a bit fit a phone, so the next one peeks in. */
 private val TileWidth = 160.dp
 
+/** "Tocadas recentemente" shows this many songs: a shortcut; the full list is in Biblioteca. */
+private const val RecentLimit = 5
+
+private fun clock(ms: Long): String {
+  val totalSec = (ms / 1000).coerceAtLeast(0)
+  return String.format(java.util.Locale.ROOT, "%d:%02d", totalSec / 60, totalSec % 60)
+}
+
 @Composable
 fun HomeScreen(
   currentTrack: Track?,
@@ -109,6 +118,13 @@ fun HomeScreen(
   onSearchJamendoOnline: (String) -> Unit = {},
   onPlayJamendoResult: (Track) -> Unit = {},
   jamendoPopular: TrendingState = TrendingState(),
+  /** The user's own music above the online rows (default) or below them; set in Ajustes. */
+  musicFirst: Boolean = true,
+  /** Plays and last plays per track id, for "Tocadas recentemente". */
+  onLoadPlayStats: suspend () -> Map<String, com.example.data.playback.TrackStats> = { emptyMap() },
+  /** Where the saved track stopped, for "Continuar ouvindo"; null when there is nothing to continue. */
+  onLoadResume: suspend () -> com.example.data.playback.ResumeInfo? = { null },
+  onResume: () -> Unit = {},
   onRetryJamendoPopular: () -> Unit = {},
   onPlayJamendoPopular: (Track) -> Unit = {},
   modifier: Modifier = Modifier
@@ -118,6 +134,14 @@ fun HomeScreen(
   // (closing the player, rotating) does not send the same searches again.
   var searchedQuery by rememberSaveable { mutableStateOf("") }
   var showDemos by rememberSaveable { mutableStateOf(false) }
+
+  var playStats by remember { mutableStateOf<Map<String, com.example.data.playback.TrackStats>>(emptyMap()) }
+  // Read again when the song that plays changes: a play may have just been counted.
+  LaunchedEffect(currentTrack?.id) { playStats = onLoadPlayStats() }
+
+  var resume by remember { mutableStateOf<com.example.data.playback.ResumeInfo?>(null) }
+  // Read again when the song or the play state changes: pausing is what saves the position.
+  LaunchedEffect(currentTrack?.id, isPlaying) { resume = onLoadResume() }
 
   val searchAudius by rememberUpdatedState(onSearchAudiusOnline)
   val searchJamendo by rememberUpdatedState(onSearchJamendoOnline)
@@ -133,6 +157,9 @@ fun HomeScreen(
   // The user's own music; the synthesized demo tracks sit in their own section at the bottom.
   val myTracks = tracks.filter { !it.isDemo }
   val demoTracks = tracks.filter { it.isDemo }
+  val recent = remember(myTracks, playStats) {
+    com.example.data.library.AutoLists.build(com.example.data.library.AutoList.RECENTLY_PLAYED, myTracks, playStats, RecentLimit)
+  }
   // Accents and case do not matter: "acao" finds "Ação".
   val searchMatches = if (searchQuery.isBlank()) emptyList() else androidx.compose.runtime.remember(searchQuery, tracks) { tracks.filter { track ->
     com.example.data.TextMatch.contains(track.title, searchQuery) ||
@@ -194,7 +221,7 @@ fun HomeScreen(
       )
     }
 
-    if (searchQuery.isBlank()) {
+    fun LazyListScope.onlineSections() {
       item(key = "trending") {
         CatalogSection(
           title = stringResource(R.string.home_trending_title),
@@ -218,6 +245,34 @@ fun HomeScreen(
           currentTrack = currentTrack,
           isPlaying = isPlaying
         )
+      }
+    }
+
+    fun LazyListScope.mySections() {
+      // Only for the track that is loaded and paused: tapping it continues exactly where it stopped.
+      val resumeTrack = currentTrack?.takeIf { t -> !isPlaying && resume?.trackId == t.id && !t.isDemo }
+      val resumeAt = resume
+      if (resumeTrack != null && resumeAt != null) {
+        item(key = "resume_header") {
+          SectionHeader(stringResource(R.string.home_resume_header), modifier = Modifier.padding(top = Space.section, bottom = Space.s))
+        }
+        songs(listOf(resumeTrack), "resume", "resume_track", showSource = true, stagger = false, onClick = { onResume() })
+        item(key = "resume_position") {
+          Text(
+            text = resumeAt.durationMs?.let { stringResource(R.string.home_resume_position_of, clock(resumeAt.positionMs), clock(it)) }
+              ?: stringResource(R.string.home_resume_position, clock(resumeAt.positionMs)),
+            style = AppText.Footnote,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = Space.l, vertical = Space.xs).testTag("resume_position")
+          )
+        }
+      }
+
+      if (recent.isNotEmpty()) {
+        item(key = "recent_header") {
+          SectionHeader(stringResource(R.string.home_recent_header), modifier = Modifier.padding(top = Space.section, bottom = Space.s))
+        }
+        songs(recent, "recent", "recent_track", showSource = true, stagger = false, onClick = onPlayTrack)
       }
 
       item(key = "mine_header") {
@@ -251,6 +306,10 @@ fun HomeScreen(
           songs(demoTracks, "demo", "demo_track", showSource = false, stagger = false, onClick = onPlayTrack)
         }
       }
+    }
+
+    if (searchQuery.isBlank()) {
+      if (musicFirst) { mySections(); onlineSections() } else { onlineSections(); mySections() }
     } else {
       // While searching: the library first, then the same query on each service. All of it plays here.
       item(key = "search_lib_header") { ResultsHeader(stringResource(R.string.home_search_library_header), searching = false) }

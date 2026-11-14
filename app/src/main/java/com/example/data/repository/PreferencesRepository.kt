@@ -144,6 +144,13 @@ class PreferencesRepository(context: Context) {
   }
 
   /** Waveform progress bar in the player (Avançado); on by default (owner decision 2026-11-13); off keeps the thin bar. */
+  /** Início: the user's own music above the Audius and Jamendo rows (default) or below them. Key `home_music_first`. */
+  fun getHomeMusicFirst(): Boolean = prefs.getBoolean("home_music_first", true)
+
+  fun saveHomeMusicFirst(on: Boolean) {
+    prefs.edit().putBoolean("home_music_first", on).apply()
+  }
+
   fun getWaveformBar(): Boolean = prefs.getBoolean("waveform_bar", true)
 
   fun saveWaveformBar(on: Boolean) {

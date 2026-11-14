@@ -15,9 +15,15 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.Share
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -79,12 +85,26 @@ fun TrackActionsMenu(
   sleepTimerLabel: String? = null,
   onSleepTimer: (() -> Unit)? = null,
   /** Shown only in the player: "Sobre a faixa" (album, date and genres from MusicBrainz). */
-  onAbout: (() -> Unit)? = null
+  onAbout: (() -> Unit)? = null,
+  onLyrics: (() -> Unit)? = null
 ) {
   // Saved, so a rotation keeps the sheet (and the playlist step) where the user left it.
   var expanded by rememberSaveable { mutableStateOf(false) }
   var showPlaylists by rememberSaveable { mutableStateOf(false) }
   var showNewPlaylist by rememberSaveable { mutableStateOf(false) }
+  val context = LocalContext.current
+  val chooserTitle = stringResource(R.string.share_chooser_title)
+  val noShareApp = stringResource(R.string.share_no_app)
+  val share = {
+    TrackShare.intent(track)?.let { send ->
+      try {
+        context.startActivity(Intent.createChooser(send, chooserTitle).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+      } catch (_: ActivityNotFoundException) {
+        Toast.makeText(context, noShareApp, Toast.LENGTH_SHORT).show()
+      }
+    }
+    Unit
+  }
 
   IconButton(
     onClick = { showPlaylists = false; expanded = true },
@@ -149,6 +169,24 @@ fun TrackActionsMenu(
             icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
             onClick = { showPlaylists = true }
           )
+          if (TrackShare.canShare(track)) {
+            ListRow(
+              title = stringResource(R.string.player_menu_share),
+              icon = Icons.Rounded.Share,
+              chevron = false,
+              onClick = { close(share) },
+              modifier = Modifier.testTag("menu_share")
+            )
+          }
+          if (onLyrics != null) {
+            ListRow(
+              title = stringResource(R.string.player_menu_lyrics),
+              icon = Icons.Rounded.Lyrics,
+              chevron = false,
+              onClick = { close(onLyrics) },
+              modifier = Modifier.testTag("menu_lyrics")
+            )
+          }
           if (onAbout != null) {
             ListRow(
               title = stringResource(R.string.player_menu_about),

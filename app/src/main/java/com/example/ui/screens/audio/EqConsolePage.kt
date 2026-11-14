@@ -44,7 +44,19 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
+import com.example.data.audio.dsp.EqActivity
 import com.example.data.audio.dsp.EqDsp
+import com.example.ui.theme.Motion
+import com.example.ui.theme.rememberReducedMotion
 import com.example.data.model.AudioCapabilities
 import com.example.data.model.EqBand
 import com.example.data.model.EqPreset
@@ -97,7 +109,7 @@ internal fun EqConsolePage(
   val colors = MaterialTheme.colorScheme
   var selectedBand by rememberSaveable { mutableIntStateOf(0) }
   var showSpatial by rememberSaveable { mutableStateOf(false) }
-  val bandIndex = selectedBand.coerceIn(0, (eqSettings.paramBands.size - 1).coerceAtLeast(0))
+  val bandIndex = selectedBand.coerceIn(0, (eqSettings.bands.size - 1).coerceAtLeast(0))
   // Each mode keeps its own scroll, so switching back finds the strip where it was.
   val graphicView = remember { StripView(ScrollState(0)) }
   val paramView = remember { StripView(ScrollState(0)) }
@@ -176,6 +188,7 @@ internal fun CurveStatusRow(settings: EqSettings, capabilities: AudioCapabilitie
         // The level is being lowered: say so in the accent, not in the neutral grey of "nothing happening".
         color = if (headroom < -0.05f) colors.primary else colors.onSurfaceVariant
       )
+      OutputStageNotes(settings, comparing)
       if (settings.device != null && onSpeaker) {
         Text(
           text = stringResource(R.string.audio_speaker_warning),
@@ -248,4 +261,47 @@ internal fun CurveStatusRow(settings: EqSettings, capabilities: AudioCapabilitie
 internal fun rememberSpatialStage(): Boolean {
   val status by com.example.data.audio.spatial.SpatialControl.status.collectAsState()
   return status.let { com.example.data.audio.spatial.SpatialControl.active }
+}
+
+/**
+ * Under the headroom line, what the output stage is doing right now: the limiter lowering the level, a clip
+ * (a sample that reached the end of the range), and, while comparing without the equalizer, how much the
+ * untouched signal was lowered or raised to play at the same volume. Each line opens and closes with the
+ * same spring as the rest of the console, and keeps the words while it closes.
+ */
+@Composable
+private fun OutputStageNotes(settings: EqSettings, comparing: Boolean) {
+  val colors = MaterialTheme.colorScheme
+  val reduced = rememberReducedMotion()
+  val activity by EqActivity.state.collectAsState()
+  val spatial = rememberSpatialStage()
+  val match = remember(settings, spatial) { EqDsp.loudnessMatchDb(settings, spatial) }
+  // The words of a line that is closing must not turn to "0.0 dB" on the way out.
+  val lastReduction = remember { mutableFloatStateOf(0f) }
+  val lastMatch = remember { mutableFloatStateOf(0f) }
+  LaunchedEffect(activity.reductionDb) { if (activity.limiting) lastReduction.floatValue = activity.reductionDb }
+  LaunchedEffect(match) { lastMatch.floatValue = match }
+  val enter = if (reduced) EnterTransition.None else expandVertically(Motion.gel()) + fadeIn()
+  val exit = if (reduced) ExitTransition.None else shrinkVertically(Motion.gelExit()) + fadeOut()
+  val style = AppText.Footnote.copy(fontFeatureSettings = "tnum")
+
+  AnimatedVisibility(visible = settings.enabled && activity.limiting, enter = enter, exit = exit) {
+    Text(
+      stringResource(R.string.audio_limiter_working, formatDb(-lastReduction.floatValue).removePrefix("-")),
+      style = style,
+      color = colors.primary,
+      modifier = Modifier.testTag("eq_limiter_note")
+    )
+  }
+  AnimatedVisibility(visible = settings.enabled && activity.clipped, enter = enter, exit = exit) {
+    Text(stringResource(R.string.audio_clipping), style = style, color = colors.primary, modifier = Modifier.testTag("eq_clip_note"))
+  }
+  AnimatedVisibility(visible = comparing && kotlin.math.abs(match) >= EqDsp.LIMITER_SHOWN_DB, enter = enter, exit = exit) {
+    Text(
+      stringResource(R.string.audio_compare_matched, formatDb(lastMatch.floatValue)),
+      style = style,
+      color = colors.onSurfaceVariant,
+      modifier = Modifier.testTag("eq_match_note")
+    )
+  }
 }

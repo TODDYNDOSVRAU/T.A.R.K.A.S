@@ -34,7 +34,7 @@ class EqTextFormatTest {
     val s = EqSettings(
       parametric = true,
       preampDb = -4.5f,
-      paramBands = listOf(
+      bands = listOf(
         EqBand(60f, 5.5f, 4f, FilterType.PEAK),
         EqBand(80f, 0f, 0.7f, FilterType.HIGH_PASS),
         EqBand(12000f, -3f, 0.7f, FilterType.HIGH_SHELF)
@@ -42,8 +42,8 @@ class EqTextFormatTest {
     )
     val r = EqTextFormat.parse(EqTextFormat.export(s)) as EqTextFormat.Result.Parametric
     assertEquals(-4.5f, r.preampDb, 0.001f)
-    assertEquals(s.paramBands.size, r.bands.size)
-    s.paramBands.zip(r.bands).forEach { (a, b) ->
+    assertEquals(s.bands.size, r.bands.size)
+    s.bands.zip(r.bands).forEach { (a, b) ->
       assertEquals(a.type, b.type)
       assertEquals(a.freqHz, b.freqHz, 0.01f)
       assertEquals(a.gainDb, b.gainDb, 0.01f)
@@ -95,18 +95,18 @@ class EqTextFormatTest {
   }
 
   @Test fun bassAndTrebleAreNotAppliedTwiceOnReimport() {
-    val s = EqSettings(parametric = true, bassDb = 4f, trebleDb = -2f, paramBands = listOf(EqBand(1000f, 1f, 1f, FilterType.PEAK)))
+    val s = EqSettings(parametric = true, bassDb = 4f, trebleDb = -2f, bands = listOf(EqBand(1000f, 1f, 1f, FilterType.PEAK)))
     val back = EqTextFormat.apply(s, EqTextFormat.parse(EqTextFormat.export(s))!!)
     assertEquals(0f, back.bassDb, 0f)
     assertEquals(0f, back.trebleDb, 0f)
-    assertEquals(3, back.paramBands.size)
+    assertEquals(3, back.bands.size)
   }
 
   @Test fun applySwitchesTheMode() {
     val p = EqTextFormat.parse(apo)!!
     val s = EqTextFormat.apply(EqSettings(), p)
     assertTrue(s.parametric)
-    assertEquals(3, s.paramBands.size)
+    assertEquals(3, s.bands.size)
     val g = EqTextFormat.apply(EqSettings(parametric = true), EqTextFormat.Result.Graphic(List(15) { 1f }, 5))
     assertEquals(false, g.parametric)
     assertEquals(1f, g.bands[0].gainDb, 0f)
