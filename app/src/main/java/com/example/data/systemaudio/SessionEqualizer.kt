@@ -229,7 +229,7 @@ class SessionEqualizer {
     const val PRIORITY = 1337
     /**
      * How far under the ceiling the block limiter's threshold goes, for the peaks it does not see. With
-     * the default ceiling (-0.5 dB) this gives -3.5 dB, what Poweramp Equalizer uses when the system
+     * the default ceiling (0 dB) this gives -3 dB (it gave -3.5 dB with the old -0.5 dB default, which is what Poweramp Equalizer uses when the system
      * volume is not handed to the effect (as here).
      */
     const val RMS_TO_PEAK_DB = 3f

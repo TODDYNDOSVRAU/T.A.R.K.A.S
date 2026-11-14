@@ -61,6 +61,7 @@ import com.example.ui.components.SubPageHeader
 import com.example.ui.components.SwitchRow
 import com.example.ui.theme.AppText
 import com.example.ui.theme.LocalBarInset
+import com.example.ui.theme.Motion
 import com.example.ui.theme.Shapes
 import com.example.ui.theme.Space
 import com.example.ui.theme.rememberReducedMotion
@@ -234,8 +235,8 @@ internal fun EqAdvancedPage(
           )
           AnimatedVisibility(
             visible = eqSettings.limiterEnabled,
-            enter = if (reduced) EnterTransition.None else expandVertically() + fadeIn(),
-            exit = if (reduced) ExitTransition.None else shrinkVertically() + fadeOut()
+            enter = if (reduced) EnterTransition.None else expandVertically(Motion.gel()) + fadeIn(),
+            exit = if (reduced) ExitTransition.None else shrinkVertically(Motion.gelExit()) + fadeOut()
           ) {
             Column {
               GroupDivider()
@@ -299,8 +300,8 @@ internal fun EqAdvancedPage(
           )
           AnimatedVisibility(
             visible = crossfadeSeconds > 0,
-            enter = if (reduced) EnterTransition.None else expandVertically() + fadeIn(),
-            exit = if (reduced) ExitTransition.None else shrinkVertically() + fadeOut()
+            enter = if (reduced) EnterTransition.None else expandVertically(Motion.gel()) + fadeIn(),
+            exit = if (reduced) ExitTransition.None else shrinkVertically(Motion.gelExit()) + fadeOut()
           ) {
             Column {
               GroupDivider()
@@ -485,7 +486,7 @@ internal fun Section(title: String?, content: @Composable () -> Unit) {
   }
 }
 
-// EqReach is a data enum with Portuguese text; the UI maps each entry to its string resource.
+// EqReach is a data enum without text; the UI maps each entry to its string resource.
 @Composable
 private fun reachLabel(r: EqReach): String = stringResource(
   when (r) {

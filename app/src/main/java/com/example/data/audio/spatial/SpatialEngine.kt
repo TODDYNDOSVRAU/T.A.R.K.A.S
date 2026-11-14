@@ -55,23 +55,24 @@ data class SpatialParams(
 )
 
 /**
- * The settings the listener can move by hand, each with its range. Read and written on [SpatialParams],
+ * The settings the listener can move by hand, each with its range. The name shown is a string resource
+ * `audio_spatial_knob_<key>`, mapped in the UI. Read and written on [SpatialParams],
  * so a preset is a set of values and a tweak is a copy with one of them changed.
  */
 enum class SpatialKnob(
-  val key: String, val label: String, val min: Double, val max: Double, val decimals: Int, val unit: String,
+  val key: String, val min: Double, val max: Double, val decimals: Int, val unit: String,
   val read: (SpatialParams) -> Double, val write: (SpatialParams, Double) -> SpatialParams
 ) {
-  ROOM("room", "Sala, nível geral", 0.0, 2.0, 2, "", { it.room }, { p, v -> p.copy(room = v) }),
-  EARLY("early", "Reflexões iniciais", 0.0, 2.0, 2, "", { it.roomEarly }, { p, v -> p.copy(roomEarly = v) }),
-  TAIL("tail", "Cauda de reverb", 0.0, 2.0, 2, "", { it.roomTail }, { p, v -> p.copy(roomTail = v) }),
-  DECAY("decay", "Duração da cauda", 0.1, 1.2, 2, " s", { it.roomDecay }, { p, v -> p.copy(roomDecay = v) }),
-  PREDELAY("predelay", "Pré-atraso da cauda", 0.0, 60.0, 0, " ms", { it.roomPreDelayMs }, { p, v -> p.copy(roomPreDelayMs = v) }),
-  DIFFUSION("diffusion", "Difusão", 0.2, 0.8, 2, "", { it.roomDiffusion }, { p, v -> p.copy(roomDiffusion = v) }),
-  VOICE("voice", "Foco na voz", 0.0, 1.0, 2, "", { it.voiceFocus }, { p, v -> p.copy(voiceFocus = v) }),
-  WIDTH("width", "Abertura", 1.0, 3.0, 2, "", { it.width }, { p, v -> p.copy(width = v) }),
-  HEIGHT("height", "Altura dos agudos", 0.0, 45.0, 0, "°", { it.height }, { p, v -> p.copy(height = v) }),
-  AMBIENCE("ambience", "Ambiência no teto", 0.0, 1.0, 2, "", { it.ambienceHeight }, { p, v -> p.copy(ambienceHeight = v) });
+  ROOM("room", 0.0, 2.0, 2, "", { it.room }, { p, v -> p.copy(room = v) }),
+  EARLY("early", 0.0, 2.0, 2, "", { it.roomEarly }, { p, v -> p.copy(roomEarly = v) }),
+  TAIL("tail", 0.0, 2.0, 2, "", { it.roomTail }, { p, v -> p.copy(roomTail = v) }),
+  DECAY("decay", 0.1, 1.2, 2, " s", { it.roomDecay }, { p, v -> p.copy(roomDecay = v) }),
+  PREDELAY("predelay", 0.0, 60.0, 0, " ms", { it.roomPreDelayMs }, { p, v -> p.copy(roomPreDelayMs = v) }),
+  DIFFUSION("diffusion", 0.2, 0.8, 2, "", { it.roomDiffusion }, { p, v -> p.copy(roomDiffusion = v) }),
+  VOICE("voice", 0.0, 1.0, 2, "", { it.voiceFocus }, { p, v -> p.copy(voiceFocus = v) }),
+  WIDTH("width", 1.0, 3.0, 2, "", { it.width }, { p, v -> p.copy(width = v) }),
+  HEIGHT("height", 0.0, 45.0, 0, "°", { it.height }, { p, v -> p.copy(height = v) }),
+  AMBIENCE("ambience", 0.0, 1.0, 2, "", { it.ambienceHeight }, { p, v -> p.copy(ambienceHeight = v) });
 
   fun clamp(v: Double) = v.coerceIn(min, max)
 
@@ -85,18 +86,19 @@ fun SpatialParams.tuned(values: Map<SpatialKnob, Double>): SpatialParams =
   values.entries.fold(this) { p, (k, v) -> k.write(p, k.clamp(v)) }
 
 /**
- * The listening presets. The first three are the prototype's: [SpatialEngine], a continuous azimuth per
+ * The listening presets; the name shown is the string resource `audio_spatial_preset_<key>`, mapped in the UI.
+ * The first three are the prototype's: [SpatialEngine], a continuous azimuth per
  * sound. [CINEMA] is the other path: the stereo is split into five speakers ([UpmixVirtualizer]); it has no
  * [params] of its own to tune ([virtual51] marks it), and the intensity slider blends it with the original.
  */
 enum class SpatialPreset(
-  val key: String, val label: String, val params: SpatialParams, val virtualizerStrength: Int,
+  val key: String, val params: SpatialParams, val virtualizerStrength: Int,
   val virtual51: Boolean = false
 ) {
-  SUBTLE("sutil", "Sutil", SpatialParams(intensity = 0.7, width = 1.3, height = 12.0, ambienceHeight = 0.3, room = 0.6, voiceFocus = 0.9), 450),
-  STANDARD("padrao", "Padrão", SpatialParams(), 750),
-  WIDE("amplo", "Amplo", SpatialParams(width = 2.4, height = 35.0, ambienceHeight = 0.8, room = 1.4, voiceFocus = 0.8), 1000),
-  CINEMA("cinema", "Cinema 5.1", SpatialParams(), 750, virtual51 = true);
+  SUBTLE("sutil", SpatialParams(intensity = 0.7, width = 1.3, height = 12.0, ambienceHeight = 0.3, room = 0.6, voiceFocus = 0.9), 450),
+  STANDARD("padrao", SpatialParams(), 750),
+  WIDE("amplo", SpatialParams(width = 2.4, height = 35.0, ambienceHeight = 0.8, room = 1.4, voiceFocus = 0.8), 1000),
+  CINEMA("cinema", SpatialParams(), 750, virtual51 = true);
 
   companion object {
     fun fromKey(key: String?): SpatialPreset = entries.firstOrNull { it.key == key } ?: STANDARD

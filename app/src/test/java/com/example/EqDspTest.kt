@@ -262,4 +262,49 @@ class EqDspTest {
     dsp.process(off, off.size)
     assertEquals(0.5f, off.last(), 2e-3f)
   }
+
+  @Test
+  fun defaultCeilingIs0dBFS() {
+    assertEquals(0f, EqSettings().limiterCeilingDb, 0f)
+  }
+
+  @Test
+  fun defaultSettingsLeaveAFullScaleSignalUntouched() {
+    val dsp = EqDsp().apply { configure(48000, 2) }
+    dsp.update(EqSettings())
+    // Stereo, peaks at exactly 0 dBFS in both polarities, a tone and a flat-top stretch.
+    val frames = 9600
+    val input = FloatArray(frames * 2) { i ->
+      val n = i / 2
+      if (n in 4000..4400) (if ((n / 40) % 2 == 0) 1f else -1f)
+      else (sin(2 * Math.PI * 997.0 * n / 48000) * (if (i % 2 == 0) 1.0 else 0.7)).toFloat()
+    }
+    input[2 * 100] = 1f
+    val buf = input.copyOf()
+    dsp.process(buf, frames)
+    // The limiter delays the sound by its lookahead (a few milliseconds); the content must be the same.
+    var bestDelay = -1
+    var bestError = Float.MAX_VALUE
+    for (delay in 0..300) {
+      var worst = 0f
+      for (n in 0 until frames - 400) for (c in 0..1) {
+        worst = maxOf(worst, abs(buf[(n + delay) * 2 + c] - input[n * 2 + c]))
+      }
+      if (worst < bestError) { bestError = worst; bestDelay = delay }
+    }
+    assertTrue("largest difference from the input $bestError at a delay of $bestDelay frames", bestError < 1e-6f)
+    assertTrue("delay $bestDelay frames is more than 5 ms", bestDelay in 1..240)
+  }
+
+  @Test
+  fun limiterStillActsWhenTheEqualizerPushesAbove0dBFS() {
+    val dsp = EqDsp().apply { configure(48000, 1) }
+    dsp.update(EqSettings(preampDb = 6f, autoPreamp = false))
+    val buf = FloatArray(9600) { (sin(2 * Math.PI * 440.0 * it / 48000)).toFloat() }
+    dsp.process(buf, buf.size)
+    var peak = 0f
+    for (v in buf) peak = maxOf(peak, abs(v))
+    assertTrue("peak $peak above 0 dBFS", peak <= 1f + 1e-4f)
+    assertTrue("the limiter did nothing (peak $peak)", peak > 0.9f)
+  }
 }

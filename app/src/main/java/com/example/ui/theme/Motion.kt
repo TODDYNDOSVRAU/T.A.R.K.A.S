@@ -88,12 +88,6 @@ object Motion {
   val PlayerEasing = androidx.compose.animation.core.CubicBezierEasing(0.45f, 0f, 0.15f, 1f)
   const val CollapseStiffness = 130f
 
-  /** Taps, toggles, small controls moving into place. */
-  fun <T> fastSpatial() = spring<T>(dampingRatio = FastSpatialDamping, stiffness = FastSpatialStiffness)
-  /** Most movement: cards settling, a surface moving into place. */
-  fun <T> defaultSpatial() = spring<T>(dampingRatio = DefaultSpatialDamping, stiffness = DefaultSpatialStiffness)
-  /** Large, unhurried movement. */
-  fun <T> slowSpatial() = spring<T>(dampingRatio = SlowSpatialDamping, stiffness = SlowSpatialStiffness)
   /** Fades and colour changes: critically damped, never overshoots. */
   fun <T> defaultEffects() = spring<T>(dampingRatio = 1f, stiffness = DefaultEffectsStiffness)
   /**
@@ -101,6 +95,21 @@ object Motion {
    * and press feedback. Lands exactly, with no wobble.
    */
   fun <T> criticalSpatial(stiffness: Float = DefaultSpatialStiffness) = spring<T>(dampingRatio = 1f, stiffness = stiffness)
+
+  /**
+   * The "gel" spring the owner tuned on the S23 (damping 0.62, stiffness 348): spatial movement that
+   * arrives or settles (position, offset, slide, scale, size, rotation) overshoots about 8% and comes
+   * to rest. Fades and colours do not use it (an alpha that wobbles flickers), and what follows the
+   * finger or is pressed stays critical. Wherever progress feeds a lerp or a clamp, p may reach ~1.08.
+   */
+  const val GelDamping = 0.62f
+  const val GelStiffness = 348f
+
+  /** Movement that arrives or settles: the gel spring. */
+  fun <T> gel(visibilityThreshold: T? = null) = spring(GelDamping, GelStiffness, visibilityThreshold)
+
+  /** What leaves the screen or disappears: same stiffness, critically damped, never comes back inside. */
+  fun <T> gelExit() = spring<T>(dampingRatio = 1f, stiffness = GelStiffness)
 
   /** How many items of a list enter one after another, and the gap between them. */
   const val StaggerItems = 8
@@ -201,27 +210,25 @@ fun screenTransition(from: Any, to: Any, reduced: Boolean = false): ContentTrans
 
 /**
  * A page opened inside a tab (an open playlist, the equalizer's advanced page, the fone list): it
- * pushes in from the trailing side on a critically damped spring and lands exactly; going back slides
+ * pushes in from the trailing side on the gel spring (a small overshoot) and leaves critically damped; going back slides
  * it away the other way. The page underneath moves a little and fades, so the two never cross.
  */
 fun subPageTransition(forward: Boolean, reduced: Boolean): ContentTransform {
   if (reduced) return EnterTransition.None togetherWith ExitTransition.None
-  val slide = Motion.criticalSpatial<IntOffset>(stiffness = 500f)
   val dir = if (forward) 1 else -1
-  return (slideInHorizontally(slide) { w -> dir * w / 3 } + fadeIn(tween(200, delayMillis = 30))) togetherWith
-    (slideOutHorizontally(slide) { w -> -dir * w / 8 } + fadeOut(tween(150)))
+  return (slideInHorizontally(Motion.gel()) { w -> dir * w / 3 } + fadeIn(tween(200, delayMillis = 30))) togetherWith
+    (slideOutHorizontally(Motion.gelExit()) { w -> -dir * w / 8 } + fadeOut(tween(150)))
 }
 
 /**
  * Switching between sections of one page (chips like Playlists / Favoritos / Fila): a short slide in
- * the direction of the chip that was picked, with a quick crossfade. Critically damped.
+ * the direction of the chip that was picked, with a quick crossfade. Gel in, critical out.
  */
 fun sectionTransition(fromIndex: Int, toIndex: Int, reduced: Boolean): ContentTransform {
   if (reduced) return EnterTransition.None togetherWith ExitTransition.None
   val dir = if (toIndex >= fromIndex) 1 else -1
-  val slide = Motion.criticalSpatial<IntOffset>(stiffness = 600f)
-  return (slideInHorizontally(slide) { w -> dir * w / 10 } + fadeIn(tween(180, delayMillis = 40))) togetherWith
-    (slideOutHorizontally(slide) { w -> -dir * w / 14 } + fadeOut(tween(150)))
+  return (slideInHorizontally(Motion.gel()) { w -> dir * w / 10 } + fadeIn(tween(180, delayMillis = 40))) togetherWith
+    (slideOutHorizontally(Motion.gelExit()) { w -> -dir * w / 14 } + fadeOut(tween(150)))
 }
 
 /**
@@ -263,7 +270,7 @@ fun Modifier.listEntrance(index: Int): Modifier {
     progress.animateTo(
       1f,
       if (style == ListAnimation.BOUNCE) spring(dampingRatio = 0.45f, stiffness = 420f)
-      else Motion.criticalSpatial(stiffness = 520f)
+      else Motion.gel(visibilityThreshold = 0.002f)
     )
   }
   return this.graphicsLayer {
@@ -307,7 +314,8 @@ fun Modifier.pressClickable(
   val reduced = AppMotion.reduced
   val scale = animateFloatAsState(
     targetValue = if (pressed.value && !reduced) pressedScale else 1f,
-    animationSpec = Motion.criticalSpatial(stiffness = 900f),
+    // The press is answered at once (critical); the release settles on the gel spring.
+    animationSpec = if (pressed.value) Motion.criticalSpatial(stiffness = 900f) else Motion.gel(visibilityThreshold = 0.001f),
     label = "pressScale"
   )
   return this

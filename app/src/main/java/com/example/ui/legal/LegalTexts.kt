@@ -114,6 +114,16 @@ object LegalTexts {
     title = "Novidades",
     subtitle = "O que mudou em cada versão",
     sections = listOf(
+      "1.17" to
+        "• Novo: áudio espacial com HRTF medida (KU100), sala virtual e palco Cinema 5.1; faixas 5.1 tocam virtualizadas no fone.\n" +
+        "• Com o espacial ligado, o pré-amp desconta 3,5 dB automaticamente para não saturar.\n" +
+        "• Limitador com teto em 0 dBFS; o ajuste antigo é convertido uma vez, na primeira abertura.\n" +
+        "• Barra de progresso em forma de onda ligada por padrão.\n" +
+        "• Biblioteca: filtro por pasta.\n" +
+        "• Aviso de atualização e pedidos de permissão aparecem ao abrir o app.\n" +
+        "• Movimento: listas, abas, painéis e mini player usam a mesma mola, com um leve passar do ponto.\n" +
+        "• Textos, números e datas seguem o idioma do sistema (português e inglês).\n" +
+        "• Ajustes pequenos de interface.",
       "1.16" to
         "• Paisagem: mini player e abas numa linha só, mais espaço na biblioteca e no player, e a área da câmera coberta.\n" +
         "• Biblioteca: menu da faixa nas Músicas, faixa A-Z maior e acessível, e a ordem escolhida sempre à vista.\n" +

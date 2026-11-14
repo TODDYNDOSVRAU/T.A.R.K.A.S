@@ -21,7 +21,9 @@ data class AudioCapabilities(
   /** The output's highest rate is below the track's: Android lowers the rate before it plays. */
   val outputBelowTrackRate: Boolean = false,
   /** The output's highest rate, when it reports one. */
-  val outputMaxRateHz: Int? = null
+  val outputMaxRateHz: Int? = null,
+  /** The most channels the output route reports, or null when it reports none (any layout is accepted). */
+  val outputMaxChannels: Int? = null
 ) {
   companion object {
     const val ROUTE_WIRED = "WIRED"

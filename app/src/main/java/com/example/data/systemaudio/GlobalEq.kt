@@ -5,22 +5,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** How far the equalizer reaches. Chosen on the Áudio screen. */
-enum class EqReach(val key: String, val label: String, val description: String) {
-  APP(
-    "app", "Sem root",
-    "Equaliza as músicas e os áudios que o T.A.R.K.A.S. toca. Não precisa de nada."
-  ),
-  ADB(
-    "adb", "ADB",
-    "Equaliza também os outros apps (Spotify, YouTube, jogos), como o Poweramp Equalizer. " +
-      "Precisa da permissão DUMP, liberada uma vez por um computador."
-  ),
-  ROOT(
-    "root", "Root",
-    "Tudo do modo ADB sem computador: o app libera a permissão sozinho pelo root e usa a saída " +
-      "geral quando o aparelho deixa, para alcançar também os sons sem sessão própria."
-  );
+/** How far the equalizer reaches. Chosen on the Áudio screen; its texts are string resources, mapped in the UI. */
+enum class EqReach(val key: String) {
+  APP("app"),
+  ADB("adb"),
+  ROOT("root");
 
   companion object {
     fun fromKey(key: String?): EqReach = entries.firstOrNull { it.key == key } ?: APP

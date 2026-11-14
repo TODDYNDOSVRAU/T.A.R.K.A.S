@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import com.example.data.audio.dsp.EqDsp
 import com.example.data.model.EqSettings
 import com.example.ui.theme.AppText
+import com.example.ui.theme.Motion
 import com.example.ui.theme.Shapes
 import com.example.ui.theme.Space
 import com.example.ui.theme.rememberReducedMotion
@@ -78,7 +79,7 @@ private fun EqSettings.responseKey(): EqSettings = copy(
   balance = 0f,
   stereoWidth = 1f,
   limiterEnabled = true,
-  limiterCeilingDb = -0.5f,
+  limiterCeilingDb = 0f,
   virtualizerStrength = 0
 )
 
@@ -328,7 +329,7 @@ private fun Modifier.overviewGestures(view: StripView, scope: CoroutineScope): M
       val up = currentEvent.changes.firstOrNull { it.id == down.id }
       if (up != null && !up.pressed && !up.isConsumed) {
         val target = (down.position.x * stripPerPx() - view.viewport / 2f).roundToInt().coerceIn(0, view.scroll.maxValue)
-        scope.launch { view.scroll.animateScrollTo(target, spring(dampingRatio = 1f, stiffness = 320f)) }
+        scope.launch { view.scroll.animateScrollTo(target, Motion.gel()) }
       }
       return@awaitEachGesture
     }

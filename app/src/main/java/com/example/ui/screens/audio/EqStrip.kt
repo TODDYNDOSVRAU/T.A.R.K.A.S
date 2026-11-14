@@ -77,6 +77,7 @@ import com.example.ui.components.IconAction
 import com.example.ui.components.TonalButton
 import com.example.ui.components.highlightClickable
 import com.example.ui.theme.AppText
+import com.example.ui.theme.Motion
 import com.example.ui.theme.Shapes
 import com.example.ui.theme.Size
 import com.example.ui.theme.Space
@@ -247,7 +248,8 @@ private fun FaderColumn(
   if (editing && edit != null) NumberEntryFor(edit) { editing = false }
   val grow by animateFloatAsState(
     targetValue = if (held) 1.3f else 1f,
-    animationSpec = if (reduced) snap() else spring(dampingRatio = 1f, stiffness = 800f),
+    // Pressing sinks at once (critical); letting go settles on the gel spring.
+    animationSpec = if (reduced) snap() else if (held) spring(dampingRatio = 1f, stiffness = 800f) else Motion.gel(),
     label = "readout"
   )
   Column(
@@ -356,7 +358,7 @@ private fun ParametricBands(
     if (selected !in settings.paramBands.indices || view.viewport == 0) return@LaunchedEffect
     val (step, card, start) = with(density) { Triple((CARD_WIDTH + CARD_GAP).toPx(), CARD_WIDTH.toPx(), Space.s.toPx()) }
     val target = (start + selected * step - (view.viewport - card) / 2f).roundToInt().coerceIn(0, view.scroll.maxValue)
-    if (abs(target - view.scroll.value) > 4) view.scroll.animateScrollTo(target, spring(dampingRatio = 1f, stiffness = 300f))
+    if (abs(target - view.scroll.value) > 4) view.scroll.animateScrollTo(target, Motion.gel())
   }
 
   ScrollingBands(view, CARD_GAP) {

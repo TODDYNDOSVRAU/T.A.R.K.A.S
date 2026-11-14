@@ -1484,7 +1484,7 @@ private fun ScrubBar(
   var dragging by remember { mutableStateOf(false) }
   val thickness by animateFloatAsState(
     targetValue = if (dragging) 10f else 4f,
-    animationSpec = if (reduced) snap() else spring(dampingRatio = 1f, stiffness = 900f),
+    animationSpec = if (reduced) snap() else if (dragging) spring(dampingRatio = 1f, stiffness = 900f) else Motion.gel(),
     label = "scrubThickness"
   )
   val fill = if (dragging) OnPage else OnPage.copy(alpha = 0.85f)

@@ -12,7 +12,7 @@ import androidx.compose.animation.shrinkVertically
 import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +31,7 @@ import com.example.data.audio.spatial.SpatialControl
 import com.example.data.audio.spatial.SpatialKnob
 import com.example.ui.components.IconAction
 import com.example.ui.components.TextAction
+import com.example.ui.theme.Motion
 import com.example.ui.theme.Space
 import java.util.Locale
 import androidx.compose.runtime.Composable
@@ -76,15 +77,15 @@ internal fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modi
       )
       AnimatedVisibility(
         visible = ui.enabled,
-        enter = if (reduced) EnterTransition.None else expandVertically() + fadeIn(),
-        exit = if (reduced) ExitTransition.None else shrinkVertically() + fadeOut()
+        enter = if (reduced) EnterTransition.None else expandVertically(Motion.gel()) + fadeIn(),
+        exit = if (reduced) ExitTransition.None else shrinkVertically(Motion.gelExit()) + fadeOut()
       ) {
         Column {
           SpatialPreset.entries.forEach { p ->
             val open = tuningOpen == p
             GroupDivider()
             RadioRow(
-              title = p.label,
+              title = presetTitle(p),
               subtitle = when {
                 p.virtual51 -> stringResource(R.string.audio_spatial_cinema_hint)
                 ui.tuning[p].orEmpty().isNotEmpty() -> stringResource(R.string.audio_spatial_tuned)
@@ -95,10 +96,10 @@ internal fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modi
               modifier = Modifier.testTag("spatial_preset_${p.key}"),
               // The Cinema preset has no room or azimuth settings to tune: no button for it.
               accessory = if (p.virtual51) null else ({
-                val turn by animateFloatAsState(if (open) 180f else 0f, tween(if (reduced) 0 else 200), label = "tuning_arrow")
+                val turn by animateFloatAsState(if (open) 180f else 0f, if (reduced) snap() else Motion.gel(), label = "tuning_arrow")
                 IconAction(
                   icon = Icons.Rounded.ExpandMore,
-                  contentDescription = stringResource(if (open) R.string.audio_spatial_tune_close else R.string.audio_spatial_tune_open, p.label),
+                  contentDescription = stringResource(if (open) R.string.audio_spatial_tune_close else R.string.audio_spatial_tune_open, presetTitle(p)),
                   onClick = {
                     // The sliders change what is playing, so the mode they belong to must be the one playing.
                     if (!open && ui.preset != p) actions.onPreset(p)
@@ -110,8 +111,8 @@ internal fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modi
             )
             AnimatedVisibility(
               visible = open,
-              enter = if (reduced) EnterTransition.None else expandVertically() + fadeIn(),
-              exit = if (reduced) ExitTransition.None else shrinkVertically() + fadeOut()
+              enter = if (reduced) EnterTransition.None else expandVertically(Motion.gel()) + fadeIn(),
+              exit = if (reduced) ExitTransition.None else shrinkVertically(Motion.gelExit()) + fadeOut()
             ) {
               SpatialTuning(p, ui, actions)
             }
@@ -145,13 +146,14 @@ private fun SpatialTuning(preset: SpatialPreset, ui: SpatialUi, actions: Spatial
   val context = LocalContext.current
   val values = ui.tuning[preset].orEmpty()
   val shown = SpatialControl.paramsFor(preset, values)
-  val copyHeader = stringResource(R.string.audio_spatial_copy_header, preset.label, "%.2f".format(Locale.US, ui.intensity))
+  val knobTitles = SpatialKnob.entries.associateWith { knobTitle(it) }
+  val copyHeader = stringResource(R.string.audio_spatial_copy_header, presetTitle(preset), "%.2f".format(Locale.US, ui.intensity))
   Column(modifier = Modifier.testTag("spatial_tuning_${preset.key}")) {
     SpatialKnob.entries.forEach { knob ->
       GroupDivider()
       val v = knob.read(shown)
       SliderRow(
-        label = knob.label,
+        label = knobTitles.getValue(knob),
         valueText = formatNumber(v.toFloat(), knob.decimals) + knob.unit,
         value = v.toFloat(),
         range = knob.min.toFloat()..knob.max.toFloat(),
@@ -167,7 +169,7 @@ private fun SpatialTuning(preset: SpatialPreset, ui: SpatialUi, actions: Spatial
       TextAction(stringResource(R.string.audio_spatial_reset_mode), onClick = { actions.onResetTuning(preset) }, enabled = values.isNotEmpty())
       TextAction(stringResource(R.string.audio_spatial_copy_values), onClick = {
         val text = SpatialKnob.entries.joinToString("\n", prefix = copyHeader) {
-          "${it.label}: ${String.format(Locale.US, "%.${it.decimals}f", it.read(shown))}${it.unit}"
+          "${knobTitles.getValue(it)}: ${String.format(Locale.US, "%.${it.decimals}f", it.read(shown))}${it.unit}"
         }
         context.getSystemService(ClipboardManager::class.java)
           ?.setPrimaryClip(ClipData.newPlainText("Tarkas Spatial", text))
@@ -175,3 +177,31 @@ private fun SpatialTuning(preset: SpatialPreset, ui: SpatialUi, actions: Spatial
     }
   }
 }
+
+/** The mode's name; [SpatialPreset] stays free of Android resources, the UI maps each entry. */
+@Composable
+private fun presetTitle(p: SpatialPreset): String = stringResource(
+  when (p) {
+    SpatialPreset.SUBTLE -> R.string.audio_spatial_preset_sutil
+    SpatialPreset.STANDARD -> R.string.audio_spatial_preset_padrao
+    SpatialPreset.WIDE -> R.string.audio_spatial_preset_amplo
+    SpatialPreset.CINEMA -> R.string.audio_spatial_preset_cinema
+  }
+)
+
+/** The slider's name; same idea as [presetTitle]. */
+@Composable
+private fun knobTitle(k: SpatialKnob): String = stringResource(
+  when (k) {
+    SpatialKnob.ROOM -> R.string.audio_spatial_knob_room
+    SpatialKnob.EARLY -> R.string.audio_spatial_knob_early
+    SpatialKnob.TAIL -> R.string.audio_spatial_knob_tail
+    SpatialKnob.DECAY -> R.string.audio_spatial_knob_decay
+    SpatialKnob.PREDELAY -> R.string.audio_spatial_knob_predelay
+    SpatialKnob.DIFFUSION -> R.string.audio_spatial_knob_diffusion
+    SpatialKnob.VOICE -> R.string.audio_spatial_knob_voice
+    SpatialKnob.WIDTH -> R.string.audio_spatial_knob_width
+    SpatialKnob.HEIGHT -> R.string.audio_spatial_knob_height
+    SpatialKnob.AMBIENCE -> R.string.audio_spatial_knob_ambience
+  }
+)

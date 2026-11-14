@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import com.example.ui.theme.Motion
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
@@ -222,7 +223,7 @@ internal fun QueueList(
               shadowElevation = 8.dp.toPx()
             }
           }
-          .then(if (isDragged) Modifier else Modifier.animateItem())
+          .then(if (isDragged) Modifier else Modifier.animateItem(placementSpec = Motion.gel(androidx.compose.ui.unit.IntOffset(1, 1))))
       ) {
         Column(modifier = Modifier.background(colors.background)) {
           if (index > 0) TrackDivider()

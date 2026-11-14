@@ -26,6 +26,11 @@ class PreferencesRepository(context: Context) {
     private const val KEY_REPEAT = "repeat_mode"
     private const val KEY_EQ_SETTINGS = "eq_settings"
     private const val KEY_EQ_USER_PRESETS = "eq_user_presets"
+    /** Set once the saved limiter ceiling moved from the old default (-0.5 dB) to the new one (0 dB). */
+    private const val KEY_EQ_CEILING_MIGRATED = "eq_ceiling_migrated"
+    private const val OLD_DEFAULT_CEILING_DB = -0.5
+    private const val CEILING_TOLERANCE_DB = 1e-3
+    private const val TAG = "PreferencesRepository"
   }
 
   fun getShuffle(): Boolean = prefs.getBoolean(KEY_SHUFFLE, false)
@@ -272,6 +277,7 @@ class PreferencesRepository(context: Context) {
 
   /** The last equalizer state, or null on first launch. */
   fun getEqSettings(): EqSettings? {
+    migrateEqCeilingOnce()
     val raw = prefs.getString(KEY_EQ_SETTINGS, null) ?: return null
     return try {
       EqPresets.settingsFromJson(JSONObject(raw))
@@ -281,11 +287,13 @@ class PreferencesRepository(context: Context) {
   }
 
   fun saveEqSettings(settings: EqSettings) {
+    migrateEqCeilingOnce()
     prefs.edit().putString(KEY_EQ_SETTINGS, EqPresets.settingsToJson(settings).toString()).apply()
   }
 
   /** Presets the user saved. On the first run after the update, old 15-band profiles are converted. */
   fun getUserPresets(): List<EqPreset> {
+    migrateEqCeilingOnce()
     val raw = prefs.getString(KEY_EQ_USER_PRESETS, null)
     if (raw != null) return EqPresets.presetsFromJson(raw)
     val migrated = getLegacyCustomProfiles().map { EqPresets.fromLegacy(it).copy(isCustom = true) }
@@ -294,7 +302,48 @@ class PreferencesRepository(context: Context) {
   }
 
   fun saveUserPresets(presets: List<EqPreset>) {
+    migrateEqCeilingOnce()
     prefs.edit().putString(KEY_EQ_USER_PRESETS, EqPresets.presetsToJson(presets)).apply()
+  }
+
+  /**
+   * The default limiter ceiling went from -0.5 dB to 0 dB (owner decision, 2026-11-13). A saved -0.5 is the
+   * old default as much as a choice, and the two cannot be told apart, so once, the first time the equalizer
+   * is read or written after the update, every saved ceiling of exactly -0.5 (the current settings and the
+   * user presets) becomes 0. Any other value stays; -0.5 set afterwards stays, because the mark is persisted.
+   * Nothing is written unless the whole conversion worked; a failure only logs, leaves the data as it is and
+   * the next call tries again.
+   */
+  private fun migrateEqCeilingOnce() {
+    if (prefs.getBoolean(KEY_EQ_CEILING_MIGRATED, false)) return
+    try {
+      val edit = prefs.edit()
+      prefs.getString(KEY_EQ_SETTINGS, null)?.let { raw ->
+        val o = JSONObject(raw)
+        if (resetOldCeiling(o)) edit.putString(KEY_EQ_SETTINGS, o.toString())
+      }
+      prefs.getString(KEY_EQ_USER_PRESETS, null)?.let { raw ->
+        val arr = JSONArray(raw)
+        var changed = false
+        for (i in 0 until arr.length()) {
+          val s = arr.getJSONObject(i).optJSONObject("settings")
+          if (s != null && resetOldCeiling(s)) changed = true
+        }
+        if (changed) edit.putString(KEY_EQ_USER_PRESETS, arr.toString())
+      }
+      edit.putBoolean(KEY_EQ_CEILING_MIGRATED, true).commit()
+    } catch (e: Exception) {
+      android.util.Log.w(TAG, "Could not move the saved limiter ceiling to the new default; data left as it was", e)
+    }
+  }
+
+  /** True when [settings] held exactly the old default ceiling and now holds 0. */
+  private fun resetOldCeiling(settings: JSONObject): Boolean {
+    if (!settings.has("ceiling")) return false
+    val v = settings.optDouble("ceiling", Double.NaN)
+    if (v.isNaN() || kotlin.math.abs(v - OLD_DEFAULT_CEILING_DB) > CEILING_TOLERANCE_DB) return false
+    settings.put("ceiling", 0.0)
+    return true
   }
 
   /** Profiles saved by the old hardware equalizer, read only to convert them. */

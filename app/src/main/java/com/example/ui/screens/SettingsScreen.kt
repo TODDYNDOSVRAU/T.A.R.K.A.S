@@ -587,7 +587,7 @@ private fun AboutPage(
         subtitle = if (termsAcceptedAt > 0) {
           stringResource(
             R.string.settings_about_accepted_on,
-            java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("pt", "BR")).format(java.util.Date(termsAcceptedAt))
+            java.text.DateFormat.getDateInstance(java.text.DateFormat.SHORT, java.util.Locale.getDefault()).format(java.util.Date(termsAcceptedAt))
           )
         } else null,
         onClick = { onOpen(SettingsPage.PRIVACY) },

@@ -264,4 +264,18 @@
   <string name="audio_form_in_ear">In-ear</string>
   <string name="audio_form_earbud">Earbud</string>
   <string name="audio_form_over_ear">Over-ear</string>
+  <string name="audio_spatial_preset_sutil">Subtle</string>
+  <string name="audio_spatial_preset_padrao">Standard</string>
+  <string name="audio_spatial_preset_amplo">Wide</string>
+  <string name="audio_spatial_preset_cinema">Cinema 5.1</string>
+  <string name="audio_spatial_knob_room">Room, overall level</string>
+  <string name="audio_spatial_knob_early">Early reflections</string>
+  <string name="audio_spatial_knob_tail">Reverb tail</string>
+  <string name="audio_spatial_knob_decay">Tail length</string>
+  <string name="audio_spatial_knob_predelay">Tail pre-delay</string>
+  <string name="audio_spatial_knob_diffusion">Diffusion</string>
+  <string name="audio_spatial_knob_voice">Voice focus</string>
+  <string name="audio_spatial_knob_width">Width</string>
+  <string name="audio_spatial_knob_height">Treble height</string>
+  <string name="audio_spatial_knob_ambience">Ceiling ambience</string>
 </resources>

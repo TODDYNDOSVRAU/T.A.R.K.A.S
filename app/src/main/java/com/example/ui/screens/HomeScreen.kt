@@ -56,6 +56,7 @@ import com.example.data.model.Track
 import com.example.ui.components.EmptyState
 import com.example.ui.components.SearchField
 import com.example.ui.components.SectionHeader
+import com.example.ui.components.topScrollFade
 import com.example.ui.components.TrackActionsMenu
 import com.example.ui.components.TrackArtwork
 import com.example.ui.components.TrackRow
@@ -176,8 +177,10 @@ fun HomeScreen(
     }
   }
 
+  val listState = androidx.compose.foundation.lazy.rememberLazyListState()
   LazyColumn(
-    modifier = modifier.fillMaxSize(),
+    state = listState,
+    modifier = modifier.fillMaxSize().topScrollFade(listState),
     contentPadding = PaddingValues(top = Space.xs, bottom = LocalBarInset.current + Space.l)
   ) {
     item(key = "search") {

@@ -835,7 +835,7 @@ private fun LetterStrip(letters: List<String>, onLetter: (String) -> Unit, modif
     }
   }
   Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-    // The bubble grows from nothing in 100 ms and keeps the last letter while it shrinks away.
+    // The bubble grows from nothing on the gel spring (a small overshoot) and keeps the last letter while it shrinks away.
     var shown by remember { mutableStateOf("") }
     active?.let { shown = it }
     val bubble by androidx.compose.animation.core.animateFloatAsState(
@@ -843,7 +843,7 @@ private fun LetterStrip(letters: List<String>, onLetter: (String) -> Unit, modif
       animationSpec = if (com.example.ui.theme.rememberReducedMotion()) {
         androidx.compose.animation.core.snap()
       } else {
-        androidx.compose.animation.core.tween(100, easing = androidx.compose.animation.core.LinearOutSlowInEasing)
+        if (active != null) com.example.ui.theme.Motion.gel() else com.example.ui.theme.Motion.gelExit()
       },
       label = "letterBubble"
     )
@@ -854,7 +854,7 @@ private fun LetterStrip(letters: List<String>, onLetter: (String) -> Unit, modif
           .graphicsLayer {
             scaleX = bubble
             scaleY = bubble
-            alpha = bubble
+            alpha = bubble.coerceIn(0f, 1f)
           }
           .clip(CircleShape)
           .background(MaterialTheme.colorScheme.surfaceContainerHigh),

@@ -61,6 +61,7 @@ import com.example.ui.components.SearchField
 import com.example.ui.components.TextAction
 import com.example.ui.components.highlightClickable
 import com.example.ui.theme.AppText
+import com.example.ui.theme.Motion
 import com.example.ui.theme.Shapes
 import com.example.ui.theme.Size
 import com.example.ui.theme.Space
@@ -241,13 +242,13 @@ internal fun PresetPanel(
       if (showMine && mine.isNotEmpty()) {
         item(key = "h_mine") { ListSection(stringResource(R.string.audio_section_mine)) }
         items(mine, key = { "p_" + it.id }) { p ->
-          PresetRow(p.name, stringResource(R.string.audio_preset_kind_mine), p.settings, selected = p.id == activePresetId, onClick = { onPickPreset(p) }, modifier = Modifier.animateItem())
+          PresetRow(p.name, stringResource(R.string.audio_preset_kind_mine), p.settings, selected = p.id == activePresetId, onClick = { onPickPreset(p) }, modifier = Modifier.animateItem(placementSpec = Motion.gel()))
         }
       }
       if (showBuiltIn && builtIn.isNotEmpty()) {
         item(key = "h_builtin") { ListSection(stringResource(R.string.audio_section_builtin)) }
         items(builtIn, key = { "p_" + it.id }) { p ->
-          PresetRow(p.name, stringResource(R.string.audio_preset_kind_builtin), p.settings, selected = p.id == activePresetId, onClick = { onPickPreset(p) }, modifier = Modifier.animateItem())
+          PresetRow(p.name, stringResource(R.string.audio_preset_kind_builtin), p.settings, selected = p.id == activePresetId, onClick = { onPickPreset(p) }, modifier = Modifier.animateItem(placementSpec = Motion.gel()))
         }
       }
       if (showFones) {
@@ -287,7 +288,7 @@ internal fun PresetPanel(
         }
         items(fones, key = { "d_" + it.path }) { entry ->
           val selected = device != null && device.name == entry.name && device.source == entry.source
-          FoneRow(entry, selected, applying = deviceSearch.applyingPath == entry.path, onClick = { onPickDevice(entry) }, modifier = Modifier.animateItem())
+          FoneRow(entry, selected, applying = deviceSearch.applyingPath == entry.path, onClick = { onPickDevice(entry) }, modifier = Modifier.animateItem(placementSpec = Motion.gel()))
         }
         item(key = "credit") {
           Text(

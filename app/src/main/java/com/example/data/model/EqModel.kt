@@ -69,7 +69,7 @@ data class EqSettings(
   /** 0 = mono, 1 = original, 2 = twice as wide (mid/side) */
   val stereoWidth: Float = 1f,
   val limiterEnabled: Boolean = true,
-  val limiterCeilingDb: Float = -0.5f,
+  val limiterCeilingDb: Float = 0f,
   /** Lowers the level by the curve's loudest boost, so boosting never pushes the music into the limiter. */
   val autoPreamp: Boolean = true,
   /** Android's hardware virtualizer, 0..1000. Only works where the device offers it. */
@@ -264,7 +264,7 @@ object EqPresets {
       balance = o.finiteDouble("balance", 0.0).toFloat().coerceIn(-1f, 1f),
       stereoWidth = o.finiteDouble("width", 1.0).toFloat().coerceIn(0f, 2f),
       limiterEnabled = o.optBoolean("limiter", true),
-      limiterCeilingDb = o.finiteDouble("ceiling", -0.5).toFloat().coerceIn(-12f, 0f),
+      limiterCeilingDb = o.finiteDouble("ceiling", 0.0).toFloat().coerceIn(-12f, 0f),
       autoPreamp = o.optBoolean("autoPre", true),
       virtualizerStrength = o.optInt("virt", 0).coerceIn(0, 1000),
       device = deviceFromJson(o.optJSONObject("device"))

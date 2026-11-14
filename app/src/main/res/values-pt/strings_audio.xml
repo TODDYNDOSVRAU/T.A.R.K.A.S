@@ -264,4 +264,18 @@
   <string name="audio_form_in_ear">Intra-auricular</string>
   <string name="audio_form_earbud">Earbud</string>
   <string name="audio_form_over_ear">Circum-auricular</string>
+  <string name="audio_spatial_preset_sutil">Sutil</string>
+  <string name="audio_spatial_preset_padrao">Padrão</string>
+  <string name="audio_spatial_preset_amplo">Amplo</string>
+  <string name="audio_spatial_preset_cinema">Cinema 5.1</string>
+  <string name="audio_spatial_knob_room">Sala, nível geral</string>
+  <string name="audio_spatial_knob_early">Reflexões iniciais</string>
+  <string name="audio_spatial_knob_tail">Cauda de reverb</string>
+  <string name="audio_spatial_knob_decay">Duração da cauda</string>
+  <string name="audio_spatial_knob_predelay">Pré-atraso da cauda</string>
+  <string name="audio_spatial_knob_diffusion">Difusão</string>
+  <string name="audio_spatial_knob_voice">Foco na voz</string>
+  <string name="audio_spatial_knob_width">Abertura</string>
+  <string name="audio_spatial_knob_height">Altura dos agudos</string>
+  <string name="audio_spatial_knob_ambience">Ambiência no teto</string>
 </resources>

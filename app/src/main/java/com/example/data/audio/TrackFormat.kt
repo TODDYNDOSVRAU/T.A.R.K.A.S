@@ -61,5 +61,13 @@ data class TrackFormat(
      */
     fun outputBelowTrack(trackRateHz: Int, outputRates: IntArray): Boolean =
       trackRateHz > 0 && outputRates.isNotEmpty() && outputRates.max() < trackRateHz
+
+    /**
+     * The most channels the output reports it takes ([AudioDeviceInfo.getChannelCounts]), or null when it
+     * reports none (Android then accepts any layout, so the number is unknown, not zero). Read only: the
+     * 5.1 routing does not depend on it.
+     */
+    fun maxOutputChannels(outputChannelCounts: IntArray): Int? =
+      outputChannelCounts.filter { it > 0 }.maxOrNull()
   }
 }

@@ -254,7 +254,7 @@ class MainActivity : ComponentActivity() {
           visible = showOnboarding,
           enter = androidx.compose.animation.EnterTransition.None,
           exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(260)) +
-            androidx.compose.animation.scaleOut(targetScale = 1.04f)
+            androidx.compose.animation.scaleOut(animationSpec = com.example.ui.theme.Motion.gelExit<Float>(), targetScale = 1.04f)
         ) {
           val reduceMotion by viewModel.reduceMotion.collectAsStateWithLifecycle()
           val surfaceStyle by viewModel.surfaceStyle.collectAsStateWithLifecycle()
@@ -855,7 +855,9 @@ fun TarkasAppContent(
             !isShowingCuriositySettings &&
             isAiSpeakingCuriosity &&
             !currentCuriositySpeechText.isNullOrBlank() &&
-            curiosityConfig.displayMode == com.example.data.model.CuriosityDisplayMode.VOICE_AND_BANNER
+            curiosityConfig.displayMode == com.example.data.model.CuriosityDisplayMode.VOICE_AND_BANNER,
+          enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandVertically(com.example.ui.theme.Motion.gel<androidx.compose.ui.unit.IntSize>()),
+          exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkVertically(com.example.ui.theme.Motion.gelExit<androidx.compose.ui.unit.IntSize>())
         ) {
           // A floating glass capsule, like the mini player under it.
           Box(
@@ -956,7 +958,11 @@ fun TarkasAppContent(
             viewModel.dismissNotice(n.id)
           }
         }
-        AnimatedVisibility(visible = noticeVisible) {
+        AnimatedVisibility(
+          visible = noticeVisible,
+          enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandVertically(com.example.ui.theme.Motion.gel<androidx.compose.ui.unit.IntSize>()),
+          exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkVertically(com.example.ui.theme.Motion.gelExit<androidx.compose.ui.unit.IntSize>())
+        ) {
           val n = shownNotice
           Row(
             modifier = Modifier
@@ -1007,7 +1013,7 @@ fun TarkasAppContent(
           visible = currentTab != TarkasNavTab.MUSIC && currentTrack != null && !imeVisible && !barsHidden,
           enter = if (miniFromPlayer || com.example.ui.theme.rememberReducedMotion()) androidx.compose.animation.EnterTransition.None
             else androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220, delayMillis = 60)) +
-              androidx.compose.animation.scaleIn(initialScale = 0.94f, animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.7f, stiffness = 500f)),
+              androidx.compose.animation.scaleIn(initialScale = 0.94f, animationSpec = com.example.ui.theme.Motion.gel<Float>()),
           // Gone within a few frames: the cover of the opening player is drawn above it and takes its place.
           exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(60))
         ) {
@@ -1042,7 +1048,7 @@ fun TarkasAppContent(
           visible = currentTab != TarkasNavTab.MUSIC && !imeVisible && !barsHidden,
           enter = if (reducedChrome) androidx.compose.animation.EnterTransition.None
             else androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200, delayMillis = 80)) +
-              androidx.compose.animation.slideInVertically(androidx.compose.animation.core.spring(dampingRatio = 1f, stiffness = 500f)) { it / 2 },
+              androidx.compose.animation.slideInVertically(com.example.ui.theme.Motion.gel<androidx.compose.ui.unit.IntOffset>()) { it / 2 },
           // It leaves downwards, quickly, as the player rises (95% gone with 15% of the opening done).
           exit = if (reducedChrome) androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150))
             else androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)) +

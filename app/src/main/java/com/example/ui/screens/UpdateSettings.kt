@@ -67,7 +67,7 @@ internal fun LazyListScope.updateSettingsGroup(header: String) {
     InfoRow(
       title = stringResource(R.string.settings_update_last_check),
       value = if (state.lastCheckedAt > 0) {
-        SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "BR")).format(Date(state.lastCheckedAt))
+        java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT, Locale.getDefault()).format(Date(state.lastCheckedAt))
       } else stringResource(R.string.settings_update_never),
       modifier = Modifier.testTag("update_last_checked")
     )

@@ -1102,11 +1102,13 @@ class AudioEngineManager(private val context: Context) {
     var routeName = context.getString(R.string.audio_route_speaker)
     var routeType = "SPEAKER"
     var outputRates = IntArray(0)
+    var outputChannelCounts = IntArray(0)
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
       try {
         activeOutputDevice()?.let { dev ->
           outputRates = dev.sampleRates ?: IntArray(0)
+          outputChannelCounts = dev.channelCounts ?: IntArray(0)
           routeType = when (dev.type) {
             AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> AudioCapabilities.ROUTE_WIRED
             AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> AudioCapabilities.ROUTE_BLUETOOTH
@@ -1166,6 +1168,7 @@ class AudioEngineManager(private val context: Context) {
       trackFormat = currentFormat?.describe(trackLabels()),
       outputBelowTrackRate = currentFormat?.let { TrackFormat.outputBelowTrack(it.sampleRateHz, outputRates) } ?: false,
       outputMaxRateHz = outputRates.maxOrNull(),
+      outputMaxChannels = TrackFormat.maxOutputChannels(outputChannelCounts),
       isAudioSessionActive = sessionId != 0 && (_isPlaying.value),
       audioSessionId = sessionId,
       isHardwareEqualizerAvailable = isEqAvail,

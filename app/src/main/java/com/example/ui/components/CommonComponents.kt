@@ -414,7 +414,7 @@ fun TarkasBottomNav(
     if (selectedIndex < 0) return@LaunchedEffect
     // Reduced motion: the bar switches at once (no width animation).
     if (reduced) position.snapTo(selectedIndex.toFloat())
-    else position.animateTo(selectedIndex.toFloat(), Motion.criticalSpatial(stiffness = 700f))
+    else position.animateTo(selectedIndex.toFloat(), Motion.gel())
   }
   // 1 while one of the four tabs is open. Ajustes is reached from Início but is none of them: the bar
   // folds to icons only, evenly spaced, with no pill and no accent. While the player covers the bar
@@ -639,7 +639,8 @@ private fun NavTab(
   val pressed by interaction.collectIsPressedAsState()
   val press = animateFloatAsState(
     targetValue = if (pressed && !reduced) 0.9f else 1f,
-    animationSpec = Motion.criticalSpatial(stiffness = 900f),
+    // The press is answered at once (critical); the release settles on the gel spring.
+    animationSpec = if (pressed) Motion.criticalSpatial(stiffness = 900f) else Motion.gel(visibilityThreshold = 0.001f),
     label = "navPress"
   )
   Layout(
@@ -761,7 +762,7 @@ fun MiniPlayerBar(
             }
             // The new track slides in from the side the old one left towards.
             if (skipped != 0) swipe = skipped * size.width * 0.3f
-            animate(swipe, 0f, animationSpec = Motion.criticalSpatial()) { v, _ -> swipe = v }
+            animate(swipe, 0f, animationSpec = Motion.gel()) { v, _ -> swipe = v }
           }
         }
         detectHorizontalDragGestures(

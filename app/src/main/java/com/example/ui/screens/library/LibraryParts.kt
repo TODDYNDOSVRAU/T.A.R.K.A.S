@@ -58,7 +58,7 @@ internal fun Modifier.trailingEdge(): Modifier = offset(x = Space.page - Space.x
 @Composable
 internal fun LazyItemScope.itemMotion(index: Int, stagger: Boolean = true): Modifier {
   if (rememberReducedMotion()) return Modifier
-  val placed = Modifier.animateItem()
+  val placed = Modifier.animateItem(placementSpec = com.example.ui.theme.Motion.gel<androidx.compose.ui.unit.IntOffset>())
   return if (stagger) placed.listEntrance(index) else placed
 }
 
