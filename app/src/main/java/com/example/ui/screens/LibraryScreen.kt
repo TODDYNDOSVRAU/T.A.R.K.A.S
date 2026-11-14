@@ -233,14 +233,14 @@ fun LibraryScreen(
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
   val audioFallbackName = stringResource(R.string.library_audio_fallback_name)
+  val localLibraryName = stringResource(R.string.library_local_library)
   val audioPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
     if (uri != null) {
       val appContext = context.applicationContext
       scope.launch {
         val (name, durationMs) = withContext(Dispatchers.IO) { readAudioFile(appContext, uri, audioFallbackName) }
         // Falls back to 3 min only when the file has no duration in its metadata.
-        onAddLocalTrack(name, "Biblioteca Local", uri.toString(), if (durationMs > 0) durationMs else 180_000L)
-        // "Biblioteca Local" is kept as is: the repository stores and compares that literal.
+        onAddLocalTrack(name, localLibraryName, uri.toString(), if (durationMs > 0) durationMs else 180_000L)
       }
     }
   }
@@ -668,7 +668,7 @@ private fun Loading(text: String) {
   ) {
     CircularProgressIndicator(
       modifier = Modifier.size(Size.iconSmall),
-      strokeWidth = 2.dp,
+      strokeWidth = Space.xxs,
       color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     Spacer(Modifier.width(Space.m))
@@ -893,7 +893,7 @@ private fun LetterStrip(letters: List<String>, onLetter: (String) -> Unit, modif
           l,
           style = AppText.Caption2,
           color = if (l == active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.padding(horizontal = Space.xs, vertical = 1.dp)
+          modifier = Modifier.padding(horizontal = Space.xs, vertical = Size.hairline)
         )
       }
     }

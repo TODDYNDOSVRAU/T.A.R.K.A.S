@@ -1,5 +1,6 @@
 package com.example.ui.screens.audio
 
+import com.example.ui.theme.EqSize
 import com.example.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.AnimatedContent
@@ -514,7 +515,7 @@ private fun BandCard(
             stateText = formatQ(band.q),
             defaultValue = qToKnob(EqBand.DEFAULT_Q),
             enabled = live,
-            size = 56.dp,
+            size = EqSize.knobSmall,
             tint = tint
           )
           Readout(
@@ -534,7 +535,7 @@ private fun BandCard(
             stateText = spokenHz(band.freqHz),
             defaultValue = freqToX(1000f),
             enabled = live,
-            size = 56.dp,
+            size = EqSize.knobSmall,
             tint = tint
           )
           Readout(

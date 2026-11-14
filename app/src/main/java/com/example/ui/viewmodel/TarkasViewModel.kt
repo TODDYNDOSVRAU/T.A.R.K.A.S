@@ -12,6 +12,7 @@ import com.example.data.model.AssistantMessage
 import com.example.data.audius.AudiusApiService
 import com.example.data.model.EqBand
 import com.example.data.model.EqPreset
+import com.example.ui.screens.audio.localizedName
 import com.example.data.model.EqPresets
 import com.example.data.model.EqSettings
 import com.example.data.model.Curiosity
@@ -247,6 +248,7 @@ class TarkasViewModel(
   private var timerTickerJob: Job? = null
 
   val assistantEngine: AssistantEngine = AssistantEngine(
+    context = context,
     musicRepository = musicRepository,
     curiosityRepository = curiosityRepository,
     audioEngineManager = audioEngineManager,
@@ -321,7 +323,7 @@ class TarkasViewModel(
     startTimerTicker()
     // Playback messages (a track that failed, the sleep timer) appear over the mini player.
     viewModelScope.launch {
-      playback.notices.collect { showNotice(Notice(it.text, it.actionLabel, it.action)) }
+      playback.notices.collect { showNotice(Notice(context.getString(it.textRes, *it.textArgs.toTypedArray()), it.actionLabelRes?.let { r -> context.getString(r) }, it.action)) }
     }
   }
 
@@ -480,7 +482,7 @@ class TarkasViewModel(
   /** Removes a queue item, with an undo on the notice. */
   fun removeFromQueue(index: Int) {
     val removed = playback.removeFromQueue(index) ?: return
-    showNotice(Notice("“${removed.title}” saiu da fila.", actionLabel = "Desfazer", action = { playback.restoreToQueue(index, removed) }))
+    showNotice(Notice(context.getString(com.example.R.string.player_notice_removed_from_queue, removed.title), actionLabel = context.getString(com.example.R.string.player_notice_undo), action = { playback.restoreToQueue(index, removed) }))
   }
 
   fun moveInQueue(from: Int, to: Int) = playback.moveInQueue(from, to)
@@ -725,7 +727,7 @@ class TarkasViewModel(
     val snapshot = EqSnapshot()
     val discards = _eqModified.value && preset.id != _activePresetId.value
     loadEqPreset(preset)
-    if (discards) offerEqUndo(context.getString(com.example.R.string.audio_notice_preset_loaded, preset.name), snapshot)
+    if (discards) offerEqUndo(context.getString(com.example.R.string.audio_notice_preset_loaded, preset.localizedName(context)), snapshot)
   }
 
   /** Loads a preset. The on/off switch stays as it is. */

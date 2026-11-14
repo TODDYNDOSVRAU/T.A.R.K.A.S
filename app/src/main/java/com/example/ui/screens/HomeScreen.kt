@@ -369,7 +369,7 @@ private fun ResultsHeader(title: String, searching: Boolean) {
         modifier = Modifier
           .size(Size.iconSmall)
           .semantics { stateDescription = searchingDescription },
-        strokeWidth = 2.dp,
+        strokeWidth = Space.xxs,
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )
     }

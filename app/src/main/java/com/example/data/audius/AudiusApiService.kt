@@ -1,14 +1,14 @@
 package com.example.data.audius
 
+import com.example.data.net.Http
 import android.util.Log
+import com.example.data.model.Placeholders
 import com.example.data.model.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.net.URLEncoder
-import java.util.concurrent.TimeUnit
 
 object AudiusApiService {
   private const val TAG = "AudiusApiService"
@@ -23,12 +23,7 @@ object AudiusApiService {
     "https://dn1.nodeoperator.io/v1"
   )
 
-  private val client = OkHttpClient.Builder()
-    .connectTimeout(15, TimeUnit.SECONDS)
-    .readTimeout(20, TimeUnit.SECONDS)
-    .followRedirects(true)
-    .followSslRedirects(true)
-    .build()
+  private val client = Http.client
 
   /** Throws [java.io.IOException] when no server answered, so the screen can tell "offline" from "nothing found". */
   suspend fun searchTracks(query: String): List<Track> = withContext(Dispatchers.IO) {
@@ -83,11 +78,11 @@ object AudiusApiService {
         // Unstreamable tracks (gated or removed) answer 404 on /stream: leave them out.
         if (!item.optBoolean("is_streamable", true)) continue
 
-        val title = item.optString("title", "Sem título")
+        val title = item.optString("title", Placeholders.untitled())
         val durationSec = item.optLong("duration", 180L)
         val genre = item.optString("genre", "Audius Music")
         val userObj = item.optJSONObject("user")
-        val artist = userObj?.optString("name", "Artista Audius") ?: "Artista Audius"
+        val artist = userObj?.optString("name", Placeholders.catalogArtist("Audius")) ?: Placeholders.catalogArtist("Audius")
 
         // Stream URL from direct node stream endpoint
         val streamUrl = "$baseNode/tracks/$id/stream?app_name=$APP_NAME&api_key=$API_KEY"

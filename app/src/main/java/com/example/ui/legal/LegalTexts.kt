@@ -1,10 +1,31 @@
 package com.example.ui.legal
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.platform.LocalConfiguration
+
 /** A titled text shown in the reading screen: Terms, Privacy, licences, what's new. */
 data class LegalDoc(val title: String, val subtitle: String, val sections: List<Pair<String, String>>)
 
+/** The legal texts in the language the screen is showing. */
+@Composable
+@ReadOnlyComposable
+fun currentLegalTexts(): LegalSet = LegalTexts.forLanguage(LocalConfiguration.current.locales[0].language)
+
+/** Every text of the reading screens and of About, in one language. */
+class LegalSet(
+  val summary: List<String>,
+  val terms: LegalDoc,
+  val privacy: LegalDoc,
+  val changelog: LegalDoc,
+  val licenses: LegalDoc,
+  val credits: List<Pair<String, String>>
+)
+
 /**
  * The legal texts and the "Sobre" content, written in Portuguese for Brazilian users.
+ * The members of this object are the Portuguese text, the original; [LegalTextsEn] is its translation,
+ * and [forLanguage] picks the one to show.
  * Raise [TERMS_VERSION] whenever the Terms or the Privacy Policy change in substance: users who
  * accepted an older version see the acceptance step again on the next launch (LGPD, art. 9 §2).
  *
@@ -199,14 +220,7 @@ object LegalTexts {
   val licenses = LegalDoc(
     title = "Licenças de código aberto",
     subtitle = "O T.A.R.K.A.S. usa estes projetos. Obrigado aos autores.",
-    sections = listOf(
-      "Jetpack Compose, AndroidX, Material 3" to "Google · Apache License 2.0",
-      "AndroidX Media3 (ExoPlayer)" to "Google · Apache License 2.0",
-      "Kotlin e kotlinx.coroutines" to "JetBrains · Apache License 2.0",
-      "Coil" to "Coil Contributors · Apache License 2.0",
-      "Haze" to "Chris Banes · Apache License 2.0",
-      "Backdrop (AndroidLiquidGlass)" to "Kyant · Apache License 2.0",
-      "OkHttp" to "Square · Apache License 2.0",
+    sections = OpenSourceNotices.librarySections + listOf(
       "AutoEq" to "Jaakko Pasanen · MIT License · curvas de correção de fones",
       "SADIE II (HRTF medida, Neumann KU100)" to "Copyright 2018, University of York · Apache License 2.0 · respostas da cabeça usadas na virtualização 5.1",
       "Inter" to "The Inter Project Authors · SIL Open Font License 1.1",
@@ -214,6 +228,7 @@ object LegalTexts {
       "JetBrains Mono" to "The JetBrains Mono Project Authors · SIL Open Font License 1.1",
       "SIL Open Font License 1.1" to "As fontes podem ser usadas, estudadas, modificadas e redistribuídas livremente, inclusive embutidas em software, " +
         "desde que não sejam vendidas sozinhas. Texto completo em https://openfontlicense.org.",
+      "Licença MIT (AutoEq)" to OpenSourceNotices.AUTOEQ_MIT,
       "Apache License 2.0" to "Licenciado sob a Apache License, Versão 2.0. Você pode obter uma cópia em https://www.apache.org/licenses/LICENSE-2.0. " +
         "O software é distribuído \"como está\", sem garantias ou condições de qualquer tipo."
     )
@@ -225,4 +240,12 @@ object LegalTexts {
     "Correção de fones" to "Projeto AutoEq e quem mediu cada fone (oratory1990, crinacle, Rtings e outros)",
     "Desenvolvimento" to "$CONTROLLER · $CONTACT_INSTAGRAM"
   )
+
+  private val portuguese by lazy { LegalSet(summary, terms, privacy, changelog, licenses, credits) }
+  private val english by lazy {
+    LegalSet(LegalTextsEn.summary, LegalTextsEn.terms, LegalTextsEn.privacy, LegalTextsEn.changelog, LegalTextsEn.licenses, LegalTextsEn.credits)
+  }
+
+  /** The texts for a language code such as "pt" or "en": Portuguese for "pt", English for every other. */
+  fun forLanguage(language: String): LegalSet = if (language.equals("pt", ignoreCase = true)) portuguese else english
 }

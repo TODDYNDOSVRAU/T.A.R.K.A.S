@@ -1,15 +1,15 @@
 package com.example.data.jamendo
 
+import com.example.data.net.Http
 import android.util.Log
 import com.example.BuildConfig
+import com.example.data.model.Placeholders
 import com.example.data.model.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import java.util.concurrent.TimeUnit
 
 /** Jamendo said no: the app's client id is missing or refused. Not a network problem. */
 class JamendoNotConfigured : Exception("Jamendo client id missing or refused")
@@ -33,10 +33,7 @@ object JamendoApiService {
    */
   val isConfigured: Boolean get() = clientId.isNotEmpty() && clientId != "MY_JAMENDO_CLIENT_ID"
 
-  private val client = OkHttpClient.Builder()
-    .connectTimeout(15, TimeUnit.SECONDS)
-    .readTimeout(20, TimeUnit.SECONDS)
-    .build()
+  private val client = Http.client
 
   /**
    * Tracks matching [query]. Throws [java.io.IOException] when Jamendo did not answer (offline), and
@@ -114,8 +111,8 @@ object JamendoApiService {
         ?: "Jamendo"
       tracks += Track(
         id = "jamendo_$id",
-        title = text(item, "name").ifBlank { "Sem título" },
-        artist = text(item, "artist_name").ifBlank { "Artista Jamendo" },
+        title = text(item, "name").ifBlank { Placeholders.untitled() },
+        artist = text(item, "artist_name").ifBlank { Placeholders.catalogArtist("Jamendo") },
         album = text(item, "album_name").ifBlank { "Jamendo" },
         durationMs = item.optLong("duration", 0L) * 1000L,
         genre = genre,

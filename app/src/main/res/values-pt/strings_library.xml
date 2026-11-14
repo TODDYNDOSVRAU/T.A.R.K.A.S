@@ -97,4 +97,14 @@
     <string name="library_notice_play_next">“%1$s” toca em seguida.</string>
     <string name="library_notice_added_to_queue">“%1$s” adicionada à fila.</string>
     <string name="library_notice_already_in_playlist">“%1$s” já está em %2$s.</string>
+    <string name="library_local_library">Biblioteca Local</string>
+    <string name="track_untitled">Sem título</string>
+    <string name="track_unknown_artist">Artista desconhecido</string>
+    <string name="track_catalog_artist">Artista %1$s</string>
+    <string name="demo_genre_prog_rock">Rock Progressivo</string>
+    <string name="demo_genre_minimal_prog">Minimalismo / Prog</string>
+    <string name="demo_genre_impressionist">Impressionismo Clássico</string>
+    <string name="demo_genre_ambient_modal">Música Ambiente / Modal</string>
+    <string name="demo_genre_calibration">Calibração Acústica</string>
+    <string name="eq_profile_custom_description">Perfil customizado pelo usuário</string>
 </resources>

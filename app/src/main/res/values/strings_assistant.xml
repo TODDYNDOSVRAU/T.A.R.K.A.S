@@ -72,4 +72,40 @@
     <string name="assistant_error_no_reply">The online service did not return a reply to this question. Try again.</string>
     <string name="assistant_error_server">The online service did not answer correctly. Try again in a moment.</string>
     <string name="assistant_retry">Try again</string>
+
+    <!-- Curiosity verification labels -->
+    <string name="assistant_curiosity_status_verified">Documented and verified fact</string>
+    <string name="assistant_curiosity_status_historical">Historical and musical analysis</string>
+    <string name="assistant_curiosity_status_technical">Technical acoustic specification</string>
+
+    <!-- Spoken narration (TextToSpeech). Args: title, artist, trivia. -->
+    <string name="assistant_spoken_intro">Curiosity about %1$s, by %2$s: %3$s Enjoy the sound!</string>
+    <string name="assistant_spoken_outro">Did you know about %1$s? %2$s That was %1$s, by %3$s.</string>
+    <string name="assistant_spoken_test">Hello! I am the voice of Tarkas. I will present short curiosities and interesting facts about your favorite music.</string>
+
+    <!-- Assistant engine replies. Commands are recognized in Portuguese only. -->
+    <string name="assistant_help_body">**Commands (recognized in Portuguese):**\n• **"analisar música"**: looks up curiosities and facts about the playing track\n• **"diagnóstico"**: inspects audio routes and hardware\n• **"equalizador flat"** (or rock, pop, jazz, vocal, graves, agudos…): applies a preset\n• **"mais graves"**, **"menos agudos"**…: moves the bass or treble control by 3 dB\n• **"timer de [X] minutos"**: starts a local timer\n• **"que música toca?"**: shows the current track\n• **"próxima"**, **"anterior"**, **"pausar"**, **"tocar"**: control the player\n• **"aleatório"**, **"repetir"**, **"favoritar"**: turn on the mode or save the track</string>
+    <string name="assistant_command_failed">Could not run this now. Choose a track first.</string>
+    <string name="assistant_tool_no_track_available">No track available</string>
+    <string name="assistant_tool_analysis_done">Analysis done: %1$s</string>
+    <string name="assistant_tool_no_curiosity">No verified curiosity</string>
+    <string name="assistant_analysis_done">I analyzed **%1$s** (%2$s). The curiosity stays in the player: tap the mini player above the bar, then the lamp.</string>
+    <string name="assistant_analysis_none">I do not have a verified curiosity about **%1$s** yet.</string>
+    <string name="assistant_no_track_analyze">No track is playing right now to analyze.</string>
+    <string name="assistant_tool_no_track">No track</string>
+    <string name="assistant_now_playing_detail">Playing **%1$s** by **%2$s** (%3$s).</string>
+    <string name="assistant_no_track_playing">No track is playing.</string>
+    <string name="assistant_audio_route">Active route: **%1$s** (%2$s Hz, Stereo 2.0). Effects run in the internal Tarkas session.</string>
+    <string name="assistant_band_bass">Bass</string>
+    <string name="assistant_band_treble">Treble</string>
+    <string name="assistant_tone_at_limit">%1$s at **%2$s dB**. That is the control limit.</string>
+    <string name="assistant_tone_set">%1$s at **%2$s dB**.</string>
+    <string name="assistant_tool_preset_applied">Preset %1$s applied to the equalizer</string>
+    <string name="assistant_eq_set">Equalizer set to **%1$s**.</string>
+    <string name="assistant_timer_label">Timer of %1$dm %2$ds</string>
+    <string name="assistant_timer_set">Timer set to **%1$s**.</string>
+    <string name="assistant_tool_timers_cancelled">Timers cancelled</string>
+    <string name="assistant_timers_cancelled">Timers cancelled.</string>
+    <string name="assistant_hello">Hello! How can I help with your music or audio today?</string>
+    <string name="assistant_not_understood">I did not understand that request. Type **help** to see what I can do.</string>
 </resources>

@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import android.content.Context
 import com.example.data.model.Playlist
+import com.example.R
 import com.example.data.model.Track
 import com.example.data.model.TrackJson
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +19,7 @@ import org.json.JSONObject
  * Local `content://` files may need to be re-added if Android revoked access to them.
  */
 class LibraryRepository(context: Context) {
+  private val appContext = context.applicationContext
   private val prefs = context.getSharedPreferences("tarkas_library", Context.MODE_PRIVATE)
 
   private val _favorites = MutableStateFlow(loadFavorites())
@@ -47,7 +49,7 @@ class LibraryRepository(context: Context) {
   fun createPlaylist(name: String, firstTrack: Track? = null): Playlist {
     val playlist = Playlist(
       id = "pl_${System.currentTimeMillis()}",
-      name = name.trim().ifBlank { "Nova playlist" },
+      name = name.trim().ifBlank { appContext.getString(R.string.library_new_playlist_title) },
       trackIds = if (firstTrack != null) listOf(firstTrack.id) else emptyList()
     )
     if (firstTrack != null) remember(firstTrack)

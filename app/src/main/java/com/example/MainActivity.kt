@@ -37,6 +37,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import com.kyant.backdrop.backdrops.layerBackdrop
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import com.example.ui.theme.Space
 import com.example.ui.theme.LocalBarInset
 import com.example.ui.theme.LocalHazeState
 import com.example.ui.theme.LocalSurfaceStyle
@@ -846,8 +847,8 @@ fun TarkasAppContent(
           .onSizeChanged { barHeightPx = it.height }
           .imePadding()
           .navigationBarsPadding()
-          .padding(start = 14.dp, end = 14.dp, bottom = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+          .padding(start = 14.dp, end = 14.dp, bottom = Space.s),
+        verticalArrangement = Arrangement.spacedBy(Space.s)
       ) {
        com.example.ui.theme.TarkasDarkOverride(enabled = currentTab == TarkasNavTab.MUSIC) {
         // Floating AI Curiosity Speech Banner. Curiosities appear only on the player page (and in
@@ -870,7 +871,7 @@ fun TarkasAppContent(
             Row(
               modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                .padding(start = Space.m, end = Space.s, top = Space.s, bottom = Space.s),
               verticalAlignment = Alignment.CenterVertically
             ) {
               Box(
@@ -908,7 +909,7 @@ fun TarkasAppContent(
                 )
               }
 
-              Spacer(modifier = Modifier.width(8.dp))
+              Spacer(modifier = Modifier.width(Space.s))
 
               com.example.ui.components.GlassChip(
                 label = androidx.compose.ui.res.stringResource(R.string.nav_curiosity_skip),
@@ -970,7 +971,7 @@ fun TarkasAppContent(
             modifier = Modifier
               .fillMaxWidth()
               .glassPill(cornerRadius = Radius.xl)
-              .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
+              .padding(start = Space.l, end = Space.s, top = Space.s, bottom = Space.s)
               .heightIn(min = 40.dp)
               .semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite }
               .testTag("app_notice"),
@@ -984,7 +985,7 @@ fun TarkasAppContent(
               modifier = Modifier.weight(1f)
             )
             if (n?.actionLabel != null) {
-              Spacer(modifier = Modifier.width(8.dp))
+              Spacer(modifier = Modifier.width(Space.s))
               com.example.ui.components.GlassChip(
                 label = n.actionLabel,
                 selected = true,
@@ -1070,7 +1071,7 @@ fun TarkasAppContent(
         }
         if (compactBars) {
           Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(Space.s),
             verticalAlignment = Alignment.Bottom
           ) { bars(Modifier.weight(1f), Modifier.width(360.dp)) }
         } else {

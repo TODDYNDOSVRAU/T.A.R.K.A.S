@@ -634,7 +634,7 @@ fun SearchField(
     if (value.isNotEmpty()) {
       IconAction(
         icon = Icons.Rounded.Cancel,
-        contentDescription = "Limpar busca",
+        contentDescription = androidx.compose.ui.res.stringResource(com.example.R.string.library_search_clear),
         onClick = { onValueChange("") },
         tint = colors.onSurfaceVariant,
         size = 32.dp

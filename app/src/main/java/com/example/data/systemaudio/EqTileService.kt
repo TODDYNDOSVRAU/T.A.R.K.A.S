@@ -39,9 +39,9 @@ class EqTileService : TileService() {
   private fun refresh(on: Boolean) {
     val tile = qsTile ?: return
     tile.state = if (on) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-    tile.label = "Equalizador"
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) tile.subtitle = if (on) "Ligado" else "Desligado"
-    tile.contentDescription = if (on) "Equalizador ligado" else "Equalizador desligado"
+    tile.label = getString(com.example.R.string.audio_tile_label)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) tile.subtitle = getString(if (on) com.example.R.string.audio_tile_on else com.example.R.string.audio_tile_off)
+    tile.contentDescription = getString(if (on) com.example.R.string.audio_tile_cd_on else com.example.R.string.audio_tile_cd_off)
     tile.updateTile()
   }
 }

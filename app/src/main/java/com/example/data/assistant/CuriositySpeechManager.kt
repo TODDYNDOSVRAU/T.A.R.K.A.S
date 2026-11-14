@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import com.example.R
 import com.example.data.model.Curiosity
 import com.example.data.model.CuriosityConfig
 import com.example.data.model.Track
@@ -82,14 +83,23 @@ class CuriositySpeechManager(
     }
   }
 
+  /**
+   * The voice reads in the language the app shows, the same language as the texts it speaks. If the device
+   * has no voice for that language, the engine's default is used.
+   */
+  private fun applyLanguage(engine: TextToSpeech) {
+    val appLocale = context.resources.configuration.locales[0]
+    val result = engine.setLanguage(appLocale)
+    if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+      Log.w(TAG, "No voice for $appLocale; using the engine default")
+      engine.language = Locale.getDefault()
+    }
+  }
+
   override fun onInit(status: Int) {
     if (status == TextToSpeech.SUCCESS) {
       tts?.let { engine ->
-        val ptLocale = Locale("pt", "BR")
-        val langResult = engine.setLanguage(ptLocale)
-        if (langResult == TextToSpeech.LANG_MISSING_DATA || langResult == TextToSpeech.LANG_NOT_SUPPORTED) {
-          engine.language = Locale.getDefault()
-        }
+        applyLanguage(engine)
 
         engine.setAudioAttributes(
           android.media.AudioAttributes.Builder()
@@ -134,9 +144,9 @@ class CuriositySpeechManager(
     val cleanTrivia = if (sentences.size >= 2) "${sentences[0]} ${sentences[1]}" else rawTrivia
 
     return if (isIntro) {
-      "Curiosidade sobre ${track.title}, de ${track.artist}: $cleanTrivia Aproveite o som!"
+      context.getString(R.string.assistant_spoken_intro, track.title, track.artist, cleanTrivia)
     } else {
-      "Você sabia sobre ${track.title}? $cleanTrivia Essa foi ${track.title}, de ${track.artist}."
+      context.getString(R.string.assistant_spoken_outro, track.title, cleanTrivia, track.artist)
     }
   }
 
@@ -172,6 +182,7 @@ class CuriositySpeechManager(
 
     try {
       tts?.apply {
+        applyLanguage(this)
         setPitch(config.pitch.coerceIn(0.5f, 2.0f))
         setSpeechRate(config.speechRate.coerceIn(0.5f, 2.0f))
 
@@ -198,7 +209,7 @@ class CuriositySpeechManager(
     config: CuriosityConfig,
     onDone: () -> Unit = {}
   ) {
-    val sampleText = "Olá! Eu sou a voz do Tarkas. Vou apresentar curiosidades curtas e fatos interessantes sobre as suas músicas favoritas."
+    val sampleText = context.getString(R.string.assistant_spoken_test)
     _currentSpokenText.value = sampleText
     _speechStage.value = "test"
 
@@ -215,6 +226,7 @@ class CuriositySpeechManager(
 
     try {
       tts?.apply {
+        applyLanguage(this)
         setPitch(config.pitch.coerceIn(0.5f, 2.0f))
         setSpeechRate(config.speechRate.coerceIn(0.5f, 2.0f))
 

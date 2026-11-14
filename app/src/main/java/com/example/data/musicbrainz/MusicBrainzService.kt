@@ -1,15 +1,14 @@
 package com.example.data.musicbrainz
 
+import com.example.data.net.Http
 import com.example.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import java.util.concurrent.TimeUnit
 
 /** What MusicBrainz knows about a recording, for the "Sobre a faixa" sheet. */
 data class RecordingInfo(
@@ -42,10 +41,7 @@ object MusicBrainzService {
 
   private val userAgent = "TARKAS/${BuildConfig.VERSION_NAME} ( roger.moreiraa8@gmail.com )"
 
-  private val client = OkHttpClient.Builder()
-    .connectTimeout(15, TimeUnit.SECONDS)
-    .readTimeout(20, TimeUnit.SECONDS)
-    .build()
+  private val client = Http.client
 
   private val gate = Mutex()
   private var lastCallAt = 0L

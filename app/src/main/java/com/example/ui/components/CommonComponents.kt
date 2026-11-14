@@ -450,7 +450,7 @@ fun TarkasBottomNav(
     with(density) {
       geometry.icon = Sizes.icon.toPx()
       geometry.touch = Sizes.touch.toPx()
-      geometry.slide = 8.dp.toPx()
+      geometry.slide = Space.s.toPx()
       geometry.height = (6.dp * 2 + Sizes.icon + Space.xxs).roundToPx() + textHeight
       geometry.gapWide = 6.dp.toPx()
       geometry.gapTight = Space.xs.toPx()
@@ -795,7 +795,7 @@ fun MiniPlayerBar(
       // A hairline of progress along the bottom edge, inside the capsule's straight part.
       .drawWithContent {
         drawContent()
-        val h = 2.dp.toPx()
+        val h = Space.xxs.toPx()
         val inset = size.height / 2f
         val w = size.width - inset * 2
         val top = size.height - h - 1.dp.toPx()
@@ -953,7 +953,7 @@ fun ToolReportCard(
       tint = if (report.success) colors.primary else colors.error,
       modifier = Modifier
         .padding(top = 1.dp)
-        .size(16.dp)
+        .size(Space.l)
     )
     Spacer(modifier = Modifier.width(Space.s))
     Column {

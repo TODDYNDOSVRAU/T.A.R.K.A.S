@@ -4,8 +4,19 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.text.format.Formatter
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.example.data.update.ReleaseNotes
+import com.example.ui.theme.AppText
+import com.example.ui.theme.Space
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -82,14 +93,17 @@ fun StartupUpdatePrompts(enabled: Boolean) {
       onDismissRequest = { UpdateManager.dismissedTag = release.tag; dismissedTag = release.tag },
       title = { Text(stringResource(R.string.update_popup_title, release.versionName)) },
       text = {
-        Text(
-          when {
-            !installs -> stringResource(R.string.update_popup_dev)
-            state.phase == Phase.READY -> stringResource(R.string.update_popup_ready)
-            size != null -> stringResource(R.string.update_popup_message_size, size)
-            else -> stringResource(R.string.update_popup_message)
-          }
-        )
+        Column {
+          Text(
+            when {
+              !installs -> stringResource(R.string.update_popup_dev)
+              state.phase == Phase.READY -> stringResource(R.string.update_popup_ready)
+              size != null -> stringResource(R.string.update_popup_message_size, size)
+              else -> stringResource(R.string.update_popup_message)
+            }
+          )
+          UpdateNotes(release.notes, release.tag, maxHeight = 160.dp, modifier = Modifier.padding(top = Space.m))
+        }
       },
       confirmButton = {
         TextButton(
@@ -118,6 +132,25 @@ fun StartupUpdatePrompts(enabled: Boolean) {
           modifier = Modifier.testTag("update_popup_later")
         ) { Text(stringResource(R.string.update_later)) }
       }
+    )
+  }
+}
+
+/**
+ * The release notes as plain text under a small title, scrollable when long. Draws nothing when the
+ * notes are empty.
+ */
+@Composable
+fun UpdateNotes(rawNotes: String, tag: String, maxHeight: Dp, modifier: Modifier = Modifier) {
+  val notes = remember(rawNotes) { ReleaseNotes.plain(rawNotes) } ?: return
+  val colors = MaterialTheme.colorScheme
+  Column(modifier.testTag("update_notes")) {
+    Text(stringResource(R.string.settings_update_notes_title, tag), style = AppText.Footnote, color = colors.onSurfaceVariant)
+    Text(
+      text = notes,
+      style = AppText.Subhead,
+      color = colors.onSurface,
+      modifier = Modifier.padding(top = Space.xs).heightIn(max = maxHeight).verticalScroll(rememberScrollState())
     )
   }
 }

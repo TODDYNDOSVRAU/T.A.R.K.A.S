@@ -21,7 +21,8 @@ import org.robolectric.annotation.Config
 
 /** Which sentences become player commands, and what the engine reports after running them. */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
+// The engine's replies come from resources; the commands it understands are Portuguese, so the tests read the PT texts.
+@Config(sdk = [36], qualifiers = "pt-rBR")
 class AssistantCommandsTest {
 
   private fun command(text: String) = playerCommandFor(text.lowercase())?.first
@@ -100,8 +101,9 @@ class AssistantCommandsTest {
   private fun engine(onPlayerCommand: suspend (PlayerCommand) -> String?): AssistantEngine {
     val context = ApplicationProvider.getApplicationContext<Context>()
     return AssistantEngine(
+      context = context,
       musicRepository = MusicRepository(context),
-      curiosityRepository = CuriosityRepository(),
+      curiosityRepository = CuriosityRepository(context),
       audioEngineManager = AudioEngineManager(context),
       onTimerCreated = {},
       onTimerCancelled = {},
@@ -164,8 +166,9 @@ class AssistantCommandsTest {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val audio = AudioEngineManager(context)
     val engine = AssistantEngine(
+      context = context,
       musicRepository = MusicRepository(context),
-      curiosityRepository = CuriosityRepository(),
+      curiosityRepository = CuriosityRepository(context),
       audioEngineManager = audio,
       onTimerCreated = {},
       onTimerCancelled = {},

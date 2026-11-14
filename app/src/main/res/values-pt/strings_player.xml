@@ -377,4 +377,11 @@
     <string name="player_sheet_handle">Arrastar para fechar</string>
     <string name="player_export_saved">Seus dados foram salvos.</string>
     <string name="player_export_failed">Não foi possível salvar o arquivo.</string>
+    <string name="player_notice_skipped">Não foi possível tocar “%1$s”. Pulando para a próxima.</string>
+    <string name="player_notice_offline">Sem conexão para tocar “%1$s”. Confira a internet e toque em Tentar de novo.</string>
+    <string name="player_notice_failed">Não foi possível tocar “%1$s”.</string>
+    <string name="player_notice_retry">Tentar de novo</string>
+    <string name="player_notice_sleep_done">Timer de dormir: música pausada.</string>
+    <string name="player_notice_removed_from_queue">“%1$s” saiu da fila.</string>
+    <string name="player_notice_undo">Desfazer</string>
 </resources>

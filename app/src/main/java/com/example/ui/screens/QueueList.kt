@@ -220,7 +220,7 @@ internal fun QueueList(
             if (isDragged) {
               val item = dragged()
               translationY = if (item != null) dragStartOffset + dragDelta - item.offset else 0f
-              shadowElevation = 8.dp.toPx()
+              shadowElevation = Space.s.toPx()
             }
           }
           .then(if (isDragged) Modifier else Modifier.animateItem(placementSpec = Motion.gel(androidx.compose.ui.unit.IntOffset(1, 1))))

@@ -1,6 +1,9 @@
 package com.example.data.assistant
 
+import com.example.data.net.Http
+import android.content.Context
 import com.example.BuildConfig
+import com.example.R
 import com.example.data.audio.AudioEngineManager
 import com.example.data.diagnostics.Diagnostics
 import com.example.data.model.AssistantFailure
@@ -20,7 +23,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.CoroutineContext
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
@@ -28,7 +30,6 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 
 /** Raised when the online reply cannot be used. The reason decides the message the user sees. */
 class AssistantFailureException(val failure: AssistantFailure, cause: Throwable? = null) : Exception(failure.name, cause)
@@ -83,6 +84,8 @@ internal fun playerCommandFor(lower: String): Pair<PlayerCommand, String>? {
 }
 
 class AssistantEngine(
+  // Reply texts come from the app's resources, so they follow the system language.
+  private val context: Context,
   private val musicRepository: MusicRepository,
   private val curiosityRepository: CuriosityRepository,
   private val audioEngineManager: AudioEngineManager,
@@ -105,10 +108,7 @@ class AssistantEngine(
   private val callbackContext: CoroutineContext = Dispatchers.Main.immediate
 ) {
   private val TAG = "AssistantEngine"
-  private val okHttpClient = OkHttpClient.Builder()
-    .connectTimeout(15, TimeUnit.SECONDS)
-    .readTimeout(20, TimeUnit.SECONDS)
-    .build()
+  private val okHttpClient = Http.client
 
   val hasGeminiKey: Boolean
     get() {
@@ -158,21 +158,10 @@ class AssistantEngine(
 
     // Command: HELP / AJUDA (Only here does it describe all its functions!)
     if (lower == "help" || lower == "ajuda" || lower == "?") {
-      val helpText = """
-        **Comandos Disponíveis:**
-        • **"analisar música"**: pesquisa curiosidades e fatos da faixa em execução
-        • **"diagnóstico"**: inspeciona rotas e hardware de áudio
-        • **"equalizador flat"** (ou rock, pop, jazz, vocal, graves, agudos…): aplica um preset
-        • **"mais graves"**, **"menos agudos"**…: move o controle de graves ou agudos em 3 dB
-        • **"timer de [X] minutos"**: inicia temporizador local
-        • **"que música toca?"**: exibe a faixa atual
-        • **"próxima"**, **"anterior"**, **"pausar"**, **"tocar"**: controlam o player
-        • **"aleatório"**, **"repetir"**, **"favoritar"**: ligam o modo ou guardam a faixa
-      """.trimIndent()
       return AssistantMessage(
         id = UUID.randomUUID().toString(),
         sender = MessageSender.ASSISTANT,
-        text = helpText
+        text = context.getString(R.string.assistant_help_body)
       )
     }
 
@@ -182,12 +171,12 @@ class AssistantEngine(
       return AssistantMessage(
         id = UUID.randomUUID().toString(),
         sender = MessageSender.ASSISTANT,
-        text = result ?: "Não consegui executar isso agora. Escolha uma faixa primeiro.",
+        text = result ?: context.getString(R.string.assistant_command_failed),
         toolReport = ToolExecutionReport(
           toolName = toolName,
           arguments = emptyMap(),
           success = result != null,
-          resultSummary = result ?: "Nenhuma faixa disponível"
+          resultSummary = result ?: context.getString(R.string.assistant_tool_no_track_available)
         )
       )
     }
@@ -204,15 +193,17 @@ class AssistantEngine(
           toolName = "analyze_and_research_music",
           arguments = mapOf("track" to track.title, "artist" to track.artist),
           success = curiosity != null,
-          resultSummary = curiosity?.let { "Análise concluída: ${it.status.label}" } ?: "Sem curiosidade verificada"
+          resultSummary = curiosity?.let {
+            context.getString(R.string.assistant_tool_analysis_done, context.getString(it.status.labelRes))
+          } ?: context.getString(R.string.assistant_tool_no_curiosity)
         )
 
         // Curiosities are shown only in the player and the notification, never in the chat, so the
         // answer points there instead of repeating the text.
         val siriStyleAnswer = if (curiosity != null) {
-          "Analisei **${track.title}** (${track.artist}). A curiosidade fica no player: toque no mini player acima da barra e depois na lâmpada."
+          context.getString(R.string.assistant_analysis_done, track.title, track.artist)
         } else {
-          "Ainda não tenho uma curiosidade verificada sobre **${track.title}**."
+          context.getString(R.string.assistant_analysis_none, track.title)
         }
 
         return AssistantMessage(
@@ -225,7 +216,7 @@ class AssistantEngine(
         return AssistantMessage(
           id = UUID.randomUUID().toString(),
           sender = MessageSender.ASSISTANT,
-          text = "Nenhuma música está tocando no momento para ser analisada."
+          text = context.getString(R.string.assistant_no_track_analyze)
         )
       }
     }
@@ -237,12 +228,12 @@ class AssistantEngine(
         toolName = "get_current_track",
         arguments = emptyMap(),
         success = track != null,
-        resultSummary = track?.title ?: "Nenhuma faixa"
+        resultSummary = track?.title ?: context.getString(R.string.assistant_tool_no_track)
       )
       val reply = if (track != null) {
-        "Tocando **${track.title}** por **${track.artist}** (${track.album})."
+        context.getString(R.string.assistant_now_playing_detail, track.title, track.artist, track.album)
       } else {
-        "Nenhuma faixa em reprodução."
+        context.getString(R.string.assistant_no_track_playing)
       }
       return AssistantMessage(
         id = UUID.randomUUID().toString(),
@@ -261,7 +252,7 @@ class AssistantEngine(
         success = true,
         resultSummary = "${caps.activeRouteName} (${caps.sampleRateHz} Hz)"
       )
-      val reply = "Rota ativa: **${caps.activeRouteName}** (${caps.sampleRateHz} Hz, Estéreo 2.0). Efeitos operam na sessão interna do Tarkas."
+      val reply = context.getString(R.string.assistant_audio_route, caps.activeRouteName, caps.sampleRateHz.toString())
       return AssistantMessage(
         id = UUID.randomUUID().toString(),
         sender = MessageSender.ASSISTANT,
@@ -276,14 +267,18 @@ class AssistantEngine(
       val up = toneMatch.groupValues[1] in setOf("aumentar", "aumenta", "mais", "subir", "sobe")
       val bass = toneMatch.groupValues[2].startsWith("grave")
       val now = withContext(callbackContext) { onTone(bass, if (up) 3f else -3f) }
-      val name = if (bass) "Graves" else "Agudos"
+      val name = context.getString(if (bass) R.string.assistant_band_bass else R.string.assistant_band_treble)
       val value = (if (now > 0) "+" else "") + String.format(java.util.Locale.US, "%.1f", now)
       val limit = com.example.data.model.EqSettings.TONE_RANGE_DB
       val atLimit = kotlin.math.abs(now) >= limit
       return AssistantMessage(
         id = UUID.randomUUID().toString(),
         sender = MessageSender.ASSISTANT,
-        text = "$name em **$value dB**." + if (atLimit) " Esse é o limite do controle." else "",
+        text = if (atLimit) {
+          context.getString(R.string.assistant_tone_at_limit, name, value)
+        } else {
+          context.getString(R.string.assistant_tone_set, name, value)
+        },
         toolReport = ToolExecutionReport(
           toolName = "adjust_tone",
           arguments = mapOf("band" to name, "delta" to if (up) "+3" else "-3"),
@@ -317,12 +312,12 @@ class AssistantEngine(
           toolName = "apply_audio_profile",
           arguments = mapOf("profile" to target.name),
           success = true,
-          resultSummary = "Preset ${target.name} ativado no equalizador"
+          resultSummary = context.getString(R.string.assistant_tool_preset_applied, target.name)
         )
         return AssistantMessage(
           id = UUID.randomUUID().toString(),
           sender = MessageSender.ASSISTANT,
-          text = "Equalizador ajustado para **${target.name}**.",
+          text = context.getString(R.string.assistant_eq_set, target.name),
           toolReport = report
         )
       }
@@ -340,7 +335,7 @@ class AssistantEngine(
       }.coerceIn(5, 7200)
 
       val timerId = "timer_${System.currentTimeMillis()}"
-      val label = "Timer de ${totalSeconds / 60}m ${totalSeconds % 60}s"
+      val label = context.getString(R.string.assistant_timer_label, totalSeconds / 60, totalSeconds % 60)
       val newTimer = LocalTimer(
         id = timerId,
         label = label,
@@ -359,7 +354,7 @@ class AssistantEngine(
       return AssistantMessage(
         id = UUID.randomUUID().toString(),
         sender = MessageSender.ASSISTANT,
-        text = "Timer definido para **${newTimer.formattedTime()}**.",
+        text = context.getString(R.string.assistant_timer_set, newTimer.formattedTime()),
         toolReport = report
       )
     }
@@ -371,12 +366,12 @@ class AssistantEngine(
         toolName = "cancel_timer",
         arguments = emptyMap(),
         success = true,
-        resultSummary = "Timers cancelados"
+        resultSummary = context.getString(R.string.assistant_tool_timers_cancelled)
       )
       return AssistantMessage(
         id = UUID.randomUUID().toString(),
         sender = MessageSender.ASSISTANT,
-        text = "Temporizadores cancelados.",
+        text = context.getString(R.string.assistant_timers_cancelled),
         toolReport = report
       )
     }
@@ -388,12 +383,8 @@ class AssistantEngine(
     val lower = input.lowercase()
 
     val responseText = when {
-      Regex("\\b(olá|ola|oi)\\b").containsMatchIn(lower) -> {
-        "Olá! Em que posso ajudar com sua música ou áudio hoje?"
-      }
-      else -> {
-        "Não entendi esse pedido. Digite **ajuda** para ver o que posso fazer."
-      }
+      Regex("\\b(olá|ola|oi)\\b").containsMatchIn(lower) -> context.getString(R.string.assistant_hello)
+      else -> context.getString(R.string.assistant_not_understood)
     }
 
     return AssistantMessage(

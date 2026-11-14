@@ -1,6 +1,8 @@
 package com.example.data.playback
 
 import android.content.Context
+import androidx.annotation.StringRes
+import com.example.R
 import com.example.data.diagnostics.Diagnostics
 import com.example.data.assistant.CuriositySpeechManager
 import com.example.data.audio.AudioEngineManager
@@ -34,7 +36,13 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 /** A message about playback for the screen (a track that failed, the sleep timer). */
-data class PlaybackNotice(val text: String, val actionLabel: String? = null, val action: (() -> Unit)? = null)
+/** A message about playback. It carries string resources, so whoever shows it writes it in the current language. */
+data class PlaybackNotice(
+  @StringRes val textRes: Int,
+  val textArgs: List<Any> = emptyList(),
+  @StringRes val actionLabelRes: Int? = null,
+  val action: (() -> Unit)? = null
+)
 
 /** The sleep timer: playback pauses at [endsAtMs] (wall clock), or when the current track ends. */
 data class SleepTimer(val endsAtMs: Long? = null, val endOfTrack: Boolean = false)
@@ -286,23 +294,25 @@ class PlaybackController(
     val canAdvance = contextList().size > 1 || _queue.value.isNotEmpty()
     when {
       PlaybackOrder.skipAfterFailure(network, failuresInARow, canAdvance) -> {
-        _notices.tryEmit(PlaybackNotice("Não foi possível tocar “${track.title}”. Pulando para a próxima."))
+        _notices.tryEmit(PlaybackNotice(R.string.player_notice_skipped, listOf(track.title)))
         advance(auto = false)
       }
       network -> {
         val at = audioEngine.lastErrorPositionMs
         _notices.tryEmit(
           PlaybackNotice(
-            "Sem conexão para tocar “${track.title}”. Confira a internet e toque em Tentar de novo.",
-            actionLabel = "Tentar de novo",
+            R.string.player_notice_offline,
+            listOf(track.title),
+            actionLabelRes = R.string.player_notice_retry,
             action = { failuresInARow = 0; startTrackAudio(track, startPositionMs = at) }
           )
         )
       }
       else -> _notices.tryEmit(
         PlaybackNotice(
-          "Não foi possível tocar “${track.title}”.",
-          actionLabel = "Tentar de novo",
+          R.string.player_notice_failed,
+          listOf(track.title),
+          actionLabelRes = R.string.player_notice_retry,
           action = { failuresInARow = 0; playInternal(track, recordHistory = false) }
         )
       )
@@ -646,7 +656,7 @@ class PlaybackController(
       speech.stopSpeech()
       audioEngine.fadeOutAndPause(SLEEP_FADE_MS)
       _sleepTimer.value = null
-      _notices.tryEmit(PlaybackNotice("Timer de dormir: música pausada."))
+      _notices.tryEmit(PlaybackNotice(R.string.player_notice_sleep_done))
     }
   }
 

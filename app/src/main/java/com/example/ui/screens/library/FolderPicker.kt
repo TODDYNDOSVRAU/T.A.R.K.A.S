@@ -47,6 +47,7 @@ import com.example.data.library.FolderTree
 import com.example.ui.components.EmptyState
 import com.example.ui.components.SubPageHeader
 import com.example.ui.theme.AppText
+import com.example.ui.theme.Size
 import com.example.ui.theme.Space
 
 /**
@@ -129,8 +130,8 @@ private fun FolderRowItem(
     verticalAlignment = Alignment.CenterVertically,
     modifier = Modifier
       .fillMaxWidth()
-      .defaultMinSize(minHeight = 48.dp)
-      .padding(start = Space.page + 20.dp * depth, end = Space.page)
+      .defaultMinSize(minHeight = Size.touch)
+      .padding(start = Space.page + Space.page * depth, end = Space.page)
   ) {
     if (node.children.isNotEmpty()) {
       Icon(
@@ -140,7 +141,7 @@ private fun FolderRowItem(
         modifier = Modifier
           .size(40.dp)
           .clickable(onClick = onToggleOpen)
-          .padding(8.dp)
+          .padding(Space.s)
       )
     } else {
       Spacer(Modifier.width(40.dp))
@@ -152,7 +153,7 @@ private fun FolderRowItem(
         .weight(1f)
         .clickable(role = Role.Checkbox) { onSetIncluded(node.path, check != FolderCheck.ON) }
         .semantics(mergeDescendants = true) { stateDescription = stateText }
-        .defaultMinSize(minHeight = 48.dp)
+        .defaultMinSize(minHeight = Size.touch)
     ) {
       TriStateCheckbox(
         state = when (check) {

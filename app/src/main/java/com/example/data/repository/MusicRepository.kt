@@ -6,6 +6,8 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import com.example.data.audio.AudioSynthesizer
+import com.example.R
+import com.example.data.model.Placeholders
 import com.example.data.model.Track
 import com.example.data.model.TrackJson
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +35,7 @@ class MusicRepository(private val context: Context) {
         artist = "Emerson, Lake & Palmer",
         album = "Tarkus (1971)",
         durationMs = 16000L,
-        genre = "Rock Progressivo",
+        genre = context.getString(R.string.demo_genre_prog_rock),
         era = "1971",
         filePath = fileMap["track_tarkus"],
         colorHex = 0xFF46C9D3,
@@ -45,7 +47,7 @@ class MusicRepository(private val context: Context) {
         artist = "Mike Oldfield",
         album = "Tubular Bells (1973)",
         durationMs = 16000L,
-        genre = "Minimalismo / Prog",
+        genre = context.getString(R.string.demo_genre_minimal_prog),
         era = "1973",
         filePath = fileMap["track_tubular"],
         colorHex = 0xFF2F8FA8,
@@ -57,7 +59,7 @@ class MusicRepository(private val context: Context) {
         artist = "Claude Debussy",
         album = "Suite bergamasque (1905)",
         durationMs = 18000L,
-        genre = "Impressionismo Clássico",
+        genre = context.getString(R.string.demo_genre_impressionist),
         era = "1905",
         filePath = fileMap["track_debussy"],
         colorHex = 0xFF0E7C86,
@@ -69,7 +71,7 @@ class MusicRepository(private val context: Context) {
         artist = "Erik Satie",
         album = "Trois Gymnopédies (1888)",
         durationMs = 18000L,
-        genre = "Música Ambiente / Modal",
+        genre = context.getString(R.string.demo_genre_ambient_modal),
         era = "1888",
         filePath = fileMap["track_satie"],
         colorHex = 0xFF5B7C99,
@@ -81,7 +83,7 @@ class MusicRepository(private val context: Context) {
         artist = "Tarkas Acoustic Lab",
         album = "Audio Engineering Suite",
         durationMs = 18000L,
-        genre = "Calibração Acústica",
+        genre = context.getString(R.string.demo_genre_calibration),
         era = "2026",
         filePath = fileMap["track_sweep"],
         colorHex = 0xFF7A8A99,
@@ -180,11 +182,11 @@ class MusicRepository(private val context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) com.example.data.library.FolderPaths.normalize(it) else com.example.data.library.FolderPaths.ofFile(it)
           }
           folders["ms:$mediaId"] = folder
-          val artistName = c.getString(artist)?.takeUnless { it == MediaStore.UNKNOWN_STRING } ?: "Artista desconhecido"
+          val artistName = c.getString(artist)?.takeUnless { it == MediaStore.UNKNOWN_STRING } ?: Placeholders.unknownArtist()
           val (disc, number) = com.example.data.playback.AlbumOrder.discAndTrack(c.getInt(trackNo))
           found += Track(
             id = "ms:$mediaId",
-            title = c.getString(title) ?: "Sem título",
+            title = c.getString(title) ?: Placeholders.untitled(),
             artist = artistName,
             album = c.getString(album)?.takeUnless { it == MediaStore.UNKNOWN_STRING } ?: "",
             durationMs = c.getLong(duration),
@@ -230,9 +232,9 @@ class MusicRepository(private val context: Context) {
       id = "local_${System.currentTimeMillis()}",
       title = title,
       artist = artist,
-      album = "Biblioteca Local",
+      album = context.getString(R.string.library_local_library),
       durationMs = durationMs,
-      genre = "Áudio Local",
+      genre = context.getString(R.string.library_audio_fallback_name),
       era = "Local",
       isLocalFile = true,
       filePath = uriString,

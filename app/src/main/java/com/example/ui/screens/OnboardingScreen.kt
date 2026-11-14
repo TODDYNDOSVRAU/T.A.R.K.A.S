@@ -66,6 +66,7 @@ import com.example.ui.components.TarkasMark
 import com.example.ui.components.TextAction
 import com.example.ui.legal.LegalDoc
 import com.example.ui.legal.LegalTexts
+import com.example.ui.legal.currentLegalTexts
 import com.example.ui.theme.AppText
 import com.example.ui.theme.Size
 import com.example.ui.theme.Space
@@ -154,9 +155,10 @@ fun OnboardingScreen(
       }
       .testTag("onboarding")
   ) {
+    val legal = currentLegalTexts()
     val doc: LegalDoc? = when (reading) {
-      "terms" -> LegalTexts.terms
-      "privacy" -> LegalTexts.privacy
+      "terms" -> legal.terms
+      "privacy" -> legal.privacy
       else -> null
     }
     AnimatedContent(
@@ -338,7 +340,7 @@ private fun TermsStep(accepted: Boolean, onAccepted: (Boolean) -> Unit, onRead: 
   )
   SectionGap()
   InsetGroup {
-    LegalTexts.summary.forEachIndexed { i, line ->
+    currentLegalTexts().summary.forEachIndexed { i, line ->
       if (i > 0) GroupDivider()
       Text(
         line,

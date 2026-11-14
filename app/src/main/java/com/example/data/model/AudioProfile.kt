@@ -24,8 +24,8 @@ data class AudioProfile(
     // Flat / Default profile: strictly 0 dB across all 15 bands
     val FLAT = AudioProfile(
       id = "preset_flat",
-      name = "Flat (Linear 0 dB)",
-      description = "Resposta 100% linear e transparente. Todos os ganhos iniciam em 0 dB.",
+      name = "Flat",
+      description = "Fully linear, transparent response. Every gain starts at 0 dB.",
       bandLevelsMb = List(15) { 0.toShort() },
       bassBoostStrength = 0,
       virtualizerStrength = 0
@@ -34,7 +34,7 @@ data class AudioProfile(
     val PROG_ROCK = AudioProfile(
       id = "preset_prog_rock",
       name = "Prog Rock Master",
-      description = "Graves firmes em 63-100Hz, calor em 250Hz, presença em 2.5kHz e brilho em 10-16kHz para sintetizadores Moog e guitarras.",
+      description = "Firm bass at 63-100 Hz, warmth at 250 Hz, presence at 2.5 kHz and brightness at 10-16 kHz for Moog synths and guitars.",
       bandLevelsMb = listOf(
         200, 350, 450, 300, 150,
         100, 150, 250, 350, 450,
@@ -46,8 +46,8 @@ data class AudioProfile(
 
     val ACOUSTIC_CLARITY = AudioProfile(
       id = "preset_acoustic_clarity",
-      name = "Clareza Acústica",
-      description = "Atenuação de ressonâncias de caixa com foco em dedilhados cristalinos e harmônicos de cordas.",
+      name = "Acoustic Clarity",
+      description = "Tames body resonances, focusing on crystalline fingerpicking and string harmonics.",
       bandLevelsMb = listOf(
         -250, -200, -100, 50, 100,
         150, 200, 300, 400, 450,
@@ -59,8 +59,8 @@ data class AudioProfile(
 
     val VOCAL_PRESENCE = AudioProfile(
       id = "preset_vocal_presence",
-      name = "Presença Vocal",
-      description = "Destaque cirúrgico na faixa de inteligibilidade humana (800Hz a 4kHz) para máxima nitidez de vozes.",
+      name = "Vocal Presence",
+      description = "Surgical lift in the range of human intelligibility (800 Hz to 4 kHz) for maximum vocal clarity.",
       bandLevelsMb = listOf(
         -150, -100, 0, 50, 100,
         200, 300, 450, 600, 500,
@@ -72,8 +72,8 @@ data class AudioProfile(
 
     val BASS_PUNCH = AudioProfile(
       id = "preset_bass_punch",
-      name = "Impacto de Graves",
-      description = "Reforço encorpado nas 4 primeiras oitavas sem mascaramento das altas frequências.",
+      name = "Bass Punch",
+      description = "Full-bodied boost across the first four octaves without masking the high frequencies.",
       bandLevelsMb = listOf(
         600, 650, 550, 450, 300,
         150, 50, 0, 0, 0,

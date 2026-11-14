@@ -377,4 +377,11 @@
     <string name="player_sheet_handle">Drag to close</string>
     <string name="player_export_saved">Your data was saved.</string>
     <string name="player_export_failed">Could not save the file.</string>
+    <string name="player_notice_skipped">Could not play “%1$s”. Skipping to the next.</string>
+    <string name="player_notice_offline">No connection to play “%1$s”. Check the internet and tap Try again.</string>
+    <string name="player_notice_failed">Could not play “%1$s”.</string>
+    <string name="player_notice_retry">Try again</string>
+    <string name="player_notice_sleep_done">Sleep timer: music paused.</string>
+    <string name="player_notice_removed_from_queue">“%1$s” was removed from the queue.</string>
+    <string name="player_notice_undo">Undo</string>
 </resources>

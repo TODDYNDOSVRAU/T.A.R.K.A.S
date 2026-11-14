@@ -1,5 +1,6 @@
 package com.example.data.update
 
+import com.example.data.net.Http
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -24,7 +25,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 
 /**
@@ -43,13 +43,24 @@ object UpdateManager {
   private lateinit var app: Context
   private lateinit var store: UpdateStore
   private val lock = Mutex()
-  private val client = OkHttpClient.Builder()
-    .connectTimeout(15, TimeUnit.SECONDS)
-    .readTimeout(30, TimeUnit.SECONDS)
-    .build()
+  // Same connections and threads as the rest of the app; only the read timeout is longer, for the APK.
+  private val client = Http.client.newBuilder().readTimeout(30, TimeUnit.SECONDS).build()
 
   private val _state = MutableStateFlow(UpdateState())
   val state: StateFlow<UpdateState> = _state
+
+  @Volatile private var cancelRequested = false
+  @Volatile private var activeCall: okhttp3.Call? = null
+
+  /**
+   * Stops the download in progress: the transfer is cut, the partial file is deleted and the state goes
+   * back to "available". Does nothing when no download is running. Downloading again afterwards is safe.
+   */
+  fun cancelDownload() {
+    if (_state.value.phase != UpdateState.Phase.DOWNLOADING) return
+    cancelRequested = true
+    activeCall?.cancel()
+  }
 
   @Synchronized
   fun init(context: Context) {
@@ -187,9 +198,18 @@ object UpdateManager {
       _state.update { it.copy(problem = UpdateProblem.METERED) }
       return@withLock _state.value
     }
+    cancelRequested = false
     _state.update { it.copy(phase = UpdateState.Phase.DOWNLOADING, progress = 0f, problem = null) }
     val problem = withContext(Dispatchers.IO) { downloadAndVerify(release) }
-    if (problem == null) {
+    activeCall = null
+    if (cancelRequested) {
+      // The user cancelled: nothing partial or half-checked stays, and the update is offered again.
+      cancelRequested = false
+      store.verifiedTag = null
+      UpdateIntegrity.discardPartials(downloadsDir())
+      apkFile(release).delete()
+      _state.update { UpdateIntegrity.afterCancel(it) }
+    } else if (problem == null) {
       store.verifiedTag = release.tag
       _state.update { it.copy(phase = UpdateState.Phase.READY, progress = 1f, problem = null) }
     } else {
@@ -207,7 +227,7 @@ object UpdateManager {
     if (!online()) return UpdateProblem.NO_NETWORK
     try {
       val request = Request.Builder().url(release.apkUrl).header("User-Agent", "TARKAS-updater").build()
-      client.newCall(request).execute().use { r ->
+      client.newCall(request).also { activeCall = it }.execute().use { r ->
         if (!r.isSuccessful) return UpdateProblem.DOWNLOAD
         val body = r.body ?: return UpdateProblem.DOWNLOAD
         val total = body.contentLength().takeIf { it > 0 } ?: release.apkSize
@@ -218,6 +238,7 @@ object UpdateManager {
             val buf = ByteArray(64 * 1024)
             while (true) {
               currentCoroutineContext().ensureActive()
+              if (cancelRequested) { part.delete(); return UpdateProblem.DOWNLOAD }
               val n = input.read(buf)
               if (n < 0) break
               out.write(buf, 0, n)
@@ -239,8 +260,10 @@ object UpdateManager {
       return if (e.message?.contains("ENOSPC", true) == true || e.message?.contains("space", true) == true) UpdateProblem.DISK
       else UpdateProblem.DOWNLOAD
     }
-    val wanted = release.sha256 ?: release.checksumUrl?.let { fetchChecksum(it) ?: return UpdateProblem.CHECKSUM }
-    val problem = verify(part, wanted)
+    if (cancelRequested) { part.delete(); return UpdateProblem.DOWNLOAD }
+    val expected = UpdateIntegrity.expected(release, ::fetchChecksum)
+    if (expected == UpdateIntegrity.Expected.Unavailable) { part.delete(); return UpdateProblem.CHECKSUM }
+    val problem = verify(part, expected)
     if (problem != null) { part.delete(); return problem }
     if (target.exists()) target.delete()
     return if (part.renameTo(target)) null else UpdateProblem.DISK
@@ -258,8 +281,8 @@ object UpdateManager {
    * this package, it is newer than the installed version, and it carries the same signing certificate.
    * The signature check is what stops an APK from another key, which Android would refuse anyway.
    */
-  private fun verify(file: File, expectedSha256: String?): UpdateProblem? {
-    if (expectedSha256 != null && sha256(file) != expectedSha256.lowercase()) return UpdateProblem.CHECKSUM
+  private fun verify(file: File, expected: UpdateIntegrity.Expected): UpdateProblem? {
+    UpdateIntegrity.check(file, expected)?.let { return it }
     val pm = app.packageManager
     val flags = signingFlags()
     val archive = pm.getPackageArchiveInfo(file.absolutePath, flags) ?: return UpdateProblem.NOT_AN_APK
@@ -312,9 +335,13 @@ object UpdateManager {
     }
     _state.update { it.copy(phase = UpdateState.Phase.INSTALLING, problem = null) }
     val problem = withContext(Dispatchers.IO) {
-      // Checked again just before installing: the file sat on disk since the download.
-      verify(file, release.sha256).also { if (it != null) { file.delete(); store.verifiedTag = null } }
-        ?: commit(file)
+      // Checked again just before installing: the file sat on disk since the download. The hash comes
+      // from the same sources as at download time (digest, else the .sha256 file). If it cannot be
+      // fetched the file is kept, so the install can be tried again once the connection is back.
+      val expected = if (online()) UpdateIntegrity.expected(release, ::fetchChecksum) else UpdateIntegrity.expected(release) { null }
+      verify(file, expected).also {
+        if (it != null && it != UpdateProblem.HASH_UNAVAILABLE) { file.delete(); store.verifiedTag = null }
+      } ?: commit(file)
     }
     if (problem != null) {
       _state.update { it.copy(phase = if (store.verifiedTag != null) UpdateState.Phase.READY else UpdateState.Phase.AVAILABLE, problem = problem) }
@@ -391,15 +418,6 @@ object UpdateManager {
   private fun isMetered(): Boolean = app.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered ?: true
 
   private fun isMusicActive(): Boolean = app.getSystemService(AudioManager::class.java)?.isMusicActive ?: false
-
-  private fun sha256(file: File): String {
-    val md = MessageDigest.getInstance("SHA-256")
-    file.inputStream().use { input ->
-      val buf = ByteArray(64 * 1024)
-      while (true) { val n = input.read(buf); if (n < 0) break; md.update(buf, 0, n) }
-    }
-    return md.digest().joinToString("") { "%02x".format(it) }
-  }
 
   private fun sha256(bytes: ByteArray): String =
     MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }

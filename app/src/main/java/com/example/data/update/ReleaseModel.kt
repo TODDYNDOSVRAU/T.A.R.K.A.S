@@ -129,6 +129,7 @@ enum class UpdateProblem(@androidx.annotation.StringRes val messageRes: Int) {
   DOWNLOAD(com.example.R.string.update_problem_download),
   DISK(com.example.R.string.update_problem_disk),
   CHECKSUM(com.example.R.string.update_problem_checksum),
+  HASH_UNAVAILABLE(com.example.R.string.update_problem_hash_unavailable),
   NOT_AN_APK(com.example.R.string.update_problem_not_an_apk),
   WRONG_PACKAGE(com.example.R.string.update_problem_wrong_package),
   NOT_NEWER(com.example.R.string.update_problem_not_newer),

@@ -36,7 +36,7 @@ object AppGraph {
     val app = context.applicationContext
     com.example.data.diagnostics.Diagnostics.install(app)
     musicRepository = MusicRepository(app)
-    curiosityRepository = CuriosityRepository()
+    curiosityRepository = CuriosityRepository(app)
     audioEngineManager = AudioEngineManager(app)
     preferencesRepository = PreferencesRepository(app)
     musicRepository.setFolderRules(com.example.data.library.FolderRules.decode(preferencesRepository.getFolderRules()))
@@ -48,6 +48,7 @@ object AppGraph {
       tunings = com.example.data.audio.spatial.SpatialPreset.entries.associateWith { preferencesRepository.getSpatialTuning(it.key) }
     )
     curiositySpeechManager = CuriositySpeechManager(app)
+    com.example.data.model.Placeholders.init(app)
     libraryRepository = LibraryRepository(app)
     waveforms = com.example.data.waveform.WaveformRepository(
       app, kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)

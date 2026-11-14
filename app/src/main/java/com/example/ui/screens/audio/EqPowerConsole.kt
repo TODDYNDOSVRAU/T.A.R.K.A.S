@@ -1,5 +1,6 @@
 package com.example.ui.screens.audio
 
+import com.example.ui.theme.EqSize
 import com.example.R
 import androidx.compose.ui.res.stringResource
 import android.content.ClipData
@@ -7,6 +8,7 @@ import android.content.ClipboardManager
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import com.example.data.audio.dsp.EqTextFormat
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.selection.selectable
@@ -227,7 +229,7 @@ private fun ConsoleBelow(
 }
 
 private val RESPONSE_HEIGHT = 80.dp
-private val STATUS_HEIGHT = 52.dp
+private val STATUS_HEIGHT = Size.row
 // Switch row 48 + gap 4 + switch row 48 + gap 4 + two 48 dp segments with 2 dp padding each side.
 private val CONTROLS_HEIGHT = 204.dp
 private val LEFT_COLUMN_WIDTH = 160.dp
@@ -286,7 +288,7 @@ private fun ControlRow(
           contentAlignment = Alignment.Center
         ) {
           Text(
-            text = (activePreset?.name ?: stringResource(R.string.audio_preset_custom)) + if (eqModified) " •" else "",
+            text = (activePreset?.localizedName() ?: stringResource(R.string.audio_preset_custom)) + if (eqModified) " •" else "",
             style = AppText.Subhead.copy(fontWeight = FontWeight.SemiBold),
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
@@ -326,7 +328,7 @@ private fun ToneControl(label: String, db: Float, enabled: Boolean, testTag: Str
       onChange = { v -> onChange(snap(v * 2f * range - range)) },
       label = label,
       stateText = "${formatDb(db)} dB",
-      size = 60.dp,
+      size = EqSize.knobMeter,
       bipolar = true,
       enabled = enabled,
       steps = (2 * range).toInt() - 1,
@@ -410,6 +412,7 @@ private fun OverflowMenu(
 ) {
   var open by remember { mutableStateOf(false) }
   val context = LocalContext.current
+  val resources = LocalResources.current
   // Resolved when the menu item is chosen, from the same context, so the toast follows the app language.
   fun toast(text: String) = Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
   val clipboard = { context.getSystemService(ClipboardManager::class.java) }
@@ -439,20 +442,20 @@ private fun OverflowMenu(
         item(stringResource(R.string.audio_menu_delete_preset), onClick = actions.onDelete)
       }
       item(stringResource(R.string.audio_menu_copy_curve), "eq_export_text") {
-        clipboard()?.setPrimaryClip(ClipData.newPlainText("Curva", EqTextFormat.export(settings)))
-        toast(context.getString(R.string.audio_toast_curve_copied))
+        clipboard()?.setPrimaryClip(ClipData.newPlainText(resources.getString(R.string.audio_clipboard_curve), EqTextFormat.export(settings)))
+        toast(resources.getString(R.string.audio_toast_curve_copied))
       }
       item(stringResource(R.string.audio_menu_import_text), "eq_import_text") {
         val text = clipboard()?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
         when (val result = EqTextFormat.parse(text)) {
-          null -> toast(context.getString(R.string.audio_toast_import_failed))
+          null -> toast(resources.getString(R.string.audio_toast_import_failed))
           is EqTextFormat.Result.Parametric -> {
             onUpdateEq { EqTextFormat.apply(it, result) }
-            toast(context.resources.getQuantityString(R.plurals.audio_toast_imported_filters, result.bands.size, result.bands.size))
+            toast(resources.getQuantityString(R.plurals.audio_toast_imported_filters, result.bands.size, result.bands.size))
           }
           is EqTextFormat.Result.Graphic -> {
             onUpdateEq { EqTextFormat.apply(it, result) }
-            toast(context.resources.getQuantityString(R.plurals.audio_toast_imported_points, result.points, result.points, result.gainsDb.size))
+            toast(resources.getQuantityString(R.plurals.audio_toast_imported_points, result.points, result.points, result.gainsDb.size))
           }
         }
       }

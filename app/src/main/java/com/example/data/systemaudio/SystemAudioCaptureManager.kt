@@ -88,7 +88,7 @@ class SystemAudioCaptureManager(private val context: Context) {
 
       if (record.state != AudioRecord.STATE_INITIALIZED) {
         record.release()
-        _status.value = _status.value.copy(isCapturing = false, errorMessage = "O Android recusou a captura de áudio dos outros apps.")
+        _status.value = _status.value.copy(isCapturing = false, errorMessage = context.getString(com.example.R.string.audio_capture_denied))
       } else {
         record.startRecording()
         audioRecord = record
@@ -123,7 +123,7 @@ class SystemAudioCaptureManager(private val context: Context) {
       Log.e(TAG, "Error starting AudioPlaybackCapture", e)
       _status.value = _status.value.copy(
         isCapturing = false,
-        errorMessage = "Não foi possível iniciar a captura de áudio neste aparelho."
+        errorMessage = context.getString(com.example.R.string.audio_capture_failed)
       )
     }
   }

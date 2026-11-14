@@ -1,5 +1,6 @@
 package com.example
 
+import androidx.test.core.app.ApplicationProvider
 import com.example.data.model.AudioProfile
 import com.example.data.model.Track
 import com.example.data.repository.CuriosityRepository
@@ -8,10 +9,17 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+// The curiosities are resources now, so the repository needs a Context (Robolectric supplies one).
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [36])
 class TarkasDomainTest {
 
-  private val curiosityRepository = CuriosityRepository()
+  private val curiosityRepository =
+    CuriosityRepository(ApplicationProvider.getApplicationContext())
 
   @Test
   fun test15BandAudioProfilesAndZeroDbDefault() {

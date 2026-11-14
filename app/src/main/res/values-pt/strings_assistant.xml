@@ -72,4 +72,40 @@
     <string name="assistant_error_no_reply">O serviço online não devolveu resposta a esta pergunta. Tente de novo.</string>
     <string name="assistant_error_server">O serviço online não respondeu corretamente. Tente de novo em instantes.</string>
     <string name="assistant_retry">Tentar de novo</string>
+
+    <!-- Rótulos de verificação da curiosidade -->
+    <string name="assistant_curiosity_status_verified">Fato documentado e verificado</string>
+    <string name="assistant_curiosity_status_historical">Análise histórica e musical</string>
+    <string name="assistant_curiosity_status_technical">Especificação técnica acústica</string>
+
+    <!-- Narração em voz (TextToSpeech). Argumentos: título, artista, curiosidade. -->
+    <string name="assistant_spoken_intro">Curiosidade sobre %1$s, de %2$s: %3$s Aproveite o som!</string>
+    <string name="assistant_spoken_outro">Você sabia sobre %1$s? %2$s Essa foi %1$s, de %3$s.</string>
+    <string name="assistant_spoken_test">Olá! Eu sou a voz do Tarkas. Vou apresentar curiosidades curtas e fatos interessantes sobre as suas músicas favoritas.</string>
+
+    <!-- Respostas do motor do assistente -->
+    <string name="assistant_help_body">**Comandos Disponíveis:**\n• **\"analisar música\"**: pesquisa curiosidades e fatos da faixa em execução\n• **\"diagnóstico\"**: inspeciona rotas e hardware de áudio\n• **\"equalizador flat\"** (ou rock, pop, jazz, vocal, graves, agudos…): aplica um preset\n• **\"mais graves\"**, **\"menos agudos\"**…: move o controle de graves ou agudos em 3 dB\n• **\"timer de [X] minutos\"**: inicia temporizador local\n• **\"que música toca?\"**: exibe a faixa atual\n• **\"próxima\"**, **\"anterior\"**, **\"pausar\"**, **\"tocar\"**: controlam o player\n• **\"aleatório\"**, **\"repetir\"**, **\"favoritar\"**: ligam o modo ou guardam a faixa</string>
+    <string name="assistant_command_failed">Não consegui executar isso agora. Escolha uma faixa primeiro.</string>
+    <string name="assistant_tool_no_track_available">Nenhuma faixa disponível</string>
+    <string name="assistant_tool_analysis_done">Análise concluída: %1$s</string>
+    <string name="assistant_tool_no_curiosity">Sem curiosidade verificada</string>
+    <string name="assistant_analysis_done">Analisei **%1$s** (%2$s). A curiosidade fica no player: toque no mini player acima da barra e depois na lâmpada.</string>
+    <string name="assistant_analysis_none">Ainda não tenho uma curiosidade verificada sobre **%1$s**.</string>
+    <string name="assistant_no_track_analyze">Nenhuma música está tocando no momento para ser analisada.</string>
+    <string name="assistant_tool_no_track">Nenhuma faixa</string>
+    <string name="assistant_now_playing_detail">Tocando **%1$s** por **%2$s** (%3$s).</string>
+    <string name="assistant_no_track_playing">Nenhuma faixa em reprodução.</string>
+    <string name="assistant_audio_route">Rota ativa: **%1$s** (%2$s Hz, Estéreo 2.0). Efeitos operam na sessão interna do Tarkas.</string>
+    <string name="assistant_band_bass">Graves</string>
+    <string name="assistant_band_treble">Agudos</string>
+    <string name="assistant_tone_at_limit">%1$s em **%2$s dB**. Esse é o limite do controle.</string>
+    <string name="assistant_tone_set">%1$s em **%2$s dB**.</string>
+    <string name="assistant_tool_preset_applied">Preset %1$s ativado no equalizador</string>
+    <string name="assistant_eq_set">Equalizador ajustado para **%1$s**.</string>
+    <string name="assistant_timer_label">Timer de %1$dm %2$ds</string>
+    <string name="assistant_timer_set">Timer definido para **%1$s**.</string>
+    <string name="assistant_tool_timers_cancelled">Timers cancelados</string>
+    <string name="assistant_timers_cancelled">Temporizadores cancelados.</string>
+    <string name="assistant_hello">Olá! Em que posso ajudar com sua música ou áudio hoje?</string>
+    <string name="assistant_not_understood">Não entendi esse pedido. Digite **ajuda** para ver o que posso fazer.</string>
 </resources>

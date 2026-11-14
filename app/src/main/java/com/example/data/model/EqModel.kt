@@ -155,12 +155,12 @@ object EqPresets {
       EqSettings.withGains(listOf(2f, 2.5f, 2f, 1f, 0f, -1f, -1f, 0f, 1f, 1.5f, 2f, 2f, 2.5f, 2.5f, 2f))
     ),
     EqPreset(
-      "preset_classical", "Clássica",
+      "preset_classical", "Classical",
       EqSettings.withGains(listOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, -1f, -2f, -2.5f, -3f, -4f))
         .copy(trebleDb = 1f)
     ),
     EqPreset(
-      "preset_electronic", "Eletrônica",
+      "preset_electronic", "Electronic",
       EqSettings.withGains(listOf(4.5f, 4f, 3f, 1f, 0f, -1.5f, -1f, 0f, 0.5f, 1f, 2f, 3f, 3.5f, 4f, 4f))
     ),
     EqPreset(
@@ -168,7 +168,7 @@ object EqPresets {
       EqSettings(bassDb = 6f, bassFreqHz = 90f, trebleDb = 4f, trebleFreqHz = 9000f, preampDb = -3f)
     ),
     EqPreset(
-      "preset_treble", "Mais agudos",
+      "preset_treble", "More treble",
       EqSettings(trebleDb = 6f, trebleFreqHz = 6000f, preampDb = -2f)
     ),
     speechPreset()
@@ -180,7 +180,7 @@ object EqPresets {
     val bands = base.bands.mapIndexed { i, b ->
       if (i == 0) b.copy(type = FilterType.HIGH_PASS, freqHz = 80f, q = 0.7f) else b
     }
-    return EqPreset("preset_speech", "Voz e podcast", base.copy(bands = bands))
+    return EqPreset("preset_speech", "Voice and podcast", base.copy(bands = bands))
   }
 
   // ---- JSON ----

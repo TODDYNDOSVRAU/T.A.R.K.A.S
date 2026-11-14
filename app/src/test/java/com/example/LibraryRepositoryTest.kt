@@ -94,7 +94,7 @@ class LibraryRepositoryTest {
   @Test
   fun `a playlist with a blank name gets a default name`() {
     val playlist = library.createPlaylist("   ")
-    assertEquals("Nova playlist", playlist.name)
+    assertEquals(context.getString(com.example.R.string.library_new_playlist_title), playlist.name)
     assertTrue(playlist.trackIds.isEmpty())
   }
 

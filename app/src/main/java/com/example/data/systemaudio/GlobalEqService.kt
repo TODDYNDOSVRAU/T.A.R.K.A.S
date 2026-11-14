@@ -239,7 +239,7 @@ class GlobalEqService : Service() {
 
   private fun labelFor(uid: Int): String {
     val pkg = runCatching { packageManager.getPackagesForUid(uid)?.firstOrNull() }.getOrNull()
-    return pkg?.let(::labelForPackage) ?: if (uid < 10000) "Sistema Android" else "App (uid $uid)"
+    return pkg?.let(::labelForPackage) ?: if (uid < 10000) getString(com.example.R.string.audio_app_system) else getString(com.example.R.string.audio_app_uid, uid)
   }
 
   private fun labelForPackage(pkg: String): String = runCatching {
@@ -249,7 +249,7 @@ class GlobalEqService : Service() {
   private fun notification(): android.app.Notification {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       getSystemService(NotificationManager::class.java)?.createNotificationChannel(
-        NotificationChannel(CHANNEL_ID, "Equalizador em todos os apps", NotificationManager.IMPORTANCE_LOW)
+        NotificationChannel(CHANNEL_ID, getString(com.example.R.string.audio_globaleq_channel), NotificationManager.IMPORTANCE_LOW)
       )
     }
     val open = PendingIntent.getActivity(
@@ -257,8 +257,8 @@ class GlobalEqService : Service() {
     )
     return NotificationCompat.Builder(this, CHANNEL_ID)
       .setSmallIcon(android.R.drawable.ic_media_play)
-      .setContentTitle("Equalizador ligado em todos os apps")
-      .setContentText("O T.A.R.K.A.S. aplica sua curva ao som dos outros apps.")
+      .setContentTitle(getString(com.example.R.string.audio_globaleq_title))
+      .setContentText(getString(com.example.R.string.audio_globaleq_text))
       .setContentIntent(open)
       .setOngoing(true)
       .setSilent(true)

@@ -41,4 +41,7 @@
     <string name="update_ready_title">T.A.R.K.A.S. update ready</string>
     <string name="update_ready_text">Tap to confirm the installation.</string>
     <string name="player_more_options_for">More options for %1$s</string>
+    <string name="update_problem_hash_unavailable">The update was not installed: the published checksum could not be fetched, so the file cannot be verified. Connect to the internet and tap \"Install now\" again.</string>
+    <string name="settings_update_cancel_download">Cancel download</string>
+    <string name="settings_update_notes_title">What is new in %1$s</string>
 </resources>

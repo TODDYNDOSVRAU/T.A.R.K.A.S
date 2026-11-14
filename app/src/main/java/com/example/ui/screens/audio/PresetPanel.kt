@@ -1,5 +1,6 @@
 package com.example.ui.screens.audio
 
+import com.example.ui.theme.EqSize
 import androidx.annotation.StringRes
 import androidx.compose.ui.res.pluralStringResource
 import com.example.R
@@ -77,7 +78,7 @@ private enum class PresetFilter(@StringRes val labelRes: Int) {
 
 /** Size of the curve thumbnail in a preset row, and the leading slot of every row in the list. */
 private val THUMB_W = 64.dp
-private val THUMB_H = 32.dp
+private val THUMB_H = Space.xxl
 private const val THUMB_POINTS = 48
 
 /**
@@ -107,8 +108,9 @@ internal fun PresetPanel(
   var filter by rememberSaveable { mutableStateOf(PresetFilter.ALL) }
   val query = deviceSearch.query
   val words = query.trim().lowercase()
-  val mine = presets.filter { it.isCustom && (words.isEmpty() || words in it.name.lowercase()) }
-  val builtIn = presets.filter { !it.isCustom && (words.isEmpty() || words in it.name.lowercase()) }
+  val names = presets.associate { it.id to it.localizedName() }
+  val mine = presets.filter { it.isCustom && (words.isEmpty() || words in names.getValue(it.id).lowercase()) }
+  val builtIn = presets.filter { !it.isCustom && (words.isEmpty() || words in names.getValue(it.id).lowercase()) }
   val showMine = filter == PresetFilter.ALL || filter == PresetFilter.MINE
   val showBuiltIn = filter == PresetFilter.ALL || filter == PresetFilter.BUILT_IN
   val showFones = filter == PresetFilter.ALL || filter == PresetFilter.FONES
@@ -214,7 +216,7 @@ internal fun PresetPanel(
     }
 
     LazyColumn(
-      modifier = Modifier.fillMaxWidth().heightIn(max = 560.dp),
+      modifier = Modifier.fillMaxWidth().heightIn(max = EqSize.presetListMax),
       contentPadding = PaddingValues(bottom = Space.xl + navBar)
     ) {
       val nothing = !deviceSearch.loading && deviceSearch.error == null &&
@@ -248,7 +250,7 @@ internal fun PresetPanel(
       if (showBuiltIn && builtIn.isNotEmpty()) {
         item(key = "h_builtin") { ListSection(stringResource(R.string.audio_section_builtin)) }
         items(builtIn, key = { "p_" + it.id }) { p ->
-          PresetRow(p.name, stringResource(R.string.audio_preset_kind_builtin), p.settings, selected = p.id == activePresetId, onClick = { onPickPreset(p) }, modifier = Modifier.animateItem(placementSpec = Motion.gel()))
+          PresetRow(names.getValue(p.id), stringResource(R.string.audio_preset_kind_builtin), p.settings, selected = p.id == activePresetId, onClick = { onPickPreset(p) }, modifier = Modifier.animateItem(placementSpec = Motion.gel()))
         }
       }
       if (showFones) {
@@ -260,7 +262,7 @@ internal fun PresetPanel(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(horizontal = Space.page, vertical = Space.s)
               ) {
-                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                CircularProgressIndicator(modifier = Modifier.size(EqSize.progress), strokeWidth = Space.xxs)
                 Spacer(Modifier.width(Space.m))
                 Text(stringResource(R.string.audio_device_downloading), style = AppText.Footnote, color = colors.onSurfaceVariant)
               }
@@ -376,7 +378,7 @@ private fun FoneRow(entry: AutoEqEntry, selected: Boolean, applying: Boolean, on
     },
     trailing = {
       when {
-        applying -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+        applying -> CircularProgressIndicator(modifier = Modifier.size(Size.iconSmall), strokeWidth = Space.xxs)
         selected -> Icon(Icons.Rounded.Check, contentDescription = null, tint = colors.primary)
       }
     }
@@ -402,10 +404,10 @@ private fun CurveThumb(settings: EqSettings) {
     val path = Path()
     points.forEachIndexed { i, db ->
       val x = i / (THUMB_POINTS - 1f) * w
-      val y = mid - (db.coerceIn(-range, range) / range) * (mid - 3.dp.toPx())
+      val y = mid - (db.coerceIn(-range, range) / range) * (mid - EqSize.knobInset.toPx())
       if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
     }
-    drawPath(path, line, style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round))
+    drawPath(path, line, style = Stroke(width = EqSize.lineFine.toPx(), cap = StrokeCap.Round))
   }
 }
 

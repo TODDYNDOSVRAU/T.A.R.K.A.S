@@ -3,6 +3,7 @@ package com.example.ui.screens
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -77,6 +78,7 @@ import com.example.ui.components.SubPageHeader
 import com.example.ui.components.SwitchRow
 import com.example.ui.components.TarkasMark
 import com.example.ui.legal.LegalTexts
+import com.example.ui.legal.currentLegalTexts
 import com.example.ui.theme.AppMotion
 import com.example.ui.theme.ListAnimation
 import com.example.ui.theme.AppText
@@ -186,10 +188,10 @@ fun SettingsScreen(
         onRestartOnboarding = onRestartOnboarding
       )
       // These pages draw their own header, so they keep it below the status bar themselves.
-      SettingsPage.TERMS -> LegalScreen(LegalTexts.terms, textOrigin.backLabel(), onBack = ::back, modifier = Modifier.statusBarsPadding())
-      SettingsPage.PRIVACY -> LegalScreen(LegalTexts.privacy, textOrigin.backLabel(), onBack = ::back, modifier = Modifier.statusBarsPadding())
-      SettingsPage.LICENSES -> LegalScreen(LegalTexts.licenses, textOrigin.backLabel(), onBack = ::back, modifier = Modifier.statusBarsPadding())
-      SettingsPage.CHANGELOG -> LegalScreen(LegalTexts.changelog, textOrigin.backLabel(), onBack = ::back, modifier = Modifier.statusBarsPadding())
+      SettingsPage.TERMS -> LegalScreen(currentLegalTexts().terms, textOrigin.backLabel(), onBack = ::back, modifier = Modifier.statusBarsPadding())
+      SettingsPage.PRIVACY -> LegalScreen(currentLegalTexts().privacy, textOrigin.backLabel(), onBack = ::back, modifier = Modifier.statusBarsPadding())
+      SettingsPage.LICENSES -> LegalScreen(currentLegalTexts().licenses, textOrigin.backLabel(), onBack = ::back, modifier = Modifier.statusBarsPadding())
+      SettingsPage.CHANGELOG -> LegalScreen(currentLegalTexts().changelog, textOrigin.backLabel(), onBack = ::back, modifier = Modifier.statusBarsPadding())
     }
   }
 }
@@ -254,6 +256,8 @@ private fun MainSettings(
   val diagnosticsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
     if (uri != null) onExportDiagnostics(uri)
   }
+  val languageHeader = stringResource(R.string.settings_language)
+  val languageFooter = stringResource(R.string.settings_language_footer)
   val diagnosticsHeader = stringResource(R.string.settings_diagnostics)
   val diagnosticsFooter = stringResource(R.string.settings_diagnostics_footer)
   val savedCrashes = remember { com.example.data.diagnostics.Diagnostics.crashCount() }
@@ -322,6 +326,11 @@ private fun MainSettings(
         onCheckedChange = onReduceMotionChange,
         modifier = Modifier.testTag("settings_reduce_motion")
       )
+    }
+
+    // Idioma: Android keeps a per-app language only from version 13; below it the app follows the system.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      settingsGroup(languageHeader, footer = languageFooter, tag = "settings_language_card") { LanguageOptionRows() }
     }
 
     // Reprodução
@@ -537,6 +546,7 @@ private fun AboutPage(
 ) {
   val colors = MaterialTheme.colorScheme
   val context = LocalContext.current
+  val credits = currentLegalTexts().credits
   var copied by remember { mutableStateOf(false) }
   fun open(url: String) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
@@ -618,7 +628,7 @@ private fun AboutPage(
       ListRow(title = stringResource(R.string.settings_about_licenses), onClick = { onOpen(SettingsPage.LICENSES) }, modifier = Modifier.testTag("about_licenses"))
     }
     settingsGroup(context.getString(R.string.settings_about_credits)) {
-      LegalTexts.credits.forEachIndexed { i, (title, body) ->
+      credits.forEachIndexed { i, (title, body) ->
         if (i > 0) GroupDivider()
         Column(
           modifier = Modifier

@@ -177,6 +177,8 @@ import com.example.ui.theme.Shapes
 import com.example.ui.theme.Size
 import com.example.ui.theme.Space
 import com.example.ui.theme.TarkasDarkOverride
+import com.example.ui.theme.TalBlack
+import com.example.ui.theme.TalNeutralTint
 import com.example.ui.theme.TarkasIce
 import com.example.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.CancellationException
@@ -371,8 +373,8 @@ fun MusicScreen(
         icon = Icons.Rounded.SkipPrevious,
         contentDescription = stringResource(R.string.player_screen_previous),
         onClick = onPreviousTrack,
-        touch = 72.dp,
-        glyph = 44.dp,
+        touch = Size.control,
+        glyph = Size.controlGlyph,
         tint = OnPage,
         modifier = Modifier.playerPart("prev", delay = 0.12f).testTag("music_btn_previous")
       )
@@ -381,8 +383,8 @@ fun MusicScreen(
         icon = Icons.Rounded.SkipNext,
         contentDescription = stringResource(R.string.player_screen_next),
         onClick = onNextTrack,
-        touch = 72.dp,
-        glyph = 44.dp,
+        touch = Size.control,
+        glyph = Size.controlGlyph,
         tint = OnPage,
         modifier = Modifier.playerPart("next", delay = 0.12f).testTag("music_btn_next")
       )
@@ -583,7 +585,7 @@ private fun CloseHandle(onClose: () -> Unit, modifier: Modifier = Modifier) {
   Box(
     modifier = modifier
       .padding(top = Space.xs)
-      .size(width = 72.dp, height = Size.touch)
+      .size(width = Size.control, height = Size.touch)
       .clip(Shapes.pill)
       .clickable(role = Role.Button, onClick = onClose)
       .semantics { contentDescription = closeLabel }
@@ -592,7 +594,7 @@ private fun CloseHandle(onClose: () -> Unit, modifier: Modifier = Modifier) {
   ) {
     Box(
       Modifier
-        .size(width = 36.dp, height = 5.dp)
+        .size(width = Size.handleWidth, height = Size.handleHeight)
         .clip(Shapes.pill)
         .background(OnPage.copy(alpha = 0.4f))
     )
@@ -1046,7 +1048,7 @@ private fun CarouselCover(
         // The shadow is softer and wider at full size, tighter when it steps back, absent while it is
         // still the small cover of the mini player, and only under the middle cover.
         shadowElevation = if (near >= 1f) 0f else
-          (8.dp + 16.dp * ((s - PlayerTravel.PausedScale) / (1f - PlayerTravel.PausedScale)).coerceIn(0f, 1f)).toPx() * p * (1f - near)
+          (Space.s + Space.l * ((s - PlayerTravel.PausedScale) / (1f - PlayerTravel.PausedScale)).coerceIn(0f, 1f)).toPx() * p * (1f - near)
         shape = if (t != null) {
           RoundedCornerShape(PlayerTravel.cornerAt(Radius.s.toPx(), Radius.m.toPx(), t.progress, t.scale * s))
         } else {
@@ -1085,7 +1087,7 @@ private fun CarouselCover(
         .graphicsLayer { alpha = abs(index - carousel.camera.floatValue).coerceAtMost(1f) }
         .drawBehind {
           drawRect(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.06f), Color.Transparent), endY = size.height * 0.5f))
-          val w = 1.dp.toPx()
+          val w = Size.hairline.toPx()
           val r = Radius.m.toPx()
           drawRoundRect(
             color = Color.White.copy(alpha = 0.12f),
@@ -1099,7 +1101,7 @@ private fun CarouselCover(
   }
 }
 
-private val AbsoluteBlack = Color(0xFF080808)
+private val AbsoluteBlack = TalBlack
 
 /**
  * Fades the content to nothing over [width] at its left and right edges, so the side covers do not end
@@ -1112,7 +1114,7 @@ private fun Modifier.carouselEdgeFade(width: Dp): Modifier {
   // The offscreen layer cuts at its bounds, and the middle cover's shadow reaches well past the carousel
   // above and below: the layer is made taller than the carousel (room on both sides), while the
   // carousel itself keeps its size in the page's layout.
-  val room = 72.dp
+  val room = Size.control
   return this
     .layout { measurable, c ->
       val extra = room.roundToPx() * 2
@@ -1229,7 +1231,7 @@ private fun Modifier.playerPart(part: String? = null, byHeight: Boolean = false,
     } else {
       val t = ((p - 0.25f) / 0.5f).coerceIn(0f, 1f)
       alpha = t * t * (3f - 2f * t)
-      translationY = (1f - t) * 24.dp.toPx()
+      translationY = (1f - t) * Space.xl.toPx()
     }
   }
 
@@ -1316,7 +1318,7 @@ private fun PlayPauseButton(isPlaying: Boolean, onClick: () -> Unit) {
   val press by animateFloatAsState(if (pressed) 1f else 0f, Motion.defaultEffects(), label = "playPress")
   Box(
     modifier = Modifier
-      .size(88.dp)
+      .size(Size.playButton)
       .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
       .testTag("music_btn_play_pause"),
     contentAlignment = Alignment.Center
@@ -1325,7 +1327,7 @@ private fun PlayPauseButton(isPlaying: Boolean, onClick: () -> Unit) {
       isPlaying = isPlaying,
       tint = OnPage,
       modifier = Modifier
-        .size(64.dp)
+        .size(Size.playGlyph)
         .playerPart("play", delay = 0.08f)
         .graphicsLayer {
           val s = 1f - 0.08f * press
@@ -1634,7 +1636,7 @@ private fun rememberStreamVolume(): StreamVolume {
  * Shown while the artwork's colour is unknown and after it fails: a neutral grey from the identity
  * palette (Precision White at 12% over Absolute Black = #242424), with no hue of its own.
  */
-private val NeutralTint = Color(0xFF242424)
+private val NeutralTint = TalNeutralTint
 
 /**
  * The colour the page is tinted with. It comes from the artwork's pixels: [Track.colorHex] is not the
@@ -1732,7 +1734,7 @@ private fun Modifier.coverBackdrop(bitmap: ImageBitmap?, seconds: State<Float>):
         )
       }
     }
-    drawRect(Color(0xFF080808).copy(alpha = 0.62f))
+    drawRect(TalBlack.copy(alpha = 0.62f))
   }
 }
 

@@ -48,8 +48,8 @@ class AudioCaptureService : Service() {
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     val notification = NotificationCompat.Builder(this, CHANNEL_ID)
       .setSmallIcon(android.R.drawable.ic_media_play)
-      .setContentTitle("Medidor de nível ligado")
-      .setContentText("Mede o volume do som dos outros apps. Desliga ao sair de Ajustes avançados.")
+      .setContentTitle(getString(com.example.R.string.audio_capture_notif_title))
+      .setContentText(getString(com.example.R.string.audio_capture_notif_text))
       .setOngoing(true)
       .setSilent(true)
       .build()
@@ -94,10 +94,10 @@ class AudioCaptureService : Service() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       val channel = NotificationChannel(
         CHANNEL_ID,
-        "Captura de Áudio do Sistema",
+        getString(com.example.R.string.audio_capture_channel_name),
         NotificationManager.IMPORTANCE_LOW
       ).apply {
-        description = "Canal de notificação para serviço de captura de áudio"
+        description = getString(com.example.R.string.audio_capture_channel_desc)
         setShowBadge(false)
       }
       val manager = getSystemService(NotificationManager::class.java)

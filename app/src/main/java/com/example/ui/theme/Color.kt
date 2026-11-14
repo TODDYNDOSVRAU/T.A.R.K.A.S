@@ -45,3 +45,6 @@ val AmoledBlack = Color(0xFF000000)
 // so these stay: coral on dark, a deeper red that keeps 4.5:1 on light.
 val TalErrorDark = Color(0xFFFF6B6B)
 val TalErrorLight = Color(0xFFC62828)
+
+// Precision White at 12 % over Absolute Black: the neutral grey shown where artwork has no colour.
+val TalNeutralTint = Color(0xFF242424)

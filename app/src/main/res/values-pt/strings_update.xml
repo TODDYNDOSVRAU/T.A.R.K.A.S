@@ -41,4 +41,7 @@
     <string name="update_ready_title">Atualização do T.A.R.K.A.S. pronta</string>
     <string name="update_ready_text">Toque para confirmar a instalação.</string>
     <string name="player_more_options_for">Mais opções para %1$s</string>
+    <string name="update_problem_hash_unavailable">A atualização não foi instalada: não foi possível obter o checksum publicado, então o arquivo não pode ser verificado. Conecte-se à internet e toque em \"Instalar agora\" de novo.</string>
+    <string name="settings_update_cancel_download">Cancelar download</string>
+    <string name="settings_update_notes_title">Novidades em %1$s</string>
 </resources>

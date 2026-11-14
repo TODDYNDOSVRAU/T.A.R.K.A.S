@@ -10,6 +10,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 class PreferencesRepository(context: Context) {
+  private val appContext = context.applicationContext
   private val prefs: SharedPreferences = context.getSharedPreferences("tarkas_prefs", Context.MODE_PRIVATE)
 
   companion object {
@@ -363,7 +364,7 @@ class PreferencesRepository(context: Context) {
           AudioProfile(
             id = obj.getString("id"),
             name = obj.getString("name"),
-            description = obj.optString("desc", "Perfil customizado pelo usuário"),
+            description = obj.optString("desc", appContext.getString(com.example.R.string.eq_profile_custom_description)),
             bandLevelsMb = bands,
             bassBoostStrength = obj.optInt("bass", 0).toShort(),
             virtualizerStrength = obj.optInt("virt", 0).toShort(),

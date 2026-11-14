@@ -1,5 +1,7 @@
 package com.example.ui.screens.audio
 
+import com.example.ui.theme.Size as ThemeSize
+import com.example.ui.theme.EqSize
 import androidx.compose.ui.platform.LocalContext
 import com.example.R
 import androidx.compose.ui.res.stringResource
@@ -187,7 +189,7 @@ internal fun EqGraph(
 
       // Grid: 0 dB, ±6 and ±12 dB; decades of frequency
       listOf(-12f, -6f, 6f, 12f).forEach { db -> drawLine(grid, Offset(0f, dbToY(db, h)), Offset(w, dbToY(db, h)), 1f) }
-      drawLine(zero, Offset(0f, dbToY(0f, h)), Offset(w, dbToY(0f, h)), 1.dp.toPx())
+      drawLine(zero, Offset(0f, dbToY(0f, h)), Offset(w, dbToY(0f, h)), ThemeSize.hairline.toPx())
       listOf(100f, 1000f, 10000f).forEach { f ->
         val x = freqToX(f) * w
         drawLine(grid, Offset(x, 0f), Offset(x, h), 1f)
@@ -217,7 +219,7 @@ internal fun EqGraph(
         drawPath(
           guide,
           label.copy(alpha = 0.6f * dim),
-          style = Stroke(width = 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f)))
+          style = Stroke(width = ThemeSize.hairline.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f)))
         )
       }
 
@@ -230,7 +232,7 @@ internal fun EqGraph(
           val y = dbToY(db.coerceIn(-GRAPH_DB_RANGE - 3f, GRAPH_DB_RANGE + 3f), h)
           if (i == 0) bp.moveTo(x, y) else bp.lineTo(x, y)
         }
-        drawPath(bp, bandTints[bi].copy(alpha = 0.7f * dim), style = Stroke(width = 1.dp.toPx(), cap = StrokeCap.Round))
+        drawPath(bp, bandTints[bi].copy(alpha = 0.7f * dim), style = Stroke(width = ThemeSize.hairline.toPx(), cap = StrokeCap.Round))
       }
 
       // Response curve with a light fill towards 0 dB
@@ -249,19 +251,19 @@ internal fun EqGraph(
         close()
       }
       drawPath(fill, accent.copy(alpha = 0.10f * dim))
-      drawPath(path, accent.copy(alpha = dim), style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
+      drawPath(path, accent.copy(alpha = dim), style = Stroke(width = Space.xxs.toPx(), cap = StrokeCap.Round))
 
       // Band nodes: the selected one filled with the accent
       settings.activeBands.forEachIndexed { i, band ->
         val pos = nodePosition(curveKey, i, w, h)
         val isSel = i == selectedBand
-        val r = if (isSel) 6.dp.toPx() else 4.dp.toPx()
+        val r = if (isSel) EqSize.nodeSelected.toPx() else Space.xs.toPx()
         val c = (if (band.enabled) bandTints.getOrElse(i) { accent } else label).copy(alpha = dim)
         if (isSel) {
           drawCircle(c, radius = r, center = pos)
         } else {
           drawCircle(nodeFill, radius = r, center = pos)
-          drawCircle(c, radius = r, center = pos, style = Stroke(width = 1.5.dp.toPx()))
+          drawCircle(c, radius = r, center = pos, style = Stroke(width = EqSize.lineFine.toPx()))
         }
       }
 
@@ -278,7 +280,7 @@ internal fun EqGraph(
             Offset(left, 0f),
             Size(ww, h),
             CornerRadius(com.example.ui.theme.Radius.xs.toPx()),
-            style = Stroke(1.dp.toPx())
+            style = Stroke(ThemeSize.hairline.toPx())
           )
         }
       }

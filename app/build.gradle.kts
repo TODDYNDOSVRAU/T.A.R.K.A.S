@@ -18,8 +18,8 @@ android {
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
-  // Do not remove or modify these signingConfigs. They are necessary for building, installing,
-  // and updating Android apps in AI Studio.
+  // The release key comes from the environment (see release-signing.local); the debug key is in the
+  // repository so every machine produces the same debug build.
   signingConfigs {
     create("release") {
       val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
@@ -42,13 +42,9 @@ android {
       isMinifyEnabled = true
       isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      // Do not remove or modify this signingConfig assignment. It is necessary for Android apps in
-      // AI Studio.
       signingConfig = signingConfigs.getByName("release")
     }
     debug {
-      // Do not remove or modify this signingConfig assignment. It is necessary for Android apps in
-      // AI Studio.
       signingConfig = signingConfigs.getByName("debugConfig")
     }
   }
@@ -69,24 +65,52 @@ android {
   }
 }
 
-// Configure the Secrets Gradle Plugin to use .env and .env.example files
-// to match the convention used in Web projects.
+// Keys (Gemini, Jamendo) are read from .env, which stays out of git; .env.example lists the names.
 secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
-  ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
 }
 
-// Some unused dependencies are commented out below instead of being removed.
-// This makes it easy to add them back in the future if needed.
+/** Writes the Maven group and name of everything the release build ships, one per line. */
+abstract class WriteDependencyModules : DefaultTask() {
+  @get:Input abstract val modules: ListProperty<String>
+  @get:OutputFile abstract val output: RegularFileProperty
+
+  @TaskAction
+  fun write() {
+    output.get().asFile.writeText(modules.get().joinToString("\n"))
+  }
+}
+
+// LicenseCoverageTest reads this list and fails when a shipped dependency has no entry on the
+// licences screen (ui/legal/OpenSourceNotices.kt), so the screen cannot fall behind the build.
+val dependencyModulesFile = layout.buildDirectory.file("generated/licenses/dependency-modules.txt")
+val writeDependencyModules = tasks.register<WriteDependencyModules>("writeDependencyModules") {
+  modules.set(
+    providers.provider { configurations.getByName("releaseRuntimeClasspath") }.flatMap { classpath ->
+      classpath.incoming.resolutionResult.rootComponent.map { root ->
+        val seen = LinkedHashSet<ResolvedComponentResult>()
+        val queue = ArrayDeque(listOf(root))
+        while (queue.isNotEmpty()) {
+          val component = queue.removeFirst()
+          if (!seen.add(component)) continue
+          component.dependencies.filterIsInstance<ResolvedDependencyResult>().forEach { queue.add(it.selected) }
+        }
+        seen.mapNotNull { (it.id as? ModuleComponentIdentifier)?.let { id -> "${id.group}:${id.module}" } }.distinct().sorted()
+      }
+    }
+  )
+  output.set(dependencyModulesFile)
+}
+tasks.withType<Test>().configureEach {
+  dependsOn(writeDependencyModules)
+  inputs.file(dependencyModulesFile).withPropertyName("dependencyModules").withPathSensitivity(PathSensitivity.NONE)
+  systemProperty("tarkas.dependencyModules", dependencyModulesFile.get().asFile.absolutePath)
+}
+
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
-  // implementation(libs.accompanist.permissions)
   implementation(libs.androidx.activity.compose)
-  // implementation(libs.androidx.camera.camera2)
-  // implementation(libs.androidx.camera.core)
-  // implementation(libs.androidx.camera.lifecycle)
-  // implementation(libs.androidx.camera.view)
   implementation(libs.androidx.compose.material.icons.core)
   implementation(libs.androidx.compose.material.icons.extended)
   implementation(libs.androidx.compose.material3)
@@ -104,17 +128,12 @@ dependencies {
   implementation(libs.androidx.media3.session)
   // Cover art and thumbnails
   implementation(libs.coil.compose)
-  // implementation(libs.androidx.datastore.preferences)
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.lifecycle.viewmodel.compose)
-  // implementation(libs.androidx.navigation.compose)
-  // Room, Retrofit, Moshi, Firebase (AI, App Check) and the OkHttp logging interceptor were never
-  // used by the app and were removed in 1.7; their versions stay in libs.versions.toml.
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.okhttp)
-  // implementation(libs.play.services.location)
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)

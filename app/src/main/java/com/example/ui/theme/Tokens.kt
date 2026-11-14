@@ -54,4 +54,14 @@ object Size {
   val rowArtwork = 48.dp
   val icon = 24.dp
   val iconSmall = 20.dp
+  /** The player's transport buttons: touch target and glyph. */
+  val control = 72.dp
+  val controlGlyph = 44.dp
+  /** The big play button and its glyph. */
+  val playButton = 88.dp
+  val playGlyph = 64.dp
+  /** The grab handle at the top of the player. */
+  val handleWidth = 36.dp
+  val handleHeight = 5.dp
+  val hairline = 1.dp
 }

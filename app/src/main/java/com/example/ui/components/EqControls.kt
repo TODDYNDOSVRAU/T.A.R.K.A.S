@@ -1,5 +1,8 @@
 package com.example.ui.components
 
+import com.example.ui.theme.Size as ThemeSize
+import com.example.ui.theme.Space
+import com.example.ui.theme.EqSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -165,11 +168,11 @@ fun EqFader(
     val bottom = size.height - handleH / 2f
     val mid = (top + bottom) / 2f
     val y = bottom - (value.coerceIn(-1f, 1f) + 1f) / 2f * (bottom - top)
-    val trackW = 2.dp.toPx()
+    val trackW = Space.xxs.toPx()
 
     // Dotted marks at +max, 0 dB and -max on both sides of the track, like the rule of a desk.
-    val dot = 1.dp.toPx()
-    val gap = 7.dp.toPx()
+    val dot = ThemeSize.hairline.toPx()
+    val gap = EqSize.faderDotGap.toPx()
     for (markY in floatArrayOf(top, mid, bottom)) {
       drawCircle(tick, dot, Offset(cx - gap, markY))
       drawCircle(tick, dot, Offset(cx + gap, markY))
@@ -177,7 +180,7 @@ fun EqFader(
 
     drawLine(track, Offset(cx, top), Offset(cx, bottom), strokeWidth = trackW, cap = StrokeCap.Round)
     if (abs(y - mid) > 0.5f) {
-      drawLine(accent, Offset(cx, mid), Offset(cx, y), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
+      drawLine(accent, Offset(cx, mid), Offset(cx, y), strokeWidth = EqSize.lineBold.toPx(), cap = StrokeCap.Round)
     }
     // The thumb: a tall pill with a light dash across it.
     drawRoundRect(
@@ -187,16 +190,16 @@ fun EqFader(
       cornerRadius = CornerRadius(handleW / 2f)
     )
     val dashW = handleW * 0.46f
-    drawLine(dash, Offset(cx - dashW / 2f, y), Offset(cx + dashW / 2f, y), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
+    drawLine(dash, Offset(cx - dashW / 2f, y), Offset(cx + dashW / 2f, y), strokeWidth = Space.xxs.toPx(), cap = StrokeCap.Round)
   }
 }
 
 /** How far above or below the handle's centre a finger still grabs it: a 48 dp touch target. */
-private val FADER_GRAB = 24.dp
+private val FADER_GRAB = ThemeSize.icon
 
 /** The handle's size; its travel stops half a handle from each end. */
-private val FADER_HANDLE_H = 38.dp
-private val FADER_HANDLE_W = 24.dp
+private val FADER_HANDLE_H = EqSize.faderHandleHeight
+private val FADER_HANDLE_W = ThemeSize.icon
 
 /**
  * A rotary knob: a quiet disc with an indicator, and an arc showing the value. [value] runs 0..1;
@@ -212,7 +215,7 @@ fun EqKnob(
   label: String,
   stateText: String,
   modifier: Modifier = Modifier,
-  size: Dp = 64.dp,
+  size: Dp = EqSize.knob,
   bipolar: Boolean = false,
   defaultValue: Float = if (bipolar) 0.5f else 0f,
   enabled: Boolean = true,
@@ -260,11 +263,11 @@ fun EqKnob(
       }
   ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
-      val stroke = 4.dp.toPx()
+      val stroke = Space.xs.toPx()
       val inset = stroke / 2f
       val arcTopLeft = Offset(inset, inset)
       val arcSize = Size(this.size.width - stroke, this.size.height - stroke)
-      val discR = this.size.minDimension / 2f - stroke - 3.dp.toPx()
+      val discR = this.size.minDimension / 2f - stroke - EqSize.knobInset.toPx()
       val v = value.coerceIn(0f, 1f)
 
       drawArc(track, KNOB_START, KNOB_SWEEP, false, arcTopLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
@@ -284,7 +287,7 @@ fun EqKnob(
           tick,
           Offset(center.x, from),
           Offset(center.x, from + discR * 0.3f),
-          strokeWidth = 2.5.dp.toPx(),
+          strokeWidth = EqSize.lineStrong.toPx(),
           cap = StrokeCap.Round
         )
       }
@@ -295,7 +298,7 @@ fun EqKnob(
 /** The shape of a filter, drawn as a small line icon (bell, shelves, passes). */
 @Composable
 fun FilterShapeIcon(type: FilterType, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurface) {
-  Canvas(modifier = modifier.size(width = 34.dp, height = 18.dp)) { drawFilterShape(type, color) }
+  Canvas(modifier = modifier.size(width = EqSize.filterGlyphWidth, height = EqSize.filterGlyphHeight)) { drawFilterShape(type, color) }
 }
 
 private fun DrawScope.drawFilterShape(type: FilterType, color: Color) {
@@ -335,5 +338,5 @@ private fun DrawScope.drawFilterShape(type: FilterType, color: Color) {
       p.cubicTo(w * 0.6f, top, w * 0.7f, top, w * 0.88f, h)
     }
   }
-  drawPath(p, color, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+  drawPath(p, color, style = Stroke(width = Space.xxs.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
 }

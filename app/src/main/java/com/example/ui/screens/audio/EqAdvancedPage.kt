@@ -1,5 +1,6 @@
 package com.example.ui.screens.audio
 
+import com.example.ui.theme.EqSize
 import androidx.compose.ui.res.pluralStringResource
 import com.example.R
 import androidx.compose.ui.res.stringResource
@@ -350,14 +351,14 @@ internal fun EqAdvancedPage(
                 .padding(horizontal = Space.l)
                 .padding(bottom = Space.m)
                 .fillMaxWidth()
-                .height(6.dp)
+                .height(EqSize.meterBar)
                 .clip(Shapes.pill)
                 .background(colors.surfaceContainerHigh)
             ) {
               Box(
                 modifier = Modifier
                   .fillMaxWidth(level)
-                  .height(6.dp)
+                  .height(EqSize.meterBar)
                   .clip(Shapes.pill)
                   .background(colors.primary)
               )

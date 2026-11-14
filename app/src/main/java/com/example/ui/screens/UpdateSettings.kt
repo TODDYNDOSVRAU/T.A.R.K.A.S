@@ -28,6 +28,9 @@ import com.example.ui.components.GroupDivider
 import com.example.ui.components.InfoRow
 import com.example.ui.components.ListRow
 import com.example.ui.components.SwitchRow
+import com.example.ui.components.UpdateNotes
+import com.example.data.update.ReleaseNotes
+import androidx.compose.ui.unit.dp
 import com.example.ui.legal.LegalTexts
 import com.example.ui.theme.AppText
 import com.example.ui.theme.Space
@@ -74,6 +77,25 @@ internal fun LazyListScope.updateSettingsGroup(header: String) {
     GroupDivider()
     StepRow(state, installs, scope) { url ->
       runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }
+    val offered = state.release
+    if (offered != null && state.phase != Phase.IDLE && state.phase != Phase.UP_TO_DATE && state.phase != Phase.CHECKING) {
+      if (installs && state.phase == Phase.DOWNLOADING) {
+        GroupDivider()
+        ListRow(
+          title = stringResource(R.string.settings_update_cancel_download),
+          onClick = { UpdateManager.cancelDownload() },
+          chevron = false,
+          modifier = Modifier.testTag("update_cancel")
+        )
+      }
+      if (ReleaseNotes.plain(offered.notes) != null) {
+        GroupDivider()
+        UpdateNotes(
+          offered.notes, offered.tag, maxHeight = 200.dp,
+          modifier = Modifier.padding(horizontal = Space.l, vertical = Space.m)
+        )
+      }
     }
     if (installs) {
       GroupDivider()
