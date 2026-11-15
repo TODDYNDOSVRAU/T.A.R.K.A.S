@@ -22,6 +22,15 @@
     <string name="assistant_suggestion_eq_flat">Equalizador flat</string>
     <string name="assistant_suggestion_timer">Timer de 15 min</string>
     <string name="assistant_suggestion_help">Ajuda</string>
+    <!-- O texto que cada sugestão envia, neste idioma. O motor entende português e inglês. -->
+    <string name="assistant_suggestion_command_next">próxima faixa</string>
+    <string name="assistant_suggestion_command_shuffle">aleatório</string>
+    <string name="assistant_suggestion_command_repeat">repetir</string>
+    <string name="assistant_suggestion_command_favorite">favoritar</string>
+    <string name="assistant_suggestion_command_diagnostics">diagnóstico de áudio</string>
+    <string name="assistant_suggestion_command_eq_flat">equalizador flat</string>
+    <string name="assistant_suggestion_command_timer">timer de 15 minutos</string>
+    <string name="assistant_suggestion_command_help">ajuda</string>
 
     <!-- Quem falou, para leitores de tela -->
     <string name="assistant_sender_user">Você</string>
@@ -72,6 +81,19 @@
     <string name="assistant_error_no_reply">O serviço online não devolveu resposta a esta pergunta. Tente de novo.</string>
     <string name="assistant_error_server">O serviço online não respondeu corretamente. Tente de novo em instantes.</string>
     <string name="assistant_retry">Tentar de novo</string>
+    <string name="assistant_undo_done">Desfeito: o equalizador voltou ao que era antes da última mudança.</string>
+    <string name="assistant_undo_none">Nada para desfazer. Só a última mudança de equalizador feita aqui pode ser desfeita.</string>
+    <string name="assistant_online_label">Respostas online</string>
+    <string name="assistant_online_disclosure_on">Ligado: mensagens que este aparelho não consegue tratar como comando são enviadas ao Google Gemini para uma resposta.</string>
+    <string name="assistant_online_disclosure_off">Desligado: as respostas vêm só deste aparelho.</string>
+    <string name="assistant_clear">Limpar conversa</string>
+    <string name="assistant_clear_confirm">Apagar a conversa inteira? Isso não pode ser desfeito.</string>
+    <string name="assistant_clear_yes">Limpar</string>
+    <string name="assistant_clear_no">Cancelar</string>
+    <string name="assistant_suggestion_pause">Pausar</string>
+    <string name="assistant_suggestion_play">Tocar</string>
+    <string name="assistant_suggestion_command_pause">pausar</string>
+    <string name="assistant_suggestion_command_play">tocar</string>
 
     <!-- Rótulos de verificação da curiosidade -->
     <string name="assistant_curiosity_status_verified">Fato documentado e verificado</string>

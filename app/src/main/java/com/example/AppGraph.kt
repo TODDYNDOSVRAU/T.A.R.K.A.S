@@ -20,6 +20,7 @@ object AppGraph {
   lateinit var curiosityRepository: CuriosityRepository private set
   lateinit var audioEngineManager: AudioEngineManager private set
   lateinit var preferencesRepository: PreferencesRepository private set
+  lateinit var settings: com.example.ui.viewmodel.SettingsStore private set
   lateinit var curiositySpeechManager: CuriositySpeechManager private set
   lateinit var libraryRepository: LibraryRepository private set
   lateinit var playback: PlaybackController private set
@@ -54,6 +55,7 @@ object AppGraph {
     curiosityRepository = CuriosityRepository(app)
     audioEngineManager = AudioEngineManager(app)
     preferencesRepository = PreferencesRepository(app)
+    settings = com.example.ui.viewmodel.SettingsStore(com.example.ui.viewmodel.PreferencesSettings(preferencesRepository))
     musicRepository.setFolderRules(com.example.data.library.FolderRules.decode(preferencesRepository.getFolderRules()))
     com.example.data.audio.spatial.SpatialControl.assetOpener = { name -> runCatching { app.assets.open(name) }.getOrNull() }
     com.example.data.audio.spatial.SpatialControl.configure(

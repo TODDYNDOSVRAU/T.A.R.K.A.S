@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -90,6 +89,7 @@ import com.example.ui.theme.SurfaceStyle
 import com.example.ui.theme.liquidGlassSupported
 import com.example.ui.theme.rememberReducedMotion
 import com.example.ui.theme.subPageTransition
+import com.example.ui.viewmodel.SettingsSubPage
 
 /** The pages inside Ajustes: the main list, Sobre, and the texts opened from them. */
 private enum class SettingsPage { MAIN, ABOUT, TERMS, PRIVACY, LICENSES, CHANGELOG }
@@ -105,7 +105,7 @@ private fun SettingsPage.backLabel(): String =
  * Every row either does something or plainly informs. Sobre and the long texts open as sub-pages,
  * and a text goes back to the page it was opened from (Ajustes or Sobre), named in its back control.
  *
- * [onSubPageChange] tells the host whether a sub-page is showing, so it can hide its own large
+ * [subPage] is the page open inside Ajustes, kept by the host in its route stack; the host hides its own large
  * "Ajustes" title while the sub-page draws its own.
  */
 @Composable
@@ -142,24 +142,23 @@ fun SettingsScreen(
   termsAcceptedAt: Long = 0L,
   modifier: Modifier = Modifier,
   onSetRepeatMode: ((RepeatMode) -> Unit)? = null,
-  onSubPageChange: (Boolean) -> Unit = {}
+  subPage: SettingsSubPage? = null,
+  onOpenSubPage: (SettingsSubPage) -> Unit = {},
+  onSubPageBack: () -> Unit = {}
 ) {
-  var page by rememberSaveable { mutableStateOf(SettingsPage.MAIN) }
+  // Which page shows comes from the host's route stack, so back, the saved state and the tab bar agree.
+  val page = subPage?.let { SettingsPage.valueOf(it.name) } ?: SettingsPage.MAIN
   // Where the open text was reached from, so back returns there (Terms and Privacy open from both).
   var textOrigin by rememberSaveable { mutableStateOf(SettingsPage.MAIN) }
   val reduced = rememberReducedMotion()
   // Kept here, outside the page switch, so coming back from Sobre lands where the list was left.
   val mainListState = androidx.compose.foundation.lazy.rememberLazyListState()
-  LaunchedEffect(page) { onSubPageChange(page != SettingsPage.MAIN) }
 
   fun openText(target: SettingsPage, from: SettingsPage) {
     textOrigin = from
-    page = target
+    onOpenSubPage(SettingsSubPage.valueOf(target.name))
   }
-  fun back() {
-    page = if (page == SettingsPage.ABOUT) SettingsPage.MAIN else textOrigin
-  }
-  BackHandler(enabled = page != SettingsPage.MAIN) { back() }
+  val back = onSubPageBack
 
   AnimatedContent(
     targetState = page,
@@ -180,22 +179,22 @@ fun SettingsScreen(
           else repeat((target.ordinal - repeatMode.ordinal + RepeatMode.entries.size) % RepeatMode.entries.size) { onCycleRepeat() }
         },
         onOpenAudio, cacheSizeBytes, onClearCache, onExportData, onRestoreData, onExportDiagnostics, onEraseAllData,
-        onOpenAbout = { page = SettingsPage.ABOUT },
+        onOpenAbout = { onOpenSubPage(SettingsSubPage.ABOUT) },
         onOpenTerms = { openText(SettingsPage.TERMS, SettingsPage.MAIN) },
         onOpenPrivacy = { openText(SettingsPage.PRIVACY, SettingsPage.MAIN) },
         listState = mainListState
       )
       SettingsPage.ABOUT -> AboutPage(
         termsAcceptedAt = termsAcceptedAt,
-        onBack = { page = SettingsPage.MAIN },
+        onBack = back,
         onOpen = { openText(it, SettingsPage.ABOUT) },
         onRestartOnboarding = onRestartOnboarding
       )
       // These pages draw their own header, so they keep it below the status bar themselves.
-      SettingsPage.TERMS -> LegalScreen(currentLegalTexts().terms, textOrigin.backLabel(), onBack = ::back, modifier = Modifier.statusBarsPadding())
-      SettingsPage.PRIVACY -> LegalScreen(currentLegalTexts().privacy, textOrigin.backLabel(), onBack = ::back, modifier = Modifier.statusBarsPadding())
-      SettingsPage.LICENSES -> LegalScreen(currentLegalTexts().licenses, textOrigin.backLabel(), onBack = ::back, modifier = Modifier.statusBarsPadding())
-      SettingsPage.CHANGELOG -> LegalScreen(currentLegalTexts().changelog, textOrigin.backLabel(), onBack = ::back, modifier = Modifier.statusBarsPadding())
+      SettingsPage.TERMS -> LegalScreen(currentLegalTexts().terms, textOrigin.backLabel(), onBack = back, modifier = Modifier.statusBarsPadding())
+      SettingsPage.PRIVACY -> LegalScreen(currentLegalTexts().privacy, textOrigin.backLabel(), onBack = back, modifier = Modifier.statusBarsPadding())
+      SettingsPage.LICENSES -> LegalScreen(currentLegalTexts().licenses, textOrigin.backLabel(), onBack = back, modifier = Modifier.statusBarsPadding())
+      SettingsPage.CHANGELOG -> LegalScreen(currentLegalTexts().changelog, textOrigin.backLabel(), onBack = back, modifier = Modifier.statusBarsPadding())
     }
   }
 }

@@ -26,6 +26,9 @@ class AssistantRequestsTest {
     assertNull(assistantRequestFor("tocar"))
     assertNull("'tocar agora' is the player command, not a name", assistantRequestFor("tocar agora"))
     assertNull(assistantRequestFor("tocar que música é essa"))
+    // a title that contains an English command word is still a name, not the command
+    assertEquals(AssistantRequest.PlayLibrary("back in black"), assistantRequestFor("tocar back in black"))
+    assertEquals(AssistantRequest.PlayLibrary("like a rolling stone"), assistantRequestFor("tocar like a rolling stone"))
   }
 
   @Test

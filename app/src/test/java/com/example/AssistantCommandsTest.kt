@@ -96,6 +96,53 @@ class AssistantCommandsTest {
     assertNull(command("tocante demais"))
   }
 
+  // --- English synonyms, one test per command ---
+
+  @Test
+  fun `english next and previous`() {
+    listOf("next", "next track", "skip").forEach { assertEquals(it, PlayerCommand.NEXT, command(it)) }
+    listOf("previous", "back").forEach { assertEquals(it, PlayerCommand.PREVIOUS, command(it)) }
+  }
+
+  @Test
+  fun `english play and pause`() {
+    listOf("play", "resume", "play the song").forEach { assertEquals(it, PlayerCommand.PLAY, command(it)) }
+    listOf("pause", "stop").forEach { assertEquals(it, PlayerCommand.PAUSE, command(it)) }
+  }
+
+  @Test
+  fun `english shuffle, repeat and favorite`() {
+    listOf("shuffle", "turn shuffle on").forEach { assertEquals(it, PlayerCommand.TOGGLE_SHUFFLE, command(it)) }
+    listOf("repeat", "repeat this").forEach { assertEquals(it, PlayerCommand.CYCLE_REPEAT, command(it)) }
+    listOf("favorite", "like this song").forEach { assertEquals(it, PlayerCommand.FAVORITE, command(it)) }
+  }
+
+  // --- negation: a negated command word does not run, the sentence does nothing ---
+
+  @Test
+  fun `negated commands do not run`() {
+    listOf("não pausar", "nao pausar", "não toque", "não tocar", "nunca pular").forEach {
+      assertNull(it, command(it))
+    }
+    listOf("don't stop", "do not pause", "don't pause", "never skip", "not play").forEach {
+      assertNull(it, command(it))
+    }
+  }
+
+  @Test
+  fun `a negated word does not cancel another command in the same sentence`() {
+    assertEquals(PlayerCommand.NEXT, command("não pausar e pular"))
+    assertEquals(PlayerCommand.PLAY, command("don't stop and play"))
+  }
+
+  @Test
+  fun `chip texts in both languages run their commands`() {
+    listOf("próxima faixa", "next track").forEach { assertEquals(it, PlayerCommand.NEXT, command(it)) }
+    listOf("aleatório", "shuffle").forEach { assertEquals(it, PlayerCommand.TOGGLE_SHUFFLE, command(it)) }
+    listOf("repetir", "repeat").forEach { assertEquals(it, PlayerCommand.CYCLE_REPEAT, command(it)) }
+    listOf("favoritar", "favorite").forEach { assertEquals(it, PlayerCommand.FAVORITE, command(it)) }
+  }
+
   // --- engine ---
 
   private fun engine(onPlayerCommand: suspend (PlayerCommand) -> String?): AssistantEngine {

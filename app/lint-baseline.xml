@@ -689,7 +689,7 @@
         errorLine1="          contentDescription = track?.let { carouselContext.getString(R.string.player_screen_cover_of, it.title, it.artist) }"
         errorLine2="                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicScreen.kt"
+            file="src/main/java/com/example/ui/screens/player/PlayerCarousel.kt"
             line="793"
             column="45"/>
     </issue>
@@ -700,7 +700,7 @@
         errorLine1="            ?: carouselContext.getString(R.string.player_screen_no_track)"
         errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicScreen.kt"
+            file="src/main/java/com/example/ui/screens/player/PlayerCarousel.kt"
             line="794"
             column="16"/>
     </issue>
@@ -711,7 +711,7 @@
         errorLine1="            shown.previous?.let { p -> CustomAccessibilityAction(carouselContext.getString(R.string.player_screen_previous_named, p.title)) { go(-1); true } },"
         errorLine2="                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicScreen.kt"
+            file="src/main/java/com/example/ui/screens/player/PlayerCarousel.kt"
             line="796"
             column="66"/>
     </issue>
@@ -722,7 +722,7 @@
         errorLine1="            shown.next?.let { n -> CustomAccessibilityAction(carouselContext.getString(R.string.player_screen_next_named, n.title)) { go(1); true } }"
         errorLine2="                                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicScreen.kt"
+            file="src/main/java/com/example/ui/screens/player/PlayerCarousel.kt"
             line="797"
             column="62"/>
     </issue>
@@ -733,7 +733,7 @@
         errorLine1="              ?: if (shown.nextUnknown) CustomAccessibilityAction(carouselContext.getString(R.string.player_screen_next)) { go(1); true } else null"
         errorLine2="                                                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicScreen.kt"
+            file="src/main/java/com/example/ui/screens/player/PlayerCarousel.kt"
             line="798"
             column="67"/>
     </issue>

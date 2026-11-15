@@ -402,13 +402,7 @@ class AudioEngineManager(private val context: Context) {
           codec = TrackFormat.codecName(f.sampleMimeType, context.getString(R.string.audio_format_codec_unknown)),
           sampleRateHz = f.sampleRate.takeIf { it > 0 } ?: 0,
           channels = f.channelCount.takeIf { it > 0 } ?: 0,
-          bits = when (f.pcmEncoding) {
-            C.ENCODING_PCM_16BIT -> 16
-            C.ENCODING_PCM_24BIT -> 24
-            C.ENCODING_PCM_32BIT, C.ENCODING_PCM_FLOAT -> 32
-            C.ENCODING_PCM_8BIT -> 8
-            else -> null
-          }
+          bits = TrackFormat.bitsOf(f.pcmEncoding)
         )
       }
       updateCapabilities()
@@ -1096,22 +1090,8 @@ class AudioEngineManager(private val context: Context) {
         activeOutputDevice()?.let { dev ->
           outputRates = dev.sampleRates ?: IntArray(0)
           outputChannelCounts = dev.channelCounts ?: IntArray(0)
-          routeType = when (dev.type) {
-            AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> AudioCapabilities.ROUTE_WIRED
-            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> AudioCapabilities.ROUTE_BLUETOOTH
-            AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> AudioCapabilities.ROUTE_USB
-            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> AudioCapabilities.ROUTE_BUILTIN_SPEAKER
-            else -> AudioCapabilities.ROUTE_OTHER
-          }
-          // Built-in outputs report the phone's model code as their product name (e.g. "sdk_gphone64_x86_64"),
-          // which means nothing to a listener; only external devices get their own name.
-          val external = dev.type != AudioDeviceInfo.TYPE_BUILTIN_SPEAKER &&
-            dev.type != AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
-          routeName = if (external) {
-            dev.productName?.toString()?.ifBlank { null } ?: friendlyRouteName(dev.type)
-          } else {
-            friendlyRouteName(dev.type)
-          }
+          routeType = OutputDetection.routeTypeOf(dev.type)
+          routeName = OutputDetection.routeNameOf(dev.type, dev.productName?.toString()) { friendlyRouteName(dev.type) }
         }
       } catch (e: Exception) {
         Log.w(TAG, "Error detecting audio devices", e)

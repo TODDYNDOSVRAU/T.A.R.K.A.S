@@ -22,6 +22,15 @@
     <string name="assistant_suggestion_eq_flat">Flat equalizer</string>
     <string name="assistant_suggestion_timer">15 min timer</string>
     <string name="assistant_suggestion_help">Help</string>
+    <!-- The text each suggestion sends, in this language. The engine reads English and Portuguese. -->
+    <string name="assistant_suggestion_command_next">next track</string>
+    <string name="assistant_suggestion_command_shuffle">shuffle</string>
+    <string name="assistant_suggestion_command_repeat">repeat</string>
+    <string name="assistant_suggestion_command_favorite">favorite</string>
+    <string name="assistant_suggestion_command_diagnostics">audio diagnostics</string>
+    <string name="assistant_suggestion_command_eq_flat">flat equalizer</string>
+    <string name="assistant_suggestion_command_timer">timer 15 minutes</string>
+    <string name="assistant_suggestion_command_help">help</string>
 
     <!-- Who spoke, for screen readers -->
     <string name="assistant_sender_user">You</string>
@@ -72,6 +81,19 @@
     <string name="assistant_error_no_reply">The online service did not return a reply to this question. Try again.</string>
     <string name="assistant_error_server">The online service did not answer correctly. Try again in a moment.</string>
     <string name="assistant_retry">Try again</string>
+    <string name="assistant_undo_done">Undone: the equalizer is back to how it was before the last change.</string>
+    <string name="assistant_undo_none">Nothing to undo. Only the last equalizer change made here can be undone.</string>
+    <string name="assistant_online_label">Online answers</string>
+    <string name="assistant_online_disclosure_on">On: messages that this device cannot handle as a command are sent to Google Gemini for an answer.</string>
+    <string name="assistant_online_disclosure_off">Off: answers come only from this device.</string>
+    <string name="assistant_clear">Clear conversation</string>
+    <string name="assistant_clear_confirm">Remove the whole conversation? This cannot be undone.</string>
+    <string name="assistant_clear_yes">Clear</string>
+    <string name="assistant_clear_no">Cancel</string>
+    <string name="assistant_suggestion_pause">Pause</string>
+    <string name="assistant_suggestion_play">Play</string>
+    <string name="assistant_suggestion_command_pause">pause</string>
+    <string name="assistant_suggestion_command_play">play</string>
 
     <!-- Curiosity verification labels -->
     <string name="assistant_curiosity_status_verified">Documented and verified fact</string>
@@ -83,8 +105,8 @@
     <string name="assistant_spoken_outro">Did you know about %1$s? %2$s That was %1$s, by %3$s.</string>
     <string name="assistant_spoken_test">Hello! I am the voice of Tarkas. I will present short curiosities and interesting facts about your favorite music.</string>
 
-    <!-- Assistant engine replies. Commands are recognized in Portuguese only. -->
-    <string name="assistant_help_body">**Commands (recognized in Portuguese):**\n• **"analisar música"**: looks up curiosities and facts about the playing track\n• **"diagnóstico"**: inspects audio routes and hardware\n• **"equalizador flat"** (or rock, pop, jazz, vocal, graves, agudos…): applies a preset\n• **"mais graves"**, **"menos agudos"**…: moves the bass or treble control by 3 dB\n• **"timer de [X] minutos"**: starts a local timer\n• **"que música toca?"**: shows the current track\n• **"próxima"**, **"anterior"**, **"pausar"**, **"tocar"**: control the player\n• **"aleatório"**, **"repetir"**, **"favoritar"**: turn on the mode or save the track</string>
+    <!-- Assistant engine replies. Commands are recognized in English and Portuguese; the examples are in Portuguese. -->
+    <string name="assistant_help_body">**Commands (examples in Portuguese; English works too):**\n• **"analisar música"**: looks up curiosities and facts about the playing track\n• **"diagnóstico"**: inspects audio routes and hardware\n• **"equalizador flat"** (or rock, pop, jazz, vocal, graves, agudos…): applies a preset\n• **"mais graves"**, **"menos agudos"**…: moves the bass or treble control by 3 dB\n• **"timer de [X] minutos"**: starts a local timer\n• **"que música toca?"**: shows the current track\n• **"próxima"**, **"anterior"**, **"pausar"**, **"tocar"**: control the player\n• **"aleatório"**, **"repetir"**, **"favoritar"**: turn on the mode or save the track</string>
     <string name="assistant_command_failed">Could not run this now. Choose a track first.</string>
     <string name="assistant_tool_no_track_available">No track available</string>
     <string name="assistant_tool_analysis_done">Analysis done: %1$s</string>

@@ -100,19 +100,23 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.components.MiniPlayerBar
 import com.example.ui.components.TarkasBottomNav
 import com.example.ui.components.TarkasLargeTitle
+import com.example.ui.screens.AssistantPlayback
 import com.example.ui.screens.AssistantScreen
 import com.example.ui.screens.AudioScreen
-import com.example.ui.screens.PrefetchCarouselCovers
+import com.example.ui.screens.player.PrefetchCarouselCovers
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LibraryScreen
 import com.example.ui.screens.library.LibraryActions
 import com.example.ui.screens.library.LibraryState
 import com.example.ui.screens.MusicScreen
+import com.example.ui.screens.player.PlayerActions
+import com.example.ui.screens.player.PlayerState
 import com.example.ui.screens.MusicalCuriositySettingsScreen
 import com.example.ui.screens.OnboardingScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.theme.TarkasTheme
 import com.example.ui.viewmodel.TarkasNavTab
+import com.example.ui.viewmodel.SettingsViewModel
 import com.example.ui.viewmodel.TarkasViewModel
 import com.example.ui.theme.AppMotion
 import com.example.ui.theme.expandFromOrigin
@@ -382,8 +386,7 @@ fun TarkasAppContent(
   // otherwise ride on the keyboard and leave the page (the assistant's chat) almost no room.
   @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
   val imeVisible = WindowInsets.isImeVisible
-  var settingsSubPage by remember { mutableStateOf(false) }
-  LaunchedEffect(currentTab) { if (currentTab != TarkasNavTab.SETTINGS) settingsSubPage = false }
+  val settingsPage by viewModel.settingsPage.collectAsStateWithLifecycle()
   // Ajustes and its pages are a place to go into, not a tab to stay on: the mini player and the tab bar
   // step aside, and the page's own back button (or the back gesture) leads out.
   val barsHidden = currentTab == TarkasNavTab.SETTINGS || isShowingCuriositySettings
@@ -511,7 +514,7 @@ fun TarkasAppContent(
           )
       ) {
       // A sub-page of Ajustes (Sobre, the legal texts) draws its own title.
-      if (tabPage && !(screen == TarkasNavTab.SETTINGS && settingsSubPage)) {
+      if (tabPage && !(screen == TarkasNavTab.SETTINGS && settingsPage != null)) {
         // Ajustes opens from the title bar of Início only, as an account button does in Apple apps;
         // the other pages keep their title clean.
         TarkasLargeTitle(
@@ -718,42 +721,61 @@ fun TarkasAppContent(
         }
 
         TarkasNavTab.ASSISTANT -> {
+          val onlineAi by viewModel.assistantOnlineAi.collectAsStateWithLifecycle()
           AssistantScreen(
             messages = assistantMessages,
             isProcessing = isAssistantProcessing,
             hasGeminiKey = viewModel.assistantEngine.hasGeminiKey,
             activeTimers = activeTimers,
             onSendMessage = { text -> viewModel.sendAssistantMessage(text) },
+            onSendVoiceMessage = { text -> viewModel.sendAssistantMessage(text, askedByVoice = true) },
+            onStopSpeech = { viewModel.stopAssistantSpeech() },
             onCancelTimer = { id -> viewModel.cancelTimer(id) },
-            onRetry = { id -> viewModel.retryAssistantReply(id) }
+            onRetry = { id -> viewModel.retryAssistantReply(id) },
+            onlineAi = onlineAi,
+            onSetOnlineAi = { enabled -> viewModel.setAssistantOnlineAi(enabled) },
+            playback = when {
+              currentTrack == null -> AssistantPlayback.NONE
+              isPlaying -> AssistantPlayback.PLAYING
+              else -> AssistantPlayback.PAUSED
+            },
+            onClearConversation = { viewModel.clearAssistantConversation() }
           )
         }
 
         TarkasNavTab.SETTINGS -> {
+          val settingsVm: SettingsViewModel = viewModel()
+          val themeMode by settingsVm.themeMode.collectAsStateWithLifecycle()
+          val surfaceStyle by settingsVm.surfaceStyle.collectAsStateWithLifecycle()
+          val reduceMotion by settingsVm.reduceMotion.collectAsStateWithLifecycle()
+          val reduceTransparency by settingsVm.reduceTransparency.collectAsStateWithLifecycle()
+          val homeMusicFirst by settingsVm.homeMusicFirst.collectAsStateWithLifecycle()
           SettingsScreen(
             themeMode = themeMode,
             capabilities = capabilities,
-            onThemeModeChange = { mode -> viewModel.setThemeMode(mode) },
+            onThemeModeChange = { mode -> settingsVm.setThemeMode(mode) },
             curiosityConfig = curiosityConfig,
             onOpenCuriositySettings = { viewModel.openCuriositySettings() },
             hasGeminiKey = viewModel.assistantEngine.hasGeminiKey,
             surfaceStyle = surfaceStyle,
-            onSurfaceStyleChange = { style -> viewModel.setSurfaceStyle(style) },
+            onSurfaceStyleChange = { style -> settingsVm.setSurfaceStyle(style) },
             reduceMotion = reduceMotion,
-            onReduceMotionChange = { viewModel.setReduceMotion(it) },
+            onReduceMotionChange = { settingsVm.setReduceMotion(it) },
             waveformBar = waveformBar,
             onWaveformBarChange = { viewModel.setWaveformBar(it) },
             homeMusicFirst = homeMusicFirst,
-            onHomeMusicFirstChange = { viewModel.setHomeMusicFirst(it) },
-            onListAnimationChange = { viewModel.setListAnimation(it) },
+            onHomeMusicFirstChange = { settingsVm.setHomeMusicFirst(it) },
+            onListAnimationChange = { settingsVm.setListAnimation(it) },
             reduceTransparency = reduceTransparency,
-            onReduceTransparencyChange = { viewModel.setReduceTransparency(it) },
+            onReduceTransparencyChange = { settingsVm.setReduceTransparency(it) },
             isShuffle = isShuffle,
             repeatMode = repeatMode,
             onToggleShuffle = { viewModel.toggleShuffle() },
             onCycleRepeat = { viewModel.cycleRepeatMode() },
             onSetRepeatMode = { viewModel.setRepeatMode(it) },
-            onSubPageChange = { settingsSubPage = it },
+            subPage = settingsPage,
+            onOpenSubPage = { viewModel.openSettingsPage(it) },
+            onSubPageBack = { viewModel.goBack() },
             onOpenAudio = { viewModel.setTab(TarkasNavTab.AUDIO) },
             cacheSizeBytes = { viewModel.cacheSizeBytes() },
             onClearCache = { done -> viewModel.clearCache(done) },
@@ -789,41 +811,45 @@ fun TarkasAppContent(
         ) {
           pageStates.SaveableStateProvider("music") {
             MusicScreen(
-            currentTrack = currentTrack,
-            isPlaying = isPlaying,
-            coverPlaying = wantsToPlay,
-            currentPositionMs = { currentPosMs.value },
-            durationMs = { durationMs.value },
-            activeCuriosity = activeCuriosity,
-            onTogglePlayPause = { viewModel.togglePlayPause() },
-            onNextTrack = { viewModel.playNextTrack() },
-            onPreviousTrack = { viewModel.playPreviousTrack() },
-            coverNeighbors = viewModel.coverNeighbors.collectAsStateWithLifecycle().value,
-            onPreviousFromCover = { viewModel.playPreviousTrack(force = true) },
-            onSeekTo = { pos -> viewModel.seekTo(pos) },
-            waveform = waveform,
-            isShuffle = isShuffle,
-            repeatMode = repeatMode,
-            favoriteIds = favoriteIds,
-            playlists = playlists,
-            onToggleShuffle = { viewModel.toggleShuffle() },
-            onCycleRepeat = { viewModel.cycleRepeatMode() },
-            onToggleFavorite = { track -> viewModel.toggleFavorite(track) },
-            onPlayNext = { track -> viewModel.playNext(track) },
-            onAddToQueue = { track -> viewModel.addToQueue(track) },
-            onAddToPlaylist = { id, track -> viewModel.addToPlaylist(id, track) },
-            onCreatePlaylist = { name, track -> viewModel.createPlaylist(name, track) },
-            onOpenQueue = { viewModel.openQueue() },
-            sleepTimer = viewModel.sleepTimer.collectAsStateWithLifecycle().value,
-            onSetSleepTimer = { m -> viewModel.setSleepTimer(m) },
-            onSleepAtEndOfTrack = { viewModel.setSleepAtEndOfTrack() },
-            onCancelSleepTimer = { viewModel.cancelSleepTimer() },
-            trackDetails = viewModel.trackDetails.collectAsStateWithLifecycle().value,
-            onLoadTrackDetails = { track -> viewModel.loadTrackDetails(track) },
-            lyrics = viewModel.lyrics.collectAsStateWithLifecycle().value,
-            onLoadLyrics = { track -> viewModel.loadLyrics(track) },
-            onClose = { viewModel.goBack() }
-          )
+              state = PlayerState(
+                currentTrack = currentTrack,
+                isPlaying = isPlaying,
+                coverPlaying = wantsToPlay,
+                currentPositionMs = { currentPosMs.value },
+                durationMs = { durationMs.value },
+                activeCuriosity = activeCuriosity,
+                coverNeighbors = viewModel.coverNeighbors.collectAsStateWithLifecycle().value,
+                waveform = waveform,
+                isShuffle = isShuffle,
+                repeatMode = repeatMode,
+                favoriteIds = favoriteIds,
+                playlists = playlists,
+                sleepTimer = viewModel.sleepTimer.collectAsStateWithLifecycle().value,
+                trackDetails = viewModel.trackDetails.collectAsStateWithLifecycle().value,
+                lyrics = viewModel.lyrics.collectAsStateWithLifecycle().value
+              ),
+              actions = PlayerActions(
+                onTogglePlayPause = { viewModel.togglePlayPause() },
+                onNextTrack = { viewModel.playNextTrack() },
+                onPreviousTrack = { viewModel.playPreviousTrack() },
+                onPreviousFromCover = { viewModel.playPreviousTrack(force = true) },
+                onSeekTo = { pos -> viewModel.seekTo(pos) },
+                onToggleShuffle = { viewModel.toggleShuffle() },
+                onCycleRepeat = { viewModel.cycleRepeatMode() },
+                onToggleFavorite = { track -> viewModel.toggleFavorite(track) },
+                onPlayNext = { track -> viewModel.playNext(track) },
+                onAddToQueue = { track -> viewModel.addToQueue(track) },
+                onAddToPlaylist = { id, track -> viewModel.addToPlaylist(id, track) },
+                onCreatePlaylist = { name, track -> viewModel.createPlaylist(name, track) },
+                onOpenQueue = { viewModel.openQueue() },
+                onClose = { viewModel.goBack() },
+                onSetSleepTimer = { m -> viewModel.setSleepTimer(m) },
+                onSleepAtEndOfTrack = { viewModel.setSleepAtEndOfTrack() },
+                onCancelSleepTimer = { viewModel.cancelSleepTimer() },
+                onLoadTrackDetails = { track -> viewModel.loadTrackDetails(track) },
+                onLoadLyrics = { track -> viewModel.loadLyrics(track) }
+              )
+            )
           }
         }
       }

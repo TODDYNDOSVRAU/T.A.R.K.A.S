@@ -87,7 +87,7 @@ internal fun assistantRequestFor(lower: String): AssistantRequest? {
   // "tocar <nome>": a track, album, artist or playlist. "tocar" alone is the play command, handled elsewhere.
   Regex("^(tocar|toca|toque)\\s+(?:a |o |as |os |um |uma )?(.+)$").find(text)?.let {
     val query = it.groupValues[2].trim().trimEnd('?', '.', '!')
-    val isCommandWord = playerCommandFor(query) != null || query in setOf("agora", "musica", "música", "faixa", "som")
+    val isCommandWord = isCommandPhrase(query) || query in setOf("agora", "musica", "música", "faixa", "som")
     if (query.isNotEmpty() && !isCommandWord && !query.startsWith("que ")) return AssistantRequest.PlayLibrary(query)
   }
   return null

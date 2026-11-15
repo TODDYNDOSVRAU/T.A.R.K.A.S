@@ -10,10 +10,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -21,7 +17,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.example.BuildConfig
 import com.example.R
-import com.example.data.update.UpdateManager
+import com.example.ui.viewmodel.UpdateViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.update.UpdateState
 import com.example.data.update.UpdateState.Phase
 import com.example.ui.components.GroupDivider
@@ -37,9 +34,6 @@ import com.example.ui.theme.Space
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 /**
  * Atualizações: the installed version, the last check, the switches and a button for the next step.
@@ -49,15 +43,13 @@ import kotlinx.coroutines.launch
 internal fun LazyListScope.updateSettingsGroup(header: String) {
   settingsGroup(header, tag = "settings_updates", footer = null) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val state by UpdateManager.state.collectAsState()
-    val installs = UpdateManager.installsUpdates
-    var auto by remember { mutableStateOf(UpdateManager.autoEnabled) }
-    var wifiOnly by remember { mutableStateOf(UpdateManager.wifiOnly) }
-    var allowed by remember { mutableStateOf(UpdateManager.canInstallPackages()) }
+    val vm: UpdateViewModel = viewModel()
+    val state by vm.state.collectAsState()
+    val switches by vm.switches.collectAsState()
+    val installs = vm.installsUpdates
     // The permission is changed on a system page, so read it again when the app comes back.
     LifecycleResumeEffect(Unit) {
-      allowed = UpdateManager.canInstallPackages()
+      vm.refresh()
       onPauseOrDispose {}
     }
 
@@ -75,7 +67,7 @@ internal fun LazyListScope.updateSettingsGroup(header: String) {
       modifier = Modifier.testTag("update_last_checked")
     )
     GroupDivider()
-    StepRow(state, installs, scope) { url ->
+    StepRow(state, installs, vm) { url ->
       runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
     val offered = state.release
@@ -84,7 +76,7 @@ internal fun LazyListScope.updateSettingsGroup(header: String) {
         GroupDivider()
         ListRow(
           title = stringResource(R.string.settings_update_cancel_download),
-          onClick = { UpdateManager.cancelDownload() },
+          onClick = { vm.cancelDownload() },
           chevron = false,
           modifier = Modifier.testTag("update_cancel")
         )
@@ -102,19 +94,19 @@ internal fun LazyListScope.updateSettingsGroup(header: String) {
       SwitchRow(
         title = stringResource(R.string.settings_update_auto),
         subtitle = stringResource(R.string.settings_update_auto_subtitle),
-        checked = auto,
-        onCheckedChange = { auto = it; UpdateManager.setAutoEnabled(it) },
+        checked = switches.auto,
+        onCheckedChange = { vm.setAuto(it) },
         modifier = Modifier.testTag("update_auto")
       )
       GroupDivider()
       SwitchRow(
         title = stringResource(R.string.settings_update_wifi_only),
         subtitle = stringResource(R.string.settings_update_wifi_only_subtitle),
-        checked = wifiOnly,
-        onCheckedChange = { wifiOnly = it; UpdateManager.setWifiOnly(it) },
+        checked = switches.wifiOnly,
+        onCheckedChange = { vm.setWifiOnly(it) },
         modifier = Modifier.testTag("update_wifi_only")
       )
-      if (!allowed) {
+      if (!switches.allowed) {
         GroupDivider()
         ListRow(
           title = stringResource(R.string.settings_update_allow_install),
@@ -134,7 +126,7 @@ internal fun LazyListScope.updateSettingsGroup(header: String) {
 
 /** The one row for the next step: check, download, install, or (development build) open the release. */
 @Composable
-private fun StepRow(state: UpdateState, installs: Boolean, scope: CoroutineScope, open: (String) -> Unit) {
+private fun StepRow(state: UpdateState, installs: Boolean, vm: UpdateViewModel, open: (String) -> Unit) {
   val release = state.release
   val tag = release?.tag.orEmpty()
   when (state.phase) {
@@ -142,7 +134,7 @@ private fun StepRow(state: UpdateState, installs: Boolean, scope: CoroutineScope
     Phase.IDLE, Phase.UP_TO_DATE -> ListRow(
       title = stringResource(R.string.settings_update_check_now),
       value = if (state.phase == Phase.UP_TO_DATE && state.problem == null) stringResource(R.string.settings_update_up_to_date) else null,
-      onClick = { scope.launch(Dispatchers.Default) { UpdateManager.check() } },
+      onClick = { vm.checkNow() },
       chevron = false,
       modifier = Modifier.testTag("update_check")
     )
@@ -165,18 +157,14 @@ private fun StepRow(state: UpdateState, installs: Boolean, scope: CoroutineScope
       Phase.READY -> ListRow(
         title = stringResource(R.string.settings_update_install_now, tag),
         subtitle = stringResource(R.string.settings_update_ready),
-        onClick = { scope.launch(Dispatchers.Default) { UpdateManager.install(userInitiated = true) } },
+        onClick = { vm.install() },
         chevron = false,
         modifier = Modifier.testTag("update_install")
       )
       else -> ListRow(
         title = stringResource(R.string.settings_update_download_install, tag),
         value = release?.apkSize?.takeIf { it > 0 }?.let(::formatSize),
-        onClick = {
-          scope.launch(Dispatchers.Default) {
-            if (UpdateManager.download(userInitiated = true).phase == Phase.READY) UpdateManager.install(userInitiated = true)
-          }
-        },
+        onClick = { vm.downloadAndInstall() },
         chevron = false,
         modifier = Modifier.testTag("update_download")
       )

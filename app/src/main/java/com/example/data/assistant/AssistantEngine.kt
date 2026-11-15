@@ -66,24 +66,6 @@ internal fun geminiReplyText(body: String): String {
 /** Player actions the assistant can trigger. The app runs them and reports what really happened. */
 enum class PlayerCommand { NEXT, PREVIOUS, PLAY, PAUSE, TOGGLE_SHUFFLE, CYCLE_REPEAT, FAVORITE }
 
-/**
- * Maps a lowercase sentence to a player command and its tool name, or null.
- * Whole-word matches only, so "toca" inside "que música toca?" never triggers a command.
- */
-internal fun playerCommandFor(lower: String): Pair<PlayerCommand, String>? {
-  fun has(vararg words: String) = Regex("\\b(${words.joinToString("|")})\\b").containsMatchIn(lower)
-  return when {
-    has("próxima", "proxima", "próximo", "proximo", "pular") -> PlayerCommand.NEXT to "next_track"
-    has("anterior", "voltar") -> PlayerCommand.PREVIOUS to "previous_track"
-    has("pausar", "pause", "pausa") -> PlayerCommand.PAUSE to "pause"
-    has("tocar", "toque", "continuar", "retomar", "play", "reproduzir") -> PlayerCommand.PLAY to "play"
-    has("aleatório", "aleatorio", "embaralhar", "shuffle") -> PlayerCommand.TOGGLE_SHUFFLE to "toggle_shuffle"
-    has("repetir", "repetição", "repeat") -> PlayerCommand.CYCLE_REPEAT to "cycle_repeat"
-    has("favoritar", "curtir", "favorito") -> PlayerCommand.FAVORITE to "toggle_favorite"
-    else -> null
-  }
-}
-
 // Answers to a pending confirmation, compared after normalizeForSearch (lowercase, no accents).
 private val CONFIRM_WORDS = setOf("sim", "s", "yes", "y", "ok", "confirmo", "confirmar", "confirm", "pode")
 private val DECLINE_WORDS = setOf("nao", "n", "no", "cancelar", "cancela", "cancele", "cancel")
@@ -109,6 +91,8 @@ class AssistantEngine(
     audioEngineManager.applyEqSettings(next)
     if (bass) next.bassDb else next.trebleDb
   },
+  // Puts back an equalizer state that a chat request changed ("desfazer").
+  private val onEqRestore: (com.example.data.model.EqSettings) -> Unit = { audioEngineManager.applyEqSettings(it) },
   // Where the callbacks above run: they change screen state, so the app keeps them on the main thread.
   private val callbackContext: CoroutineContext = Dispatchers.Main.immediate,
   // What the assistant can change in the app. Only runs after the user confirms it.
@@ -126,6 +110,9 @@ class AssistantEngine(
   )
 
   @Volatile private var pending: PendingAction? = null
+
+  // The equalizer state before the last change made by chat (tone or preset). "desfazer" restores it once.
+  @Volatile private var eqBeforeChat: com.example.data.model.EqSettings? = null
 
   val hasGeminiKey: Boolean
     get() {
@@ -183,6 +170,15 @@ class AssistantEngine(
         sender = MessageSender.ASSISTANT,
         text = context.getString(R.string.assistant_help_body)
       )
+    }
+
+    // Undo: restores the equalizer state from before the last chat change (tone or preset).
+    if (lower == "desfazer" || lower == "undo") {
+      val before = eqBeforeChat
+      eqBeforeChat = null
+      if (before == null) return reply(context.getString(R.string.assistant_undo_none))
+      withContext(callbackContext) { onEqRestore(before) }
+      return reply(context.getString(R.string.assistant_undo_done))
     }
 
     // State-changing requests (library, queue, sleep timer, spatial, volume): asked for confirmation first.
@@ -269,7 +265,7 @@ class AssistantEngine(
     }
 
     // Tool: get_audio_capabilities
-    if (lower.contains("diagnóstico") || lower.contains("diagnostico") || lower.contains("hardware") || Regex("\\brota\\b").containsMatchIn(lower)) {
+    if (lower.contains("diagnóstico") || lower.contains("diagnostico") || lower.contains("diagnostic") || lower.contains("hardware") || Regex("\\brota\\b").containsMatchIn(lower)) {
       val caps = audioEngineManager.capabilities.value
       val report = ToolExecutionReport(
         toolName = "get_audio_capabilities",
@@ -291,6 +287,7 @@ class AssistantEngine(
     if (toneMatch != null) {
       val up = toneMatch.groupValues[1] in setOf("aumentar", "aumenta", "mais", "subir", "sobe")
       val bass = toneMatch.groupValues[2].startsWith("grave")
+      eqBeforeChat = audioEngineManager.eqSettings.value
       val now = withContext(callbackContext) { onTone(bass, if (up) 3f else -3f) }
       val name = context.getString(if (bass) R.string.assistant_band_bass else R.string.assistant_band_treble)
       val value = (if (now > 0) "+" else "") + String.format(java.util.Locale.US, "%.1f", now)
@@ -314,7 +311,7 @@ class AssistantEngine(
     }
 
     // Tool: apply_audio_profile
-    if (lower.contains("perfil") || lower.contains("equalizador") || lower.contains("preset") || Regex("\\bsom\\b").containsMatchIn(lower)) {
+    if (lower.contains("perfil") || lower.contains("equalizador") || lower.contains("equalizer") || lower.contains("preset") || Regex("\\bsom\\b").containsMatchIn(lower)) {
       fun preset(id: String) = EqPresets.BUILT_IN.firstOrNull { it.id == id }
       val target = when {
         lower.contains("flat") || lower.contains("linear") || lower.contains("neutro") -> EqPresets.FLAT
@@ -332,6 +329,7 @@ class AssistantEngine(
         else -> null
       }
       if (target != null) {
+        eqBeforeChat = audioEngineManager.eqSettings.value
         withContext(callbackContext) { onEqPreset(target) }
         val report = ToolExecutionReport(
           toolName = "apply_audio_profile",
@@ -544,7 +542,7 @@ class AssistantEngine(
   )
 
   // Optional Gemini API execution. Throws AssistantFailureException with the reason when no reply arrives.
-  private fun callGeminiApi(prompt: String): AssistantMessage {
+  private suspend fun callGeminiApi(prompt: String): AssistantMessage {
     val apiKey = BuildConfig.GEMINI_API_KEY
     // processUserMessage only calls this when a key is set, so a blank key here is a build problem.
     if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") throw AssistantFailureException(AssistantFailure.KEY_REFUSED)
@@ -557,38 +555,49 @@ class AssistantEngine(
       Não repita listas de comandos a menos que o usuário peça 'help' ou 'ajuda'.
       Nunca conte curiosidades, história ou fatos sobre músicas, artistas ou álbuns: isso só aparece no player do app.
       Se pedirem, diga que as curiosidades ficam no player.
+      Para pedidos de controle do player (próxima, anterior, pausar, tocar, aleatório, repetir, favoritar), chame a função correspondente.
       Música tocando agora: '${currentTrack?.title ?: "Nenhuma"}' (${currentTrack?.artist ?: ""}).
     """.trimIndent()
 
+    val contents = JSONArray().put(geminiUserTurn(prompt))
+    val first = postGemini(apiKey, geminiRequestJson(systemContext, contents))
+
+    val toolName = geminiFunctionCall(first)
+      ?: return AssistantMessage(
+        id = UUID.randomUUID().toString(),
+        sender = MessageSender.ASSISTANT,
+        text = geminiReplyText(first)
+      )
+
+    // The model asked for a player command: run it through the app, then send the real result back for the answer.
+    val command = geminiPlayerCommand(toolName)
+    val result = if (command != null) withContext(callbackContext) { onPlayerCommand(command) } else null
+    contents.put(geminiFunctionCallTurn(toolName))
+    contents.put(geminiFunctionResponseTurn(toolName, result ?: "failed"))
+    val second = postGemini(apiKey, geminiRequestJson(systemContext, contents))
+
+    return AssistantMessage(
+      id = UUID.randomUUID().toString(),
+      sender = MessageSender.ASSISTANT,
+      text = geminiReplyText(second),
+      toolReport = ToolExecutionReport(
+        toolName = toolName,
+        arguments = emptyMap(),
+        success = result != null,
+        resultSummary = result ?: context.getString(R.string.assistant_tool_no_track_available)
+      )
+    )
+  }
+
+  // One POST to Gemini; returns the raw reply body or throws AssistantFailureException with the reason.
+  private fun postGemini(apiKey: String, payload: JSONObject): String {
     // Key goes in a header, not the URL, so it never lands in logs or proxies.
-    val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
-
-    val payload = JSONObject().apply {
-      put("systemInstruction", JSONObject().apply {
-        put("parts", JSONArray().put(JSONObject().put("text", systemContext)))
-      })
-      put("contents", JSONArray().put(JSONObject().apply {
-        put("role", "user")
-        put("parts", JSONArray().put(JSONObject().put("text", prompt)))
-      }))
-      put("generationConfig", JSONObject().apply {
-        put("temperature", 0.2)
-        put("maxOutputTokens", 120)
-      })
-    }
-
     val body = payload.toString().toRequestBody("application/json".toMediaType())
-    val request = Request.Builder().url(url).header("x-goog-api-key", apiKey).post(body).build()
-
+    val request = Request.Builder().url(GEMINI_MODEL_URL).header("x-goog-api-key", apiKey).post(body).build()
     return try {
       okHttpClient.newCall(request).execute().use { response ->
         if (!response.isSuccessful) throw AssistantFailureException(failureForHttpStatus(response.code))
-        val respBody = response.body?.string() ?: throw AssistantFailureException(AssistantFailure.NO_REPLY)
-        AssistantMessage(
-          id = UUID.randomUUID().toString(),
-          sender = MessageSender.ASSISTANT,
-          text = geminiReplyText(respBody)
-        )
+        response.body?.string() ?: throw AssistantFailureException(AssistantFailure.NO_REPLY)
       }
     } catch (e: IOException) {
       throw AssistantFailureException(AssistantFailure.NO_CONNECTION, e)

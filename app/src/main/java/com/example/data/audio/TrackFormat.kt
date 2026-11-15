@@ -37,6 +37,16 @@ data class TrackFormat(
   ).joinToString(" · ")
 
   companion object {
+    /** Bits per sample for a Media3 PCM encoding; null when the file does not state them (lossy formats). */
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    fun bitsOf(pcmEncoding: Int): Int? = when (pcmEncoding) {
+      androidx.media3.common.C.ENCODING_PCM_16BIT -> 16
+      androidx.media3.common.C.ENCODING_PCM_24BIT -> 24
+      androidx.media3.common.C.ENCODING_PCM_32BIT, androidx.media3.common.C.ENCODING_PCM_FLOAT -> 32
+      androidx.media3.common.C.ENCODING_PCM_8BIT -> 8
+      else -> null
+    }
+
     fun khz(hz: Int): String =
       if (hz % 1000 == 0) "${hz / 1000} kHz" else String.format(java.util.Locale.ROOT, "%.1f kHz", hz / 1000.0)
 

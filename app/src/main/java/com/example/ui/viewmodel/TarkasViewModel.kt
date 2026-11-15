@@ -6,6 +6,11 @@ import android.media.projection.MediaProjection
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.assistant.AssistantEngine
+import com.example.data.assistant.AssistantSpeaker
+import com.example.data.assistant.assistantHistoryFromJson
+import com.example.data.assistant.assistantHistoryToJson
+import com.example.data.assistant.shouldSpeakReply
+import com.example.data.assistant.speakableReply
 import com.example.data.assistant.PlayerCommand
 import com.example.data.audio.AudioEngineManager
 import com.example.data.model.AssistantMessage
@@ -162,17 +167,15 @@ class TarkasViewModel(
   val currentCuriositySpeechText: StateFlow<String?> = curiositySpeechManager.currentSpokenText
   val curiositySpeechStage: StateFlow<String?> = curiositySpeechManager.speechStage
 
-  private val _isShowingCuriositySettings = MutableStateFlow(false)
-  val isShowingCuriositySettings: StateFlow<Boolean> = _isShowingCuriositySettings.asStateFlow()
-
-  // The page shown and the pages to go back to, kept across process death.
-  private val _currentTab = MutableStateFlow(
-    savedState.get<String>(KEY_TAB)?.let { name -> TarkasNavTab.entries.firstOrNull { it.name == name } } ?: TarkasNavTab.HOME
-  )
+  // The route stack: the page shown and the pages to go back to, kept across process death.
+  private val nav = NavStack.decode(savedState.get<ArrayList<String>>(KEY_ROUTES))
+  private val _currentTab = MutableStateFlow(nav.currentTab)
   val currentTab: StateFlow<TarkasNavTab> = _currentTab.asStateFlow()
-  private val backStack = ArrayDeque(
-    savedState.get<ArrayList<String>>(KEY_BACK).orEmpty().mapNotNull { name -> TarkasNavTab.entries.firstOrNull { it.name == name } }
-  )
+  private val _isShowingCuriositySettings = MutableStateFlow(nav.showingCuriosity)
+  val isShowingCuriositySettings: StateFlow<Boolean> = _isShowingCuriositySettings.asStateFlow()
+  private val _settingsPage = MutableStateFlow(nav.settingsPage)
+  /** The page open inside Ajustes (About, Terms, …), or null on Ajustes itself. */
+  val settingsPage: StateFlow<SettingsSubPage?> = _settingsPage.asStateFlow()
 
   /** Favourites as tracks, in the order they were added; worked out here once instead of on every frame. */
   val favoriteTracks: StateFlow<List<Track>> = kotlinx.coroutines.flow.combine(
@@ -206,11 +209,52 @@ class TarkasViewModel(
   private val _isAssistantProcessing = MutableStateFlow(false)
   val isAssistantProcessing: StateFlow<Boolean> = _isAssistantProcessing.asStateFlow()
 
+  // Online answers (Gemini) on or off. Saved in the app's preferences; on by default, as before.
+  private val assistantPrefs = context.getSharedPreferences("tarkas_prefs", android.content.Context.MODE_PRIVATE)
+  private val _assistantOnlineAi = MutableStateFlow(
+    runCatching { assistantPrefs.getBoolean("assistant_online_ai", true) }.getOrDefault(true)
+  )
+  val assistantOnlineAi: StateFlow<Boolean> = _assistantOnlineAi.asStateFlow()
+
+  fun setAssistantOnlineAi(enabled: Boolean) {
+    _assistantOnlineAi.value = enabled
+    runCatching { assistantPrefs.edit().putBoolean("assistant_online_ai", enabled).apply() }
+  }
+
+  // The conversation is kept in a file, so it is still there after the app restarts. Writes run one at a time.
+  private val assistantHistoryFile = java.io.File(context.filesDir, "assistant_history.json")
+  private val assistantSaveDispatcher = Dispatchers.IO.limitedParallelism(1)
+
+  private fun assistantGreeting(): List<AssistantMessage> = listOf(
+    AssistantMessage(
+      id = UUID.randomUUID().toString(),
+      sender = MessageSender.ASSISTANT,
+      text = context.getString(com.example.R.string.assistant_greeting)
+    )
+  )
+
+  private fun restoreAssistantHistory(): List<AssistantMessage>? = runCatching {
+    if (!assistantHistoryFile.exists()) return@runCatching null
+    assistantHistoryFromJson(assistantHistoryFile.readText()).takeIf { it.isNotEmpty() }
+  }.getOrNull()
+
+  private fun publishAssistantMessages(list: List<AssistantMessage>) {
+    _assistantMessages.value = list
+    val json = assistantHistoryToJson(list)
+    viewModelScope.launch(assistantSaveDispatcher) {
+      runCatching { assistantHistoryFile.writeText(json) }
+    }
+  }
+
+  // "Limpar conversa": the chat starts again from the greeting. The saved copy is replaced with it.
+  fun clearAssistantConversation() = publishAssistantMessages(assistantGreeting())
+
   private val _activeTimers = MutableStateFlow<List<LocalTimer>>(emptyList())
   val activeTimers: StateFlow<List<LocalTimer>> = _activeTimers.asStateFlow()
 
-  private val _themeMode = MutableStateFlow(preferencesRepository.getThemeMode())
-  val themeMode: StateFlow<String> = _themeMode.asStateFlow()
+  // Appearance and behaviour switches have one owner, shared with SettingsViewModel.
+  private val settings = graph.settings
+  val themeMode: StateFlow<String> = settings.themeMode
 
   val systemAudioStatus: StateFlow<SystemAudioStatus> = systemAudioCaptureManager.status
 
@@ -319,6 +363,8 @@ class TarkasViewModel(
     onCuriosityUpdated = { cur -> playback.setActiveCuriosity(cur) },
     onPlayerCommand = { command -> runPlayerCommand(command) },
     onEqPreset = { preset -> selectEqPreset(preset) },
+    // "desfazer" puts back the equalizer state from before the chat change, through updateEq so it is saved.
+    onEqRestore = { saved -> updateEq { saved } },
     // Through updateEq, so the change is saved and marks the preset as edited like a turn of the knob.
     onTone = { bass, delta ->
       val r = EqSettings.TONE_RANGE_DB
@@ -406,52 +452,37 @@ class TarkasViewModel(
     }
 
     // Initial Siri greeting (concise without listing commands unless user asks for help)
-    _assistantMessages.value = listOf(
-      AssistantMessage(
-        id = UUID.randomUUID().toString(),
-        sender = MessageSender.ASSISTANT,
-        text = context.getString(com.example.R.string.assistant_greeting)
-      )
-    )
+    // The saved conversation comes back when there is one; otherwise the greeting starts it.
+    _assistantMessages.value = restoreAssistantHistory() ?: assistantGreeting()
   }
 
   /**
    * Opens a page on top of the current one (the player, Ajustes, Áudio from Ajustes): back returns to
    * where it was opened from.
    */
-  fun setTab(tab: TarkasNavTab) {
-    val from = _currentTab.value
-    if (tab == from) return
-    // Opening a page that is already lower in the stack goes back to it instead of piling up copies.
-    val existing = backStack.indexOf(tab)
-    if (existing >= 0) {
-      while (backStack.size > existing) backStack.removeLast()
-    } else {
-      backStack.addLast(from)
-    }
-    show(tab)
-  }
+  fun setTab(tab: TarkasNavTab) = navigate { it.open(Route.Tab(tab)) }
 
   /** A tab picked in the tab bar: a fresh start at that tab, like every tab bar on the platform. */
-  fun selectTab(tab: TarkasNavTab) {
-    backStack.clear()
-    if (tab != TarkasNavTab.HOME) backStack.addLast(TarkasNavTab.HOME)
-    show(tab)
-  }
+  fun selectTab(tab: TarkasNavTab) = navigate { it.select(tab) }
 
   /** Back: the page it was opened from; from a tab with nothing under it, Início. */
-  fun goBack() {
-    val previous = backStack.removeLastOrNull() ?: TarkasNavTab.HOME
-    show(previous)
+  fun goBack() = navigate { it.back() }
+
+  /** Opens a page inside Ajustes (About, Terms, …); back returns to where it was opened from. */
+  fun openSettingsPage(page: SettingsSubPage) = navigate {
+    if (it.currentTab != TarkasNavTab.SETTINGS) it.open(Route.Tab(TarkasNavTab.SETTINGS))
+    it.open(Route.Settings(page))
   }
 
   /** True while back has somewhere to go inside the app. */
-  val canGoBack: Boolean get() = _currentTab.value != TarkasNavTab.HOME || backStack.isNotEmpty()
+  val canGoBack: Boolean get() = nav.canGoBack
 
-  private fun show(tab: TarkasNavTab) {
-    _currentTab.value = tab
-    savedState[KEY_TAB] = tab.name
-    savedState[KEY_BACK] = ArrayList(backStack.map { it.name })
+  private fun navigate(change: (NavStack) -> Unit) {
+    change(nav)
+    _currentTab.value = nav.currentTab
+    _isShowingCuriositySettings.value = nav.showingCuriosity
+    _settingsPage.value = nav.settingsPage
+    savedState[KEY_ROUTES] = nav.encode()
   }
 
   fun playTrack(track: Track) = startList(track, null)
@@ -765,13 +796,9 @@ class TarkasViewModel(
     }
   }
 
-  fun openCuriositySettings() {
-    _isShowingCuriositySettings.value = true
-  }
+  fun openCuriositySettings() = navigate { it.open(Route.CuriositySettings) }
 
-  fun closeCuriositySettings() {
-    _isShowingCuriositySettings.value = false
-  }
+  fun closeCuriositySettings() = navigate { if (it.showingCuriosity) it.back() }
 
   fun updateCuriosityConfig(newConfig: com.example.data.model.CuriosityConfig) = playback.setCuriosityConfig(newConfig)
 
@@ -902,13 +929,9 @@ class TarkasViewModel(
     _eqPresets.value = EqPresets.BUILT_IN + list
   }
 
-  private val _surfaceStyle = MutableStateFlow(SurfaceStyle.fromKey(preferencesRepository.getSurfaceStyle()))
-  val surfaceStyle: StateFlow<SurfaceStyle> = _surfaceStyle.asStateFlow()
+  val surfaceStyle: StateFlow<SurfaceStyle> = settings.surfaceStyle
 
-  fun setSurfaceStyle(style: SurfaceStyle) {
-    _surfaceStyle.value = style
-    preferencesRepository.saveSurfaceStyle(style.key)
-  }
+  fun setSurfaceStyle(style: SurfaceStyle) = settings.setSurfaceStyle(style)
 
   // ---- first-run setup and the terms ----
 
@@ -1042,13 +1065,9 @@ class TarkasViewModel(
   }
 
   /** "Reduzir transparência" in the app: every glass surface becomes solid. */
-  private val _reduceTransparency = MutableStateFlow(preferencesRepository.getReduceTransparency())
-  val reduceTransparency: StateFlow<Boolean> = _reduceTransparency.asStateFlow()
+  val reduceTransparency: StateFlow<Boolean> = settings.reduceTransparency
 
-  fun setReduceTransparency(reduce: Boolean) {
-    _reduceTransparency.value = reduce
-    preferencesRepository.saveReduceTransparency(reduce)
-  }
+  fun setReduceTransparency(reduce: Boolean) = settings.setReduceTransparency(reduce)
 
   // ---- Fone correction (AutoEq: oratory1990, crinacle, Rtings…) ----
 
@@ -1230,14 +1249,10 @@ class TarkasViewModel(
     _devicePickerRequest.value = null
   }
 
-  private val _homeMusicFirst = MutableStateFlow(preferencesRepository.getHomeMusicFirst())
   /** Início: the user's own music before (true) or after (false) the online catalogue rows. */
-  val homeMusicFirst: StateFlow<Boolean> = _homeMusicFirst.asStateFlow()
+  val homeMusicFirst: StateFlow<Boolean> = settings.homeMusicFirst
 
-  fun setHomeMusicFirst(on: Boolean) {
-    _homeMusicFirst.value = on
-    preferencesRepository.saveHomeMusicFirst(on)
-  }
+  fun setHomeMusicFirst(on: Boolean) = settings.setHomeMusicFirst(on)
 
   private val _waveformBar = MutableStateFlow(preferencesRepository.getWaveformBar())
   /** Advanced: draw the player progress as the track.s waveform when it is known. */
@@ -1256,34 +1271,24 @@ class TarkasViewModel(
     .flatMapLatest { track -> if (track == null) kotlinx.coroutines.flow.flowOf(null) else graph.waveformSource.waveform(track) }
     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-  private val _reduceMotion = MutableStateFlow(preferencesRepository.getReduceMotion().also { AppMotion.userReduced = it })
-  val reduceMotion: StateFlow<Boolean> = _reduceMotion.asStateFlow()
+  val reduceMotion: StateFlow<Boolean> = settings.reduceMotion
 
-  fun setReduceMotion(reduce: Boolean) {
-    _reduceMotion.value = reduce
-    AppMotion.userReduced = reduce
-    preferencesRepository.saveReduceMotion(reduce)
-  }
+  fun setReduceMotion(reduce: Boolean) = settings.setReduceMotion(reduce)
 
-  init {
-    AppMotion.listAnimation = com.example.ui.theme.ListAnimation.fromKey(preferencesRepository.getListAnimation())
-  }
+  fun setListAnimation(style: com.example.ui.theme.ListAnimation) = settings.setListAnimation(style)
 
-  fun setListAnimation(style: com.example.ui.theme.ListAnimation) {
-    AppMotion.listAnimation = style
-    preferencesRepository.saveListAnimation(style.key)
-  }
-
-  fun setThemeMode(mode: String) {
-    _themeMode.value = mode
-    preferencesRepository.saveThemeMode(mode)
-  }
+  fun setThemeMode(mode: String) = settings.setThemeMode(mode)
 
   // Replies run one at a time, in the order they were asked (see enqueueAssistantReply).
   private val assistantReplyMutex = Mutex()
   private var assistantRepliesPending = 0
+  // Read aloud only for questions asked by voice (A13); created without starting the engine.
+  private val assistantSpeaker = AssistantSpeaker(context)
 
-  fun sendAssistantMessage(text: String) {
+  /** Stops the reading of a previous reply: a new question, typed or spoken, takes over the voice. */
+  fun stopAssistantSpeech() = assistantSpeaker.stop()
+
+  fun sendAssistantMessage(text: String, askedByVoice: Boolean = false) {
     if (text.isBlank()) return
 
     val userMsg = AssistantMessage(
@@ -1291,8 +1296,9 @@ class TarkasViewModel(
       sender = MessageSender.USER,
       text = text
     )
-    _assistantMessages.value = _assistantMessages.value + userMsg
-    enqueueAssistantReply(text)
+    assistantSpeaker.stop()
+    publishAssistantMessages(_assistantMessages.value + userMsg)
+    enqueueAssistantReply(text, askedByVoice)
   }
 
   // "Try again" on a failed reply: the error line goes away and the same question is asked again.
@@ -1302,21 +1308,21 @@ class TarkasViewModel(
     val index = list.indexOfFirst { it.id == errorMessageId }
     if (index < 0) return
     val question = list.take(index).lastOrNull { it.sender == MessageSender.USER }?.text ?: return
-    _assistantMessages.value = list.filterNot { it.id == errorMessageId }
+    publishAssistantMessages(list.filterNot { it.id == errorMessageId })
     enqueueAssistantReply(question)
   }
 
   // Policy for a message sent while another is pending: it waits in line. Cancelling the earlier one
   // would drop a reply the user is still waiting for, and could stop a player command halfway.
   // Every message gets its answer, in order. "Thinking" stays on until the line is empty.
-  private fun enqueueAssistantReply(text: String) {
+  private fun enqueueAssistantReply(text: String, askedByVoice: Boolean = false) {
     assistantRepliesPending++
     _isAssistantProcessing.value = true
     viewModelScope.launch {
       try {
         assistantReplyMutex.withLock {
           val reply = try {
-            assistantEngine.processUserMessage(text)
+            assistantEngine.processUserMessage(text, useGeminiIfAvailable = _assistantOnlineAi.value)
           } catch (e: CancellationException) {
             throw e
           } catch (e: Exception) {
@@ -1330,7 +1336,8 @@ class TarkasViewModel(
           }
           val failure = reply.failure
           val shown = if (failure == null) reply else reply.copy(text = context.getString(failure.textRes))
-          _assistantMessages.value = _assistantMessages.value + shown
+          publishAssistantMessages(_assistantMessages.value + shown)
+          if (shouldSpeakReply(askedByVoice, shown)) assistantSpeaker.speak(speakableReply(shown.text))
         }
       } finally {
         // Runs on success, on failure and on cancellation, so "thinking" always ends.
@@ -1650,6 +1657,7 @@ class TarkasViewModel(
   override fun onCleared() {
     super.onCleared()
     GlobalEq.appListening = false
+    assistantSpeaker.shutdown()
     timerTickerJob?.cancel()
     // The static callback held this view model; a new one sets its own when it asks for capture again.
     com.example.data.systemaudio.AudioCaptureService.onMediaProjectionReady = null
@@ -1658,8 +1666,7 @@ class TarkasViewModel(
   }
 
   private companion object {
-    const val KEY_TAB = "nav_tab"
-    const val KEY_BACK = "nav_back"
+    const val KEY_ROUTES = "nav_routes"
     const val KEY_LEGACY_CLEANED = "legacy_spotify_cleaned"
     const val KEY_WEB_CLEANED = "legacy_web_players_cleaned"
   }
