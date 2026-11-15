@@ -54,6 +54,7 @@ fun TrackDetailsSheet(
   val info = state.info
   val loadingDescription = stringResource(R.string.player_details_loading)
   ModalBottomSheet(
+    sheetMaxWidth = Grid.u384 * 2,
     onDismissRequest = onDismiss,
     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     containerColor = MaterialTheme.colorScheme.surfaceContainer,

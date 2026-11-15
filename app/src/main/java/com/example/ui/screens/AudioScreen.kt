@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
 import com.example.ui.components.TarkasAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -248,6 +249,7 @@ fun AudioScreen(
 
   if (showPresets) {
     ModalBottomSheet(
+      sheetMaxWidth = Grid.u384 * 2,
       onDismissRequest = closePresets,
       sheetState = sheetState,
       containerColor = MaterialTheme.colorScheme.surface

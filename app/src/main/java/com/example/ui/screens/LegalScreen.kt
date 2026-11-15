@@ -45,7 +45,7 @@ fun LegalScreen(
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
     item {
-      SubPageHeader(title = doc.title, backLabel = backLabel, onBack = onBack, modifier = Modifier.testTag("legal_back"))
+      SubPageHeader(title = doc.title, backLabel = backLabel, onBack = onBack, modifier = Modifier.widthIn(max = ReadingWidth).fillMaxWidth().testTag("legal_back"))
     }
     item {
       Text(

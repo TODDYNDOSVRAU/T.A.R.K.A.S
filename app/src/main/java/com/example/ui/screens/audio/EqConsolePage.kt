@@ -157,6 +157,7 @@ internal fun EqConsolePage(
 
   if (showSpatial && spatialActions != null) {
     ModalBottomSheet(
+      sheetMaxWidth = Grid.u384 * 2,
       onDismissRequest = { showSpatial = false },
       sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
       containerColor = colors.surface
@@ -170,6 +171,7 @@ internal fun EqConsolePage(
 
   if (showSettings) {
     ModalBottomSheet(
+      sheetMaxWidth = Grid.u384 * 2,
       onDismissRequest = { showSettings = false },
       sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
       containerColor = colors.surface

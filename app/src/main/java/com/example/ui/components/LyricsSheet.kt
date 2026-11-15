@@ -60,6 +60,7 @@ fun LyricsSheet(
   onDismiss: () -> Unit
 ) {
   ModalBottomSheet(
+    sheetMaxWidth = Grid.u384 * 2,
     onDismissRequest = onDismiss,
     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     containerColor = MaterialTheme.colorScheme.surfaceContainer,

@@ -128,6 +128,7 @@ fun TrackActionsMenu(
       }
     }
     ModalBottomSheet(
+      sheetMaxWidth = Grid.u384 * 2,
       onDismissRequest = { expanded = false; showPlaylists = false },
       sheetState = sheetState,
       containerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -276,6 +277,7 @@ fun QueueItemMenu(
       scope.launch { sheetState.hide() }.invokeOnCompletion { expanded = false }
     }
     ModalBottomSheet(
+      sheetMaxWidth = Grid.u384 * 2,
       onDismissRequest = { expanded = false },
       sheetState = sheetState,
       containerColor = MaterialTheme.colorScheme.surfaceContainer,
