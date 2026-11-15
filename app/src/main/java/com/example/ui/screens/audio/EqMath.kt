@@ -83,7 +83,7 @@ internal fun spokenHz(f: Float): String = when {
   else -> "${f.roundToInt()} Hz"
 }
 
-internal fun formatQ(q: Float): String = formatNumber(q, 2)
+internal fun formatQ(q: Float): String = formatNumber(q, 2).trimEnd('0').trimEnd('.', ',')
 
 /** "48 kHz", "44.1 kHz", "22.05 kHz": a decimal only when the value is not whole. */
 internal fun formatSampleRate(hz: Int): String {

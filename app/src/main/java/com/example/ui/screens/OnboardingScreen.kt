@@ -376,7 +376,7 @@ private fun TermsStep(accepted: Boolean, onAccepted: (Boolean) -> Unit, onRead: 
         colors = CheckboxDefaults.colors(checkedColor = colors.primary, checkmarkColor = colors.onPrimary),
         modifier = Modifier.size(Size.touch)
       )
-      Text(stringResource(R.string.onboarding_accept), style = AppText.Body, color = colors.onSurface)
+      Text(stringResource(R.string.onboarding_accept), style = AppText.Body, color = colors.onSurface, modifier = Modifier.padding(vertical = Grid.u6))
     }
   }
   GroupFooter(stringResource(R.string.onboarding_controller, LegalTexts.CONTROLLER, LegalTexts.CONTACT_EMAIL))

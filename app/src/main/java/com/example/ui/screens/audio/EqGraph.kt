@@ -45,7 +45,6 @@ import com.example.ui.theme.rememberReducedMotion
 private const val CURVE_POINTS = 128
 
 /** The curve card: 168 dp of plot and a 24 dp axis row, 192 dp in all. */
-internal val CURVE_PLOT_HEIGHT = Grid.u192 - Grid.u24
 
 /**
  * The settings with every field that does not shape the frequency response set to its default, so
@@ -156,7 +155,7 @@ internal fun EqGraph(
       .border(ThemeSize.hairline, colors.onSurface.copy(alpha = 0.08f), shape)
       .semantics { contentDescription = curveDescription }
   ) {
-    Box(modifier = Modifier.fillMaxWidth().height(CURVE_PLOT_HEIGHT)) {
+    Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
       Canvas(modifier = Modifier.fillMaxSize()) {
         // The plot is inset 12 dp each side: the same x as the faders under the card.
         inset(horizontal = Grid.inset.toPx(), vertical = 0f) {
@@ -254,7 +253,7 @@ internal fun EqGraph(
         "0",
         style = EqType.Mono,
         color = label,
-        modifier = Modifier.align(Alignment.CenterStart).offset(x = Grid.inset)
+        modifier = Modifier.align(Alignment.CenterStart).offset(x = Grid.inset, y = -Grid.u12)
       )
     }
     // The axis row: 20 / 200 / 2k / 20k, each centred on its x in the plot, except the two ends: the

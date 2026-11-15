@@ -232,7 +232,8 @@ fun TarkasLargeTitle(
   onOpenSettings: () -> Unit,
   modifier: Modifier = Modifier,
   showSettings: Boolean = true,
-  onBack: (() -> Unit)? = null
+  onBack: (() -> Unit)? = null,
+  fadeBelow: Boolean = true
 ) {
   val page = MaterialTheme.colorScheme.background
   Row(
@@ -241,7 +242,8 @@ fun TarkasLargeTitle(
       // title instead of being cut in a straight line.
       .zIndex(1f)
       .drawBehind {
-        val fade = 14.dp.toPx()
+        // Only while content is scrolled under the title; at rest the first control below is not dimmed.
+        val fade = if (fadeBelow) 14.dp.toPx() else 0f
         drawRect(
           brush = androidx.compose.ui.graphics.Brush.verticalGradient(
             colors = listOf(page, page.copy(alpha = 0f)),

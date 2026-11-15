@@ -247,7 +247,7 @@ fun InsetGroup(modifier: Modifier = Modifier, content: @Composable ColumnScope.(
  * boundary and takes no height, so rows stay on the 12 dp rhythm.
  */
 @Composable
-fun GroupDivider(inset: Dp = Grid.inset) {
+fun GroupDivider(inset: Dp = Grid.inset, endInset: Dp = 0.dp) {
   val color = MaterialTheme.colorScheme.outline
   Box(
     modifier = Modifier
@@ -255,7 +255,7 @@ fun GroupDivider(inset: Dp = Grid.inset) {
       .height(0.dp)
       .drawBehind {
         val w = Grid.hairline.toPx()
-        drawLine(color, Offset(inset.toPx(), -w / 2), Offset(size.width, -w / 2), strokeWidth = w)
+        drawLine(color, Offset(inset.toPx(), -w / 2), Offset(size.width - endInset.toPx(), -w / 2), strokeWidth = w)
       }
   )
 }

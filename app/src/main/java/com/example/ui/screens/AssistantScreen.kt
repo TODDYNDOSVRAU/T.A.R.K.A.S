@@ -271,7 +271,8 @@ fun AssistantScreen(
                   .minimumInteractiveComponentSize()
                   .clip(Shapes.pill)
                   .highlightClickable(onClick = { enableHelpShown = !enableHelpShown })
-                  .padding(horizontal = Grid.u12)
+                  // Padding on the start only: the text ends on the 24 dp margin like the rows below it.
+                  .padding(start = Grid.u12)
                   .testTag("assistant_enable_help"),
                 contentAlignment = Alignment.Center
               ) {

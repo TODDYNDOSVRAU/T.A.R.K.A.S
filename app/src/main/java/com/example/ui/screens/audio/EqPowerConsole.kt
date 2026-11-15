@@ -66,6 +66,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.example.R
@@ -118,12 +119,12 @@ internal fun EqPowerConsole(
   fun presets() = PresetRow(eqSettings, activePreset, eqModified, presetActions, onOpenSettings, onOpenAdvanced, onOpenSpatial, onUpdateEq)
 
   @Composable
-  fun curve() = EqGraph(
+  fun curve(height: Dp = Grid.u192) = EqGraph(
     settings = eqSettings,
     selectedBand = if (mode == EqMode.PARAMETRIC) bandIndex else -1,
     spectrumBars = spectrumBars,
     isPlaying = isPlaying,
-    modifier = Modifier.fillMaxWidth().testTag("audio_spectrum_graph_card")
+    modifier = Modifier.fillMaxWidth().height(height).testTag("audio_spectrum_graph_card")
   )
 
   @Composable
@@ -145,11 +146,13 @@ internal fun EqPowerConsole(
         // The curve and bands take the height there is, and no less than the curve plus the band minimum;
         // below that the column scrolls.
         Box(modifier = Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+          // A short screen (a phone on its side) gets the curve at half height, so the bands show without scrolling.
+          val curveHeight = if (pageHeight < Grid.u192 + Grid.u12 + BANDS_MIN) Grid.u96 else Grid.u192
           Column(
-            modifier = Modifier.fillMaxWidth().height(maxOf(pageHeight, Grid.u192 + Grid.u12 + BANDS_MIN)),
+            modifier = Modifier.fillMaxWidth().height(maxOf(pageHeight, curveHeight + Grid.u12 + BANDS_MIN)),
             verticalArrangement = Arrangement.spacedBy(Grid.u12)
           ) {
-            curve()
+            curve(curveHeight)
             bands(Modifier.weight(1f).fillMaxWidth())
           }
         }

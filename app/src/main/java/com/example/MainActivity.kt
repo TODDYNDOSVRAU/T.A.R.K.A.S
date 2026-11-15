@@ -521,6 +521,17 @@ fun TarkasAppContent(
           )
       ) {
       // A sub-page of Ajustes (Sobre, the legal texts) draws its own title.
+      // How far the page has been scrolled under its title: the title's soft fade shows only then, so at
+      // rest it does not dim the first control below it.
+      var scrolledUnder by remember(screen, settingsPage) { mutableStateOf(0f) }
+      val scrollWatcher = remember {
+        object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
+          override fun onPostScroll(consumed: androidx.compose.ui.geometry.Offset, available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
+            if (consumed.y != 0f) scrolledUnder = (scrolledUnder - consumed.y).coerceAtLeast(0f)
+            return androidx.compose.ui.geometry.Offset.Zero
+          }
+        }
+      }
       if (tabPage && !(screen == TarkasNavTab.SETTINGS && settingsPage != null)) {
         // Ajustes opens from the title bar of Início only, as an account button does in Apple apps;
         // the other pages keep their title clean.
@@ -528,10 +539,11 @@ fun TarkasAppContent(
           title = androidx.compose.ui.res.stringResource((screen as TarkasNavTab).labelRes),
           onOpenSettings = { viewModel.setTab(TarkasNavTab.SETTINGS) },
           showSettings = screen == TarkasNavTab.HOME,
-          onBack = if (screen == TarkasNavTab.SETTINGS) ({ viewModel.goBack() }) else null
+          onBack = if (screen == TarkasNavTab.SETTINGS) ({ viewModel.goBack() }) else null,
+          fadeBelow = scrolledUnder > 0f
         )
       }
-      Box(modifier = Modifier.weight(1f)) {
+      Box(modifier = Modifier.weight(1f).nestedScroll(scrollWatcher)) {
       pageStates.SaveableStateProvider(screen.toString()) {
       if (screen == "curiosity") {
         MusicalCuriositySettingsScreen(

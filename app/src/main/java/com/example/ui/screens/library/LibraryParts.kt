@@ -43,7 +43,7 @@ internal fun trackSubtitle(track: Track, showSource: Boolean = true): String {
 /** The hairline between two track rows, inset to where the title starts. */
 @Composable
 internal fun TrackDivider() {
-  GroupDivider(inset = Grid.margin + Grid.u48 + Grid.inset)
+  GroupDivider(inset = Grid.margin + Grid.u48 + Grid.inset, endInset = Grid.margin)
 }
 
 /**

@@ -167,7 +167,7 @@ internal fun SongOrderRow(
     state = rowState,
     modifier = modifier,
     horizontalArrangement = Arrangement.spacedBy(Grid.u6),
-    contentPadding = PaddingValues(horizontal = Grid.margin - Grid.u6, vertical = Grid.u6)
+    contentPadding = PaddingValues(horizontal = Grid.margin, vertical = Grid.u6)
   ) {
     items(com.example.data.playback.SongOrder.entries.size) { i ->
       val o = com.example.data.playback.SongOrder.entries[i]
