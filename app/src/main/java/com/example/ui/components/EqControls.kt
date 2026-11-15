@@ -85,7 +85,12 @@ fun EqFader(
   steps: Int = 29,
   onHeldChange: (Boolean) -> Unit = {},
   /** The colour of the filled part; the theme accent when null. A band passes its own. */
-  tint: androidx.compose.ui.graphics.Color? = null
+  tint: androidx.compose.ui.graphics.Color? = null,
+  /** The thumb's size. The graphic bands use a thin 12 dp thumb so 15 faders fit under their frequencies. */
+  handleWidth: Dp = FADER_HANDLE_W,
+  handleHeight: Dp = FADER_HANDLE_H,
+  /** The dotted marks beside the track; the graphic bands leave them out (a dashed zero line replaces them). */
+  marks: Boolean = true
 ) {
   val colors = MaterialTheme.colorScheme
   val current by rememberUpdatedState(value)
@@ -132,11 +137,11 @@ fun EqFader(
         // the track the drag is left to the page, so scrolling over the strip never changes a band.
         awaitEachGesture {
           val down = awaitFirstDown(requireUnconsumed = false)
-          val handleH = FADER_HANDLE_H.toPx()
+          val handleH = handleHeight.toPx()
           val top = handleH / 2f
           val bottom = size.height - handleH / 2f
           val handleY = bottom - (current.coerceIn(-1f, 1f) + 1f) / 2f * (bottom - top)
-          if (abs(down.position.y - handleY) > FADER_GRAB.toPx()) return@awaitEachGesture
+          if (abs(down.position.y - handleY) > maxOf(FADER_GRAB.toPx(), handleH / 2f)) return@awaitEachGesture
           // Every move is consumed as it arrives, so the page never starts scrolling under a held
           // handle; the down itself is left alone so a double tap still reaches the tap detector.
           dragValue = current
@@ -162,8 +167,8 @@ fun EqFader(
       }
   ) {
     val cx = size.width / 2f
-    val handleH = FADER_HANDLE_H.toPx()
-    val handleW = FADER_HANDLE_W.toPx().coerceAtMost(size.width)
+    val handleH = handleHeight.toPx()
+    val handleW = handleWidth.toPx().coerceAtMost(size.width)
     val top = handleH / 2f
     val bottom = size.height - handleH / 2f
     val mid = (top + bottom) / 2f
@@ -173,7 +178,7 @@ fun EqFader(
     // Dotted marks at +max, 0 dB and -max on both sides of the track, like the rule of a desk.
     val dot = ThemeSize.hairline.toPx()
     val gap = EqSize.faderDotGap.toPx()
-    for (markY in floatArrayOf(top, mid, bottom)) {
+    if (marks) for (markY in floatArrayOf(top, mid, bottom)) {
       drawCircle(tick, dot, Offset(cx - gap, markY))
       drawCircle(tick, dot, Offset(cx + gap, markY))
     }

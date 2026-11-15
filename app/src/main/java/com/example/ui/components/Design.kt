@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -13,13 +14,18 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -34,8 +40,6 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
@@ -46,6 +50,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -54,12 +60,16 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.data.model.Track
 import com.example.ui.theme.AppText
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
+import com.example.ui.theme.gridHeight
 import com.example.ui.theme.Radius
 import com.example.ui.theme.Shapes
 import com.example.ui.theme.Size
@@ -116,12 +126,13 @@ fun SectionHeader(
   Row(
     modifier = modifier
       .fillMaxWidth()
-      .padding(horizontal = Space.page),
+      .heightIn(min = Grid.u48)
+      .padding(horizontal = Grid.margin),
     verticalAlignment = Alignment.CenterVertically
   ) {
     Text(
       text = title,
-      style = AppText.Title2,
+      style = GridText.Title,
       color = MaterialTheme.colorScheme.onSurface,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
@@ -133,15 +144,17 @@ fun SectionHeader(
   }
 }
 
-/** The small label above a group of rows. */
+/** The small label above a group of rows: 12 sp technical type, starting where the rows' text starts. */
 @Composable
 fun GroupHeader(text: String, modifier: Modifier = Modifier) {
   Text(
     text = text,
-    style = AppText.Footnote,
+    style = GridText.Label,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
     modifier = modifier
-      .padding(start = Space.page + Space.l, end = Space.page, bottom = Space.s)
+      .padding(bottom = Grid.u12)
+      .gridHeight(min = Grid.u24)
+      .padding(start = Grid.margin + Grid.inset, end = Grid.margin + Grid.inset)
       .semantics { heading() }
   )
 }
@@ -151,9 +164,12 @@ fun GroupHeader(text: String, modifier: Modifier = Modifier) {
 fun GroupFooter(text: String, modifier: Modifier = Modifier) {
   Text(
     text = text,
-    style = AppText.Footnote,
+    style = GridText.Small,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
-    modifier = modifier.padding(start = Space.page + Space.l, end = Space.page + Space.l, top = Space.s)
+    modifier = modifier
+      .padding(top = Grid.u12)
+      .gridHeight(min = Grid.u24)
+      .padding(start = Grid.margin + Grid.inset, end = Grid.margin + Grid.inset)
   )
 }
 
@@ -173,15 +189,15 @@ fun SubPageHeader(
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(start = Space.s, end = Space.s),
+        .padding(start = Grid.inset, end = Grid.inset),
       verticalAlignment = Alignment.CenterVertically
     ) {
       Row(
         modifier = Modifier
-          .heightIn(min = Size.touch)
-          .clip(Shapes.s)
+          .heightIn(min = Grid.u48)
+          .clip(Grid.r24)
           .clickable(role = Role.Button, onClickLabel = "Voltar para $backLabel", onClick = onBack)
-          .padding(horizontal = Space.s),
+          .padding(horizontal = Grid.inset),
         verticalAlignment = Alignment.CenterVertically
       ) {
         Icon(
@@ -190,17 +206,19 @@ fun SubPageHeader(
           tint = MaterialTheme.colorScheme.primary,
           modifier = Modifier.size(18.dp)
         )
-        Text(backLabel, style = AppText.Body, color = MaterialTheme.colorScheme.primary, maxLines = 1)
+        Spacer(Modifier.width(Grid.u6))
+        Text(backLabel, style = GridText.Body, color = MaterialTheme.colorScheme.primary, maxLines = 1)
       }
       Spacer(Modifier.weight(1f))
       trailing()
     }
     Text(
       text = title,
-      style = AppText.LargeTitle,
+      style = GridText.Title,
       color = MaterialTheme.colorScheme.onSurface,
       modifier = Modifier
-        .padding(start = Space.page, end = Space.page, top = Space.xs, bottom = Space.m)
+        .gridHeight(min = Grid.u48)
+        .padding(horizontal = Grid.margin)
         .semantics { heading() }
     )
   }
@@ -217,22 +235,28 @@ fun InsetGroup(modifier: Modifier = Modifier, content: @Composable ColumnScope.(
   Column(
     modifier = modifier
       .fillMaxWidth()
-      .padding(horizontal = Space.page)
-      .clip(Shapes.m)
+      .padding(horizontal = Grid.margin)
+      .clip(Grid.r12)
       .background(MaterialTheme.colorScheme.surface),
     content = content
   )
 }
 
-/** Hairline between two rows of a group, inset to where the row's text starts. */
+/**
+ * Hairline between two rows of a group, inset to where the row's text starts. It is drawn over the
+ * boundary and takes no height, so rows stay on the 12 dp rhythm.
+ */
 @Composable
-fun GroupDivider(inset: Dp = Space.l) {
+fun GroupDivider(inset: Dp = Grid.inset) {
+  val color = MaterialTheme.colorScheme.outline
   Box(
     modifier = Modifier
       .fillMaxWidth()
-      .padding(start = inset)
-      .height(0.5.dp)
-      .background(MaterialTheme.colorScheme.outline)
+      .height(0.dp)
+      .drawBehind {
+        val w = Grid.hairline.toPx()
+        drawLine(color, Offset(inset.toPx(), -w / 2), Offset(size.width, -w / 2), strokeWidth = w)
+      }
   )
 }
 
@@ -247,22 +271,16 @@ fun Hairline(modifier: Modifier = Modifier) {
   )
 }
 
-/** A rounded square holding a row's icon, in the accent or a colour of its own. */
+/** A row's icon: 24 dp, gray unless the row gives it a colour of its own. The accent is kept for state. */
 @Composable
-fun RowIcon(icon: ImageVector, tint: Color = MaterialTheme.colorScheme.primary) {
-  Box(
-    modifier = Modifier
-      .size(30.dp)
-      .clip(RoundedSquare)
-      .background(tint.copy(alpha = 0.16f)),
-    contentAlignment = Alignment.Center
-  ) {
-    Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
-  }
+fun RowIcon(icon: ImageVector, tint: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+  Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(Grid.icon))
 }
 
-private val RoundedSquare = com.example.ui.theme.Shapes.xs
-
+/**
+ * The layout every row shares: 48 dp tall with one line, taller in steps of 12 dp when the text wraps
+ * or has a subtitle; content 12 dp from the group's edge; title 18 sp, subtitle 12 sp.
+ */
 @Composable
 private fun RowLayout(
   title: String,
@@ -276,18 +294,18 @@ private fun RowLayout(
   Row(
     modifier = modifier
       .fillMaxWidth()
-      .heightIn(min = Size.row)
-      .padding(horizontal = Space.l, vertical = Space.s),
+      .gridHeight(min = Grid.u48)
+      .padding(horizontal = Grid.inset, vertical = Grid.u6),
     verticalAlignment = Alignment.CenterVertically
   ) {
     if (icon != null) {
       RowIcon(icon, iconTint)
-      Spacer(Modifier.width(Space.m))
+      Spacer(Modifier.width(Grid.inset))
     }
     Column(modifier = Modifier.weight(1f)) {
-      Text(title, style = AppText.Body, color = titleColor)
+      Text(title, style = GridText.Body, color = titleColor)
       if (subtitle != null) {
-        Text(subtitle, style = AppText.Footnote, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(subtitle, style = GridText.Small, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
     }
     trailing()
@@ -305,7 +323,7 @@ fun ListRow(
   modifier: Modifier = Modifier,
   subtitle: String? = null,
   icon: ImageVector? = null,
-  iconTint: Color = MaterialTheme.colorScheme.primary,
+  iconTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
   value: String? = null,
   chevron: Boolean = true,
   destructive: Boolean = false,
@@ -331,21 +349,19 @@ fun ListRow(
     if (value != null) {
       Text(
         value,
-        style = AppText.Body,
+        style = GridText.Label,
         color = colors.onSurfaceVariant,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.padding(start = Space.s)
+        modifier = Modifier.padding(start = Grid.inset)
       )
     }
     if (chevron) {
       Icon(
         Icons.Rounded.ChevronRight,
         contentDescription = null,
-        tint = colors.onSurfaceVariant.copy(alpha = 0.6f),
-        modifier = Modifier
-          .padding(start = Space.xs)
-          .size(Size.iconSmall)
+        tint = colors.onSurfaceVariant,
+        modifier = Modifier.size(Grid.icon)
       )
     }
   }
@@ -362,7 +378,7 @@ fun InfoRow(title: String, value: String, modifier: Modifier = Modifier) {
     titleColor = MaterialTheme.colorScheme.onSurface,
     modifier = modifier.semantics(mergeDescendants = true) {}
   ) {
-    Text(value, style = AppText.Body, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+    Text(value, style = GridText.Label, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, modifier = Modifier.padding(start = Grid.inset))
   }
 }
 
@@ -382,22 +398,45 @@ fun SwitchRow(
     title = title,
     subtitle = subtitle,
     icon = icon,
-    iconTint = colors.primary,
+    iconTint = colors.onSurfaceVariant,
     titleColor = if (enabled) colors.onSurface else colors.onSurface.copy(alpha = 0.38f),
     modifier = modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
   ) {
-    Spacer(Modifier.width(Space.m))
-    Switch(
-      checked = checked,
-      onCheckedChange = null,
-      enabled = enabled,
-      colors = SwitchDefaults.colors(
-        checkedTrackColor = colors.primary,
-        checkedThumbColor = colors.onPrimary,
-        uncheckedTrackColor = colors.surfaceContainerHigh,
-        uncheckedBorderColor = Color.Transparent,
-        uncheckedThumbColor = colors.onSurfaceVariant
-      )
+    Spacer(Modifier.width(Grid.inset))
+    GridSwitch(checked = checked, enabled = enabled)
+  }
+}
+
+/**
+ * The grid's switch: 48 x 24 dp, an 18 dp thumb 3 dp from the edge. On is the accent track with a dark
+ * thumb; off is a quiet track. It only shows the state: the row around it is what toggles.
+ */
+@Composable
+fun GridSwitch(checked: Boolean, modifier: Modifier = Modifier, enabled: Boolean = true) {
+  val colors = MaterialTheme.colorScheme
+  val fade = if (enabled) 1f else 0.38f
+  val track by animateColorAsState(
+    if (checked) colors.primary.copy(alpha = fade) else colors.onSurface.copy(alpha = 0.2f * fade),
+    tween(200), label = "switchTrack"
+  )
+  val thumb by animateColorAsState(
+    if (checked) colors.onPrimary else colors.onSurface.copy(alpha = fade),
+    tween(200), label = "switchThumb"
+  )
+  val x by animateDpAsState(if (checked) Grid.u24 + 3.dp else 3.dp, tween(250), label = "switchX")
+  Box(
+    modifier = modifier
+      .size(width = Grid.u48, height = Grid.u24)
+      .clip(Grid.r12)
+      .background(track),
+    contentAlignment = Alignment.CenterStart
+  ) {
+    Box(
+      Modifier
+        .offset(x = x)
+        .size(18.dp)
+        .clip(CircleShape)
+        .background(thumb)
     )
   }
 }
@@ -419,14 +458,14 @@ fun RadioRow(
     title = title,
     subtitle = subtitle,
     icon = icon,
-    iconTint = colors.primary,
+    iconTint = colors.onSurfaceVariant,
     titleColor = colors.onSurface,
     modifier = modifier
       .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
   ) {
     accessory?.invoke()
-    Box(Modifier.size(Size.icon), contentAlignment = Alignment.Center) {
-      if (selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = colors.primary, modifier = Modifier.size(22.dp))
+    Box(Modifier.padding(start = Grid.inset).size(Grid.icon), contentAlignment = Alignment.Center) {
+      if (selected) Icon(Icons.Rounded.Check, contentDescription = null, tint = colors.primary, modifier = Modifier.size(Grid.icon))
     }
   }
 }
@@ -492,19 +531,19 @@ private fun ButtonLayout(
 ) {
   Row(
     modifier = modifier
-      .heightIn(min = 50.dp)
-      .clip(Shapes.m)
+      .heightIn(min = Grid.u48)
+      .clip(Grid.r24)
       .background(container)
       .highlightClickable(enabled = enabled, onClick = onClick)
-      .padding(horizontal = Space.l, vertical = Space.m),
+      .padding(horizontal = Grid.u24, vertical = Grid.u12),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.Center
   ) {
     if (icon != null) {
-      Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(Size.iconSmall))
-      Spacer(Modifier.width(Space.s))
+      Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(Grid.icon))
+      Spacer(Modifier.width(Grid.u6))
     }
-    Text(text, style = AppText.Headline, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Text(text, style = GridText.BodyStrong, color = content, maxLines = 1, overflow = TextOverflow.Ellipsis)
   }
 }
 
@@ -513,15 +552,15 @@ private fun ButtonLayout(
 fun TextAction(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
   Box(
     modifier = modifier
-      .heightIn(min = Size.touch)
-      .clip(Shapes.s)
+      .heightIn(min = Grid.u48)
+      .clip(Grid.r24)
       .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-      .padding(horizontal = Space.s),
+      .padding(horizontal = Grid.inset),
     contentAlignment = Alignment.Center
   ) {
     Text(
       text,
-      style = AppText.Body,
+      style = GridText.Body,
       color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
       maxLines = 1
     )
@@ -560,32 +599,80 @@ fun IconAction(
 }
 
 /**
- * A filter among a few views of one list (Músicas, Playlists, Favoritos). Announced as a tab; the
- * selected one is filled with the accent wash.
+ * A filter among a few views of one list (Músicas, Playlists, Favoritos). Announced as a tab. A 48 dp
+ * pill; the selected one is filled with the text colour.
  */
 @Composable
 fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
   val colors = MaterialTheme.colorScheme
   Box(
     modifier = modifier
-      .minimumInteractiveComponentSize()
-      .selectable(selected = selected, role = Role.Tab, onClick = onClick),
+      .height(Grid.u48)
+      .clip(Grid.r24)
+      .background(if (selected) colors.onSurface else colors.surfaceContainer)
+      .selectable(selected = selected, role = Role.Tab, onClick = onClick)
+      .padding(horizontal = Grid.u24),
+    contentAlignment = Alignment.Center
+  ) {
+    Text(
+      label,
+      style = GridText.Small.copy(fontWeight = FontWeight.Medium),
+      color = if (selected) colors.background else colors.onSurface,
+      maxLines = 1
+    )
+  }
+}
+
+/**
+ * A choice among a few views of one page, as one 48 dp pill split into equal parts. Put [Segment]s
+ * inside. The chosen part is a raised pill 6 dp inside the track; the whole 48 dp height is the target.
+ */
+@Composable
+fun SegmentedTabs(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
+  Row(
+    modifier = modifier
+      .fillMaxWidth()
+      .height(Grid.u48)
+      .clip(Grid.r24)
+      .background(MaterialTheme.colorScheme.surface)
+      .padding(horizontal = Grid.u6)
+      .selectableGroup(),
+    content = content
+  )
+}
+
+/** One part of [SegmentedTabs]. Announced as a tab. */
+@Composable
+fun RowScope.Segment(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+  val colors = MaterialTheme.colorScheme
+  val fill by animateColorAsState(
+    if (selected) colors.surfaceContainerHigh else colors.surfaceContainerHigh.copy(alpha = 0f),
+    tween(200), label = "segmentFill"
+  )
+  val text by animateColorAsState(if (selected) colors.onSurface else colors.onSurfaceVariant, tween(200), label = "segmentText")
+  Box(
+    modifier = modifier
+      .weight(1f)
+      .fillMaxHeight()
+      .selectable(
+        selected = selected,
+        interactionSource = remember { MutableInteractionSource() },
+        indication = null,
+        role = Role.Tab,
+        onClick = onClick
+      )
+      .padding(vertical = Grid.u6),
     contentAlignment = Alignment.Center
   ) {
     Box(
       modifier = Modifier
-        .heightIn(min = 34.dp)
-        .clip(Shapes.pill)
-        .background(if (selected) colors.onSurface else colors.surfaceContainer)
-        .padding(horizontal = 14.dp, vertical = 7.dp),
+        .fillMaxSize()
+        .clip(Grid.r24)
+        .background(fill)
+        .padding(horizontal = Grid.u6),
       contentAlignment = Alignment.Center
     ) {
-      Text(
-        label,
-        style = AppText.Subhead.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium),
-        color = if (selected) colors.background else colors.onSurface,
-        maxLines = 1
-      )
+      Text(label, style = GridText.Small.copy(fontWeight = FontWeight.Medium), color = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
   }
 }
@@ -602,21 +689,21 @@ fun SearchField(
   onSearch: () -> Unit = {}
 ) {
   val colors = MaterialTheme.colorScheme
-  val textStyle: TextStyle = AppText.Body.copy(color = colors.onSurface)
+  val textStyle: TextStyle = GridText.Body.copy(color = colors.onSurface)
   Row(
     modifier = modifier
       .fillMaxWidth()
-      .heightIn(min = 44.dp)
-      .clip(Shapes.s)
+      .heightIn(min = Grid.u48)
+      .clip(Grid.r24)
       .background(colors.surfaceContainer)
-      .padding(start = Space.m, end = Space.xs),
+      .padding(start = Grid.inset),
     verticalAlignment = Alignment.CenterVertically
   ) {
-    Icon(Icons.Rounded.Search, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(Size.iconSmall))
-    Spacer(Modifier.width(Space.s))
+    Icon(Icons.Rounded.Search, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(Grid.icon))
+    Spacer(Modifier.width(Grid.inset))
     Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
       if (value.isEmpty()) {
-        Text(placeholder, style = AppText.Body, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(placeholder, style = GridText.Body, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
       }
       BasicTextField(
         value = value,
@@ -637,10 +724,10 @@ fun SearchField(
         contentDescription = androidx.compose.ui.res.stringResource(com.example.R.string.library_search_clear),
         onClick = { onValueChange("") },
         tint = colors.onSurfaceVariant,
-        size = 32.dp
+        size = Grid.u24
       )
     } else {
-      Spacer(Modifier.width(Space.s))
+      Spacer(Modifier.width(Grid.inset))
     }
   }
 }
@@ -667,7 +754,9 @@ fun TrackRow(
     modifier = modifier
       .fillMaxWidth()
       .highlightClickable(onClickLabel = "Tocar ${track.title}", onClick = onClick)
-      .padding(start = Space.page, end = if (onMore != null) Space.xs else Space.page, top = 6.dp, bottom = 6.dp),
+      // Artwork on the 24 dp margin. With a "more" button (48 dp target, 24 dp glyph) the end is 12, so
+      // the glyph itself ends on the margin.
+      .padding(start = Grid.margin, end = if (onMore != null) Grid.inset else Grid.margin, top = Grid.u6, bottom = Grid.u6),
     verticalAlignment = Alignment.CenterVertically
   ) {
     TrackArtwork(
@@ -713,4 +802,4 @@ fun WithContentColor(color: Color, content: @Composable () -> Unit) {
 }
 
 /** Corner radius of a group, exposed for screens that draw their own grouped surfaces. */
-val GroupRadius: Dp get() = Radius.m
+val GroupRadius: Dp get() = Grid.u12

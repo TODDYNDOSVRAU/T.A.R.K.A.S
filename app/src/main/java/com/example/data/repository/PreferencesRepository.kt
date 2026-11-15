@@ -80,6 +80,13 @@ class PreferencesRepository(context: Context) {
   }
 
   /** "Reduzir animações": off by default, so the app animates even when the system scale is zero. */
+  /** Material You: follow the phone's colours instead of the T.A.L. palette. Off by default. */
+  fun getSystemColors(): Boolean = prefs.getBoolean("system_colors", false)
+
+  fun saveSystemColors(on: Boolean) {
+    prefs.edit().putBoolean("system_colors", on).apply()
+  }
+
   fun getReduceMotion(): Boolean = prefs.getBoolean("reduce_motion", false)
 
   fun saveReduceMotion(reduce: Boolean) {

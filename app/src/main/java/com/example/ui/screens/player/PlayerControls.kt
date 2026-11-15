@@ -82,6 +82,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.R
 import com.example.data.model.Curiosity
@@ -115,7 +116,7 @@ internal fun CloseHandle(onClose: () -> Unit, modifier: Modifier = Modifier) {
   Box(
     modifier = modifier
       .padding(top = Space.xs)
-      .size(width = Size.control, height = Size.touch)
+      .size(width = PlayerGrid.g96, height = PlayerGrid.g48)
       .clip(Shapes.pill)
       .clickable(role = Role.Button, onClick = onClose)
       .semantics { contentDescription = closeLabel }
@@ -124,7 +125,7 @@ internal fun CloseHandle(onClose: () -> Unit, modifier: Modifier = Modifier) {
   ) {
     Box(
       Modifier
-        .size(width = Size.handleWidth, height = Size.handleHeight)
+        .size(width = PlayerGrid.g48, height = 6.dp)
         .clip(Shapes.pill)
         .background(OnPage.copy(alpha = 0.4f))
     )
@@ -207,14 +208,14 @@ internal fun TitleRow(
         Column {
           Text(
             text = t?.title ?: stringResource(R.string.player_screen_nothing_playing),
-            style = AppText.Title3,
+            style = AppText.Title3.copy(fontSize = PlayerGrid.text24, lineHeight = 30.sp),
             color = OnPage,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
           )
           Text(
             text = t?.artist ?: stringResource(R.string.player_screen_pick_song),
-            style = AppText.Body,
+            style = AppText.Body.copy(fontSize = PlayerGrid.text18, lineHeight = 24.sp),
             color = OnPageMuted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -262,7 +263,7 @@ internal fun PlayPauseButton(isPlaying: Boolean, onClick: () -> Unit) {
   val press by animateFloatAsState(if (pressed) 1f else 0f, Motion.defaultEffects(), label = "playPress")
   Box(
     modifier = Modifier
-      .size(Size.playButton)
+      .size(PlayerGrid.g96)
       .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
       .testTag("music_btn_play_pause"),
     contentAlignment = Alignment.Center
@@ -271,7 +272,7 @@ internal fun PlayPauseButton(isPlaying: Boolean, onClick: () -> Unit) {
       isPlaying = isPlaying,
       tint = OnPage,
       modifier = Modifier
-        .size(Size.playGlyph)
+        .size(PlayerGrid.g48)
         .playerPart("play", delay = 0.08f)
         .graphicsLayer {
           val s = 1f - 0.08f * press
@@ -397,7 +398,7 @@ internal fun PlayerProgress(
   )
   Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
     // Tabular figures keep the clocks from jittering as digits change.
-    val clockStyle = AppText.Caption1.copy(fontFeatureSettings = "tnum")
+    val clockStyle = AppText.Caption1.copy(fontSize = PlayerGrid.text12, fontFeatureSettings = "tnum")
     Text(text = formatClock(position), style = clockStyle, color = OnPageMuted)
     Text(text = remaining, style = clockStyle, color = OnPageMuted)
   }
@@ -629,8 +630,8 @@ internal fun TransportRow(isPlaying: Boolean, onPrevious: () -> Unit, onTogglePl
       icon = Icons.Rounded.SkipPrevious,
       contentDescription = stringResource(R.string.player_screen_previous),
       onClick = onPrevious,
-      touch = Size.control,
-      glyph = Size.controlGlyph,
+      touch = PlayerGrid.g48,
+      glyph = PlayerGrid.g24,
       tint = OnPage,
       modifier = Modifier.playerPart("prev", delay = 0.12f).testTag("music_btn_previous")
     )
@@ -639,8 +640,8 @@ internal fun TransportRow(isPlaying: Boolean, onPrevious: () -> Unit, onTogglePl
       icon = Icons.Rounded.SkipNext,
       contentDescription = stringResource(R.string.player_screen_next),
       onClick = onNext,
-      touch = Size.control,
-      glyph = Size.controlGlyph,
+      touch = PlayerGrid.g48,
+      glyph = PlayerGrid.g24,
       tint = OnPage,
       modifier = Modifier.playerPart("next", delay = 0.12f).testTag("music_btn_next")
     )
@@ -651,7 +652,7 @@ internal fun TransportRow(isPlaying: Boolean, onPrevious: () -> Unit, onTogglePl
 internal fun VolumeRow(volume: StreamVolume, reduced: Boolean) {
   Row(modifier = Modifier.fillMaxWidth().revealWithPlayer(), verticalAlignment = Alignment.CenterVertically) {
     // Decorative (contentDescription = null on purpose): the volume slider beside it carries the label
-    Icon(Icons.AutoMirrored.Rounded.VolumeDown, contentDescription = null, tint = OnPageMuted, modifier = Modifier.size(Size.iconSmall))
+    Icon(Icons.AutoMirrored.Rounded.VolumeDown, contentDescription = null, tint = OnPageMuted, modifier = Modifier.size(PlayerGrid.g24))
     ScrubBar(
       fraction = volume.fraction,
       description = stringResource(R.string.player_screen_volume),
@@ -666,7 +667,7 @@ internal fun VolumeRow(volume: StreamVolume, reduced: Boolean) {
         .testTag("music_volume_slider")
     )
     // Decorative (contentDescription = null on purpose): the volume slider beside it carries the label
-    Icon(Icons.AutoMirrored.Rounded.VolumeUp, contentDescription = null, tint = OnPageMuted, modifier = Modifier.size(Size.iconSmall))
+    Icon(Icons.AutoMirrored.Rounded.VolumeUp, contentDescription = null, tint = OnPageMuted, modifier = Modifier.size(PlayerGrid.g24))
   }
 }
 

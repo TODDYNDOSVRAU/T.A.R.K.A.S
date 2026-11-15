@@ -1,5 +1,8 @@
 package com.example.ui.screens.library
 
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.Arrangement
@@ -37,23 +40,23 @@ internal fun MusicPermissionPrompt(blocked: Boolean, onAllow: () -> Unit, onOpen
   Column(
     modifier = Modifier
       .fillMaxWidth()
-      .padding(horizontal = Space.page, vertical = Space.xl),
+      .padding(horizontal = Grid.margin, vertical = Grid.u24),
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
     Text(
       stringResource(R.string.library_permission_title),
-      style = AppText.Title3,
+      style = GridText.Title,
       color = MaterialTheme.colorScheme.onSurface,
       modifier = Modifier.semantics { heading() }
     )
-    Spacer(Modifier.size(Space.s))
+    Spacer(Modifier.size(Grid.u6))
     Text(
       stringResource(if (blocked) R.string.library_permission_blocked else R.string.library_permission_request),
-      style = AppText.Subhead,
+      style = GridText.Small,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
       textAlign = androidx.compose.ui.text.style.TextAlign.Center
     )
-    Spacer(Modifier.size(Space.l))
+    Spacer(Modifier.size(Grid.inset))
     if (blocked) {
       PrimaryButton(stringResource(R.string.library_permission_open_settings), onClick = onOpenSettings, modifier = Modifier.fillMaxWidth().testTag("library_open_settings"))
       // The detection cannot tell "don't ask again" from a dismissed dialog, so asking stays possible.
@@ -71,7 +74,7 @@ internal fun NoMatch(message: String, onClear: () -> Unit) {
     icon = Icons.Rounded.SearchOff,
     title = stringResource(R.string.library_search_empty_title),
     message = message,
-    modifier = Modifier.padding(horizontal = Space.page),
+    modifier = Modifier.padding(horizontal = Grid.margin),
     actionLabel = stringResource(R.string.library_search_clear),
     onAction = onClear
   )
@@ -85,7 +88,7 @@ internal fun EmptyLibrary(onRefresh: () -> Unit, onImport: () -> Unit) {
       icon = Icons.Rounded.LibraryMusic,
       title = stringResource(R.string.library_empty_songs_title),
       message = stringResource(R.string.library_empty_songs_message),
-      modifier = Modifier.padding(horizontal = Space.page),
+      modifier = Modifier.padding(horizontal = Grid.margin),
       actionLabel = stringResource(R.string.library_refresh),
       onAction = onRefresh
     )
@@ -103,17 +106,17 @@ internal fun Loading(text: String) {
   Row(
     modifier = Modifier
       .fillMaxWidth()
-      .padding(horizontal = Space.page, vertical = Space.xl),
+      .padding(horizontal = Grid.margin, vertical = Grid.u24),
     horizontalArrangement = Arrangement.Center,
     verticalAlignment = Alignment.CenterVertically
   ) {
     CircularProgressIndicator(
-      modifier = Modifier.size(Size.iconSmall),
-      strokeWidth = Space.xxs,
+      modifier = Modifier.size(Grid.u24),
+      strokeWidth = 2.dp,
       color = MaterialTheme.colorScheme.onSurfaceVariant
     )
-    Spacer(Modifier.width(Space.m))
-    Text(text, style = AppText.Subhead, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Spacer(Modifier.width(Grid.inset))
+    Text(text, style = GridText.Small, color = MaterialTheme.colorScheme.onSurfaceVariant)
   }
 }
 
@@ -122,8 +125,8 @@ internal fun Loading(text: String) {
 internal fun Note(text: String) {
   Text(
     text,
-    style = AppText.Subhead,
+    style = GridText.Small,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
-    modifier = Modifier.padding(horizontal = Space.page, vertical = Space.l)
+    modifier = Modifier.padding(horizontal = Grid.margin, vertical = Grid.inset)
   )
 }

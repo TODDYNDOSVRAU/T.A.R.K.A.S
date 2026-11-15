@@ -53,6 +53,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.example.R
 import com.example.data.model.Track
@@ -155,7 +156,7 @@ internal fun QueueList(
   LazyColumn(
     state = listState,
     modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
+    contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.xl)
   ) {
     if (queue.isEmpty() && upcoming.isEmpty()) {
       item(key = "empty") {
@@ -163,7 +164,7 @@ internal fun QueueList(
           icon = Icons.AutoMirrored.Rounded.QueueMusic,
           title = stringResource(R.string.queue_empty_title),
           message = stringResource(R.string.queue_empty_message),
-          modifier = Modifier.padding(horizontal = Space.page)
+          modifier = Modifier.padding(horizontal = Space.xl)
         )
       }
       return@LazyColumn
@@ -174,12 +175,12 @@ internal fun QueueList(
         modifier = Modifier
           .fillMaxWidth()
           .heightIn(min = Size.touch)
-          .padding(start = Space.page, end = Space.page - Space.s, top = Space.s),
+          .padding(start = Space.xl, end = Space.xl - Space.m, top = Space.m),
         verticalAlignment = Alignment.CenterVertically
       ) {
         Text(
           stringResource(R.string.queue_header),
-          style = AppText.Title2,
+          style = AppText.Title2.copy(fontSize = 24.sp, lineHeight = 30.sp),
           color = colors.onSurface,
           modifier = Modifier
             .weight(1f)
@@ -211,7 +212,7 @@ internal fun QueueList(
             modifier = Modifier
               .fillMaxSize()
               .background(colors.surfaceContainerHigh)
-              .padding(horizontal = Space.page),
+              .padding(horizontal = Space.xl),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = if (dismiss.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Arrangement.Start else Arrangement.End
           ) {
@@ -302,7 +303,7 @@ internal fun QueueList(
           stringResource(R.string.queue_empty_note),
           style = AppText.Footnote,
           color = colors.onSurfaceVariant,
-          modifier = Modifier.padding(horizontal = Space.page, vertical = Space.s)
+          modifier = Modifier.padding(horizontal = Space.xl, vertical = Space.m)
         )
       }
     }
@@ -314,7 +315,7 @@ internal fun QueueList(
           style = AppText.Title3,
           color = colors.onSurface,
           modifier = Modifier
-            .padding(start = Space.page, end = Space.page, top = Space.xl, bottom = Space.xs)
+            .padding(start = Space.xl, end = Space.xl, top = Space.xl, bottom = Space.xs)
             .semantics { heading() }
         )
       }

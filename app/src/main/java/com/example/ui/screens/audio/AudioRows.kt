@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import com.example.ui.components.highlightClickable
+import androidx.compose.ui.unit.Dp
 import com.example.ui.theme.AppText
 import com.example.ui.theme.Space
 import kotlinx.coroutines.launch
@@ -52,11 +53,12 @@ internal fun SliderRow(
   modifier: Modifier = Modifier,
   onChangeFinished: ((Float) -> Unit)? = null,
   enabled: Boolean = true,
-  testTag: String? = null
+  testTag: String? = null,
+  side: Dp = Space.l
 ) {
   val colors = MaterialTheme.colorScheme
   val latest by rememberUpdatedState(value)
-  Column(modifier = modifier.fillMaxWidth().padding(start = Space.l, end = Space.l, top = Space.m, bottom = Space.xs)) {
+  Column(modifier = modifier.fillMaxWidth().padding(start = side, end = side, top = Space.m, bottom = Space.xs)) {
     Row(modifier = Modifier.fillMaxWidth()) {
       Text(label, style = AppText.Body, color = colors.onSurface, modifier = Modifier.weight(1f))
       Text(valueText, style = AppText.Body.copy(fontFeatureSettings = "tnum"), color = colors.onSurfaceVariant)

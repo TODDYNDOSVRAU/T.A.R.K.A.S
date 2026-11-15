@@ -1,5 +1,7 @@
 package com.example.ui.screens.library
 
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
 import androidx.compose.foundation.layout.fillMaxHeight
 import com.example.ui.layout.readingColumn
 import androidx.compose.runtime.setValue
@@ -61,7 +63,7 @@ import com.example.ui.theme.Size
 import com.example.ui.theme.Space
 
 /** Artwork of a playlist row. */
-internal val PlaylistArtworkSize = 56.dp
+internal val PlaylistArtworkSize = 48.dp
 
 @Composable
 internal fun PlaylistsList(
@@ -75,7 +77,7 @@ internal fun PlaylistsList(
   val shown = playlists.filter { com.example.data.TextMatch.contains(it.name, query) }
   LazyColumn(
     modifier = Modifier.readingColumn().fillMaxHeight(),
-    contentPadding = PaddingValues(top = Space.s, bottom = LocalBarInset.current + Space.l)
+    contentPadding = PaddingValues(top = Grid.u6, bottom = LocalBarInset.current + Grid.inset)
   ) {
     item(key = "search") {
       SearchField(
@@ -83,8 +85,8 @@ internal fun PlaylistsList(
         onValueChange = { query = it },
         placeholder = stringResource(R.string.library_search_playlists_hint),
         modifier = Modifier
-          .padding(horizontal = Space.page)
-          .padding(bottom = Space.s)
+          .padding(horizontal = Grid.margin)
+          .padding(bottom = Grid.u6)
           .testTag("library_search_input")
       )
     }
@@ -121,20 +123,20 @@ internal fun ActionRow(title: String, icon: ImageVector, onClick: () -> Unit, mo
     modifier = modifier
       .fillMaxWidth()
       .highlightClickable(onClick = onClick)
-      .padding(horizontal = Space.page, vertical = 6.dp),
+      .padding(horizontal = Grid.margin, vertical = Grid.u6),
     verticalAlignment = Alignment.CenterVertically
   ) {
     Box(
       modifier = Modifier
-        .size(Size.rowArtwork)
-        .clip(Shapes.xs)
+        .size(Grid.u48)
+        .clip(Grid.r6)
         .background(MaterialTheme.colorScheme.surfaceContainer),
       contentAlignment = Alignment.Center
     ) {
-      Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(Size.icon))
+      Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(Grid.u24))
     }
-    Spacer(Modifier.width(Space.m))
-    Text(title, style = AppText.Body, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Spacer(Modifier.width(Grid.inset))
+    Text(title, style = GridText.Body, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
   }
 }
 
@@ -144,18 +146,18 @@ internal fun PlaylistRow(playlist: Playlist, tracks: List<Track>, onClick: () ->
     modifier = Modifier
       .fillMaxWidth()
       .highlightClickable(onClickLabel = stringResource(R.string.library_open_playlist, playlist.name), onClick = onClick)
-      .padding(horizontal = Space.page, vertical = 6.dp)
+      .padding(horizontal = Grid.margin, vertical = Grid.u6)
       .testTag("playlist_row_${playlist.id}"),
     verticalAlignment = Alignment.CenterVertically
   ) {
     PlaylistArtwork(tracks)
-    Spacer(Modifier.width(Space.m))
+    Spacer(Modifier.width(Grid.inset))
     Column(modifier = Modifier.weight(1f)) {
-      Text(playlist.name, style = AppText.Body, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+      Text(playlist.name, style = GridText.Body, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
       Text(
         if (playlist.trackIds.isEmpty()) stringResource(R.string.library_tracks_none)
         else pluralStringResource(R.plurals.library_track_count, playlist.trackIds.size, playlist.trackIds.size),
-        style = AppText.Subhead,
+        style = GridText.Small,
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )
     }
@@ -163,7 +165,7 @@ internal fun PlaylistRow(playlist: Playlist, tracks: List<Track>, onClick: () ->
       Icons.Rounded.ChevronRight,
       contentDescription = null,
       tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-      modifier = Modifier.size(Size.iconSmall)
+      modifier = Modifier.size(Grid.u24)
     )
   }
 }
@@ -178,7 +180,7 @@ internal fun PlaylistArtwork(tracks: List<Track>) {
   Box(
     modifier = Modifier
       .size(PlaylistArtworkSize)
-      .clip(Shapes.xs)
+      .clip(Grid.r6)
       .background(MaterialTheme.colorScheme.surfaceContainerHigh),
     contentAlignment = Alignment.Center
   ) {
@@ -187,7 +189,7 @@ internal fun PlaylistArtwork(tracks: List<Track>) {
         covers.chunked(2).forEach { pair ->
           Row {
             pair.forEach { t ->
-              TrackArtwork(track = t, shape = RectangleShape, iconSize = 14.dp, modifier = Modifier.size(PlaylistArtworkSize / 2))
+              TrackArtwork(track = t, shape = RectangleShape, iconSize = 12.dp, modifier = Modifier.size(PlaylistArtworkSize / 2))
             }
           }
         }
@@ -195,14 +197,14 @@ internal fun PlaylistArtwork(tracks: List<Track>) {
       tracks.isNotEmpty() -> TrackArtwork(
         track = covers.firstOrNull() ?: tracks.first(),
         shape = RectangleShape,
-        iconSize = Size.icon,
+        iconSize = Grid.u24,
         modifier = Modifier.size(PlaylistArtworkSize)
       )
       else -> Icon(
         Icons.AutoMirrored.Rounded.QueueMusic,
         contentDescription = null,
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.size(Size.icon)
+        modifier = Modifier.size(Grid.u24)
       )
     }
   }
@@ -246,7 +248,7 @@ internal fun PlaylistDetail(
         icon = Icons.AutoMirrored.Rounded.QueueMusic,
         title = stringResource(R.string.library_playlist_empty_title),
         message = stringResource(R.string.library_playlist_empty_message),
-        modifier = Modifier.padding(horizontal = Space.page)
+        modifier = Modifier.padding(horizontal = Grid.margin)
       )
     },
     trailing = { track ->

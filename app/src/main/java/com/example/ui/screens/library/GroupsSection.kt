@@ -1,5 +1,7 @@
 package com.example.ui.screens.library
 
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
 import androidx.compose.foundation.layout.fillMaxHeight
 import com.example.ui.layout.readingColumn
 import androidx.compose.runtime.setValue
@@ -95,7 +97,7 @@ internal fun GroupsList(
   val shown = remember(groups, query) { groups.filter { com.example.data.TextMatch.contains(it.name, query) } }
   LazyColumn(
     modifier = Modifier.readingColumn().fillMaxHeight(),
-    contentPadding = PaddingValues(top = Space.s, bottom = LocalBarInset.current + Space.l)
+    contentPadding = PaddingValues(top = Grid.u6, bottom = LocalBarInset.current + Grid.inset)
   ) {
     if (groups.isNotEmpty()) item(key = "search") {
       SearchField(
@@ -103,8 +105,8 @@ internal fun GroupsList(
         onValueChange = { query = it },
         placeholder = stringResource(hintRes),
         modifier = Modifier
-          .padding(horizontal = Space.page)
-          .padding(bottom = Space.s)
+          .padding(horizontal = Grid.margin)
+          .padding(bottom = Grid.u6)
           .testTag("library_search_$kind")
       )
     }
@@ -130,21 +132,21 @@ internal fun GroupRow(group: LibraryGroup, subtitle: String, onClick: () -> Unit
     modifier = Modifier
       .fillMaxWidth()
       .highlightClickable(onClickLabel = stringResource(R.string.library_open_group, group.name), onClick = onClick)
-      .padding(horizontal = Space.page, vertical = 6.dp)
+      .padding(horizontal = Grid.margin, vertical = Grid.u6)
       .testTag("group_row_${group.key}"),
     verticalAlignment = Alignment.CenterVertically
   ) {
     PlaylistArtwork(covers)
-    Spacer(Modifier.width(Space.m))
+    Spacer(Modifier.width(Grid.inset))
     Column(modifier = Modifier.weight(1f)) {
-      Text(group.name, style = AppText.Body, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
-      Text(subtitle, style = AppText.Subhead, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      Text(group.name, style = GridText.Body, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+      Text(subtitle, style = GridText.Small, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
     Icon(
       Icons.Rounded.ChevronRight,
       contentDescription = null,
       tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-      modifier = Modifier.size(Size.iconSmall)
+      modifier = Modifier.size(Grid.u24)
     )
   }
 }
@@ -181,18 +183,18 @@ internal fun GroupDetail(
       item(key = "info") {
         Text(
           subtitle,
-          style = AppText.Subhead,
+          style = GridText.Small,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.padding(horizontal = Space.page).padding(bottom = Space.s)
+          modifier = Modifier.padding(horizontal = Grid.margin).padding(bottom = Grid.u6)
         )
       }
       if (albums.isNotEmpty()) {
         item(key = "albums_heading") {
           Text(
             stringResource(R.string.library_group_albums_heading),
-            style = AppText.Subhead,
+            style = GridText.Small,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(horizontal = Space.page, vertical = Space.xs).semantics { heading() }
+            modifier = Modifier.padding(horizontal = Grid.margin, vertical = Grid.u6).semantics { heading() }
           )
         }
         itemsIndexed(albums, key = { _, a -> "album_${a.key}" }) { index, album ->

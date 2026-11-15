@@ -13,6 +13,7 @@ class SettingsStoreTest {
   private class FakePrefs : SettingsPrefs {
     val saved = mutableListOf<String>()
     var theme = "system"
+    var phoneColors = false
     var surface = "solid"
     var motion = false
     var anim: String? = null
@@ -20,6 +21,8 @@ class SettingsStoreTest {
     var musicFirst = true
     override fun themeMode() = theme
     override fun saveThemeMode(mode: String) { theme = mode; saved += "theme=$mode" }
+    override fun systemColors() = phoneColors
+    override fun saveSystemColors(on: Boolean) { phoneColors = on; saved += "systemColors=$on" }
     override fun surfaceStyle() = surface
     override fun saveSurfaceStyle(key: String) { surface = key; saved += "surface=$key" }
     override fun reduceMotion() = motion
@@ -54,6 +57,21 @@ class SettingsStoreTest {
     assertEquals("light", vm.themeMode.value)
     assertEquals(true, vm.reduceTransparency.value)
     assertEquals(false, store.homeMusicFirst.value)
+  }
+
+  @Test fun phoneColorsStartOffAndAChangeIsSavedAndShared() {
+    val p = FakePrefs()
+    val store = SettingsStore(p)
+    val vm = SettingsViewModel(store)
+    assertEquals(false, store.systemColors.value)
+    vm.setSystemColors(true)
+    assertEquals(listOf("systemColors=true"), p.saved)
+    assertEquals(true, store.systemColors.value)
+    assertEquals(true, vm.systemColors.value)
+    assertEquals(true, SettingsStore(p).systemColors.value)
+    vm.setSystemColors(false)
+    assertEquals(false, store.systemColors.value)
+    assertEquals(false, SettingsStore(p).systemColors.value)
   }
 
   @Test fun surfaceAndMotionAreSavedByKey() {

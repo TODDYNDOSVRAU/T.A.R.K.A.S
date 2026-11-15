@@ -164,6 +164,7 @@ class MainActivity : ComponentActivity() {
     setContent {
       val viewModel: TarkasViewModel = viewModel()
       val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+      val systemColors by viewModel.systemColors.collectAsStateWithLifecycle()
 
       // The opening animation plays once per launch (it survives rotation).
       var showBoot by rememberSaveable { mutableStateOf(true) }
@@ -233,7 +234,7 @@ class MainActivity : ComponentActivity() {
       }
 
       val showOnboarding by viewModel.showOnboarding.collectAsStateWithLifecycle()
-      TarkasTheme(themeMode = themeMode) {
+      TarkasTheme(themeMode = themeMode, systemColors = systemColors) {
         Box(modifier = Modifier.fillMaxSize()) {
         TarkasAppContent(
           viewModel = viewModel,
@@ -273,7 +274,9 @@ class MainActivity : ComponentActivity() {
             curiosityConfig = curiosityConfig,
             onCuriosityConfig = { viewModel.updateCuriosityConfig(it) },
             onAcceptTerms = { viewModel.acceptTerms() },
-            onFinish = { viewModel.finishOnboarding() }
+            onFinish = { viewModel.finishOnboarding() },
+            systemColors = systemColors,
+            onSystemColors = { viewModel.setSystemColors(it) }
           )
         }
         if (showBoot) {
@@ -753,6 +756,7 @@ fun TarkasAppContent(
         TarkasNavTab.SETTINGS -> {
           val settingsVm: SettingsViewModel = viewModel()
           val themeMode by settingsVm.themeMode.collectAsStateWithLifecycle()
+          val systemColors by settingsVm.systemColors.collectAsStateWithLifecycle()
           val surfaceStyle by settingsVm.surfaceStyle.collectAsStateWithLifecycle()
           val reduceMotion by settingsVm.reduceMotion.collectAsStateWithLifecycle()
           val reduceTransparency by settingsVm.reduceTransparency.collectAsStateWithLifecycle()
@@ -761,6 +765,8 @@ fun TarkasAppContent(
             themeMode = themeMode,
             capabilities = capabilities,
             onThemeModeChange = { mode -> settingsVm.setThemeMode(mode) },
+            systemColors = systemColors,
+            onSystemColorsChange = { settingsVm.setSystemColors(it) },
             curiosityConfig = curiosityConfig,
             onOpenCuriositySettings = { viewModel.openCuriositySettings() },
             hasGeminiKey = viewModel.assistantEngine.hasGeminiKey,

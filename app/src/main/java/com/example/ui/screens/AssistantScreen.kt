@@ -89,10 +89,10 @@ import com.example.ui.components.IconAction
 import com.example.ui.components.ToolReportCard
 import com.example.ui.components.highlightClickable
 import com.example.ui.theme.AppText
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
 import com.example.ui.theme.LocalBarInset
 import com.example.ui.theme.Shapes
-import com.example.ui.theme.Size
-import com.example.ui.theme.Space
 import com.example.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.delay
 import java.text.DateFormat
@@ -252,15 +252,15 @@ fun AssistantScreen(
     LazyColumn(
       state = listState,
       modifier = Modifier.weight(1f).readingColumn(),
-      contentPadding = PaddingValues(start = Space.page, end = Space.page, top = Space.xs, bottom = Space.m),
-      verticalArrangement = Arrangement.spacedBy(Space.s)
+      contentPadding = PaddingValues(start = Grid.margin, end = Grid.margin, top = Grid.u6, bottom = Grid.u12),
+      verticalArrangement = Arrangement.spacedBy(Grid.u12)
     ) {
       item {
         Column(Modifier.fillMaxWidth()) {
           Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
               stringResource(if (online) R.string.assistant_status_online else R.string.assistant_status_local),
-              style = AppText.Footnote,
+              style = GridText.Small,
               color = colors.onSurfaceVariant,
               modifier = Modifier.weight(1f)
             )
@@ -271,13 +271,13 @@ fun AssistantScreen(
                   .minimumInteractiveComponentSize()
                   .clip(Shapes.pill)
                   .highlightClickable(onClick = { enableHelpShown = !enableHelpShown })
-                  .padding(horizontal = Space.s)
+                  .padding(horizontal = Grid.u12)
                   .testTag("assistant_enable_help"),
                 contentAlignment = Alignment.Center
               ) {
                 Text(
                   stringResource(if (enableHelpShown) R.string.assistant_enable_hide else R.string.assistant_enable_action),
-                  style = AppText.Footnote,
+                  style = GridText.Small,
                   color = colors.primary
                 )
               }
@@ -286,9 +286,9 @@ fun AssistantScreen(
           if (!hasGeminiKey && enableHelpShown) {
             Text(
               stringResource(R.string.assistant_enable_body),
-              style = AppText.Footnote,
+              style = GridText.Small,
               color = colors.onSurfaceVariant,
-              modifier = Modifier.fillMaxWidth().padding(bottom = Space.xs)
+              modifier = Modifier.fillMaxWidth().padding(bottom = Grid.u6)
             )
           }
           if (hasGeminiKey) {
@@ -296,14 +296,14 @@ fun AssistantScreen(
             Row(
               modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = Size.row)
+                .heightIn(min = Grid.u48)
                 .toggleable(value = onlineAi, role = Role.Switch, onValueChange = onSetOnlineAi)
                 .testTag("assistant_online_switch"),
               verticalAlignment = Alignment.CenterVertically
             ) {
               Text(
                 stringResource(R.string.assistant_online_label),
-                style = AppText.Subhead,
+                style = GridText.Body,
                 color = colors.onSurface,
                 modifier = Modifier.weight(1f)
               )
@@ -311,33 +311,33 @@ fun AssistantScreen(
             }
             Text(
               stringResource(if (onlineAi) R.string.assistant_online_disclosure_on else R.string.assistant_online_disclosure_off),
-              style = AppText.Footnote,
+              style = GridText.Small,
               color = colors.onSurfaceVariant,
-              modifier = Modifier.fillMaxWidth().padding(bottom = Space.xs)
+              modifier = Modifier.fillMaxWidth().padding(bottom = Grid.u6)
             )
           }
           if (isListening) {
-            Text(listeningText, style = AppText.Footnote, color = colors.primary, modifier = Modifier.padding(top = Space.xs))
+            Text(listeningText, style = GridText.Small, color = colors.primary, modifier = Modifier.padding(top = Grid.u6))
           }
           if (messages.isEmpty()) {
-            Spacer(Modifier.height(Space.xxl))
+            Spacer(Modifier.height(Grid.u48))
             Text(
               stringResource(R.string.assistant_empty_title),
-              style = AppText.Title3,
+              style = GridText.Title,
               color = colors.onSurface,
               textAlign = TextAlign.Center,
               modifier = Modifier.fillMaxWidth()
             )
             Text(
               stringResource(R.string.assistant_empty_body),
-              style = AppText.Subhead,
+              style = GridText.Body,
               color = colors.onSurfaceVariant,
               textAlign = TextAlign.Center,
-              modifier = Modifier.fillMaxWidth().padding(top = Space.xs)
+              modifier = Modifier.fillMaxWidth().padding(top = Grid.u6)
             )
           }
           voiceError?.let {
-            Text(it, style = AppText.Footnote, color = colors.error, modifier = Modifier.padding(top = Space.s))
+            Text(it, style = GridText.Small, color = colors.error, modifier = Modifier.padding(top = Grid.u12))
           }
           if (hasUserMessage) {
             ClearConversation(
@@ -351,12 +351,12 @@ fun AssistantScreen(
             )
           }
           if (activeTimers.isNotEmpty()) {
-            Spacer(Modifier.height(Space.m))
+            Spacer(Modifier.height(Grid.u12))
             // Drawn like an InsetGroup, without its page margin: the list already applies it.
             Column(
               Modifier
                 .fillMaxWidth()
-                .clip(Shapes.m)
+                .clip(Grid.r12)
                 .background(colors.surface)
             ) {
               activeTimers.forEachIndexed { i, timer ->
@@ -382,7 +382,7 @@ fun AssistantScreen(
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(start = Space.page, end = Space.s, top = Space.s, bottom = Space.s),
+        .padding(start = Grid.margin, end = Grid.inset, top = Grid.u12, bottom = Grid.u12),
       verticalAlignment = Alignment.Bottom
     ) {
       ComposerField(
@@ -404,7 +404,7 @@ fun AssistantScreen(
         onClick = ::send,
         tint = if (textInput.isBlank()) colors.onSurfaceVariant.copy(alpha = 0.5f) else colors.primary,
         filled = true,
-        size = 36.dp,
+        size = Grid.u48,
         modifier = Modifier.testTag("siri_send_button")
       )
     }
@@ -420,24 +420,24 @@ private fun ClearConversation(confirming: Boolean, onAsk: () -> Unit, onConfirm:
       onClick = onAsk,
       modifier = Modifier.minimumInteractiveComponentSize().testTag("assistant_clear")
     ) {
-      Text(stringResource(R.string.assistant_clear), style = AppText.Footnote, color = colors.primary)
+      Text(stringResource(R.string.assistant_clear), style = GridText.Small, color = colors.primary)
     }
   } else {
     Row(
-      modifier = Modifier.fillMaxWidth().padding(top = Space.xs),
+      modifier = Modifier.fillMaxWidth().padding(top = Grid.u6),
       verticalAlignment = Alignment.CenterVertically
     ) {
       Text(
         stringResource(R.string.assistant_clear_confirm),
-        style = AppText.Footnote,
+        style = GridText.Small,
         color = colors.onSurfaceVariant,
         modifier = Modifier.weight(1f)
       )
       TextButton(onClick = onCancel, modifier = Modifier.minimumInteractiveComponentSize()) {
-        Text(stringResource(R.string.assistant_clear_no), style = AppText.Footnote, color = colors.onSurfaceVariant)
+        Text(stringResource(R.string.assistant_clear_no), style = GridText.Small, color = colors.onSurfaceVariant)
       }
       TextButton(onClick = onConfirm, modifier = Modifier.minimumInteractiveComponentSize().testTag("assistant_clear_yes")) {
-        Text(stringResource(R.string.assistant_clear_yes), style = AppText.Footnote, color = colors.error)
+        Text(stringResource(R.string.assistant_clear_yes), style = GridText.Small, color = colors.error)
       }
     }
   }
@@ -449,11 +449,11 @@ private fun ThinkingIndicator(label: String, reduced: Boolean) {
   val colors = MaterialTheme.colorScheme
   val transition = rememberInfiniteTransition(label = "assistant_thinking")
   Row(
-    modifier = Modifier.padding(start = Space.s).semantics { contentDescription = label },
+    modifier = Modifier.padding(start = Grid.u12).semantics { contentDescription = label },
     verticalAlignment = Alignment.CenterVertically
   ) {
-    Text(label, style = AppText.Footnote, color = colors.onSurfaceVariant)
-    Spacer(Modifier.width(Space.s))
+    Text(label, style = GridText.Small, color = colors.onSurfaceVariant)
+    Spacer(Modifier.width(Grid.u12))
     for (i in 0 until 3) {
       val alpha by transition.animateFloat(
         initialValue = 0.25f,
@@ -466,11 +466,11 @@ private fun ThinkingIndicator(label: String, reduced: Boolean) {
       )
       Box(
         Modifier
-          .size(6.dp)
+          .size(Grid.u6)
           .clip(CircleShape)
           .background(colors.onSurfaceVariant.copy(alpha = if (reduced) 0.6f else alpha))
       )
-      if (i < 2) Spacer(Modifier.width(4.dp))
+      if (i < 2) Spacer(Modifier.width(Grid.u6))
     }
   }
 }
@@ -481,20 +481,20 @@ private fun TimerRow(timer: LocalTimer, onCancel: () -> Unit) {
   Row(
     modifier = Modifier
       .fillMaxWidth()
-      .heightIn(min = Size.row)
-      .padding(start = Space.l, end = Space.xs),
+      .heightIn(min = Grid.u48)
+      .padding(start = Grid.u12, end = Grid.u6),
     verticalAlignment = Alignment.CenterVertically
   ) {
     Icon(
       if (timer.isCompleted) Icons.Rounded.Alarm else Icons.Rounded.Timer,
       contentDescription = null,
       tint = colors.primary,
-      modifier = Modifier.size(Size.iconSmall)
+      modifier = Modifier.size(Grid.u24)
     )
-    Spacer(Modifier.width(Space.m))
+    Spacer(Modifier.width(Grid.u12))
     Text(
       stringResource(R.string.assistant_timer_line, timer.label, timer.formattedTime()),
-      style = AppText.Body,
+      style = GridText.Body,
       color = colors.onSurface,
       modifier = Modifier.weight(1f)
     )
@@ -517,10 +517,10 @@ private fun MessageBubble(message: AssistantMessage, onRetry: (String) -> Unit) 
     if (message.timestampMs > 0L) DateFormat.getTimeInstance(DateFormat.SHORT, Locale.getDefault()).format(Date(message.timestampMs)) else ""
   }
   val shape = RoundedCornerShape(
-    topStart = com.example.ui.theme.Radius.l,
-    topEnd = com.example.ui.theme.Radius.l,
-    bottomStart = if (isUser) com.example.ui.theme.Radius.l else com.example.ui.theme.Radius.xs,
-    bottomEnd = if (isUser) com.example.ui.theme.Radius.xs else com.example.ui.theme.Radius.l
+    topStart = Grid.u24,
+    topEnd = Grid.u24,
+    bottomStart = if (isUser) Grid.u24 else Grid.u6,
+    bottomEnd = if (isUser) Grid.u6 else Grid.u24
   )
   // A bubble takes what its text needs, up to most of the row; long replies wrap instead of stopping at a fixed width.
   BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -532,13 +532,13 @@ private fun MessageBubble(message: AssistantMessage, onRetry: (String) -> Unit) 
       SelectionContainer {
         Text(
           text = text,
-          style = AppText.Body,
+          style = GridText.Body,
           color = if (isUser) colors.onPrimary else colors.onSurface,
           modifier = Modifier
             .widthIn(max = bubbleMax)
             .clip(shape)
             .background(if (isUser) colors.primary else colors.surfaceContainer)
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .padding(horizontal = Grid.u12, vertical = Grid.u12)
             .semantics { contentDescription = spoken }
             .testTag(if (isUser) "message_user" else "message_assistant")
         )
@@ -546,13 +546,13 @@ private fun MessageBubble(message: AssistantMessage, onRetry: (String) -> Unit) 
       if (time.isNotEmpty()) {
         Text(
           time,
-          style = AppText.Footnote,
+          style = GridText.Small,
           color = colors.onSurfaceVariant,
-          modifier = Modifier.padding(top = 2.dp, start = Space.xs, end = Space.xs)
+          modifier = Modifier.padding(top = Grid.u6, start = Grid.u6, end = Grid.u6)
         )
       }
       message.toolReport?.let { report ->
-        Spacer(Modifier.height(Space.xs))
+        Spacer(Modifier.height(Grid.u6))
         ToolReportCard(report = report, modifier = Modifier.widthIn(max = bubbleMax))
       }
       if (message.failure?.retryable == true) {
@@ -562,7 +562,7 @@ private fun MessageBubble(message: AssistantMessage, onRetry: (String) -> Unit) 
             .minimumInteractiveComponentSize()
             .testTag("assistant_retry")
         ) {
-          Text(stringResource(R.string.assistant_retry), style = AppText.Footnote)
+          Text(stringResource(R.string.assistant_retry), style = GridText.Small)
         }
       }
     }
@@ -574,8 +574,8 @@ private fun MessageBubble(message: AssistantMessage, onRetry: (String) -> Unit) 
 private fun Suggestions(suggestions: List<Suggestion>, onSendMessage: (String) -> Unit) {
   val colors = MaterialTheme.colorScheme
   LazyRow(
-    horizontalArrangement = Arrangement.spacedBy(Space.s),
-    contentPadding = PaddingValues(horizontal = Space.page),
+    horizontalArrangement = Arrangement.spacedBy(Grid.u12),
+    contentPadding = PaddingValues(horizontal = Grid.margin),
     modifier = Modifier.fillMaxWidth()
   ) {
     items(suggestions) { suggestion ->
@@ -591,13 +591,13 @@ private fun Suggestions(suggestions: List<Suggestion>, onSendMessage: (String) -
       ) {
         Box(
           modifier = Modifier
-            .heightIn(min = 34.dp)
+            .heightIn(min = Grid.u48)
             .clip(Shapes.pill)
             .background(colors.surfaceContainer)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
+            .padding(horizontal = Grid.u12, vertical = Grid.u12),
           contentAlignment = Alignment.Center
         ) {
-          Text(stringResource(suggestion.label), style = AppText.Subhead, color = colors.onSurface, maxLines = 1)
+          Text(stringResource(suggestion.label), style = GridText.Body, color = colors.onSurface, maxLines = 1)
         }
       }
     }
@@ -615,20 +615,20 @@ private fun ComposerField(value: String, onValueChange: (String) -> Unit, onSend
   val fieldDescription = stringResource(R.string.assistant_composer_description)
   Box(
     modifier = modifier
-      .heightIn(min = 44.dp)
-      .clip(Shapes.s)
+      .heightIn(min = Grid.u48)
+      .clip(Grid.r12)
       .background(colors.surfaceContainer)
-      .padding(horizontal = Space.m, vertical = Space.s),
+      .padding(horizontal = Grid.u12, vertical = Grid.u12),
     contentAlignment = Alignment.CenterStart
   ) {
     if (value.isEmpty()) {
-      Text(placeholder, style = AppText.Body, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      Text(placeholder, style = GridText.Body, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
     BasicTextField(
       value = value,
       onValueChange = onValueChange,
       maxLines = 4,
-      textStyle = AppText.Body.copy(color = colors.onSurface),
+      textStyle = GridText.Body.copy(color = colors.onSurface),
       cursorBrush = SolidColor(colors.primary),
       keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
       keyboardActions = KeyboardActions(onSend = { onSend() }),
@@ -661,3 +661,4 @@ private fun lightMarkdown(text: String): AnnotatedString = buildAnnotatedString 
     }
   }
 }
+

@@ -29,8 +29,9 @@ import com.example.ui.components.UpdateNotes
 import com.example.data.update.ReleaseNotes
 import androidx.compose.ui.unit.dp
 import com.example.ui.legal.LegalTexts
-import com.example.ui.theme.AppText
-import com.example.ui.theme.Space
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
+import com.example.ui.theme.gridHeight
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -84,8 +85,8 @@ internal fun LazyListScope.updateSettingsGroup(header: String) {
       if (ReleaseNotes.plain(offered.notes) != null) {
         GroupDivider()
         UpdateNotes(
-          offered.notes, offered.tag, maxHeight = 200.dp,
-          modifier = Modifier.padding(horizontal = Space.l, vertical = Space.m)
+          offered.notes, offered.tag, maxHeight = Grid.u192,
+          modifier = Modifier.padding(Grid.inset)
         )
       }
     }
@@ -177,9 +178,9 @@ private fun Footer(text: String) {
   val colors = MaterialTheme.colorScheme
   Text(
     text = text,
-    style = AppText.Footnote,
+    style = GridText.Small,
     color = colors.onSurfaceVariant,
-    modifier = Modifier.padding(horizontal = Space.l, vertical = Space.m).testTag("update_message")
+    modifier = Modifier.gridHeight(min = Grid.u48).padding(horizontal = Grid.inset, vertical = Grid.u6).testTag("update_message")
   )
 }
 

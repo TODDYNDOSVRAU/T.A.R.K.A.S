@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.asStateFlow
 interface SettingsPrefs {
   fun themeMode(): String
   fun saveThemeMode(mode: String)
+  fun systemColors(): Boolean
+  fun saveSystemColors(on: Boolean)
   fun surfaceStyle(): String
   fun saveSurfaceStyle(key: String)
   fun reduceMotion(): Boolean
@@ -29,6 +31,8 @@ interface SettingsPrefs {
 class PreferencesSettings(private val p: PreferencesRepository) : SettingsPrefs {
   override fun themeMode() = p.getThemeMode()
   override fun saveThemeMode(mode: String) = p.saveThemeMode(mode)
+  override fun systemColors() = p.getSystemColors()
+  override fun saveSystemColors(on: Boolean) = p.saveSystemColors(on)
   override fun surfaceStyle() = p.getSurfaceStyle()
   override fun saveSurfaceStyle(key: String) = p.saveSurfaceStyle(key)
   override fun reduceMotion() = p.getReduceMotion()
@@ -48,6 +52,10 @@ class PreferencesSettings(private val p: PreferencesRepository) : SettingsPrefs 
 class SettingsStore(private val prefs: SettingsPrefs) {
   private val _themeMode = MutableStateFlow(prefs.themeMode())
   val themeMode: StateFlow<String> = _themeMode.asStateFlow()
+
+  private val _systemColors = MutableStateFlow(prefs.systemColors())
+  /** Material You: the phone's colours (true) or the T.A.L. colours (false, the default). */
+  val systemColors: StateFlow<Boolean> = _systemColors.asStateFlow()
 
   private val _surfaceStyle = MutableStateFlow(SurfaceStyle.fromKey(prefs.surfaceStyle()))
   val surfaceStyle: StateFlow<SurfaceStyle> = _surfaceStyle.asStateFlow()
@@ -69,6 +77,11 @@ class SettingsStore(private val prefs: SettingsPrefs) {
   fun setThemeMode(mode: String) {
     _themeMode.value = mode
     prefs.saveThemeMode(mode)
+  }
+
+  fun setSystemColors(on: Boolean) {
+    _systemColors.value = on
+    prefs.saveSystemColors(on)
   }
 
   fun setSurfaceStyle(style: SurfaceStyle) {
@@ -101,12 +114,14 @@ class SettingsStore(private val prefs: SettingsPrefs) {
 /** The state and actions of the appearance and behaviour switches in Ajustes. */
 class SettingsViewModel(private val store: SettingsStore = com.example.AppGraph.settings) : ViewModel() {
   val themeMode: StateFlow<String> = store.themeMode
+  val systemColors: StateFlow<Boolean> = store.systemColors
   val surfaceStyle: StateFlow<SurfaceStyle> = store.surfaceStyle
   val reduceMotion: StateFlow<Boolean> = store.reduceMotion
   val reduceTransparency: StateFlow<Boolean> = store.reduceTransparency
   val homeMusicFirst: StateFlow<Boolean> = store.homeMusicFirst
 
   fun setThemeMode(mode: String) = store.setThemeMode(mode)
+  fun setSystemColors(on: Boolean) = store.setSystemColors(on)
   fun setSurfaceStyle(style: SurfaceStyle) = store.setSurfaceStyle(style)
   fun setReduceMotion(reduce: Boolean) = store.setReduceMotion(reduce)
   fun setReduceTransparency(reduce: Boolean) = store.setReduceTransparency(reduce)

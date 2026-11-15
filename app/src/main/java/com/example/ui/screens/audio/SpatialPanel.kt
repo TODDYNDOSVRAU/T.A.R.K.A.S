@@ -1,56 +1,82 @@
 package com.example.ui.screens.audio
 
-import com.example.R
-import androidx.compose.ui.res.stringResource
+import android.content.ClipData
+import android.content.ClipboardManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import android.content.ClipData
-import android.content.ClipboardManager
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import com.example.R
 import com.example.data.audio.spatial.HeadTrackStatus
 import com.example.data.audio.spatial.SpatialControl
 import com.example.data.audio.spatial.SpatialKnob
-import com.example.ui.components.IconAction
-import com.example.ui.components.TextAction
-import com.example.ui.theme.Motion
-import com.example.ui.theme.Space
-import java.util.Locale
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import com.example.data.audio.spatial.SpatialPreset
 import com.example.data.audio.spatial.SpatialStatus
+import com.example.ui.components.GridSwitch
 import com.example.ui.components.GroupDivider
-import com.example.ui.components.GroupFooter
-import com.example.ui.components.InsetGroup
-import com.example.ui.components.RadioRow
 import com.example.ui.components.SwitchRow
+import com.example.ui.components.TextAction
 import com.example.ui.screens.SpatialActions
 import com.example.ui.screens.SpatialUi
+import androidx.compose.ui.unit.dp
+import com.example.ui.theme.GridText
+import com.example.ui.theme.Grid
+import com.example.ui.theme.Motion
+import com.example.ui.theme.Space
 import com.example.ui.theme.rememberReducedMotion
+import java.util.Locale
 import kotlin.math.roundToInt
 
-/** What the switch row says under its title, for each state of the engine. */
+/** What the status line says, for each state of the engine. */
 @Composable
 private fun spatialStatusText(status: SpatialStatus): String = when (status) {
   SpatialStatus.OFF -> stringResource(R.string.audio_spatial_status_off)
@@ -70,75 +96,169 @@ private fun headStatusText(wanted: Boolean, status: HeadTrackStatus): String = s
   }
 )
 
+/** The caption of the stage: the first word in the main colour, the rest muted, like the mock. */
+@Composable
+private fun StageCaption(text: String, modifier: Modifier = Modifier) {
+  val colors = MaterialTheme.colorScheme
+  val cut = text.indexOf(" · ")
+  val styled: AnnotatedString = buildAnnotatedString {
+    if (cut < 0) append(text) else {
+      withStyle(SpanStyle(color = colors.onSurface)) { append(text.substring(0, cut)) }
+      append(text.substring(cut))
+    }
+  }
+  Text(
+    styled, modifier = modifier, maxLines = 1, overflow = TextOverflow.Ellipsis,
+    style = GridText.Label.copy(fontWeight = FontWeight.Medium),
+    color = colors.onSurfaceVariant
+  )
+}
+
+/** Four equal segments (48 dp high, inner inset 6): Subtle, Standard, Wide, Cinema 5.1. */
+@Composable
+private fun PresetSegments(ui: SpatialUi, actions: SpatialActions) {
+  val colors = MaterialTheme.colorScheme
+  val pill = Grid.r24
+  val label = stringResource(R.string.audio_spatial_mode)
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .height(Grid.u48)
+      .clip(pill)
+      .background(colors.surfaceContainer)
+      .selectableGroup()
+      .semantics { contentDescription = label }
+  ) {
+    val last = SpatialPreset.entries.size - 1
+    SpatialPreset.entries.forEachIndexed { position, p ->
+      val selected = ui.preset == p
+      // The touch target is the full 48 dp; the highlight is inset 6 inside it.
+      Box(
+        modifier = Modifier
+          .weight(1f)
+          .fillMaxHeight()
+          .selectable(selected = selected, role = Role.RadioButton, onClick = { actions.onPreset(p) })
+          .testTag("spatial_preset_${p.key}")
+      ) {
+        Box(
+          modifier = Modifier
+            .fillMaxSize()
+            .padding(
+              start = if (position == 0) Grid.u6 else Grid.u6 / 2,
+              end = if (position == last) Grid.u6 else Grid.u6 / 2,
+              top = Grid.u6,
+              bottom = Grid.u6
+            )
+            .clip(pill)
+            .background(if (selected) colors.primary.copy(alpha = 0.16f) else colors.surfaceContainer),
+          contentAlignment = Alignment.Center
+        ) {
+          Text(
+            presetTitle(p), maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+            style = GridText.Small.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
+            color = if (selected) colors.primary else colors.onSurfaceVariant
+          )
+        }
+      }
+    }
+  }
+}
+
 /**
- * Tarkas Spatial, stereo turned into a binaural scene for headphones: a switch, then (when on) the
- * scene as a list of choices and its intensity.
+ * Tarkas Spatial sheet: title and caption, the 3D stage, the mode segments, the on/off row and the
+ * intensity; the hand tuning, head tracking, status and notes sit behind one expandable row.
  */
 @Composable
 internal fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modifier = Modifier) {
   val reduced = rememberReducedMotion()
-  var tuningOpen by rememberSaveable { mutableStateOf<SpatialPreset?>(null) }
-  Column(modifier = modifier) {
-    InsetGroup {
-      SwitchRow(
-        title = stringResource(R.string.audio_spatial_title),
-        subtitle = spatialStatusText(ui.status),
-        checked = ui.enabled,
-        onCheckedChange = actions.onEnabled,
-        modifier = Modifier.testTag("switch_spatial")
+  val colors = MaterialTheme.colorScheme
+  var moreOpen by rememberSaveable { mutableStateOf(false) }
+  val caption = spatialStageCaption(ui.enabled, ui.preset)
+  Column(modifier = modifier.fillMaxWidth().padding(horizontal = Grid.margin)) {
+    Row(
+      modifier = Modifier.fillMaxWidth().heightIn(min = Grid.u48),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(Grid.u12)
+    ) {
+      Text(
+        stringResource(R.string.audio_spatial_title), modifier = Modifier.weight(1f), maxLines = 1,
+        style = GridText.Title, color = colors.onSurface
       )
-      AnimatedVisibility(
-        visible = ui.enabled,
-        enter = if (reduced) EnterTransition.None else expandVertically(Motion.gel()) + fadeIn(),
-        exit = if (reduced) ExitTransition.None else shrinkVertically(Motion.gelExit()) + fadeOut()
-      ) {
-        Column {
-          SpatialPreset.entries.forEach { p ->
-            val open = tuningOpen == p
-            GroupDivider()
-            RadioRow(
-              title = presetTitle(p),
-              subtitle = when {
-                p.virtual51 -> stringResource(R.string.audio_spatial_cinema_hint)
-                ui.tuning[p].orEmpty().isNotEmpty() -> stringResource(R.string.audio_spatial_tuned)
-                else -> null
-              },
-              selected = ui.preset == p,
-              onClick = { actions.onPreset(p) },
-              modifier = Modifier.testTag("spatial_preset_${p.key}"),
-              // The Cinema preset has no room or azimuth settings to tune: no button for it.
-              accessory = if (p.virtual51) null else ({
-                val turn by animateFloatAsState(if (open) 180f else 0f, if (reduced) snap() else Motion.gel(), label = "tuning_arrow")
-                IconAction(
-                  icon = Icons.Rounded.ExpandMore,
-                  contentDescription = stringResource(if (open) R.string.audio_spatial_tune_close else R.string.audio_spatial_tune_open, presetTitle(p)),
-                  onClick = {
-                    // The sliders change what is playing, so the mode they belong to must be the one playing.
-                    if (!open && ui.preset != p) actions.onPreset(p)
-                    tuningOpen = if (open) null else p
-                  },
-                  modifier = Modifier.rotate(turn).testTag("spatial_tune_${p.key}")
-                )
-              })
-            )
-            AnimatedVisibility(
-              visible = open,
-              enter = if (reduced) EnterTransition.None else expandVertically(Motion.gel()) + fadeIn(),
-              exit = if (reduced) ExitTransition.None else shrinkVertically(Motion.gelExit()) + fadeOut()
-            ) {
-              SpatialTuning(p, ui, actions)
-            }
-          }
-          GroupDivider()
-          SliderRow(
-            label = stringResource(R.string.audio_spatial_intensity),
-            valueText = "${(ui.intensity * 100).roundToInt()}%",
-            value = ui.intensity,
-            range = 0.2f..1f,
-            onChange = actions.onIntensity,
-            onChangeFinished = actions.onIntensityFinished,
-            testTag = "spatial_intensity"
+      StageCaption(caption)
+    }
+    Box(modifier = Modifier.padding(top = Grid.u12)) {
+      SpatialStage(enabled = ui.enabled, preset = ui.preset, intensity = ui.intensity)
+    }
+    Box(modifier = Modifier.padding(top = Grid.u12)) { PresetSegments(ui, actions) }
+    Row(
+      modifier = Modifier
+        .padding(top = Grid.u12)
+        .fillMaxWidth()
+        .height(Grid.u48)
+        .toggleable(value = ui.enabled, role = Role.Switch, onValueChange = actions.onEnabled)
+        .testTag("switch_spatial"),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Text(
+        stringResource(R.string.audio_spatial_on), modifier = Modifier.weight(1f),
+        style = GridText.Body, color = colors.onSurface
+      )
+      // The row is the control; the switch only draws the state.
+      GridSwitch(checked = ui.enabled)
+    }
+    SliderRow(
+      label = stringResource(R.string.audio_spatial_intensity),
+      valueText = "${(ui.intensity * 100).roundToInt()}%",
+      value = ui.intensity,
+      range = 0.2f..1f,
+      onChange = actions.onIntensity,
+      onChangeFinished = actions.onIntensityFinished,
+      enabled = ui.enabled,
+      side = 0.dp,
+      testTag = "spatial_intensity"
+    )
+    val turn by animateFloatAsState(if (moreOpen) 180f else 0f, if (reduced) snap() else Motion.gel(), label = "more_arrow")
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(Grid.u48)
+        .clickable(role = Role.Button, onClick = { moreOpen = !moreOpen })
+        .testTag("spatial_tune_${ui.preset.key}"),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Text(
+        stringResource(R.string.audio_spatial_more), modifier = Modifier.weight(1f),
+        style = GridText.Body, color = colors.onSurface
+      )
+      Box(modifier = Modifier.size(Grid.u48), contentAlignment = Alignment.Center) {
+        Icon(
+          Icons.Rounded.ExpandMore, contentDescription = null,
+          modifier = Modifier.size(Grid.u24).rotate(turn), tint = colors.onSurfaceVariant
+        )
+      }
+    }
+    AnimatedVisibility(
+      visible = moreOpen,
+      enter = if (reduced) EnterTransition.None else expandVertically(Motion.gel()) + fadeIn(),
+      exit = if (reduced) ExitTransition.None else shrinkVertically(Motion.gelExit()) + fadeOut()
+    ) {
+      Column(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth().clip(Grid.r12).background(colors.surface)) {
+          Text(
+            spatialStatusText(ui.status),
+            modifier = Modifier.fillMaxWidth().padding(Grid.u12),
+            style = GridText.Label,
+            color = colors.onSurfaceVariant
           )
+          if (ui.preset.virtual51) {
+            Text(
+              stringResource(R.string.audio_spatial_cinema_hint),
+              modifier = Modifier.padding(horizontal = Grid.u12, vertical = Grid.u12),
+              style = GridText.Small, color = colors.onSurfaceVariant
+            )
+          } else {
+            SpatialTuning(ui.preset, ui, actions)
+          }
           GroupDivider()
           SwitchRow(
             title = stringResource(R.string.audio_spatial_head_title),
@@ -152,12 +272,13 @@ internal fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modi
             TextAction(stringResource(R.string.audio_spatial_head_recenter), onClick = actions.onRecenterHead)
           }
         }
+        Text(
+          stringResource(R.string.audio_spatial_footer) + (ui.othersNote?.let { "\n" + it } ?: ""),
+          modifier = Modifier.padding(vertical = Grid.u12),
+          style = GridText.Small, color = colors.onSurfaceVariant
+        )
       }
     }
-    GroupFooter(
-      stringResource(R.string.audio_spatial_footer) +
-        (ui.othersNote?.let { "\n" + it } ?: "")
-    )
   }
 }
 

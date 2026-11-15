@@ -37,9 +37,9 @@ fun PlaybackProblemBanner(problem: PlaybackProblem?, onRetry: () -> Unit, modifi
   Row(
     modifier = modifier
       .fillMaxWidth()
-      .clip(RoundedCornerShape(14.dp))
+      .clip(RoundedCornerShape(PlayerGrid.radius12))
       .background(Color.White.copy(alpha = 0.1f))
-      .padding(start = 14.dp, end = 4.dp)
+      .padding(start = PlayerGrid.g12)
       .semantics { liveRegion = LiveRegionMode.Polite }
       .testTag("playback_problem"),
     verticalAlignment = Alignment.CenterVertically,
@@ -48,18 +48,18 @@ fun PlaybackProblemBanner(problem: PlaybackProblem?, onRetry: () -> Unit, modifi
     Text(
       text = stringResource(if (problem.network) R.string.player_problem_offline else R.string.player_problem_failed),
       color = Color(0xFFF2F2F0),
-      fontSize = 14.sp,
-      modifier = Modifier.weight(1f).padding(vertical = 10.dp)
+      fontSize = PlayerGrid.text12,
+      modifier = Modifier.weight(1f).padding(vertical = PlayerGrid.g12)
     )
     Text(
       text = stringResource(R.string.player_notice_retry),
       color = Color(0xFF7EE3EA),
-      fontSize = 14.sp,
+      fontSize = PlayerGrid.text12,
       fontWeight = FontWeight.SemiBold,
       modifier = Modifier
-        .heightIn(min = 48.dp)
+        .heightIn(min = PlayerGrid.g48)
         .clickable(role = Role.Button, onClick = onRetry)
-        .padding(horizontal = 12.dp, vertical = 14.dp)
+        .padding(horizontal = PlayerGrid.g12, vertical = PlayerGrid.g12)
         .testTag("playback_problem_retry")
     )
   }

@@ -18,8 +18,8 @@ import kotlin.math.roundToInt
  */
 
 /**
- * Every number on this screen is printed in the language of the interface ("48,0 kHz" in Portuguese,
- * "48.0 kHz" in English), read at the moment of printing so a change of language shows at once. Text typed
+ * Every number on this screen is printed in the language of the interface ("44,1 kHz" in Portuguese,
+ * "44.1 kHz" in English), read at the moment of printing so a change of language shows at once. Text typed
  * into a number field accepts both separators, and text meant for the clipboard stays in Locale.US.
  */
 internal fun numberLocale(): Locale = Locale.getDefault()
@@ -63,10 +63,10 @@ internal fun snap(db: Float): Float {
   return if (abs(r) < 0.25f) 0f else r
 }
 
-/** "+3.5", "0.0", "-2.0": a sign on boosts, so a glance tells up from down. */
+/** "+3.5", "0", "-2": a sign on boosts, and a decimal only when the value is not whole. */
 internal fun formatDb(db: Float): String {
-  val rounded = (db * 10f).roundToInt() / 10f
-  val text = formatNumber(rounded, 1)
+  val rounded = (db * 10f).roundToInt() / 10f + 0f // + 0f turns -0.0 into 0.0
+  val text = formatNumber(rounded, if (rounded == rounded.roundToInt().toFloat()) 0 else 1)
   return if (rounded > 0f) "+$text" else text
 }
 
@@ -85,8 +85,15 @@ internal fun spokenHz(f: Float): String = when {
 
 internal fun formatQ(q: Float): String = formatNumber(q, 2)
 
-/** "48.0 kHz" for the output line. */
-internal fun formatSampleRate(hz: Int): String = formatNumber(hz / 1000f, 1) + " kHz"
+/** "48 kHz", "44.1 kHz", "22.05 kHz": a decimal only when the value is not whole. */
+internal fun formatSampleRate(hz: Int): String {
+  val decimals = when {
+    hz % 1000 == 0 -> 0
+    hz % 100 == 0 -> 1
+    else -> 2
+  }
+  return formatNumber(hz / 1000f, decimals) + " kHz"
+}
 
 /** The filter type's name. [FilterType.label] stays as is in data/model; the UI maps the type to a string. */
 @Composable

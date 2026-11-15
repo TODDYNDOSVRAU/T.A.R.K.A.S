@@ -257,6 +257,7 @@ class TarkasViewModel(
   // Appearance and behaviour switches have one owner, shared with SettingsViewModel.
   private val settings = graph.settings
   val themeMode: StateFlow<String> = settings.themeMode
+  val systemColors: StateFlow<Boolean> = settings.systemColors
 
   val systemAudioStatus: StateFlow<SystemAudioStatus> = systemAudioCaptureManager.status
 
@@ -1212,6 +1213,7 @@ class TarkasViewModel(
   fun setListAnimation(style: com.example.ui.theme.ListAnimation) = settings.setListAnimation(style)
 
   fun setThemeMode(mode: String) = settings.setThemeMode(mode)
+  fun setSystemColors(on: Boolean) = settings.setSystemColors(on)
 
   // Replies run one at a time, in the order they were asked (see enqueueAssistantReply).
   private val assistantReplyMutex = Mutex()

@@ -1,5 +1,7 @@
 package com.example.ui.screens.library
 
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
 import androidx.compose.foundation.layout.fillMaxHeight
 import com.example.ui.layout.readingColumn
 import androidx.compose.runtime.setValue
@@ -56,7 +58,7 @@ internal fun AutoList.nameRes(): Int = when (this) {
 internal fun AutoListsOverview(lists: Map<AutoList, List<Track>>, byId: Map<String, Track>, onOpen: (AutoList) -> Unit) {
   LazyColumn(
     modifier = Modifier.readingColumn().fillMaxHeight(),
-    contentPadding = PaddingValues(top = Space.s, bottom = LocalBarInset.current + Space.l)
+    contentPadding = PaddingValues(top = Grid.u6, bottom = LocalBarInset.current + Grid.inset)
   ) {
     itemsIndexed(AutoList.entries.toList(), key = { _, l -> l.name }) { index, list ->
       val tracks = lists.getValue(list)
@@ -67,18 +69,18 @@ internal fun AutoListsOverview(lists: Map<AutoList, List<Track>>, byId: Map<Stri
           modifier = Modifier
             .fillMaxWidth()
             .highlightClickable(onClickLabel = stringResource(R.string.library_auto_open, name), onClick = { onOpen(list) })
-            .padding(horizontal = Space.page, vertical = 6.dp)
+            .padding(horizontal = Grid.margin, vertical = Grid.u6)
             .testTag("auto_row_${list.name.lowercase()}"),
           verticalAlignment = Alignment.CenterVertically
         ) {
           PlaylistArtwork(tracks.map { byId[it.id] ?: it })
-          Spacer(Modifier.width(Space.m))
+          Spacer(Modifier.width(Grid.inset))
           Column(modifier = Modifier.weight(1f)) {
-            Text(name, style = AppText.Body, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(name, style = GridText.Body, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
               if (tracks.isEmpty()) stringResource(R.string.library_tracks_none)
               else pluralStringResource(R.plurals.library_track_count, tracks.size, tracks.size),
-              style = AppText.Subhead,
+              style = GridText.Small,
               color = MaterialTheme.colorScheme.onSurfaceVariant
             )
           }
@@ -86,7 +88,7 @@ internal fun AutoListsOverview(lists: Map<AutoList, List<Track>>, byId: Map<Stri
             Icons.Rounded.ChevronRight,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.size(Size.iconSmall)
+            modifier = Modifier.size(Grid.u24)
           )
         }
       }
@@ -130,7 +132,7 @@ internal fun AutoListDetail(
         icon = Icons.AutoMirrored.Rounded.QueueMusic,
         title = stringResource(title),
         message = stringResource(message),
-        modifier = Modifier.padding(horizontal = Space.page)
+        modifier = Modifier.padding(horizontal = Grid.margin)
       )
     }
   )

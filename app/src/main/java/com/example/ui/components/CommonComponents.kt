@@ -255,8 +255,15 @@ fun TarkasLargeTitle(
       .background(page)
       .statusBarsPadding()
       .fillMaxWidth()
-      .heightIn(min = Sizes.touch + Space.m + Space.s)
-      .padding(start = Space.page, end = Space.s, top = Space.m, bottom = Space.s),
+      // On the T.A.L. grid: a 48 dp line with 12 dp above and below; the title starts at the 24 dp margin
+      // (the back button is a 48 dp target, so its 24 dp glyph starts at the margin too).
+      .heightIn(min = com.example.ui.theme.Grid.u48 + com.example.ui.theme.Grid.u24)
+      .padding(
+        start = if (onBack != null) com.example.ui.theme.Grid.inset else com.example.ui.theme.Grid.margin,
+        end = com.example.ui.theme.Grid.inset,
+        top = com.example.ui.theme.Grid.u12,
+        bottom = com.example.ui.theme.Grid.u12
+      ),
     verticalAlignment = Alignment.CenterVertically
   ) {
     if (onBack != null) {
@@ -270,7 +277,7 @@ fun TarkasLargeTitle(
     }
     Text(
       text = title,
-      style = AppText.LargeTitle,
+      style = com.example.ui.theme.GridText.Title,
       color = MaterialTheme.colorScheme.onBackground,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,

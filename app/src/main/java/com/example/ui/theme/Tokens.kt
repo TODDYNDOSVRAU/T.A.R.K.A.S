@@ -65,3 +65,30 @@ object Size {
   val handleHeight = 5.dp
   val hairline = 1.dp
 }
+
+/**
+ * The T.A.L. grid (tal skill, references/ui.md section 6). One chain of sizes in 2x steps; every height,
+ * width, gap and radius of a screen on the grid is one of these. Screens move here one at a time; the
+ * older [Space], [Radius] and [Size] stay until the last one has moved.
+ */
+object Grid {
+  val u6 = 6.dp
+  val u12 = 12.dp
+  val u24 = 24.dp
+  /** The touch target, and the height of every row, button and pill. */
+  val u48 = 48.dp
+  val u96 = 96.dp
+  val u192 = 192.dp
+  val u384 = 384.dp
+  /** The one side margin of a page. */
+  val margin = u24
+  /** From a surface's edge to its content. */
+  val inset = u12
+  /** Icons, inside a 48 dp target. */
+  val icon = u24
+  /** Hairlines are drawn over the surface and take no room in the layout. */
+  val hairline = 1.dp
+  val r6 = RoundedCornerShape(u6)
+  val r12 = RoundedCornerShape(u12)
+  val r24 = RoundedCornerShape(u24)
+}

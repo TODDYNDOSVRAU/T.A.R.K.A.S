@@ -112,7 +112,6 @@
   <string name="audio_compare_state_on">With equalizer</string>
   <string name="audio_copied">Copied</string>
   <string name="audio_copy_command">Copy the command</string>
-  <string name="audio_curve_description">Equalizer curve, read-only. %1$s Drag sideways to scroll the bands.</string>
   <string name="audio_curve_flat">Flat curve, no adjustment.</string>
   <string name="audio_curve_peak_cut">Deepest cut %1$s dB near %2$s.</string>
   <string name="audio_curve_peak_gain">Highest boost %1$s dB near %2$s. </string>
@@ -162,12 +161,9 @@
   <string name="audio_notice_suggest_one">There is a correction for %1$s, measured by %2$s.</string>
   <string name="audio_notice_suggest_many">There are corrections for headphones like “%1$s”. Choose your model.</string>
   <string name="audio_enter_value">Enter the value</string>
-  <string name="audio_enter_value_for">Enter the value of %1$s</string>
   <string name="audio_filter_all">All</string>
   <string name="audio_filter_all_sources">All measurements</string>
   <string name="audio_filter_builtin">Built-in</string>
-  <string name="audio_filter_choose_type">Choose the filter type</string>
-  <string name="audio_filter_desc">Filter %1$s</string>
   <string name="audio_filter_fones">Headphones (AutoEq)</string>
   <string name="audio_filter_high_pass">High-pass</string>
   <string name="audio_filter_high_shelf">High shelf</string>
@@ -236,9 +232,6 @@
   <string name="audio_spatial_status_off">Opens the music around your head</string>
   <string name="audio_spatial_status_preparing">Preparing…</string>
   <string name="audio_spatial_title">Tarkas Spatial</string>
-  <string name="audio_spatial_tune_close">Close settings for %1$s</string>
-  <string name="audio_spatial_tune_open">Settings for %1$s</string>
-  <string name="audio_spatial_tuned">Adjusted by you</string>
   <string name="audio_spatial_cinema_hint">Stereo spread over five virtual speakers. Not tuned by ear yet.</string>
   <string name="audio_speaker_warning">The headphone correction is on, but the sound plays through the speaker.</string>
   <string name="audio_spectrum_permission">The live spectrum needs the microphone permission. The app records nothing.</string>
@@ -319,4 +312,24 @@
   <string name="audio_preset_name_loudness">Loudness</string>
   <string name="audio_preset_name_treble">More treble</string>
   <string name="audio_preset_name_speech">Voice and podcast</string>
+  <string name="audio_spatial_stage_off">Headphones · off</string>
+  <string name="audio_spatial_stage_subtle">Speakers · subtle</string>
+  <string name="audio_spatial_stage_standard">Speakers · standard</string>
+  <string name="audio_spatial_stage_wide">Speakers · wide</string>
+  <string name="audio_spatial_stage_cinema">5.1 · 6 speakers</string>
+  <string name="audio_spatial_stage_desc">Spatial stage, %1$s</string>
+  <string name="audio_spatial_on">On</string>
+  <string name="audio_spatial_mode">Mode</string>
+  <string name="audio_spatial_more">More modes and fine tuning</string>
+  <string name="audio_curve_card_description">Equalizer curve, read-only. %1$s</string>
+  <string name="audio_compare_banner">No EQ · volume matched</string>
+  <string name="audio_settings_title">Settings</string>
+  <string name="audio_correction">Correction</string>
+  <string name="audio_spatial_sub_on">%1$s · %2$d%%</string>
+  <string name="audio_spatial_sub_off">Off</string>
+  <string name="audio_stepper_less">Decrease %1$s</string>
+  <string name="audio_stepper_more">Increase %1$s</string>
+  <string name="audio_preset_modified_desc">%1$s, modified</string>
+  <string name="audio_correction_desc">Correction presets</string>
+  <string name="audio_band_off">Off</string>
 </resources>

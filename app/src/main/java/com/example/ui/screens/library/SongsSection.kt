@@ -1,5 +1,7 @@
 package com.example.ui.screens.library
 
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.annotation.StringRes
@@ -101,7 +103,7 @@ internal fun TrackList(
     // With the strip on, rows and their dividers stop before it instead of running under it.
     contentPadding = PaddingValues(
       end = if (showStrip) LetterStripWidth else 0.dp,
-      bottom = LocalBarInset.current + Space.l
+      bottom = LocalBarInset.current + Grid.inset
     )
   ) {
     header()
@@ -164,8 +166,8 @@ internal fun SongOrderRow(
   androidx.compose.foundation.lazy.LazyRow(
     state = rowState,
     modifier = modifier,
-    horizontalArrangement = Arrangement.spacedBy(Space.xs),
-    contentPadding = PaddingValues(horizontal = Space.page - Space.xs, vertical = Space.xs)
+    horizontalArrangement = Arrangement.spacedBy(Grid.u6),
+    contentPadding = PaddingValues(horizontal = Grid.margin - Grid.u6, vertical = Grid.u6)
   ) {
     items(com.example.data.playback.SongOrder.entries.size) { i ->
       val o = com.example.data.playback.SongOrder.entries[i]
@@ -188,7 +190,7 @@ internal fun SongOrderRow(
 }
 
 /** Width of the A–Z strip: a touch target close to the 48 dp minimum; sliding makes the height forgiving. */
-internal val LetterStripWidth = 44.dp
+internal val LetterStripWidth = 48.dp
 
 /**
  * A–Z strip on the list's right edge: touching or sliding along it jumps to the first track of the
@@ -226,7 +228,7 @@ internal fun LetterStrip(letters: List<String>, onLetter: (String) -> Unit, modi
     if (bubble > 0f) {
       Box(
         modifier = Modifier
-          .size(56.dp)
+          .size(Grid.u48)
           .graphicsLayer {
             scaleX = bubble
             scaleY = bubble
@@ -236,9 +238,9 @@ internal fun LetterStrip(letters: List<String>, onLetter: (String) -> Unit, modi
           .background(MaterialTheme.colorScheme.surfaceContainerHigh),
         contentAlignment = Alignment.Center
       ) {
-        Text(shown, style = AppText.Title2, color = MaterialTheme.colorScheme.onSurface)
+        Text(shown, style = GridText.Title, color = MaterialTheme.colorScheme.onSurface)
       }
-      Spacer(Modifier.width(Space.s))
+      Spacer(Modifier.width(Grid.u6))
     }
     Column(
       modifier = Modifier
@@ -267,9 +269,9 @@ internal fun LetterStrip(letters: List<String>, onLetter: (String) -> Unit, modi
       letters.forEach { l ->
         Text(
           l,
-          style = AppText.Caption2,
+          style = GridText.Label,
           color = if (l == active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.padding(horizontal = Space.xs, vertical = Size.hairline)
+          modifier = Modifier.padding(horizontal = Grid.u6, vertical = Size.hairline)
         )
       }
     }

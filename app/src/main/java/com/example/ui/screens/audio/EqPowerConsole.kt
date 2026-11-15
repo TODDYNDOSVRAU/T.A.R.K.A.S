@@ -1,33 +1,37 @@
 package com.example.ui.screens.audio
 
-import com.example.ui.theme.EqSize
-import com.example.R
-import androidx.compose.ui.res.stringResource
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.widget.Toast
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalResources
-import com.example.data.audio.dsp.EqTextFormat
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material3.Switch
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.MoreVert
@@ -44,31 +48,44 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.example.R
+import com.example.data.audio.dsp.EqDsp
+import com.example.data.audio.dsp.EqTextFormat
+import com.example.data.audio.spatial.SpatialPreset
 import com.example.data.model.AudioCapabilities
 import com.example.data.model.EqBand
 import com.example.data.model.EqPreset
 import com.example.data.model.EqSettings
-import com.example.ui.components.EqKnob
-import com.example.ui.components.TextAction
-import com.example.ui.theme.AppText
-import com.example.ui.theme.Shapes
-import com.example.ui.theme.Size
-import com.example.ui.theme.Space
+import com.example.ui.screens.SpatialUi
+import com.example.ui.theme.Grid
+import kotlin.math.roundToInt
 
 /**
- * The equalizer as one fixed screen, laid out like a hardware console: the faders take all the height
- * there is, the response strip sits under them, and the controls (power pills, preset, bass and treble)
- * under that. Nothing scrolls unless the screen is too short for the controls. Everything else the
- * page does (presets, spatial, advanced) is reached from the preset pill and the overflow menu.
+ * The equalizer as one fixed screen, top to bottom: the title with the power pill, the preset row, the
+ * curve card, the bands, the dock (view and Tarkas Spatial) and the signal path bar. Bass, treble, the
+ * preamp, the limiter and the advanced entry live in the settings sheet. The band area takes the height
+ * that is left; below its minimum the page scrolls. In landscape the curve and bands take the width and
+ * everything else moves to a column on the right.
  */
 @Composable
 internal fun EqPowerConsole(
@@ -78,339 +95,495 @@ internal fun EqPowerConsole(
   eqModified: Boolean,
   isPlaying: Boolean,
   spectrumBars: () -> List<Float>,
-  spectrumAllowed: Boolean,
-  onAllowSpectrum: () -> Unit,
   onSetEnabled: (Boolean) -> Unit,
   onUpdateEq: ((EqSettings) -> EqSettings) -> Unit,
   onUpdateBand: (Int, (EqBand) -> EqBand) -> Unit,
   presetActions: PresetActions,
   onOpenAdvanced: () -> Unit,
+  onOpenSettings: () -> Unit,
   onOpenSpatial: (() -> Unit)?,
-  onCompare: (Boolean) -> Unit,
+  spatial: SpatialUi,
+  compare: CompareState,
   selectedBand: Int,
   onSelectBand: (Int) -> Unit,
-  graphicView: StripView,
-  paramView: StripView,
   modifier: Modifier = Modifier
 ) {
-  val colors = MaterialTheme.colorScheme
   val mode = if (eqSettings.parametric) EqMode.PARAMETRIC else EqMode.GRAPHIC
   val bandIndex = selectedBand.coerceIn(0, (eqSettings.bands.size - 1).coerceAtLeast(0))
 
-  BoxWithConstraints(modifier = modifier) {
-    // What sits under the faders: response strip, status line, the control row, and the gaps.
-    // maxHeight already ends above the floating mini player and tab bar.
-    val below = RESPONSE_HEIGHT + STATUS_HEIGHT + CONTROLS_HEIGHT + Space.s * 3
-    val stripHeight = (maxHeight - below).coerceAtLeast(MIN_STRIP_HEIGHT)
+  @Composable
+  fun top() = TopRow(capabilities, eqSettings, compare, onSetEnabled)
 
-    // Landscape: the faders take the width and everything under them moves to a column on the right,
-    // so the faders keep the height instead of the page scrolling past them.
+  @Composable
+  fun presets() = PresetRow(eqSettings, activePreset, eqModified, presetActions, onOpenSettings, onOpenAdvanced, onOpenSpatial, onUpdateEq)
+
+  @Composable
+  fun curve() = EqGraph(
+    settings = eqSettings,
+    selectedBand = if (mode == EqMode.PARAMETRIC) bandIndex else -1,
+    spectrumBars = spectrumBars,
+    isPlaying = isPlaying,
+    modifier = Modifier.fillMaxWidth().testTag("audio_spectrum_graph_card")
+  )
+
+  @Composable
+  fun bands(m: Modifier) = BandArea(eqSettings, mode, bandIndex, onSelectBand, onUpdateBand, onUpdateEq, m)
+
+  @Composable
+  fun dock(m: Modifier) = Dock(mode, spatial, onOpenSpatial, onUpdateEq, m)
+
+  @Composable
+  fun path() = PathBar(eqSettings, capabilities, compare)
+
+  BoxWithConstraints(modifier = modifier) {
+    val pageHeight = maxHeight
     if (maxWidth > maxHeight && maxWidth >= SIDE_MIN_WIDTH) {
-      val rowHeight = maxOf(maxHeight, SIDE_MIN_HEIGHT)
-      Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-        Row(modifier = Modifier.fillMaxWidth().height(rowHeight)) {
-          BandStrip(
-            settings = eqSettings,
-            mode = mode,
-            selectedBand = bandIndex,
-            graphicView = graphicView,
-            paramView = paramView,
-            onSelectBand = onSelectBand,
-            onUpdateBand = onUpdateBand,
-            onUpdateEq = onUpdateEq,
-            modifier = Modifier.weight(1f).fillMaxHeight()
-          )
-          Column(modifier = Modifier.width(SIDE_WIDTH).fillMaxHeight()) {
-            ConsoleBelow(
-              capabilities, eqSettings, mode, bandIndex, activePreset, eqModified, isPlaying, spectrumBars, spectrumAllowed,
-              onAllowSpectrum, onSetEnabled, onUpdateEq, presetActions, onOpenAdvanced, onOpenSpatial, onCompare, graphicView, paramView
-            )
+      Row(
+        modifier = Modifier.fillMaxSize().padding(horizontal = Grid.margin),
+        horizontalArrangement = Arrangement.spacedBy(Grid.u24)
+      ) {
+        // The curve and bands take the height there is, and no less than the curve plus the band minimum;
+        // below that the column scrolls.
+        Box(modifier = Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+          Column(
+            modifier = Modifier.fillMaxWidth().height(maxOf(pageHeight, Grid.u192 + Grid.u12 + BANDS_MIN)),
+            verticalArrangement = Arrangement.spacedBy(Grid.u12)
+          ) {
+            curve()
+            bands(Modifier.weight(1f).fillMaxWidth())
           }
+        }
+        Column(
+          modifier = Modifier.width(Grid.u384).fillMaxHeight().verticalScroll(rememberScrollState()),
+          verticalArrangement = Arrangement.spacedBy(Grid.u12)
+        ) {
+          top()
+          presets()
+          dock(Modifier.fillMaxWidth())
+          path()
         }
       }
       return@BoxWithConstraints
     }
 
-    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-      BandStrip(
-        settings = eqSettings,
-        mode = mode,
-        selectedBand = bandIndex,
-        graphicView = graphicView,
-        paramView = paramView,
-        onSelectBand = onSelectBand,
-        onUpdateBand = onUpdateBand,
-        onUpdateEq = onUpdateEq,
-        modifier = Modifier.height(stripHeight)
-      )
-
-      ConsoleBelow(
-        capabilities, eqSettings, mode, bandIndex, activePreset, eqModified, isPlaying, spectrumBars, spectrumAllowed,
-        onAllowSpectrum, onSetEnabled, onUpdateEq, presetActions, onOpenAdvanced, onOpenSpatial, onCompare, graphicView, paramView
-      )
+    // Rows 48 + 48 + 48 + 48 + 48, the curve card 192, and five gaps of 12 around the band area.
+    val bandHeight = (maxHeight - FIXED_HEIGHT).coerceIn(BANDS_MIN, BANDS_MAX)
+    Column(
+      modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Grid.margin),
+      verticalArrangement = Arrangement.spacedBy(Grid.u12)
+    ) {
+      top()
+      presets()
+      curve()
+      bands(Modifier.fillMaxWidth().height(bandHeight))
+      dock(Modifier.fillMaxWidth())
+      path()
     }
   }
 }
 
-private val SIDE_WIDTH = 380.dp
-private val SIDE_MIN_WIDTH = 600.dp
-private val SIDE_MIN_HEIGHT = 340.dp
+private val SIDE_MIN_WIDTH = 720.dp
+private val BANDS_MIN = Grid.u96 + Grid.u48
+private val BANDS_MAX = Grid.u192 + Grid.u96
+private val FIXED_HEIGHT = Grid.u48 * 4 + Grid.u192 + Grid.u12 * 5
 
-/** Under the faders: the response curve, the status line, the spectrum notice and the control row. */
+/** Title and route line on the left; the power pill on the right. Holding the pill plays without the EQ. */
 @Composable
-private fun ConsoleBelow(
-  capabilities: AudioCapabilities,
-  eqSettings: EqSettings,
-  mode: EqMode,
-  bandIndex: Int,
-  activePreset: EqPreset?,
-  eqModified: Boolean,
-  isPlaying: Boolean,
-  spectrumBars: () -> List<Float>,
-  spectrumAllowed: Boolean,
-  onAllowSpectrum: () -> Unit,
-  onSetEnabled: (Boolean) -> Unit,
-  onUpdateEq: ((EqSettings) -> EqSettings) -> Unit,
-  presetActions: PresetActions,
-  onOpenAdvanced: () -> Unit,
-  onOpenSpatial: (() -> Unit)?,
-  onCompare: (Boolean) -> Unit,
-  graphicView: StripView,
-  paramView: StripView
-) {
+private fun TopRow(capabilities: AudioCapabilities, settings: EqSettings, compare: CompareState, onSetEnabled: (Boolean) -> Unit) {
   val colors = MaterialTheme.colorScheme
-  Column {
-      EqGraph(
-        settings = eqSettings,
-        selectedBand = if (mode == EqMode.PARAMETRIC) bandIndex else -1,
-        spectrumBars = spectrumBars,
-        isPlaying = isPlaying,
-        window = if (mode == EqMode.GRAPHIC) graphicView else paramView,
-        modifier = Modifier
-          .padding(horizontal = Space.page, vertical = Space.s)
-          .fillMaxWidth()
-          .height(RESPONSE_HEIGHT)
-          .testTag("audio_spectrum_graph_card")
-      )
-
-      Box(modifier = Modifier.heightIn(min = STATUS_HEIGHT)) {
-        CurveStatusRow(eqSettings, capabilities, onCompare = onCompare)
-      }
-      if (!spectrumAllowed) {
-        Row(
-          modifier = Modifier.fillMaxWidth().padding(start = Space.page, end = Space.page - Space.s),
-          verticalAlignment = Alignment.CenterVertically
-        ) {
-          Text(
-            text = stringResource(R.string.audio_spectrum_permission),
-            style = AppText.Footnote,
-            color = colors.onSurfaceVariant,
-            modifier = Modifier.weight(1f)
+  Row(modifier = Modifier.fillMaxWidth().heightIn(min = Grid.u48), verticalAlignment = Alignment.CenterVertically) {
+    Column(modifier = Modifier.weight(1f)) {
+      Text(stringResource(R.string.audio_switch_equalizer), style = EqType.Title, color = colors.onSurface, maxLines = 1)
+      if (compare.comparing) {
+        Text(
+          stringResource(R.string.audio_compare_banner),
+          style = EqType.Mono,
+          color = colors.primary,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.testTag("eq_compare_banner")
+        )
+      } else {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Box(
+            modifier = Modifier
+              .size(Grid.u6)
+              .clip(CircleShape)
+              .background(if (settings.enabled) colors.primary else colors.onSurface.copy(alpha = 0.38f))
           )
-          Spacer(Modifier.width(Space.s))
-          TextAction(stringResource(R.string.audio_spectrum_show), onAllowSpectrum, modifier = Modifier.testTag("audio_allow_spectrum"))
+          Spacer(Modifier.width(Grid.u6))
+          val rate = formatSampleRate(capabilities.sampleRateHz)
+          val outputLine = stringResource(R.string.audio_output_line, capabilities.activeRouteName, rate)
+          Text(
+            capabilities.activeRouteName + " · " + rate,
+            style = EqType.Mono,
+            color = colors.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.semantics { contentDescription = outputLine }
+          )
         }
       }
-
-      ControlRow(
-        eqSettings = eqSettings,
-        mode = mode,
-        activePreset = activePreset,
-        eqModified = eqModified,
-        onSetEnabled = onSetEnabled,
-        onUpdateEq = onUpdateEq,
-        presetActions = presetActions,
-        onOpenAdvanced = onOpenAdvanced,
-        onOpenSpatial = onOpenSpatial,
-        modifier = Modifier.padding(horizontal = Space.page).padding(top = Space.s)
-      )
-      Spacer(Modifier.height(Space.s))
+    }
+    PowerPill(settings.enabled, compare, onSetEnabled)
   }
 }
 
-private val RESPONSE_HEIGHT = 80.dp
-private val STATUS_HEIGHT = Size.row
-// Switch row 48 + gap 4 + switch row 48 + gap 4 + two 48 dp segments with 2 dp padding each side.
-private val CONTROLS_HEIGHT = 204.dp
-private val LEFT_COLUMN_WIDTH = 160.dp
-private val MIN_STRIP_HEIGHT = 260.dp
-
-/**
- * Left: Equ, Limit and the graphic/parametric switch as pills. Middle: the preset pill and an overflow
- * menu. Right: bass and treble knobs with their values.
- */
+/** 96 x 48 pill with a 48 x 24 switch. A tap switches the equalizer; holding it compares against the untouched signal. */
 @Composable
-private fun ControlRow(
-  eqSettings: EqSettings,
-  mode: EqMode,
-  activePreset: EqPreset?,
-  eqModified: Boolean,
-  onSetEnabled: (Boolean) -> Unit,
-  onUpdateEq: ((EqSettings) -> EqSettings) -> Unit,
-  presetActions: PresetActions,
-  onOpenAdvanced: () -> Unit,
-  onOpenSpatial: (() -> Unit)?,
-  modifier: Modifier = Modifier
-) {
-  Row(modifier = modifier.fillMaxWidth().height(CONTROLS_HEIGHT), verticalAlignment = Alignment.Top) {
-    Column(modifier = Modifier.width(LEFT_COLUMN_WIDTH), verticalArrangement = Arrangement.spacedBy(Space.xs)) {
-      PowerSwitch(
-        label = stringResource(R.string.audio_switch_equalizer),
-        on = eqSettings.enabled,
-        onToggle = { onSetEnabled(!eqSettings.enabled) },
-        modifier = Modifier.testTag("audio_dsp_switch")
-      )
-      PowerSwitch(
-        label = stringResource(R.string.audio_switch_limiter),
-        on = eqSettings.limiterEnabled,
-        onToggle = { onUpdateEq { it.copy(limiterEnabled = !it.limiterEnabled) } },
-        modifier = Modifier.testTag("switch_limiter")
-      )
-      ModeSegments(
-        parametric = mode == EqMode.PARAMETRIC,
-        onSelect = { parametric -> if (parametric != (mode == EqMode.PARAMETRIC)) onUpdateEq { it.withLayout(parametric) } }
+private fun PowerPill(on: Boolean, compare: CompareState, onSetEnabled: (Boolean) -> Unit) {
+  val colors = MaterialTheme.colorScheme
+  var pressed by remember { mutableStateOf(false) }
+  var heldCompare by remember { mutableStateOf(false) }
+  var longWhileOff by remember { mutableStateOf(false) }
+  val scale by animateFloatAsState(if (pressed) 0.96f else 1f, tween(150), label = "powerPress")
+  val thumb by animateDpAsState(if (on) Grid.u24 else 0.dp, tween(200), label = "powerThumb")
+  val track by animateColorAsState(if (on) colors.primary else colors.onSurface.copy(alpha = 0.24f), tween(200), label = "powerTrack")
+  val name = stringResource(R.string.audio_switch_equalizer)
+  val hint = stringResource(R.string.audio_compare_desc)
+  Box(
+    modifier = Modifier
+      .size(width = Grid.u96, height = Grid.u48)
+      .graphicsLayer { scaleX = scale; scaleY = scale }
+      .clip(Grid.r24)
+      .background(colors.surfaceContainer)
+      .pointerInput(on) {
+        detectTapGestures(
+          onPress = {
+            pressed = true
+            longWhileOff = false
+            val released = tryAwaitRelease()
+            pressed = false
+            if (heldCompare) {
+              heldCompare = false
+              compare.stop()
+            }
+            // A press past the long-press time while the EQ is off has no tap: a real release still switches it on.
+            if (longWhileOff) {
+              longWhileOff = false
+              if (released) onSetEnabled(true)
+            }
+          },
+          onLongPress = {
+            if (on) {
+              heldCompare = true
+              compare.start()
+            } else {
+              longWhileOff = true
+            }
+          },
+          onTap = { onSetEnabled(!on) }
+        )
+      }
+      .semantics {
+        role = Role.Switch
+        contentDescription = "$name. $hint"
+        toggleableState = ToggleableState(on)
+        onClick { onSetEnabled(!on); true }
+      }
+      .testTag("audio_dsp_switch"),
+    contentAlignment = Alignment.Center
+  ) {
+    Box(modifier = Modifier.size(width = Grid.u48, height = Grid.u24).clip(Grid.r12).background(track)) {
+      Box(
+        modifier = Modifier
+          .offset { IntOffset(thumb.roundToPx(), 0) }
+          .size(Grid.u24)
+          .clip(CircleShape)
+          .background(if (on) colors.onPrimary else colors.onSurfaceVariant)
       )
     }
+  }
+}
 
-    Spacer(Modifier.width(Space.m))
+/** The preset pill takes the width that is left, then Correction 96 and the overflow 48, with 12 between them. */
+@Composable
+private fun PresetRow(
+  settings: EqSettings,
+  preset: EqPreset?,
+  modified: Boolean,
+  actions: PresetActions,
+  onOpenSettings: () -> Unit,
+  onOpenAdvanced: () -> Unit,
+  onOpenSpatial: (() -> Unit)?,
+  onUpdateEq: ((EqSettings) -> EqSettings) -> Unit
+) {
+  val presetName = preset?.localizedName() ?: stringResource(R.string.audio_preset_custom)
+  val presetDescription = if (modified) stringResource(R.string.audio_preset_modified_desc, presetName) else presetName
+  Row(
+    modifier = Modifier.fillMaxWidth().heightIn(min = Grid.u48).height(IntrinsicSize.Min),
+    horizontalArrangement = Arrangement.spacedBy(Grid.u12),
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    Pill(
+      text = presetName + if (modified) " •" else "",
+      description = presetDescription,
+      modifier = Modifier.weight(1f),
+      onClickLabel = stringResource(R.string.audio_choose_preset),
+      onClick = actions.onOpen,
+      tag = "eq_preset_button"
+    )
+    Pill(
+      text = stringResource(R.string.audio_correction),
+      description = stringResource(R.string.audio_correction_desc),
+      modifier = Modifier.width(Grid.u96),
+      onClickLabel = stringResource(R.string.audio_correction),
+      onClick = actions.onOpen,
+      tag = "eq_correction_button"
+    )
+    OverflowMenu(settings, preset, modified, actions, onOpenSettings, onOpenAdvanced, onOpenSpatial, onUpdateEq)
+  }
+}
 
-    Column(modifier = Modifier.weight(1f)) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
+/** A 48 dp tall pill (taller when the text is larger). [description] is what a screen reader says instead of the visible text. */
+@Composable
+private fun Pill(text: String, description: String, modifier: Modifier, onClickLabel: String, onClick: () -> Unit, tag: String) {
+  val colors = MaterialTheme.colorScheme
+  val source = remember { MutableInteractionSource() }
+  Box(
+    modifier = modifier
+      .fillMaxHeight()
+      .heightIn(min = Grid.u48)
+      .pressScale(source)
+      .clip(Grid.r24)
+      .background(colors.surfaceContainer)
+      .clickable(interactionSource = source, indication = null, role = Role.Button, onClickLabel = onClickLabel, onClick = onClick)
+      .semantics { contentDescription = description }
+      .padding(horizontal = Grid.u12)
+      .testTag(tag),
+    contentAlignment = Alignment.Center
+  ) {
+    Text(
+      text,
+      style = EqType.LabelStrong,
+      color = colors.onSurface,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+      modifier = Modifier.clearAndSetSemantics {}
+    )
+  }
+}
+
+/** The view switch (192 wide, 6 inside) and the Tarkas Spatial button that fills the rest. */
+@Composable
+private fun Dock(mode: EqMode, spatial: SpatialUi, onOpenSpatial: (() -> Unit)?, onUpdateEq: ((EqSettings) -> EqSettings) -> Unit, modifier: Modifier) {
+  val colors = MaterialTheme.colorScheme
+  val source = remember { MutableInteractionSource() }
+  val enabled = onOpenSpatial != null
+  val sub = if (spatial.enabled) {
+    stringResource(R.string.audio_spatial_sub_on, spatialPresetLabel(spatial.preset), (spatial.intensity * 100f).roundToInt())
+  } else stringResource(R.string.audio_spatial_sub_off)
+  // The view switch takes 192 at most; on a narrow column it shrinks so the Spatial button keeps 96.
+  BoxWithConstraints(modifier = modifier.heightIn(min = Grid.u48)) {
+    val segmentsWidth = (maxWidth - Grid.u12 - Grid.u96).coerceIn(Grid.u96, Grid.u192)
+  Row(
+    modifier = Modifier.fillMaxWidth().heightIn(min = Grid.u48).height(IntrinsicSize.Min),
+    horizontalArrangement = Arrangement.spacedBy(Grid.u12)
+  ) {
+    ModeSegments(
+      parametric = mode == EqMode.PARAMETRIC,
+      width = segmentsWidth,
+      onSelect = { parametric -> if (parametric != (mode == EqMode.PARAMETRIC)) onUpdateEq { it.withLayout(parametric) } }
+    )
+    Column(
+      modifier = Modifier
+        .weight(1f)
+        .fillMaxHeight()
+        .heightIn(min = Grid.u48)
+        .pressScale(source)
+        .clip(Grid.r24)
+        .background(if (spatial.enabled) colors.primary.copy(alpha = 0.14f) else colors.surfaceContainer)
+        .clickable(
+          interactionSource = source, indication = null, enabled = enabled, role = Role.Button,
+          onClickLabel = stringResource(R.string.audio_spatial_title), onClick = { onOpenSpatial?.invoke() }
+        )
+        .padding(horizontal = Grid.u12)
+        .testTag("eq_open_spatial"),
+      verticalArrangement = Arrangement.Center
+    ) {
+      Text(
+        stringResource(R.string.audio_spatial_title),
+        style = EqType.LabelStrong,
+        color = if (enabled) colors.onSurface else colors.onSurface.copy(alpha = 0.38f),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+      )
+      Text(
+        sub,
+        style = EqType.Mono,
+        color = if (spatial.enabled) colors.primary else colors.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+      )
+    }
+  }
+  }
+}
+
+@Composable
+private fun spatialPresetLabel(preset: SpatialPreset): String = stringResource(
+  when (preset) {
+    SpatialPreset.SUBTLE -> R.string.audio_spatial_preset_sutil
+    SpatialPreset.STANDARD -> R.string.audio_spatial_preset_padrao
+    SpatialPreset.WIDE -> R.string.audio_spatial_preset_amplo
+    SpatialPreset.CINEMA -> R.string.audio_spatial_preset_cinema
+  }
+)
+
+/**
+ * Graphic or Parametric, both always visible; the chosen one is lit. [width] is 192 at most. Each option
+ * is a full-height (48 dp) touch target; the lit highlight is inset 6 inside it.
+ */
+@Composable
+private fun ModeSegments(parametric: Boolean, width: androidx.compose.ui.unit.Dp, onSelect: (Boolean) -> Unit) {
+  val colors = MaterialTheme.colorScheme
+  Row(
+    modifier = Modifier
+      .width(width)
+      .fillMaxHeight()
+      .clip(Grid.r24)
+      .background(colors.surfaceContainer)
+      .selectableGroup()
+      .testTag("eq_mode_toggle")
+  ) {
+    listOf(false to stringResource(R.string.audio_mode_graphic), true to stringResource(R.string.audio_mode_parametric)).forEachIndexed { position, (isParam, name) ->
+      val chosen = parametric == isParam
+      val fill by animateColorAsState(if (chosen) colors.primary.copy(alpha = 0.14f) else Color.Transparent, tween(150), label = "segment")
+      Box(
+        modifier = Modifier
+          .weight(1f)
+          .fillMaxHeight()
+          .selectable(selected = chosen, role = Role.RadioButton, onClick = { onSelect(isParam) })
+          .testTag(if (isParam) "eq_mode_parametric" else "eq_mode_graphic")
+      ) {
         Box(
           modifier = Modifier
-            .weight(1f)
-            .heightIn(min = Size.touch)
-            .clip(Shapes.pill)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .clickable(role = Role.Button, onClickLabel = stringResource(R.string.audio_choose_preset), onClick = presetActions.onOpen)
-            .padding(horizontal = Space.m)
-            .testTag("eq_preset_button"),
+            .fillMaxSize()
+            .padding(
+              start = if (position == 0) Grid.u6 else Grid.u6 / 2,
+              end = if (position == 0) Grid.u6 / 2 else Grid.u6,
+              top = Grid.u6,
+              bottom = Grid.u6
+            )
+            .clip(Grid.r12)
+            .background(fill),
           contentAlignment = Alignment.Center
         ) {
           Text(
-            text = (activePreset?.localizedName() ?: stringResource(R.string.audio_preset_custom)) + if (eqModified) " •" else "",
-            style = AppText.Subhead.copy(fontWeight = FontWeight.SemiBold),
-            color = MaterialTheme.colorScheme.onSurface,
+            name,
+            style = if (chosen) EqType.LabelStrong else EqType.Label,
+            color = if (chosen) colors.onSurface else colors.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
           )
         }
-        OverflowMenu(eqSettings, activePreset, eqModified, presetActions, onOpenAdvanced, onOpenSpatial, onUpdateEq)
-      }
-      Spacer(Modifier.height(Space.s))
-      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-        ToneControl(stringResource(R.string.audio_tone_bass), eqSettings.bassDb, eqSettings.enabled, "knob_bass") { db -> onUpdateEq { it.copy(bassDb = db) } }
-        ToneControl(stringResource(R.string.audio_tone_treble), eqSettings.trebleDb, eqSettings.enabled, "knob_treble") { db -> onUpdateEq { it.copy(trebleDb = db) } }
       }
     }
   }
 }
 
-/** A knob with its name above it and its value beside it, as the tone controls of a console. */
+/**
+ * Headroom and what the output stage is doing (limiter, clip, matched volume, the loudspeaker warning),
+ * then the compare button, right-aligned. Only actions that exist have a button.
+ */
 @Composable
-private fun ToneControl(label: String, db: Float, enabled: Boolean, testTag: String, onChange: (Float) -> Unit) {
+private fun PathBar(settings: EqSettings, capabilities: AudioCapabilities, compare: CompareState) {
   val colors = MaterialTheme.colorScheme
-  val range = EqSettings.TONE_RANGE_DB
-  Column(horizontalAlignment = Alignment.CenterHorizontally) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-      Text(label, style = AppText.Caption1.copy(fontWeight = FontWeight.SemiBold), color = colors.onSurface, maxLines = 1)
-      Spacer(Modifier.width(Space.xs))
+  val headroom = EqDsp.totalPreampDb(settings, rememberSpatialStage())
+  val onSpeaker = capabilities.activeRouteType == AudioCapabilities.ROUTE_BUILTIN_SPEAKER
+  // The button sits in a fixed 48 dp box at the top: the notes may grow, the button never moves.
+  Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+    Column(modifier = Modifier.weight(1f).heightIn(min = Grid.u48), verticalArrangement = Arrangement.Center) {
       Text(
-        formatDb(db),
-        style = AppText.Caption2.copy(fontFeatureSettings = "tnum"),
-        color = if (db == 0f) colors.onSurfaceVariant else colors.primary,
-        maxLines = 1
+        text = if (headroom < -0.05f) stringResource(R.string.audio_headroom_lowered, formatDb(-headroom).removePrefix("+")) else stringResource(R.string.audio_headroom_none),
+        style = EqType.Mono,
+        // The level is being lowered: say so in the accent, not in the neutral grey of "nothing happening".
+        color = if (headroom < -0.05f) colors.primary else colors.onSurfaceVariant
       )
+      OutputStageNotes(settings, compare.comparing)
+      if (settings.device != null && onSpeaker) {
+        Text(text = stringResource(R.string.audio_speaker_warning), style = EqType.Label, color = colors.primary)
+      }
     }
-    Spacer(Modifier.height(Space.xs))
-    EqKnob(
-      value = (db + range) / (2f * range),
-      onChange = { v -> onChange(snap(v * 2f * range - range)) },
-      label = label,
-      stateText = "${formatDb(db)} dB",
-      size = EqSize.knobMeter,
-      bipolar = true,
-      enabled = enabled,
-      steps = (2 * range).toInt() - 1,
-      modifier = Modifier.testTag(testTag)
-    )
+    Spacer(Modifier.width(Grid.u12))
+    Box(modifier = Modifier.height(Grid.u48), contentAlignment = Alignment.Center) {
+      CompareButton(settings.enabled, compare)
+    }
   }
 }
 
-/** An on/off switch with its full name: the switch shows the state, the label stays readable. */
+/** Hold: without EQ until the finger lifts. Tap (under 400 ms): without EQ until the next tap. A screen reader toggles it. */
 @Composable
-private fun PowerSwitch(label: String, on: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+private fun CompareButton(enabled: Boolean, compare: CompareState) {
   val colors = MaterialTheme.colorScheme
-  Row(
-    modifier = modifier
-      .fillMaxWidth()
-      .heightIn(min = Size.touch)
-      .clip(Shapes.pill)
-      .background(colors.surfaceContainerHigh)
-      .toggleable(value = on, role = Role.Switch, onValueChange = { onToggle() })
-      .padding(start = Space.m, end = Space.s),
-    verticalAlignment = Alignment.CenterVertically
+  var pressed by remember { mutableStateOf(false) }
+  val scale by animateFloatAsState(if (pressed) 0.96f else 1f, tween(150), label = "comparePress")
+  val comparing = compare.comparing
+  val description = stringResource(if (comparing) R.string.audio_compare_listening_desc else R.string.audio_compare_desc)
+  val state = stringResource(if (comparing) R.string.audio_compare_state_off else R.string.audio_compare_state_on)
+  Box(
+    modifier = Modifier
+      .heightIn(min = Grid.u48)
+      .widthIn(min = Grid.u48)
+      .graphicsLayer { scaleX = scale; scaleY = scale }
+      .clip(Grid.r24)
+      .background(if (comparing) colors.primary else colors.surfaceContainer)
+      .pointerInput(enabled) {
+        if (!enabled) return@pointerInput
+        detectTapGestures(onPress = {
+          val wasLatched = compare.latched
+          val start = System.currentTimeMillis()
+          pressed = true
+          compare.start()
+          val released = tryAwaitRelease()
+          pressed = false
+          if (!released) {
+            // The press was cancelled (the finger scrolled away): end what this press started, never latch.
+            if (!wasLatched) compare.stop()
+          } else {
+            val held = System.currentTimeMillis() - start >= HOLD_MS
+            if (wasLatched || held) compare.stop() else compare.latch()
+          }
+        })
+      }
+      .semantics {
+        role = Role.Button
+        contentDescription = description
+        stateDescription = state
+        // A screen reader cannot hold: a double tap switches the comparison on and off. Off with the EQ.
+        if (enabled) onClick { compare.toggle(); true } else disabled()
+      }
+      .padding(horizontal = Grid.u12)
+      .testTag("eq_compare"),
+    contentAlignment = Alignment.Center
   ) {
     Text(
-      label,
-      style = AppText.Caption1.copy(fontWeight = FontWeight.SemiBold),
-      color = colors.onSurface,
-      maxLines = 1,
-      modifier = Modifier.weight(1f)
+      if (comparing) stringResource(if (compare.latched) R.string.audio_compare_latched else R.string.audio_compare_no_eq) else stringResource(R.string.audio_compare_button),
+      style = EqType.LabelStrong,
+      color = when {
+        !enabled -> colors.onSurface.copy(alpha = 0.38f)
+        comparing -> colors.onPrimary
+        else -> colors.onSurface
+      },
+      maxLines = 1
     )
-    // The row is the control (one touch target, one announcement); the switch only draws the state.
-    Switch(checked = on, onCheckedChange = null)
   }
 }
 
-/** Gráfico or Paramétrico, both always visible; the chosen one is lit. */
-@Composable
-private fun ModeSegments(parametric: Boolean, onSelect: (Boolean) -> Unit) {
-  val colors = MaterialTheme.colorScheme
-  Column(
-    modifier = Modifier
-      .fillMaxWidth()
-      .clip(Shapes.pill)
-      .background(colors.surfaceContainerHigh)
-      .padding(Space.xxs)
-      .testTag("eq_mode_toggle")
-  ) {
-    listOf(false to stringResource(R.string.audio_mode_graphic), true to stringResource(R.string.audio_mode_parametric)).forEach { (isParam, name) ->
-      val chosen = parametric == isParam
-      Box(
-        modifier = Modifier
-          .fillMaxWidth()
-          .heightIn(min = Size.touch)
-          .clip(Shapes.pill)
-          .background(if (chosen) colors.primary.copy(alpha = 0.24f) else androidx.compose.ui.graphics.Color.Transparent)
-          .selectable(selected = chosen, role = Role.RadioButton, onClick = { onSelect(isParam) })
-          .testTag(if (isParam) "eq_mode_parametric" else "eq_mode_graphic"),
-        contentAlignment = Alignment.Center
-      ) {
-        Text(
-          name,
-          style = AppText.Caption1.copy(fontWeight = if (chosen) FontWeight.SemiBold else FontWeight.Normal),
-          // Text on the accent wash stays in the surface text colour: the accent on its own wash is under 4.5:1 on light.
-          color = if (chosen) colors.onSurface else colors.onSurfaceVariant,
-          maxLines = 1
-        )
-      }
-    }
-  }
-}
-
-/** The preset's actions and the way into the advanced settings. */
+/** The preset's actions, the way into the settings sheet and the advanced page. */
 @Composable
 private fun OverflowMenu(
   settings: EqSettings,
   preset: EqPreset?,
   modified: Boolean,
   actions: PresetActions,
+  onOpenSettings: () -> Unit,
   onOpenAdvanced: () -> Unit,
   onOpenSpatial: (() -> Unit)?,
   onUpdateEq: ((EqSettings) -> EqSettings) -> Unit
 ) {
   var open by remember { mutableStateOf(false) }
+  val source = remember { MutableInteractionSource() }
   val context = LocalContext.current
   val resources = LocalResources.current
   // Resolved when the menu item is chosen, from the same context, so the toast follows the app language.
@@ -420,18 +593,24 @@ private fun OverflowMenu(
   Box {
     Box(
       modifier = Modifier
-        .size(Size.touch)
-        .clip(Shapes.pill)
-        .clickable(role = Role.Button, onClickLabel = stringResource(R.string.audio_more_options)) { open = true }
+        .size(Grid.u48)
+        .pressScale(source)
+        .clip(CircleShape)
+        .clickable(interactionSource = source, indication = null, role = Role.Button, onClickLabel = stringResource(R.string.audio_more_options)) { open = true }
         .testTag("eq_more"),
       contentAlignment = Alignment.Center
     ) {
-      Icon(Icons.Rounded.MoreVert, contentDescription = stringResource(R.string.audio_more_options), tint = MaterialTheme.colorScheme.onSurface)
+      Icon(
+        Icons.Rounded.MoreVert,
+        contentDescription = stringResource(R.string.audio_more_options),
+        tint = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.size(Grid.icon)
+      )
     }
     DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
       @Composable
       fun item(text: String, tag: String? = null, onClick: () -> Unit) = DropdownMenuItem(
-        text = { Text(text, style = AppText.Body) },
+        text = { Text(text, style = EqType.Body) },
         onClick = { open = false; onClick() },
         modifier = if (tag != null) Modifier.testTag(tag) else Modifier
       )
@@ -460,7 +639,8 @@ private fun OverflowMenu(
         }
       }
       item(stringResource(R.string.audio_menu_reset), "eq_reset", actions.onReset)
-      if (onOpenSpatial != null) item(stringResource(R.string.audio_spatial_title), "eq_open_spatial", onOpenSpatial)
+      if (onOpenSpatial != null) item(stringResource(R.string.audio_spatial_title), "eq_open_spatial_menu", onOpenSpatial)
+      item(stringResource(R.string.audio_settings_title), "eq_open_settings", onOpenSettings)
       item(stringResource(R.string.audio_menu_advanced), "eq_open_advanced", onOpenAdvanced)
     }
   }

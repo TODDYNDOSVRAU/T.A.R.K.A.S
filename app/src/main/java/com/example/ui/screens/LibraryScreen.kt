@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
 import com.example.ui.screens.library.rememberComputed
 import com.example.ui.screens.library.letterStarts
 import com.example.ui.screens.library.LibraryActions
@@ -352,9 +354,9 @@ fun LibraryScreen(
           modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = Space.page)
+            .padding(horizontal = Grid.margin)
             .selectableGroup(),
-          horizontalArrangement = Arrangement.spacedBy(Space.s)
+          horizontalArrangement = Arrangement.spacedBy(Grid.u6)
         ) {
           LibrarySection.entries.forEach { s ->
             FilterChip(
@@ -386,7 +388,7 @@ fun LibraryScreen(
                   if (compact) {
                     item(key = "song_search") {
                       Row(
-                        modifier = Modifier.padding(top = Space.s, bottom = Space.xs),
+                        modifier = Modifier.padding(top = Grid.u6, bottom = Grid.u6),
                         verticalAlignment = Alignment.CenterVertically
                       ) {
                         SearchField(
@@ -395,7 +397,7 @@ fun LibraryScreen(
                           placeholder = stringResource(R.string.library_search_songs_hint),
                           modifier = Modifier
                             .weight(1f)
-                            .padding(start = Space.page)
+                            .padding(start = Grid.margin)
                             .testTag("library_search_songs")
                         )
                         SongOrderRow(
@@ -414,8 +416,8 @@ fun LibraryScreen(
                         onValueChange = { songQuery = it },
                         placeholder = stringResource(R.string.library_search_songs_hint),
                         modifier = Modifier
-                          .padding(horizontal = Space.page)
-                          .padding(top = Space.s, bottom = Space.xs)
+                          .padding(horizontal = Grid.margin)
+                          .padding(top = Grid.u6, bottom = Grid.u6)
                           .testTag("library_search_songs")
                       )
                     }
@@ -457,7 +459,7 @@ fun LibraryScreen(
                     icon = Icons.Rounded.SearchOff,
                     title = stringResource(R.string.library_folders_all_out_title),
                     message = stringResource(R.string.library_folders_all_out_message),
-                    modifier = Modifier.padding(horizontal = Space.page),
+                    modifier = Modifier.padding(horizontal = Grid.margin),
                     actionLabel = stringResource(R.string.library_folders_chip),
                     onAction = { showFolders = true }
                   )
@@ -521,8 +523,8 @@ fun LibraryScreen(
                     onValueChange = { favoriteQuery = it },
                     placeholder = stringResource(R.string.library_search_favorites_hint),
                     modifier = Modifier
-                      .padding(horizontal = Space.page)
-                      .padding(top = Space.s, bottom = Space.xs)
+                      .padding(horizontal = Grid.margin)
+                      .padding(top = Grid.u6, bottom = Grid.u6)
                       .testTag("library_search_favorites")
                   )
                 }
@@ -538,7 +540,7 @@ fun LibraryScreen(
                     icon = Icons.Rounded.FavoriteBorder,
                     title = stringResource(R.string.library_favorites_empty_title),
                     message = stringResource(R.string.library_favorites_empty_message),
-                    modifier = Modifier.padding(horizontal = Space.page)
+                    modifier = Modifier.padding(horizontal = Grid.margin)
                   )
                 }
               },
@@ -605,12 +607,12 @@ fun LibraryScreen(
   playlists.firstOrNull { it.id == deletingId }?.let { pl ->
     TarkasAlertDialog(
       onDismissRequest = { deletingId = null },
-      title = { Text(stringResource(R.string.library_delete_title, pl.name), style = AppText.Title3) },
+      title = { Text(stringResource(R.string.library_delete_title, pl.name), style = GridText.Title) },
       text = {
         Text(
           if (pl.trackIds.isEmpty()) stringResource(R.string.library_delete_body_empty)
           else pluralStringResource(R.plurals.library_delete_body, pl.trackIds.size, pl.trackIds.size),
-          style = AppText.Subhead
+          style = GridText.Small
         )
       },
       confirmButton = {

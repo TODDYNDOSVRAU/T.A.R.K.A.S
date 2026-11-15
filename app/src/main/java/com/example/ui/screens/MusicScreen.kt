@@ -208,7 +208,7 @@ fun MusicScreen(
   }
   val titlePart: @Composable () -> Unit = {
     Column {
-    PlaybackProblemBanner(state.problem, actions.onRetry, Modifier.padding(bottom = 8.dp))
+    PlaybackProblemBanner(state.problem, actions.onRetry, Modifier.padding(bottom = Space.m))
     TitleRow(
       track = currentTrack,
       isFavorite = currentTrack != null && currentTrack.id in favoriteIds,
@@ -297,7 +297,7 @@ fun MusicScreen(
             Modifier
               .weight(1f)
               .fillMaxWidth()
-              .padding(vertical = Space.s),
+              .padding(vertical = Space.m),
             // The half ends at its edge: the side covers fade out well before it.
             Space.xl * 2.5f
           )
@@ -305,7 +305,7 @@ fun MusicScreen(
             titlePart()
             progressPart()
           }
-          Spacer(Modifier.height(Space.s))
+          Spacer(Modifier.height(Space.m))
         }
         Spacer(Modifier.width(Space.xl))
         Column(
@@ -315,9 +315,9 @@ fun MusicScreen(
           CloseHandle(onClose = onClose, modifier = Modifier.revealWithPlayer())
           Spacer(Modifier.weight(1f))
           transportPart()
-          Spacer(Modifier.height(Space.s))
+          Spacer(Modifier.height(Space.m))
           volumePart()
-          Spacer(Modifier.height(Space.s))
+          Spacer(Modifier.height(Space.m))
           actionsPart()
           Spacer(Modifier.weight(1f))
         }
@@ -330,7 +330,7 @@ fun MusicScreen(
           Modifier
             .weight(1f)
             .fillMaxWidth()
-            .padding(vertical = Space.l),
+            .padding(vertical = Space.m),
           // The side covers run off the screen: they fade out over the margin instead of being cut.
           Space.xl
         )
@@ -340,15 +340,15 @@ fun MusicScreen(
         // nothing.
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
           titlePart()
-          Spacer(Modifier.height(Space.l))
+          Spacer(Modifier.height(Space.m))
           progressPart()
-          Spacer(Modifier.height(Space.s))
+          Spacer(Modifier.height(Space.m))
           transportPart()
-          Spacer(Modifier.height(Space.s))
+          Spacer(Modifier.height(Space.m))
           volumePart()
-          Spacer(Modifier.height(Space.s))
+          Spacer(Modifier.height(Space.m))
           actionsPart()
-          Spacer(Modifier.height(Space.s))
+          Spacer(Modifier.height(Space.m))
         }
       }
     }

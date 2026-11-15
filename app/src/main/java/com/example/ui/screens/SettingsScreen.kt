@@ -76,6 +76,8 @@ import com.example.ui.components.InfoRow
 import com.example.ui.components.InsetGroup
 import com.example.ui.components.ListRow
 import com.example.ui.components.RadioRow
+import com.example.ui.components.Segment
+import com.example.ui.components.SegmentedTabs
 import com.example.ui.components.SubPageHeader
 import com.example.ui.components.SwitchRow
 import com.example.ui.components.TarkasMark
@@ -84,6 +86,9 @@ import com.example.ui.legal.currentLegalTexts
 import com.example.ui.theme.AppMotion
 import com.example.ui.theme.ListAnimation
 import com.example.ui.theme.AppText
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
+import com.example.ui.theme.gridHeight
 import com.example.ui.theme.LocalBarInset
 import com.example.ui.theme.Shapes
 import com.example.ui.theme.Size
@@ -147,7 +152,9 @@ fun SettingsScreen(
   onSetRepeatMode: ((RepeatMode) -> Unit)? = null,
   subPage: SettingsSubPage? = null,
   onOpenSubPage: (SettingsSubPage) -> Unit = {},
-  onSubPageBack: () -> Unit = {}
+  onSubPageBack: () -> Unit = {},
+  systemColors: Boolean = false,
+  onSystemColorsChange: (Boolean) -> Unit = {}
 ) {
   // Which page shows comes from the host's route stack, so back, the saved state and the tab bar agree.
   val page = subPage?.let { SettingsPage.valueOf(it.name) } ?: SettingsPage.MAIN
@@ -185,7 +192,9 @@ fun SettingsScreen(
         onOpenAbout = { onOpenSubPage(SettingsSubPage.ABOUT) },
         onOpenTerms = { openText(SettingsPage.TERMS, SettingsPage.MAIN) },
         onOpenPrivacy = { openText(SettingsPage.PRIVACY, SettingsPage.MAIN) },
-        listState = mainListState
+        listState = mainListState,
+        systemColors = systemColors,
+        onSystemColorsChange = onSystemColorsChange
       )
       SettingsPage.ABOUT -> AboutPage(
         termsAcceptedAt = termsAcceptedAt,
@@ -210,7 +219,7 @@ internal fun LazyListScope.settingsGroup(
   content: @Composable () -> Unit
 ) {
   item {
-    Column(Modifier.padding(top = Space.xl)) {
+    Column(Modifier.padding(top = Grid.u24)) {
       if (header != null) GroupHeader(header)
       InsetGroup(modifier = if (tag != null) Modifier.testTag(tag) else Modifier) { content() }
       if (footer != null) GroupFooter(footer)
@@ -251,7 +260,9 @@ private fun MainSettings(
   onOpenAbout: () -> Unit,
   onOpenTerms: () -> Unit,
   onOpenPrivacy: () -> Unit,
-  listState: androidx.compose.foundation.lazy.LazyListState
+  listState: androidx.compose.foundation.lazy.LazyListState,
+  systemColors: Boolean = false,
+  onSystemColorsChange: (Boolean) -> Unit = {}
 ) {
   val colors = MaterialTheme.colorScheme
   val context = LocalContext.current
@@ -307,23 +318,20 @@ private fun MainSettings(
   LazyColumn(
     state = listState,
     modifier = Modifier.readingColumn().fillMaxHeight(),
-    contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
+    contentPadding = PaddingValues(bottom = LocalBarInset.current + Grid.u24)
   ) {
     item {
-      Column(Modifier.padding(start = Space.page, end = Space.page, top = Space.s)) {
+      Column(Modifier.padding(horizontal = Grid.margin)) {
         com.example.ui.components.SearchField(
           value = query,
           onValueChange = { query = it },
           placeholder = stringResource(R.string.settings_search_hint),
           modifier = Modifier.testTag("settings_search")
         )
-        // A search looks in every layer, so the layer chips only apply while the box is empty.
-        Row(
-          modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = Space.s).selectableGroup(),
-          horizontalArrangement = Arrangement.spacedBy(Space.xs)
-        ) {
+        // A search looks in every layer, so the layer control only applies while the box is empty.
+        SegmentedTabs(modifier = Modifier.padding(top = Grid.u12)) {
           SettingsLayer.entries.forEach { l ->
-            com.example.ui.components.FilterChip(
+            Segment(
               label = stringResource(layerLabel(l)),
               selected = !searching && layer == l,
               onClick = { query = ""; layerKey = l.key },
@@ -349,7 +357,7 @@ private fun MainSettings(
 
     // Aparência
     group(SettingsLayer.ESSENTIAL, resources.getString(R.string.settings_theme), tag = "settings_theme_card") {
-      ThemeOptionRows(themeMode, onThemeModeChange, tagPrefix = "theme_chip_")
+      ThemeOptionRows(themeMode, onThemeModeChange, tagPrefix = "theme_chip_", systemColors = systemColors, onSystemColors = onSystemColorsChange)
     }
     group(
       SettingsLayer.ADVANCED,
@@ -366,9 +374,9 @@ private fun MainSettings(
       Row(
         modifier = Modifier
           .horizontalScroll(rememberScrollState())
-          .padding(horizontal = Space.s, vertical = Space.s)
+          .padding(Grid.inset)
           .selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(Space.xs)
+        horizontalArrangement = Arrangement.spacedBy(Grid.u6)
       ) {
         ListAnimation.entries.forEach { style ->
           com.example.ui.components.FilterChip(
@@ -628,9 +636,9 @@ private fun MainSettings(
       item {
         Text(
           stringResource(R.string.settings_search_empty, query.trim()),
-          style = AppText.Body,
+          style = GridText.Body,
           color = colors.onSurfaceVariant,
-          modifier = Modifier.padding(top = Space.xl).testTag("settings_search_empty")
+          modifier = Modifier.padding(start = Grid.margin, end = Grid.margin, top = Grid.u24).testTag("settings_search_empty")
         )
       }
     }
@@ -640,7 +648,7 @@ private fun MainSettings(
   if (confirmErase) {
     TarkasAlertDialog(
       onDismissRequest = { confirmErase = false },
-      title = { Text(stringResource(R.string.settings_erase_dialog_title), style = AppText.Title3) },
+      title = { Text(stringResource(R.string.settings_erase_dialog_title), style = GridText.Title) },
       text = { Text(stringResource(R.string.settings_erase_dialog_text)) },
       confirmButton = {
         TextButton(onClick = { confirmErase = false; onEraseAllData() }, modifier = Modifier.testTag("settings_erase_confirm")) {
@@ -684,7 +692,7 @@ private fun AboutPage(
 
   LazyColumn(
     modifier = Modifier.statusBarsPadding().fillMaxSize().testTag("settings_about_page"),
-    contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
+    contentPadding = PaddingValues(bottom = LocalBarInset.current + Grid.u24)
   ) {
     item {
       SubPageHeader(
@@ -697,22 +705,23 @@ private fun AboutPage(
     item {
       Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = Space.page, vertical = Space.s)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Grid.margin, vertical = Grid.u12).gridHeight()
       ) {
-        TarkasMark(modifier = Modifier.size(width = 72.dp, height = 44.dp))
-        Spacer(Modifier.height(Space.m))
-        Text("T.A.R.K.A.S.", style = AppText.Title2, color = colors.onSurface)
+        // The mark is drawn 132 wide by 80 tall; 96 x 60 keeps that shape on the 12 dp rhythm.
+        TarkasMark(modifier = Modifier.size(width = Grid.u96, height = 60.dp))
+        Spacer(Modifier.height(Grid.u12))
+        Text("T.A.R.K.A.S.", style = GridText.Title, color = colors.onSurface)
         Text(
           stringResource(R.string.settings_about_tagline),
-          style = AppText.Subhead,
+          style = GridText.Small,
           color = colors.onSurfaceVariant,
           textAlign = TextAlign.Center
         )
-        Spacer(Modifier.height(Space.xs))
+        Spacer(Modifier.height(Grid.u6))
         // Authorship line, in English as the T.A.L. identity asks for every product's About page.
         Text(
           "Developed by Totally Accurate Labs.",
-          style = AppText.Footnote,
+          style = GridText.Small,
           color = colors.onSurfaceVariant,
           textAlign = TextAlign.Center,
           modifier = Modifier.testTag("about_developer")
@@ -763,12 +772,12 @@ private fun AboutPage(
         Column(
           modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = Size.row)
-            .padding(horizontal = Space.l, vertical = Space.m)
+            .gridHeight(min = Grid.u48)
+            .padding(horizontal = Grid.inset, vertical = Grid.u6)
             .semantics(mergeDescendants = true) {}
         ) {
-          Text(title, style = AppText.Body, color = colors.onSurface)
-          Text(body, style = AppText.Footnote, color = colors.onSurfaceVariant)
+          Text(title, style = GridText.Body, color = colors.onSurface)
+          Text(body, style = GridText.Small, color = colors.onSurfaceVariant)
         }
       }
     }
@@ -801,16 +810,16 @@ private fun AboutPage(
           if (onDark) com.example.R.drawable.tal_logo_negative else com.example.R.drawable.tal_logo_positive
         ),
         contentDescription = "Totally Accurate Labs",
-        modifier = Modifier.fillMaxWidth().padding(top = Space.xl).size(64.dp).testTag("about_tal_logo")
+        modifier = Modifier.fillMaxWidth().padding(top = Grid.u24).size(Grid.u48).testTag("about_tal_logo")
       )
     }
     item {
       Text(
         "© 2026 Totally Accurate Labs · MADE BY T.A.L.",
-        style = AppText.Caption1.copy(fontFamily = com.example.ui.theme.JetBrainsMono),
+        style = GridText.Label,
         color = colors.onSurfaceVariant,
         textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = Space.page, vertical = Space.m).testTag("about_seal")
+        modifier = Modifier.fillMaxWidth().padding(vertical = Grid.u12).gridHeight().padding(horizontal = Grid.margin).testTag("about_seal")
       )
     }
   }
@@ -832,9 +841,19 @@ internal val ThemeChoices = listOf(
   Triple("amoled", R.string.settings_theme_amoled, R.string.settings_theme_amoled_desc)
 )
 
-/** The theme as radio rows; put inside an [InsetGroup]. */
+/**
+ * The theme as radio rows; put inside an [InsetGroup]. With [onSystemColors], a last row offers the phone's
+ * colours (Material You). It only appears where Android has them (12 and later): no dead switch on older phones.
+ */
 @Composable
-internal fun ThemeOptionRows(themeMode: String, onThemeMode: (String) -> Unit, tagPrefix: String) {
+internal fun ThemeOptionRows(
+  themeMode: String,
+  onThemeMode: (String) -> Unit,
+  tagPrefix: String,
+  systemColors: Boolean = false,
+  onSystemColors: ((Boolean) -> Unit)? = null,
+  systemColorsAvailable: Boolean = com.example.ui.theme.systemColorsSupported()
+) {
   Column(Modifier.selectableGroup()) {
     ThemeChoices.forEachIndexed { i, (key, label, subtitle) ->
       if (i > 0) GroupDivider()
@@ -844,6 +863,16 @@ internal fun ThemeOptionRows(themeMode: String, onThemeMode: (String) -> Unit, t
         selected = themeMode == key,
         onClick = { onThemeMode(key) },
         modifier = Modifier.testTag("$tagPrefix$key")
+      )
+    }
+    if (onSystemColors != null && systemColorsAvailable) {
+      GroupDivider()
+      SwitchRow(
+        title = stringResource(R.string.settings_system_colors),
+        subtitle = stringResource(R.string.settings_system_colors_desc),
+        checked = systemColors,
+        onCheckedChange = onSystemColors,
+        modifier = Modifier.testTag("${tagPrefix}system_colors")
       )
     }
   }

@@ -109,7 +109,9 @@ fun OnboardingScreen(
   curiosityConfig: CuriosityConfig,
   onCuriosityConfig: (CuriosityConfig) -> Unit,
   onAcceptTerms: () -> Unit,
-  onFinish: () -> Unit
+  onFinish: () -> Unit,
+  systemColors: Boolean = false,
+  onSystemColors: (Boolean) -> Unit = {}
 ) {
   val steps = if (onlyTerms) listOf(Step.TERMS) else Step.entries
   var index by rememberSaveable { mutableIntStateOf(0) }
@@ -212,7 +214,7 @@ fun OnboardingScreen(
                     onRead = { reading = it },
                     changed = onlyTerms
                   )
-                  Step.LOOK -> LookStep(themeMode, onThemeMode, surfaceStyle, onSurfaceStyle, reduceMotion, onReduceMotion)
+                  Step.LOOK -> LookStep(themeMode, onThemeMode, surfaceStyle, onSurfaceStyle, reduceMotion, onReduceMotion, systemColors, onSystemColors)
                   Step.CURIOSITY -> CuriosityStep(curiosityConfig, onCuriosityConfig)
                   Step.DONE -> DoneStep()
                 }
@@ -387,12 +389,14 @@ private fun LookStep(
   surfaceStyle: SurfaceStyle,
   onSurfaceStyle: (SurfaceStyle) -> Unit,
   reduceMotion: Boolean,
-  onReduceMotion: (Boolean) -> Unit
+  onReduceMotion: (Boolean) -> Unit,
+  systemColors: Boolean,
+  onSystemColors: (Boolean) -> Unit
 ) {
   StepHeader(stringResource(R.string.onboarding_look_title), stringResource(R.string.onboarding_look_body))
   SectionGap()
   GroupHeader(stringResource(R.string.onboarding_theme))
-  InsetGroup { ThemeOptionRows(themeMode, onThemeMode, tagPrefix = "onboarding_theme_") }
+  InsetGroup { ThemeOptionRows(themeMode, onThemeMode, tagPrefix = "onboarding_theme_", systemColors = systemColors, onSystemColors = onSystemColors) }
   SectionGap()
   GroupHeader(stringResource(R.string.onboarding_floating_bars))
   InsetGroup { SurfaceOptionRows(surfaceStyle, onSurfaceStyle, tagPrefix = "onboarding_surface_") }

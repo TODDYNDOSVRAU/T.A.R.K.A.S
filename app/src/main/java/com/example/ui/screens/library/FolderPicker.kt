@@ -1,5 +1,7 @@
 package com.example.ui.screens.library
 
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -75,16 +77,16 @@ fun FolderPicker(
         )
         Text(
           text = stringResource(R.string.library_folders_note),
-          style = AppText.Footnote,
+          style = GridText.Small,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.padding(horizontal = Space.page, vertical = Space.s)
+          modifier = Modifier.padding(horizontal = Grid.margin, vertical = Grid.u6)
         )
         if (rows.isEmpty()) {
           EmptyState(
             icon = Icons.Rounded.ChevronRight,
             title = stringResource(R.string.library_folders_empty_title),
             message = stringResource(R.string.library_folders_empty_message),
-            modifier = Modifier.padding(horizontal = Space.page)
+            modifier = Modifier.padding(horizontal = Grid.margin)
           )
         } else {
           LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -130,8 +132,8 @@ private fun FolderRowItem(
     verticalAlignment = Alignment.CenterVertically,
     modifier = Modifier
       .fillMaxWidth()
-      .defaultMinSize(minHeight = Size.touch)
-      .padding(start = Space.page + Space.page * depth, end = Space.page)
+      .defaultMinSize(minHeight = Grid.u48)
+      .padding(start = Grid.margin + Grid.margin * depth, end = Grid.margin)
   ) {
     if (node.children.isNotEmpty()) {
       Icon(
@@ -139,12 +141,12 @@ private fun FolderRowItem(
         contentDescription = stringResource(if (open) R.string.library_folders_collapse else R.string.library_folders_expand, name),
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier
-          .size(40.dp)
+          .size(Grid.u48)
           .clickable(onClick = onToggleOpen)
-          .padding(Space.s)
+          .padding(Grid.u6)
       )
     } else {
-      Spacer(Modifier.width(40.dp))
+      Spacer(Modifier.width(Grid.u48))
     }
     // The row is the target: tapping the name or the box does the same. A partly ticked branch goes fully in.
     Row(
@@ -153,7 +155,7 @@ private fun FolderRowItem(
         .weight(1f)
         .clickable(role = Role.Checkbox) { onSetIncluded(node.path, check != FolderCheck.ON) }
         .semantics(mergeDescendants = true) { stateDescription = stateText }
-        .defaultMinSize(minHeight = Size.touch)
+        .defaultMinSize(minHeight = Grid.u48)
     ) {
       TriStateCheckbox(
         state = when (check) {
@@ -163,11 +165,11 @@ private fun FolderRowItem(
         },
         onClick = null
       )
-      Column(modifier = Modifier.weight(1f).padding(start = Space.m)) {
-        Text(name, style = AppText.Body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      Column(modifier = Modifier.weight(1f).padding(start = Grid.inset)) {
+        Text(name, style = GridText.Body, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(
           pluralStringResource(R.plurals.library_track_count, node.total, node.total),
-          style = AppText.Footnote,
+          style = GridText.Small,
           color = MaterialTheme.colorScheme.onSurfaceVariant
         )
       }

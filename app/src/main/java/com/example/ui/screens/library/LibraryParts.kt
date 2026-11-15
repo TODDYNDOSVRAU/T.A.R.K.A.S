@@ -1,5 +1,7 @@
 package com.example.ui.screens.library
 
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -41,15 +43,15 @@ internal fun trackSubtitle(track: Track, showSource: Boolean = true): String {
 /** The hairline between two track rows, inset to where the title starts. */
 @Composable
 internal fun TrackDivider() {
-  GroupDivider(inset = Space.page + Size.rowArtwork + Space.m)
+  GroupDivider(inset = Grid.margin + Grid.u48 + Grid.inset)
 }
 
 /**
  * Moves a trailing button of a [com.example.ui.components.TrackRow] to the edge a row's own "more"
  * button sits at. TrackRow keeps the full page margin when it has no "more" button, so a 48 dp
- * trailing button there would sit 16 dp further in than the ellipsis in the next list.
+ * trailing button there would sit 12 dp further in than the ellipsis in the next list.
  */
-internal fun Modifier.trailingEdge(): Modifier = offset(x = Space.page - Space.xs)
+internal fun Modifier.trailingEdge(): Modifier = offset(x = Grid.inset)
 
 /**
  * How a list row arrives and moves: the list animation chosen in Ajustes ([stagger]) and the slide when
@@ -68,8 +70,8 @@ internal fun PlayShuffleRow(onPlay: () -> Unit, onShuffle: () -> Unit, modifier:
   Row(
     modifier = modifier
       .fillMaxWidth()
-      .padding(horizontal = Space.page, vertical = Space.s),
-    horizontalArrangement = Arrangement.spacedBy(Space.m)
+      .padding(horizontal = Grid.margin, vertical = Grid.u6),
+    horizontalArrangement = Arrangement.spacedBy(Grid.inset)
   ) {
     TonalButton(
       text = stringResource(R.string.library_play),

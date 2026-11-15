@@ -68,6 +68,23 @@ object AppText {
   val Caption2 = style(11, 13, FontWeight.Normal, 0.006f)
 }
 
+/**
+ * The three text sizes of the T.A.L. grid: 24, 18 and 12 sp. Screens on the grid use only these; the
+ * line heights are multiples of 6 so a block of text can land on the 12 dp rhythm.
+ */
+object GridText {
+  /** A screen's or a sheet's title. */
+  val Title = style(24, 30, FontWeight.SemiBold, -0.02f, SpaceGrotesk)
+  /** Row titles, buttons, running text. */
+  val Body = style(18, 24, FontWeight.Normal)
+  /** Body with emphasis: buttons, the chosen item. */
+  val BodyStrong = style(18, 24, FontWeight.SemiBold)
+  /** Notes, subtitles, chips. */
+  val Small = style(12, 18, FontWeight.Normal)
+  /** Section labels, values, metrics and technical data. */
+  val Label = style(12, 18, FontWeight.Normal, 0f, JetBrainsMono)
+}
+
 /** The same scale on Material's roles, for the components that read MaterialTheme.typography. */
 val TarkasTypography = Typography(
   displayLarge = AppText.LargeTitle,

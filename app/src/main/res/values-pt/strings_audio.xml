@@ -112,7 +112,6 @@
   <string name="audio_compare_state_on">Com equalizador</string>
   <string name="audio_copied">Copiado</string>
   <string name="audio_copy_command">Copiar o comando</string>
-  <string name="audio_curve_description">Curva do equalizador, só para leitura. %1$s Arraste para o lado para rolar as bandas.</string>
   <string name="audio_curve_flat">Curva plana, sem ajuste.</string>
   <string name="audio_curve_peak_cut">Maior corte %1$s dB perto de %2$s.</string>
   <string name="audio_curve_peak_gain">Maior ganho %1$s dB perto de %2$s. </string>
@@ -162,12 +161,9 @@
   <string name="audio_notice_suggest_one">Há correção para %1$s, medida por %2$s.</string>
   <string name="audio_notice_suggest_many">Há correções para fones como “%1$s”. Escolha o modelo do seu.</string>
   <string name="audio_enter_value">Digitar o valor</string>
-  <string name="audio_enter_value_for">Digitar o valor de %1$s</string>
   <string name="audio_filter_all">Todas</string>
   <string name="audio_filter_all_sources">Todas as medições</string>
   <string name="audio_filter_builtin">Embutidas</string>
-  <string name="audio_filter_choose_type">Escolher o tipo de filtro</string>
-  <string name="audio_filter_desc">Filtro %1$s</string>
   <string name="audio_filter_fones">Fones (AutoEq)</string>
   <string name="audio_filter_high_pass">Passa-alta</string>
   <string name="audio_filter_high_shelf">Prateleira aguda</string>
@@ -236,9 +232,6 @@
   <string name="audio_spatial_status_off">Abre a música ao redor da cabeça</string>
   <string name="audio_spatial_status_preparing">Preparando…</string>
   <string name="audio_spatial_title">Tarkas Spatial</string>
-  <string name="audio_spatial_tune_close">Fechar ajustes de %1$s</string>
-  <string name="audio_spatial_tune_open">Ajustes de %1$s</string>
-  <string name="audio_spatial_tuned">Ajustado por você</string>
   <string name="audio_spatial_cinema_hint">Estéreo distribuído em cinco caixas virtuais. Ainda não ajustado de ouvido.</string>
   <string name="audio_speaker_warning">A correção do fone está ligada, mas o som sai pelo alto-falante.</string>
   <string name="audio_spectrum_permission">O espectro ao vivo pede a permissão do microfone. O app não grava nada.</string>
@@ -319,4 +312,24 @@
   <string name="audio_preset_name_loudness">Loudness</string>
   <string name="audio_preset_name_treble">Mais agudos</string>
   <string name="audio_preset_name_speech">Voz e podcast</string>
+  <string name="audio_spatial_stage_off">Fone · desligado</string>
+  <string name="audio_spatial_stage_subtle">Falantes · sutil</string>
+  <string name="audio_spatial_stage_standard">Falantes · padrão</string>
+  <string name="audio_spatial_stage_wide">Falantes · amplo</string>
+  <string name="audio_spatial_stage_cinema">5.1 · 6 caixas</string>
+  <string name="audio_spatial_stage_desc">Quadro espacial, %1$s</string>
+  <string name="audio_spatial_on">Ligado</string>
+  <string name="audio_spatial_mode">Modo</string>
+  <string name="audio_spatial_more">Mais modos e ajuste fino</string>
+  <string name="audio_curve_card_description">Curva do equalizador, somente leitura. %1$s</string>
+  <string name="audio_compare_banner">Sem EQ · volume igualado</string>
+  <string name="audio_settings_title">Ajustes</string>
+  <string name="audio_correction">Correção</string>
+  <string name="audio_spatial_sub_on">%1$s · %2$d%%</string>
+  <string name="audio_spatial_sub_off">Desligado</string>
+  <string name="audio_stepper_less">Diminuir %1$s</string>
+  <string name="audio_stepper_more">Aumentar %1$s</string>
+  <string name="audio_preset_modified_desc">%1$s, modificada</string>
+  <string name="audio_correction_desc">Predefinições de correção</string>
+  <string name="audio_band_off">Desligada</string>
 </resources>

@@ -23,8 +23,10 @@ class AudioNumberFormatTest {
 
   @Test fun portugueseUsesTheComma() {
     Locale.setDefault(Locale.forLanguageTag("pt-BR"))
-    assertEquals("48,0 kHz", formatSampleRate(48000))
-    assertEquals("0,0", formatDb(0f))
+    assertEquals("48 kHz", formatSampleRate(48000))
+    assertEquals("44,1 kHz", formatSampleRate(44100))
+    assertEquals("0", formatDb(0f))
+    assertEquals("+3", formatDb(3f))
     assertEquals("-0,5", formatDb(-0.5f))
     assertEquals("+3,5", formatDb(3.5f))
     assertEquals("1,6k", formatHz(1600f))
@@ -38,7 +40,8 @@ class AudioNumberFormatTest {
 
   @Test fun englishKeepsTheDot() {
     Locale.setDefault(Locale.US)
-    assertEquals("48.0 kHz", formatSampleRate(48000))
+    assertEquals("48 kHz", formatSampleRate(48000))
+    assertEquals("44.1 kHz", formatSampleRate(44100))
     assertEquals("-0.5", formatDb(-0.5f))
     assertEquals("1.6k", formatHz(1600f))
     assertEquals("1k", formatHz(1000f))
