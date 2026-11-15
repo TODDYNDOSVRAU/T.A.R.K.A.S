@@ -105,6 +105,13 @@ internal object LegalTextsEn {
     title = "What's new",
     subtitle = "What changed in each version",
     sections = listOf(
+      "2.0" to
+        "• New T.A.L. grid on every screen: the same margins, sizes and alignment in Home, Library, Audio, Assistant, Settings, sheets and dialogs.\n" +
+        "• New equalizer: curve, faders on the same frequency scale, parametric tiles with an edit bubble, and a preset list. Double tap resets.\n" +
+        "• Tarkas Spatial in the equalizer dock, with a 3D stage and the Subtle, Standard, Wide and Cinema 5.1 modes.\n" +
+        "• An option to follow the phone colours (Material You), off by default.\n" +
+        "• Local database, backup and restore, failure diagnostics, and legal texts in Portuguese and English.\n" +
+        "• Landscape and large screens: a reading column and sheets with a fixed width.",
       "1.17" to
         "• New: spatial audio with a measured HRTF (KU100), virtual room and Cinema 5.1 stage; 5.1 tracks play virtualized on headphones.\n" +
         "• With spatial audio on, the preamp takes off 3.5 dB automatically to avoid clipping.\n" +

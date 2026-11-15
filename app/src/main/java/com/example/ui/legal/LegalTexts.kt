@@ -135,6 +135,13 @@ object LegalTexts {
     title = "Novidades",
     subtitle = "O que mudou em cada versão",
     sections = listOf(
+      "2.0" to
+        "• Nova grade T.A.L. em todas as telas: margens, tamanhos e alinhamento iguais em Início, Biblioteca, Áudio, Assistente, Ajustes, folhas e diálogos.\n" +
+        "• Novo equalizador: curva, faders na mesma escala de frequência, paramétrico em peças com balão de edição e predefinições em lista. Toque duplo redefine.\n" +
+        "• Tarkas Spatial no dock do equalizador, com palco 3D e os modos Sutil, Padrão, Amplo e Cinema 5.1.\n" +
+        "• Opção de seguir as cores do celular (Material You), desligada por padrão.\n" +
+        "• Banco de dados local, backup e restauração, diagnóstico de falhas e textos legais em português e inglês.\n" +
+        "• Paisagem e telas grandes: coluna de leitura e folhas com largura fixa.",
       "1.17" to
         "• Novo: áudio espacial com HRTF medida (KU100), sala virtual e palco Cinema 5.1; faixas 5.1 tocam virtualizadas no fone.\n" +
         "• Com o espacial ligado, o pré-amp desconta 3,5 dB automaticamente para não saturar.\n" +
