@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import com.example.ui.screens.library.rememberComputed
+import com.example.ui.screens.library.letterStarts
 import com.example.ui.screens.library.LibraryActions
 import com.example.ui.screens.library.LibraryState
 import androidx.compose.runtime.setValue
@@ -174,6 +175,10 @@ fun LibraryScreen(
   val shownSongs = remember(sortedSongs, songQuery) {
     LibrarySearch.filter(sortedSongs.orEmpty(), songQuery) { songHaystacks.getOrPut(it.id) { LibrarySearch.haystack(it) } }
   }
+  // The letters of the strip are made off the main thread too, from the list that is shown.
+  val songLetters = rememberComputed(shownSongs, songOrder) {
+    letterStarts(shownSongs) { com.example.data.playback.LibrarySort.section(it, songOrder) }
+  }.orEmpty()
   val shownFavorites = remember(favoriteTracks, favoriteQuery) { LibrarySearch.filter(favoriteTracks, favoriteQuery) }
   var openPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
   // The automatic lists are built from the songs and their counters, read again when the section or one
@@ -433,7 +438,7 @@ fun LibraryScreen(
                   modifier = Modifier.trailingEdge()
                 )
               },
-              index = { com.example.data.playback.LibrarySort.section(it, songOrder) },
+              letters = songLetters,
               subtitle = { t ->
                 val n = playCounts[t.id] ?: 0
                 if (songOrder == com.example.data.playback.SongOrder.MOST_PLAYED && n > 0) {

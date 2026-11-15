@@ -64,6 +64,13 @@ internal fun com.example.data.playback.SongOrder.labelRes(): Int = when (this) {
   com.example.data.playback.SongOrder.MOST_PLAYED -> R.string.library_order_most_played
 }
 
+/** Each letter with the position of its first track, in list order. Walks every track: keep it off the main thread. */
+internal fun letterStarts(tracks: List<Track>, letter: (Track) -> String?): List<Pair<String, Int>> {
+  val firsts = LinkedHashMap<String, Int>()
+  tracks.forEachIndexed { i, t -> letter(t)?.let { firsts.putIfAbsent(it, i) } }
+  return firsts.entries.map { it.key to it.value }
+}
+
 /**
  * A list of songs with Play and Shuffle above it. [header] goes before them (a sub-page title),
  * [empty] replaces the list when there are no songs, [trailing] adds a button to each row.
@@ -77,21 +84,13 @@ internal fun TrackList(
   onShuffle: () -> Unit,
   empty: @Composable () -> Unit,
   header: LazyListScope.() -> Unit = {},
-  /** The A–Z letter of a track; with it, a letter strip on the right jumps through the list. */
-  index: ((Track) -> String?)? = null,
+  /** Each A–Z letter with the position of its first track, made off the main thread by [letterStarts]; with several, a strip on the right jumps through the list. */
+  letters: List<Pair<String, Int>> = emptyList(),
   /** A row's second line, when it should say more than artist and source. */
   subtitle: @Composable (Track) -> String = { trackSubtitle(it) },
   trailing: (@Composable RowScope.(Track) -> Unit)? = null
 ) {
   val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-  val letters = remember(tracks, index) {
-    if (index == null) emptyList() else {
-      // Each letter's first track, in list order.
-      val firsts = LinkedHashMap<String, Int>()
-      tracks.forEachIndexed { i, t -> index(t)?.let { firsts.putIfAbsent(it, i) } }
-      firsts.entries.map { it.key to it.value }
-    }
-  }
   // Only worth it for a long list with several letters, and only where there is height for 26 of them.
   val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 480
   val showStrip = letters.size >= 3 && tracks.size >= 30 && !compact

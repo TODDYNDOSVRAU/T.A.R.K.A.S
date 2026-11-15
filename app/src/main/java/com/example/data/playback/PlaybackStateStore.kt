@@ -59,13 +59,18 @@ class PlaybackStateStore(
    * Null when nothing valid is saved, the track is a demo tone, or the stored position belongs to another
    * track. [ResumeInfo.durationMs] is null when the track's length is unknown.
    */
-  suspend fun resumeInfo(): ResumeInfo? {
-    val row = try { load() } catch (e: Exception) { return null }
-    val restored = PlaybackRestore.read(row?.stateJson, row?.positionTrackId, row?.positionMs?.takeIf { it >= 0 }) as? RestoreOutcome.Restored ?: return null
-    val saved = restored.state
-    val owner = row?.positionTrackId
-    if (owner != null && owner != saved.track.id) return null
-    return ResumeInfo(saved.track.id, saved.positionMs, saved.track.durationMs.takeIf { it > 0 })
+  suspend fun resumeInfo(): ResumeInfo? = try {
+    // Parsed on the worker too: the saved state holds the whole queue, and the caller is the main thread.
+    run {
+      val row = dao.get()
+      val restored = PlaybackRestore.read(row?.stateJson, row?.positionTrackId, row?.positionMs?.takeIf { it >= 0 }) as? RestoreOutcome.Restored
+      val saved = restored?.state
+      val owner = row?.positionTrackId
+      if (saved == null || (owner != null && owner != saved.track.id)) null
+      else ResumeInfo(saved.track.id, saved.positionMs, saved.track.durationMs.takeIf { it > 0 })
+    }
+  } catch (e: Exception) {
+    null
   }
 
   /** Waits until everything asked so far has run. */

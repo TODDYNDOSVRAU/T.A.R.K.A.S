@@ -6,14 +6,11 @@ import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -34,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import com.example.ui.viewmodel.TarkasNavTab
 
 /**
  * Motion used across the app. Everything here moves only alpha and scale (drawn by the GPU
@@ -171,40 +167,6 @@ fun springAt(seconds: Float, damping: Float = 10f, mass: Float = 1f, stiffness: 
     1f - exp(-zeta * w0 * seconds) * (cos(wd * seconds) + (zeta * w0 / wd) * sin(wd * seconds))
   } else {
     1f - exp(-w0 * seconds) * (1f + w0 * seconds)
-  }
-}
-
-/**
- * Transition between screens. Tabs fade through: the old page is gone in 90 ms, then the new one fades
- * in over 200 ms. No scaling, so the page is not re-rasterised every frame. No sideways movement, as
- * Material advises for bottom tabs (a slide suggests the pages can be swiped), and quick, because
- * switching tabs is done all the time. Opening the full player grows it out of what was tapped (see
- * expandFromOrigin).
- */
-fun screenTransition(from: Any, to: Any, reduced: Boolean = false): ContentTransform {
-  if (reduced) return EnterTransition.None togetherWith ExitTransition.None
-
-  // The full player grows out of what was tapped and shrinks back into the mini player
-  // (expandFromOrigin draws that shape). The page underneath stays in place meanwhile: it fades
-  // only once the player covers it, and is back before the player lands when closing.
-  if (to == TarkasNavTab.MUSIC) {
-    return (EnterTransition.None togetherWith fadeOut(tween(200, delayMillis = 260))).apply {
-      targetContentZIndex = 1f
-    }
-  }
-  if (from == TarkasNavTab.MUSIC) {
-    return (fadeIn(tween(160)) togetherWith ExitTransition.None).apply {
-      // The closing player stays on top of the page it returns to.
-      targetContentZIndex = -1f
-    }
-  }
-
-  // Alpha only: scaling a whole page re-rasterises it every frame, which dropped frames on the S23.
-  val enter = fadeIn(tween(200, delayMillis = 90, easing = LinearOutSlowInEasing))
-  val exit = fadeOut(tween(150, easing = FastOutLinearInEasing))
-  return (enter togetherWith exit).apply {
-    // The new screen draws over the old one, so it never slips behind the page that is leaving.
-    targetContentZIndex = 1f
   }
 }
 

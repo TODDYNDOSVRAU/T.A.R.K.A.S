@@ -16,7 +16,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -43,7 +42,6 @@ import com.example.ui.theme.LocalHazeState
 import com.example.ui.theme.LocalSurfaceStyle
 import com.example.ui.theme.Radius
 import com.example.ui.theme.glassPill
-import com.example.ui.theme.screenTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -487,14 +485,19 @@ fun TarkasAppContent(
       // Each page keeps its saved state (list scroll, open playlist, search) while another page
       // is shown, so going back from the player lands exactly where the user left the list.
       val pageStates = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
-      AnimatedContent(
+      // The four tabs stay composed after they are left, so a tab switch is only the fade, not a
+      // new composition of the whole page (1–2 frames of 20–35 ms on the S23). Settings and the
+      // curiosity page are built when opened and dropped when closed.
+      com.example.ui.components.KeptPages(
+        target = screenKey,
+        keep = { it is TarkasNavTab && it != TarkasNavTab.SETTINGS },
         // While the full player covers the page, a screen reader must not reach it: its nodes stay
         // composed (for the quick close) but are removed from the accessibility tree.
         modifier = if (currentTab == TarkasNavTab.MUSIC) Modifier.clearAndSetSemantics {} else Modifier,
-        targetState = screenKey,
-        transitionSpec = { screenTransition(initialState, targetState, reducedMotion) },
-        label = "screen"
+        reducedMotion = reducedMotion
       ) { screen ->
+      // A page kept in the background shows nothing playing, so its bars and spectrum stop.
+      val playingHere = pagePlaying && screen == screenKey
       // The large title belongs to each tab page, so it moves with the page in every transition
       // (and stays put under the player while that grows over it).
       val tabPage = screen is TarkasNavTab && screen != TarkasNavTab.MUSIC
@@ -550,7 +553,7 @@ fun TarkasAppContent(
             },
             currentTrack = currentTrack,
             tracks = tracks,
-            isPlaying = pagePlaying,
+            isPlaying = playingHere,
             favoriteIds = favoriteIds,
             playlists = playlists,
             onToggleFavorite = { track -> viewModel.toggleFavorite(track) },
@@ -608,7 +611,7 @@ fun TarkasAppContent(
               folderRules = viewModel.folderRules.collectAsStateWithLifecycle().value,
               queue = queue,
               currentTrack = currentTrack,
-              isPlaying = pagePlaying,
+              isPlaying = playingHere,
               upcoming = viewModel.upcoming.collectAsStateWithLifecycle().value,
               initialSongOrder = viewModel.songOrder,
               playCounts = viewModel.playCounts.collectAsStateWithLifecycle().value,
@@ -662,7 +665,7 @@ fun TarkasAppContent(
             activePresetId = activePresetId,
             eqModified = eqModified,
             systemAudioStatus = systemAudioStatus,
-            isPlaying = pagePlaying,
+            isPlaying = playingHere,
             spectrumBars = { spectrumBars.value },
             activeApps = activeApps,
             onRefreshActiveApps = { viewModel.refreshActiveApps() },

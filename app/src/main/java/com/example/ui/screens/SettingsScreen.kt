@@ -310,7 +310,7 @@ private fun MainSettings(
     contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
   ) {
     item {
-      Column(Modifier.padding(top = Space.s)) {
+      Column(Modifier.padding(start = Space.page, end = Space.page, top = Space.s)) {
         com.example.ui.components.SearchField(
           value = query,
           onValueChange = { query = it },

@@ -52,6 +52,15 @@ android {
     debug {
       signingConfig = signingConfigs.getByName("debugConfig")
     }
+    // The release build signed with the debug key, to measure frames on a device. A debuggable build is not
+    // optimised by Android and runs Compose several times slower, so its frame times say little about the app.
+    create("perf") {
+      initWith(getByName("release"))
+      signingConfig = signingConfigs.getByName("debugConfig")
+      matchingFallbacks += "release"
+      // Real names in the profile; src/perf/AndroidManifest.xml makes the build profileable from the shell.
+      proguardFiles("perf-rules.pro")
+    }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
