@@ -69,6 +69,7 @@ import com.example.ui.screens.library.itemMotion
 import com.example.ui.screens.library.trackSubtitle
 import com.example.ui.screens.library.trailingEdge
 import com.example.ui.theme.AppText
+import com.example.ui.theme.Grid
 import com.example.ui.theme.LocalBarInset
 import com.example.ui.theme.Shapes
 import com.example.ui.theme.Size
@@ -84,7 +85,7 @@ import kotlinx.coroutines.delay
 private const val SearchDebounceMs = 350L
 
 /** Width of a tile in the trending carousel: two and a bit fit a phone, so the next one peeks in. */
-private val TileWidth = 160.dp
+private val TileWidth = 144.dp
 
 /** "Tocadas recentemente" shows this many songs: a shortcut; the full list is in Biblioteca. */
 private const val RecentLimit = 5
@@ -210,7 +211,7 @@ fun HomeScreen(
   LazyColumn(
     state = listState,
     modifier = modifier.readingColumn().fillMaxHeight().topScrollFade(listState),
-    contentPadding = PaddingValues(top = Space.xs, bottom = LocalBarInset.current + Space.l)
+    contentPadding = PaddingValues(top = Grid.u6, bottom = LocalBarInset.current + Grid.u24)
   ) {
     item(key = "search") {
       SearchField(
@@ -218,7 +219,7 @@ fun HomeScreen(
         onValueChange = { searchQuery = it },
         placeholder = stringResource(R.string.home_search_placeholder),
         modifier = Modifier
-          .padding(horizontal = Space.page)
+          .padding(horizontal = Grid.margin)
           .testTag("home_search_input")
       )
     }
@@ -256,7 +257,7 @@ fun HomeScreen(
       val resumeAt = resume
       if (resumeTrack != null && resumeAt != null) {
         item(key = "resume_header") {
-          SectionHeader(stringResource(R.string.home_resume_header), modifier = Modifier.padding(top = Space.section, bottom = Space.s))
+          SectionHeader(stringResource(R.string.home_resume_header), modifier = Modifier.padding(top = Space.section, bottom = Grid.u6))
         }
         songs(listOf(resumeTrack), "resume", "resume_track", showSource = true, stagger = false, onClick = { onResume() })
         item(key = "resume_position") {
@@ -265,20 +266,20 @@ fun HomeScreen(
               ?: stringResource(R.string.home_resume_position, clock(resumeAt.positionMs)),
             style = AppText.Footnote,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = Space.l, vertical = Space.xs).testTag("resume_position")
+            modifier = Modifier.padding(horizontal = Grid.margin, vertical = Grid.u6).testTag("resume_position")
           )
         }
       }
 
       if (recent.isNotEmpty()) {
         item(key = "recent_header") {
-          SectionHeader(stringResource(R.string.home_recent_header), modifier = Modifier.padding(top = Space.section, bottom = Space.s))
+          SectionHeader(stringResource(R.string.home_recent_header), modifier = Modifier.padding(top = Space.section, bottom = Grid.u6))
         }
         songs(recent, "recent", "recent_track", showSource = true, stagger = false, onClick = onPlayTrack)
       }
 
       item(key = "mine_header") {
-        SectionHeader(stringResource(R.string.home_mine_header), modifier = Modifier.padding(top = Space.section, bottom = Space.s))
+        SectionHeader(stringResource(R.string.home_mine_header), modifier = Modifier.padding(top = Space.section, bottom = Grid.u6))
       }
       if (myTracks.isEmpty()) {
         item(key = "mine_empty") {
@@ -288,7 +289,7 @@ fun HomeScreen(
             message = stringResource(R.string.home_mine_empty_message),
             actionLabel = stringResource(R.string.home_mine_empty_action),
             onAction = onOpenLibrary,
-            modifier = Modifier.padding(horizontal = Space.page).testTag("home_empty")
+            modifier = Modifier.padding(horizontal = Grid.margin).testTag("home_empty")
           )
         }
       }
@@ -331,7 +332,7 @@ fun HomeScreen(
               message = stringResource(R.string.home_offline_message),
               actionLabel = stringResource(R.string.home_retry),
               onAction = { onSearchAudiusOnline(searchQuery) },
-              modifier = Modifier.padding(horizontal = Space.page).testTag("audius_offline")
+              modifier = Modifier.padding(horizontal = Grid.margin).testTag("audius_offline")
             )
           } else {
             Note(stringResource(R.string.home_nothing_found, "Audius"))
@@ -351,7 +352,7 @@ fun HomeScreen(
               message = stringResource(R.string.home_offline_message),
               actionLabel = stringResource(R.string.home_retry),
               onAction = { onSearchJamendoOnline(searchQuery) },
-              modifier = Modifier.padding(horizontal = Space.page).testTag("jamendo_offline")
+              modifier = Modifier.padding(horizontal = Grid.margin).testTag("jamendo_offline")
             )
             else -> Note(stringResource(R.string.home_nothing_found, "Jamendo"), Modifier.testTag("jamendo_empty"))
           }
@@ -379,7 +380,7 @@ private fun CatalogSection(
 ) {
   if (state.notConfigured) return
   Column {
-    SectionHeader(title, modifier = Modifier.padding(top = Space.xl, bottom = Space.m))
+    SectionHeader(title, modifier = Modifier.padding(top = Space.xl, bottom = Grid.u12))
     when {
       state.tracks.isEmpty() && state.loading -> TrendingSkeleton()
       state.tracks.isNotEmpty() -> TrendingRow(
@@ -395,7 +396,7 @@ private fun CatalogSection(
         message = stringResource(R.string.home_offline_catalog_message),
         actionLabel = stringResource(R.string.home_retry),
         onAction = onRetry,
-        modifier = Modifier.padding(horizontal = Space.page).testTag("${tagPrefix}_offline")
+        modifier = Modifier.padding(horizontal = Grid.margin).testTag("${tagPrefix}_offline")
       )
       !state.loading -> Note(stringResource(R.string.home_catalog_empty, service))
     }
@@ -412,7 +413,7 @@ private fun ResultsHeader(title: String, searching: Boolean) {
   Row(
     modifier = Modifier
       .fillMaxWidth()
-      .padding(top = Space.xl, bottom = Space.s, end = Space.page),
+      .padding(top = Space.xl, bottom = Grid.u6, end = Grid.margin),
     verticalAlignment = Alignment.CenterVertically
   ) {
     SectionHeader(title, modifier = Modifier.weight(1f))
@@ -444,7 +445,7 @@ private fun Note(text: String, modifier: Modifier = Modifier) {
     text = text,
     style = AppText.Subhead,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
-    modifier = modifier.padding(horizontal = Space.page, vertical = Space.s)
+    modifier = modifier.padding(horizontal = Grid.margin, vertical = Grid.u6)
   )
 }
 
@@ -455,10 +456,10 @@ private fun DemoToggle(count: Int, expanded: Boolean, onToggle: () -> Unit, modi
   Row(
     modifier = modifier
       .fillMaxWidth()
-      .heightIn(min = Size.row)
+      .heightIn(min = Grid.u48)
       .highlightClickable(role = Role.Button, onClickLabel = stringResource(if (expanded) R.string.home_demo_hide else R.string.home_demo_show), onClick = onToggle)
       .semantics { stateDescription = toggleState }
-      .padding(horizontal = Space.page, vertical = Space.s)
+      .padding(horizontal = Grid.margin, vertical = Grid.u6)
       .testTag("home_demo_toggle"),
     verticalAlignment = Alignment.CenterVertically
   ) {
@@ -495,7 +496,7 @@ private fun TrendingRow(
   LazyRow(
     state = state,
     flingBehavior = rememberSnapFlingBehavior(state, SnapPosition.Start),
-    contentPadding = PaddingValues(horizontal = Space.page),
+    contentPadding = PaddingValues(horizontal = Grid.margin),
     horizontalArrangement = Arrangement.spacedBy(Space.m)
   ) {
     itemsIndexed(tracks.take(12), key = { _, t -> "${tagPrefix}_${t.id}" }) { index, track ->
@@ -512,11 +513,11 @@ private fun TrendingRow(
         TrackArtwork(
           track = track,
           shape = Shapes.s,
-          iconSize = 40.dp,
+          iconSize = Grid.u48,
           playing = isCurrent && isPlaying,
           modifier = Modifier.size(TileWidth)
         )
-        Spacer(Modifier.height(Space.s))
+        Spacer(Modifier.height(Grid.u6))
         Text(
           text = track.title,
           style = AppText.Subhead.copy(fontWeight = FontWeight.SemiBold),
@@ -556,17 +557,17 @@ private fun TrendingSkeleton() {
     modifier = Modifier
       .fillMaxWidth()
       .wrapContentWidth(Alignment.Start, unbounded = true)
-      .padding(horizontal = Space.page)
+      .padding(horizontal = Grid.margin)
       .semantics { stateDescription = loadingDescription }
       .testTag("trending_loading")
   ) {
     repeat(3) {
       Column(modifier = Modifier.width(TileWidth)) {
         Box(Modifier.size(TileWidth).clip(Shapes.s).background(fill))
-        Spacer(Modifier.height(Space.s))
-        Box(Modifier.width(110.dp).height(Space.m).clip(Shapes.xs).background(fill))
+        Spacer(Modifier.height(Grid.u6))
+        Box(Modifier.width(Grid.u96).height(Space.m).clip(Shapes.xs).background(fill))
         Spacer(Modifier.height(Space.xs))
-        Box(Modifier.width(80.dp).height(Space.m).clip(Shapes.xs).background(fill))
+        Box(Modifier.width(Grid.u48 + Grid.u24).height(Space.m).clip(Shapes.xs).background(fill))
       }
     }
   }

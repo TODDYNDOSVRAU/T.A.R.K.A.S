@@ -382,7 +382,7 @@ fun AssistantScreen(
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(start = Grid.margin, end = Grid.inset, top = Grid.u12, bottom = Grid.u12),
+        .padding(start = Grid.margin, end = Grid.margin, top = Grid.u12, bottom = Grid.u12),
       verticalAlignment = Alignment.Bottom
     ) {
       ComposerField(

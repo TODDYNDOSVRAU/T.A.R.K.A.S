@@ -36,6 +36,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import com.kyant.backdrop.backdrops.layerBackdrop
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import com.example.ui.theme.Grid
 import com.example.ui.theme.Space
 import com.example.ui.theme.LocalBarInset
 import com.example.ui.theme.LocalHazeState
@@ -903,8 +904,8 @@ fun TarkasAppContent(
           .onSizeChanged { barHeightPx = it.height }
           .imePadding()
           .navigationBarsPadding()
-          .padding(start = 14.dp, end = 14.dp, bottom = Space.s),
-        verticalArrangement = Arrangement.spacedBy(Space.s)
+          .padding(start = Grid.margin, end = Grid.margin, bottom = Grid.u6),
+        verticalArrangement = Arrangement.spacedBy(Grid.u6)
       ) {
        com.example.ui.theme.TarkasDarkOverride(enabled = currentTab == TarkasNavTab.MUSIC) {
         // Floating AI Curiosity Speech Banner. Curiosities appear only on the player page (and in
