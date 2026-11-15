@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Biblioteca (English, default). Portuguese is in values-pt/strings_library.xml; keep both in step. -->
+<resources>
+    <!-- Sections -->
+    <string name="library_section_songs">Songs</string>
+    <string name="library_section_playlists">Playlists</string>
+    <string name="library_section_favorites">Favorites</string>
+    <string name="library_section_auto">Automatic</string>
+    <string name="library_auto_recently_added">Recently added</string>
+    <string name="library_auto_recently_played">Recently played</string>
+    <string name="library_auto_most_played">Most played</string>
+    <string name="library_auto_open">Open %1$s</string>
+    <string name="library_auto_empty_title_added">Nothing added yet</string>
+    <string name="library_auto_empty_message_added">Songs appear here with the date they were added to the device.</string>
+    <string name="library_auto_empty_title_played">Nothing played yet</string>
+    <string name="library_auto_empty_message_played">Songs you listen to appear here, the latest first.</string>
+    <string name="library_auto_empty_title_most">No plays counted yet</string>
+    <string name="library_auto_empty_message_most">Songs you listen to appear here, the most played first.</string>
+    <string name="library_section_queue">Queue</string>
+    <string name="library_section_queue_count">Queue (%1$d)</string>
+    <string name="library_back_label">Library</string>
+
+    <!-- Song order -->
+    <string name="library_order_title">Title</string>
+    <string name="library_order_artist">Artist</string>
+    <string name="library_order_album">Album</string>
+    <string name="library_order_recent">Recent</string>
+    <string name="library_order_most_played">Most played</string>
+    <plurals name="library_play_count">
+        <item quantity="one">%1$d play</item>
+        <item quantity="other">%1$d plays</item>
+    </plurals>
+
+    <!-- Search -->
+    <string name="library_search_songs_hint">Search songs, artists and albums</string>
+    <string name="library_search_favorites_hint">Search favorites</string>
+    <string name="library_search_playlists_hint">Search playlists</string>
+    <string name="library_search_empty_title">Nothing found</string>
+    <string name="library_search_empty_songs">No song matches “%1$s”. Check the spelling, or try the name of an artist or album.</string>
+    <string name="library_search_empty_favorites">No favorite matches “%1$s”. Check the spelling, or clear the search to see them all.</string>
+    <string name="library_letter_strip">Jump to letter</string>
+    <string name="library_search_clear">Clear search</string>
+    <string name="library_search_no_playlist">No playlist matches “%1$s”.</string>
+
+    <!-- Device music -->
+    <string name="library_loading_songs">Looking for music on this device…</string>
+    <string name="library_empty_songs_title">No music on this device</string>
+    <string name="library_empty_songs_message">No audio files were found. Add music to the phone and refresh the library, or import a file.</string>
+    <string name="library_refresh">Refresh library</string>
+    <string name="library_import_file">Import file</string>
+    <string name="library_permission_title">Your music on this device</string>
+    <string name="library_permission_blocked">Access to your music is blocked. Allow it in Settings › Permissions › Music and audio to see everything on the phone here.</string>
+    <string name="library_permission_request">Allow access to your music to see everything on the phone here, with cover, artist and album.</string>
+    <string name="library_permission_open_settings">Open app settings</string>
+    <string name="library_permission_ask_again">Ask again</string>
+    <string name="library_permission_allow">Allow access</string>
+
+    <!-- Favorites -->
+    <string name="library_favorites_empty_title">No favorites yet</string>
+    <string name="library_favorites_empty_message">Tap “Favorite” in a song’s menu to keep it here.</string>
+    <string name="library_favorite_remove">Remove %1$s from favorites</string>
+
+    <!-- Play and shuffle -->
+    <string name="library_play">Play</string>
+    <string name="library_shuffle">Shuffle</string>
+
+    <!-- Playlists -->
+    <string name="library_new_playlist">New playlist…</string>
+    <string name="library_import_audio">Import audio file…</string>
+    <string name="library_playlists_empty_note">Create a playlist and add songs from the menu of any track.</string>
+    <string name="library_open_playlist">Open %1$s</string>
+    <string name="library_tracks_none">0 tracks</string>
+    <plurals name="library_track_count">
+        <item quantity="one">%1$d track</item>
+        <item quantity="other">%1$d tracks</item>
+    </plurals>
+    <string name="library_new_playlist_title">New playlist</string>
+    <string name="library_create">Create</string>
+    <string name="library_rename_playlist_title">Rename playlist</string>
+    <string name="library_save">Save</string>
+    <string name="library_delete_title">Delete “%1$s”?</string>
+    <string name="library_delete_body_empty">The playlist is empty.</string>
+    <plurals name="library_delete_body">
+        <item quantity="one">The playlist and the order of its track will be deleted. The song stays in the library.</item>
+        <item quantity="other">The playlist and the order of its %1$d tracks will be deleted. The songs stay in the library.</item>
+    </plurals>
+    <string name="library_delete">Delete</string>
+    <string name="library_cancel">Cancel</string>
+    <string name="library_rename_desc">Rename playlist</string>
+    <string name="library_delete_desc">Delete playlist</string>
+    <string name="library_playlist_empty_title">Empty playlist</string>
+    <string name="library_playlist_empty_message">Use “Add to a playlist” in a song’s menu to put it here.</string>
+    <string name="library_playlist_remove">Remove %1$s from the playlist</string>
+    <string name="library_audio_fallback_name">Local audio</string>
+    <string name="library_folders_chip">Folders</string>
+    <string name="library_folders_title">Folders</string>
+    <string name="library_folders_note">Choose which folders of this phone count as your library. Nothing is moved or deleted; unticked folders are only left out of the lists.</string>
+    <string name="library_folders_empty_title">No folders yet</string>
+    <string name="library_folders_empty_message">Folders appear here once the music on this device has been found.</string>
+    <string name="library_folders_root">Main storage folder</string>
+    <string name="library_folders_state_on">In the library</string>
+    <string name="library_folders_state_off">Left out</string>
+    <string name="library_folders_state_partial">Partly in the library</string>
+    <string name="library_folders_expand">Show folders inside %1$s</string>
+    <string name="library_folders_collapse">Hide folders inside %1$s</string>
+    <string name="library_folders_all_out_title">All folders are left out</string>
+    <string name="library_folders_all_out_message">Every folder with music is unticked, so there are no songs to show. Open Folders to put some back.</string>
+    <string name="library_notice_play_next">“%1$s” plays next.</string>
+    <string name="library_notice_added_to_queue">“%1$s” added to the queue.</string>
+    <string name="library_notice_already_in_playlist">“%1$s” is already in %2$s.</string>
+    <string name="library_local_library">Local library</string>
+    <string name="track_untitled">Untitled</string>
+    <string name="track_unknown_artist">Unknown artist</string>
+    <string name="track_catalog_artist">%1$s artist</string>
+    <string name="demo_genre_prog_rock">Progressive rock</string>
+    <string name="demo_genre_minimal_prog">Minimalism / Prog</string>
+    <string name="demo_genre_impressionist">Classical impressionism</string>
+    <string name="demo_genre_ambient_modal">Ambient / Modal music</string>
+    <string name="demo_genre_calibration">Acoustic calibration</string>
+    <string name="eq_profile_custom_description">Custom profile made by the user</string>
+    <string name="library_section_albums">Albums</string>
+    <string name="library_section_artists">Artists</string>
+    <string name="library_section_genres">Genres</string>
+    <string name="library_search_albums_hint">Search albums</string>
+    <string name="library_search_artists_hint">Search artists</string>
+    <string name="library_search_genres_hint">Search genres</string>
+    <string name="library_search_no_group">Nothing matches “%1$s”. Check the spelling or clear the search.</string>
+    <string name="library_albums_empty">No song has an album name. Albums come from the tags of your files.</string>
+    <string name="library_artists_empty">No song has an artist name. Artists come from the tags of your files.</string>
+    <string name="library_genres_empty">No song has a genre. Genres come from the tags of your files; some files have none.</string>
+    <string name="library_various_artists">Various artists</string>
+    <string name="library_open_group">Open %1$s</string>
+    <string name="library_group_albums_heading">Albums</string>
+    <plurals name="library_album_count">
+        <item quantity="one">%1$d album</item>
+        <item quantity="other">%1$d albums</item>
+    </plurals>
+</resources>

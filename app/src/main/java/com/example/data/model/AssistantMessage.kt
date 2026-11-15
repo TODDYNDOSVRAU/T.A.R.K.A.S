@@ -19,5 +19,7 @@ data class AssistantMessage(
   val sender: MessageSender,
   val text: String,
   val timestampMs: Long = System.currentTimeMillis(),
-  val toolReport: ToolExecutionReport? = null
+  val toolReport: ToolExecutionReport? = null,
+  // Set when the reply is an error message; the screen offers "try again" when the failure allows it.
+  val failure: AssistantFailure? = null
 )

@@ -79,10 +79,7 @@ class ActiveAppsReader(private val context: Context) {
     if (!hasPermission()) return ActiveAppsState.PermissionMissing
     return withContext(Dispatchers.IO) {
       try {
-        val text = withTimeoutOrNull(DUMP_TIMEOUT_MS) {
-          val process = Runtime.getRuntime().exec(arrayOf("dumpsys", "audio"))
-          process.inputStream.bufferedReader().use { it.readText() }
-        } ?: return@withContext ActiveAppsState.Failed("O sistema demorou para responder.")
+        val text = ShellCommand.run(listOf("dumpsys", "audio"), DUMP_TIMEOUT_MS) ?: return@withContext ActiveAppsState.Failed(context.getString(com.example.R.string.audio_apps_timeout))
 
         val own = context.applicationInfo.uid
         val apps = DumpsysAudioParser.parsePlayers(text)
@@ -92,7 +89,7 @@ class ActiveAppsReader(private val context: Context) {
         ActiveAppsState.Ready(apps)
       } catch (e: Exception) {
         Log.w(TAG, "dumpsys audio failed", e)
-        ActiveAppsState.Failed("Não foi possível ler o estado do áudio.")
+        ActiveAppsState.Failed(context.getString(com.example.R.string.audio_apps_read_failed))
       }
     }
   }
@@ -110,7 +107,7 @@ class ActiveAppsReader(private val context: Context) {
       } catch (_: Exception) {
         it
       }
-    } ?: if (player.uid < 10000) "Sistema Android" else "App (uid ${player.uid})"
+    } ?: if (player.uid < 10000) context.getString(com.example.R.string.audio_app_system) else context.getString(com.example.R.string.audio_app_uid, player.uid)
     return ListedApp(label = label, packageName = pkg, usage = player.usage)
   }
 }

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Verified curiosities of the built-in tracks. Portuguese is in values-pt/strings_curiosity.xml.
+         Track titles, artist names and sources are not translated: they are names and bibliographic references. -->
+
+    <!-- Tarkus: Eruption Suite -->
+    <string name="curiosity_tarkus_trivia">Written in 5/4 time and inspired by the aesthetics of Béla Bartók and Alberto Ginastera, \'Eruption\' was created by Keith Emerson on the Moog Modular synthesizer. Greg Lake first rejected the concept as too complex, but the 20-minute suite became a defining landmark of British progressive rock in 1971.</string>
+    <string name="curiosity_tarkus_facts">Recorded at Advision Studios in London in January 1971, produced by Greg Lake and engineered by Eddy Offord. Emerson used a Moog Modular 1C with deliberately detuned oscillators to create the \'raw\' sound of the creature Tarkus.</string>
+    <string-array name="curiosity_tarkus_sources" translatable="false">
+        <item>Emerson, Keith (2004). Pictures of an Exhibitionist. John Blake Publishing.</item>
+        <item>Macan, Edward (1997). Rocking the Classics: English Progressive Rock. Oxford University Press.</item>
+        <item>AllMusic Guide: Tarkus Album Overview by Bruce Eder.</item>
+    </string-array>
+
+    <!-- Tubular Bells (Part One) -->
+    <string name="curiosity_tubular_trivia">Mike Oldfield was only 19 when he recorded almost every instrument at The Manor studio, layering dozens of tracks on analog tape. The album launched Richard Branson\'s Virgin Records in 1973 and reached a worldwide audience when director William Friedkin used it in the classic soundtrack of \'The Exorcist\'.</string>
+    <string name="curiosity_tubular_facts">Recorded between autumn 1972 and spring 1973 at The Manor in Oxfordshire. Oldfield played guitars, bass, mandolin, Farfisa synthesizer and the famous orchestral tubular bells.</string>
+    <string-array name="curiosity_tubular_sources" translatable="false">
+        <item>Oldfield, Mike (2007). Changeling: The Autobiography of Mike Oldfield. Virgin Books.</item>
+        <item>Sound on Sound Magazine (April 2001). Classic Tracks: Mike Oldfield\'s Tubular Bells by Richard Buskin.</item>
+        <item>British Phonographic Industry (BPI) Certification Database.</item>
+    </string-array>
+
+    <!-- Clair de Lune -->
+    <string name="curiosity_debussy_trivia">Third movement of the \'Suite bergamasque\', inspired by Paul Verlaine\'s poem of the same name from 1869. Composed from 1890 and revised in 1905, the piece evokes moonlight through rubato tempo, subtle polyrhythm and impressionist pentatonic scales that challenged traditional German Romantic harmony.</string>
+    <string name="curiosity_debussy_facts">The piece was published in 1905 by the French music publisher Eugène Fromont, after nearly 15 years of meticulous revision of the original score by the composer.</string>
+    <string-array name="curiosity_debussy_sources" translatable="false">
+        <item>Lockspeiser, Edward (1962). Debussy: His Life and Mind. Cambridge University Press.</item>
+        <item>Bibliothèque nationale de France (BnF Gallica) - Archives Département de la Musique.</item>
+        <item>Grove Music Online - Debussy, (Achille-)Claude.</item>
+    </string-array>
+
+    <!-- Gymnopédie No. 1 -->
+    <string name="curiosity_satie_trivia">Published in Paris in 1888, the composition broke with the virtuosity of the 19th century through soft modal cadences and static major seventh chords. It is regarded as a fundamental precursor of modern ambient music, minimalism and the idea of music for furniture (\'musique d\'ameublement\').</string>
+    <string name="curiosity_satie_facts">First published in the periodical \'Le Chat Noir\' and later as a printed score by Satie\'s father, Alfred Satie, in Paris in 1888.</string>
+    <string-array name="curiosity_satie_sources" translatable="false">
+        <item>Orledge, Robert (1990). Satie the Composer. Cambridge University Press.</item>
+        <item>Davis, Mary E. (2007). Erik Satie. Reaktion Books.</item>
+        <item>Eno, Brian (1978). Ambient 1: Music for Airports - Liner Notes on Satie\'s Furniture Music.</item>
+    </string-array>
+
+    <!-- Soundcheck Sweep (20Hz-20kHz) -->
+    <string name="curiosity_sweep_trivia">Digitally generated acoustic test signal for measuring spectral response and finding resonant nodes in the room or in the headphones. It makes it possible to assess transducer linearity at 60 Hz (sub-bass), 1 kHz (vocal reference) and 10 kHz (treble presence), without masking or dynamic compression.</string>
+    <!-- The hyphens are part of the standard designations (AES-67, IEC 60268-7), not ranges. -->
+    <string name="curiosity_sweep_facts" tools:ignore="TypographyDashes">Generated as linear 16-bit 44.1 kHz PCM with no dither and no dynamic range compression. Based on the AES-67 and IEC 60268-7 electroacoustic calibration standards.</string>
+    <string-array name="curiosity_sweep_sources" translatable="false">
+        <item>Audio Engineering Society (AES) Standards Committee - AES3-2003 / AES67.</item>
+        <item>IEC 60268-7: Sound System Equipment - Part 7: Headphones and Earphones.</item>
+        <item>Toole, Floyd E. (2017). Sound Reproduction: The Acoustics and Psychoacoustics of Loudspeakers and Rooms. Focal Press.</item>
+    </string-array>
+</resources>

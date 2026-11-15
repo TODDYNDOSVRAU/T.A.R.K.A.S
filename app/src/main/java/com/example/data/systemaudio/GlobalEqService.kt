@@ -11,9 +11,14 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
+import android.media.AudioPlaybackConfiguration
 import android.media.audiofx.AudioEffect
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -22,6 +27,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import com.example.data.repository.PreferencesRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -30,11 +36,13 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Applies the app's equalizer curve to other apps (ADB and root modes). Every couple of seconds it
- * reads which players are active and their audio sessions from `dumpsys audio` (DUMP permission, or
- * `su` in root mode) and attaches an effect to each one; players that announce their session with
- * Android's open-session broadcast are picked up too. Runs as a foreground service so it keeps
- * working with the app closed.
+ * Applies the app's equalizer curve to other apps (ADB and root modes). It reads which players are
+ * active and their audio sessions from `dumpsys audio` (DUMP permission, or `su` in root mode) and
+ * attaches an effect to each one; players that announce their session with Android's open-session
+ * broadcast are picked up too. A read runs [EVENT_DEBOUNCE_MS] after Android reports a player starting,
+ * pausing or stopping (Android 8+), and every [FALLBACK_POLL_MS] in case an event was missed. A session
+ * that disappears keeps its effect for [SessionGrace.GRACE_MS], so a track change has no gap. Runs as a
+ * foreground service so it keeps working with the app closed.
  */
 class GlobalEqService : Service() {
 
@@ -42,7 +50,10 @@ class GlobalEqService : Service() {
     private const val TAG = "GlobalEqService"
     private const val CHANNEL_ID = "tarkas_global_eq"
     private const val NOTIFICATION_ID = 4107
-    private const val POLL_MS = 2000L
+    /** The read when no event came: only a safety net, events start most reads. */
+    private const val FALLBACK_POLL_MS = 5000L
+    /** A play usually brings several events in a row; one read covers them. */
+    private const val EVENT_DEBOUNCE_MS = 50L
     private const val SETTINGS_MIN_INTERVAL_MS = 50L
     /** The output mix: effects there reach sounds that have no session of their own. */
     private const val GLOBAL_SESSION = 0
@@ -65,6 +76,11 @@ class GlobalEqService : Service() {
   /** Sessions announced by players with ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION. */
   private val announced = mutableMapOf<Int, String>()
   private var rootDump = false
+  private val grace = SessionGrace()
+  /** Asks the loop for a read now (conflated: a burst of events makes one read). */
+  private val wake = Channel<Unit>(Channel.CONFLATED)
+  /** An AudioManager.AudioPlaybackCallback (Android 8+), kept to unregister it. */
+  private var playbackCallback: Any? = null
 
   private val sessionReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
@@ -74,13 +90,12 @@ class GlobalEqService : Service() {
       when (intent.action) {
         AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION -> {
           announced[session] = pkg
-          equalizer.attach(session)
+          if (GlobalEq.reach.value != EqReach.ROOT) grace.attached(session, equalizer.attach(session))
         }
-        AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION -> {
-          announced.remove(session)
-          equalizer.detach(session)
-        }
+        // Not released here: the read lets it go after the grace time, unless it opens again first.
+        AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION -> announced.remove(session)
       }
+      wake.trySend(Unit)
     }
   }
 
@@ -125,10 +140,35 @@ class GlobalEqService : Service() {
       }
     }
     scope.launch {
+      com.example.data.audio.spatial.SpatialControl.otherAppsStrength.collect { equalizer.setSpatial(it) }
+    }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      // Fires for every player that starts, pauses or stops. Apps without special access get the
+      // events without saying whose player it was, which is enough: the read finds out.
+      val callback = object : AudioManager.AudioPlaybackCallback() {
+        override fun onPlaybackConfigChanged(configs: MutableList<AudioPlaybackConfiguration>?) {
+          wake.trySend(Unit)
+        }
+      }
+      runCatching {
+        getSystemService(AudioManager::class.java)?.registerAudioPlaybackCallback(callback, Handler(Looper.getMainLooper()))
+        playbackCallback = callback
+      }.onFailure { Log.w(TAG, "No playback events; reading on a timer only", it) }
+    }
+    scope.launch {
       if (GlobalEq.reach.value == EqReach.ROOT) prepareRoot()
       while (isActive) {
-        poll()
-        delay(POLL_MS)
+        val retrySoon = poll()
+        val now = SystemClock.elapsedRealtime()
+        val wait = minOf(
+          FALLBACK_POLL_MS,
+          grace.nextExpiry()?.minus(now) ?: Long.MAX_VALUE,
+          if (retrySoon) SessionGrace.RETRY_MS else Long.MAX_VALUE
+        ).coerceAtLeast(0)
+        if (withTimeoutOrNull(wait) { wake.receive() } != null) {
+          delay(EVENT_DEBOUNCE_MS)
+          wake.tryReceive()
+        }
       }
     }
   }
@@ -145,7 +185,8 @@ class GlobalEqService : Service() {
 
   private fun hasDump() = checkSelfPermission(Manifest.permission.DUMP) == PackageManager.PERMISSION_GRANTED
 
-  private suspend fun poll() {
+  /** Reads the players and attaches or releases effects. True when an attach failed and is worth retrying soon. */
+  private suspend fun poll(): Boolean {
     val reach = GlobalEq.reach.value
     val dump: String? = when {
       hasDump() -> readDumpsys()
@@ -154,8 +195,7 @@ class GlobalEqService : Service() {
     }
     val own = applicationInfo.uid
     val players = dump?.let { DumpsysAudioParser.parsePlayers(it) }
-      // The web players (YouTube Music, Spotify) run in this app's own process, so own-uid players
-      // count too, except the music player, which carries its equalizer already.
+      // Everything this app plays goes through its own player, which carries its equalizer already.
       ?.filter { it.isLive && it.sessionId > 0 && it.uid != own }
       .orEmpty()
 
@@ -164,8 +204,17 @@ class GlobalEqService : Service() {
     // twice. Per-app effects are the fallback for devices that refuse the output mix.
     val globalOutput = reach == EqReach.ROOT && equalizer.attach(GLOBAL_SESSION)
     val targets = if (globalOutput) setOf(GLOBAL_SESSION) else alive
-    targets.forEach { equalizer.attach(it) }
-    equalizer.retainOnly(targets)
+    var retrySoon = false
+    for (id in targets) {
+      if (!grace.shouldTry(id)) continue
+      if (grace.attached(id, equalizer.attach(id))) retrySoon = true
+    }
+    if (globalOutput) {
+      // The output mix carries every app: per-app effects left from before would apply the curve twice.
+      equalizer.retainOnly(targets)
+    } else {
+      grace.expired(equalizer.sessions, targets, SystemClock.elapsedRealtime()).forEach(equalizer::detach)
+    }
 
     val names = (players.map { labelFor(it.uid) } + announced.values.map { labelForPackage(it) }).distinct()
     val rootMissing = reach == EqReach.ROOT && !hasDump() && !rootDump
@@ -175,31 +224,22 @@ class GlobalEqService : Service() {
         apps = names,
         needsDump = reach == EqReach.ADB && !hasDump(),
         rootUnavailable = rootMissing,
-        globalOutput = globalOutput
+        globalOutput = globalOutput,
+        spatialApps = equalizer.spatialSessions,
+        spatialUnsupported = equalizer.spatialUnsupported,
+        appsWithoutControl = equalizer.sessionsWithoutControl
       )
     )
+    return retrySoon
   }
 
   private suspend fun readDumpsys(): String? = withContext(Dispatchers.IO) {
-    try {
-      val process = ProcessBuilder("dumpsys", "audio").redirectErrorStream(true).start()
-      try {
-        // readText() blocks and ignores cancellation; destroying the process on timeout unblocks it.
-        withTimeoutOrNull(4000) {
-          kotlinx.coroutines.runInterruptible { process.inputStream.bufferedReader().use { it.readText() } }
-        }
-      } finally {
-        process.destroy()
-      }
-    } catch (e: Exception) {
-      Log.w(TAG, "dumpsys audio failed: ${e.javaClass.simpleName}")
-      null
-    }
+    ShellCommand.run(listOf("dumpsys", "audio"), 4000)
   }
 
   private fun labelFor(uid: Int): String {
     val pkg = runCatching { packageManager.getPackagesForUid(uid)?.firstOrNull() }.getOrNull()
-    return pkg?.let(::labelForPackage) ?: if (uid < 10000) "Sistema Android" else "App (uid $uid)"
+    return pkg?.let(::labelForPackage) ?: if (uid < 10000) getString(com.example.R.string.audio_app_system) else getString(com.example.R.string.audio_app_uid, uid)
   }
 
   private fun labelForPackage(pkg: String): String = runCatching {
@@ -209,7 +249,7 @@ class GlobalEqService : Service() {
   private fun notification(): android.app.Notification {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       getSystemService(NotificationManager::class.java)?.createNotificationChannel(
-        NotificationChannel(CHANNEL_ID, "Equalizador em todos os apps", NotificationManager.IMPORTANCE_LOW)
+        NotificationChannel(CHANNEL_ID, getString(com.example.R.string.audio_globaleq_channel), NotificationManager.IMPORTANCE_LOW)
       )
     }
     val open = PendingIntent.getActivity(
@@ -217,8 +257,8 @@ class GlobalEqService : Service() {
     )
     return NotificationCompat.Builder(this, CHANNEL_ID)
       .setSmallIcon(android.R.drawable.ic_media_play)
-      .setContentTitle("Equalizador ligado em todos os apps")
-      .setContentText("O T.A.R.K.A.S. aplica sua curva ao som dos outros apps.")
+      .setContentTitle(getString(com.example.R.string.audio_globaleq_title))
+      .setContentText(getString(com.example.R.string.audio_globaleq_text))
       .setContentIntent(open)
       .setOngoing(true)
       .setSilent(true)
@@ -228,6 +268,11 @@ class GlobalEqService : Service() {
   override fun onDestroy() {
     scope.cancel()
     runCatching { unregisterReceiver(sessionReceiver) }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      (playbackCallback as? AudioManager.AudioPlaybackCallback)?.let { cb ->
+        runCatching { getSystemService(AudioManager::class.java)?.unregisterAudioPlaybackCallback(cb) }
+      }
+    }
     equalizer.releaseAll()
     GlobalEq.publish(GlobalEqStatus())
     super.onDestroy()

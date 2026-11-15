@@ -16,17 +16,17 @@
             android:fillColor="#7EE3EA"
             android:pathData="M0,34h29v12h-29z" />
         <path
-            android:fillColor="#EAF7F8"
+            android:fillColor="#F2F2F0"
             android:pathData="M103,34h29v12h-29z" />
         <path
             android:pathData="M66,6L102,40L66,74L30,40Z"
             android:strokeWidth="12"
-            android:strokeColor="#EAF7F8"
+            android:strokeColor="#F2F2F0"
             android:strokeLineJoin="miter"
             android:strokeMiterLimit="4" />
         <path
             android:pathData="M100,40L126,8M100,40L126,72"
             android:strokeWidth="12"
-            android:strokeColor="#EAF7F8" />
+            android:strokeColor="#F2F2F0" />
     </group>
 </vector>

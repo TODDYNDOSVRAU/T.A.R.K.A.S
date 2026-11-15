@@ -1,5 +1,6 @@
 package com.example.data.audio
 
+import com.example.R
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -18,15 +19,29 @@ import android.os.Build
 import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Metadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.util.Util
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.extractor.metadata.id3.InternalFrame
+import androidx.media3.extractor.metadata.id3.TextInformationFrame
+import androidx.media3.extractor.metadata.vorbis.VorbisComment
+import com.example.data.audio.dsp.EqActivity
 import com.example.data.audio.dsp.EqDsp
+import com.example.data.audio.dsp.FloatPcmAudioProcessor
+import com.example.data.audio.loudness.LoudnessMeterProcessor
+import com.example.data.audio.loudness.LoudnessNormalization
+import com.example.data.audio.loudness.LoudnessStore
+import com.example.data.audio.loudness.LoudnessUi
+import com.example.data.audio.loudness.NormalizationMode
+import com.example.data.audio.loudness.TaggedLoudness
+import com.example.data.audio.dsp.OwnAudioProcessorChain
 import com.example.data.audio.dsp.ParametricEqAudioProcessor
 import com.example.data.model.AudioCapabilities
 import com.example.data.model.EqSettings
@@ -54,11 +69,41 @@ class AudioEngineManager(private val context: Context) {
   private companion object {
     // Volume while another app needs a moment of the audio focus (a navigation prompt, for example).
     const val DUCK_VOLUME = 0.25f
+    /** How long the focus is kept after a track ends or stops, for what comes next. */
+    const val FOCUS_HOLD_MS = 4000L
+    /** How long the route is left to settle after a fone connects or disconnects. */
+    const val OUTPUT_SETTLE_MS = 400L
+    /** Volume steps of the crossfade: small enough that no step is heard. */
+    const val CROSSFADE_STEP_MS = 25L
+    const val CROSSFADE_MIN_MS = 500L
+    const val CROSSFADE_MAX_MS = 12_000L
+    val EXTERNAL_KINDS = setOf(OutputKind.WIRED, OutputKind.BLUETOOTH, OutputKind.USB)
   }
   private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
   private val eqDsp = EqDsp()
   private val eqProcessor = ParametricEqAudioProcessor(eqDsp)
+  // Tarkas Spatial comes first: it turns stereo into binaural, then the equalizer and the fone
+  // correction shape the result.
+  private val spatialProcessor = com.example.data.audio.spatial.SpatialAudioProcessor()
+  // Before both: measures the track as it is in the file, whatever the spatial and the EQ do.
+  private val loudnessMeter = LoudnessMeterProcessor()
+  private val loudnessStore = LoudnessStore(context)
+
+  /** Volume from focus ducking and fades; the player gets it times [normalizationGain]. */
+  private var levelVolume = 1f
+  private var normalizationGain = 1f
+  /** The incoming track's level during a crossfade (1 otherwise). */
+  private var fadeInGain = 1f
+
+  /** Id of the track whose audio the meter is measuring, and its length once known. */
+  private var measuringKey: String? = null
+  private var measuringDurationMs = 0L
+  /** Tags of the playing track, kept so a change of mode can decide again. */
+  private var currentTags = TaggedLoudness()
+
+  private val _loudness = MutableStateFlow(LoudnessUi(mode = loudnessStore.mode))
+  val loudness: StateFlow<LoudnessUi> = _loudness.asStateFlow()
 
   private var player: ExoPlayer? = null
   private var audioSessionId = 0
@@ -72,6 +117,11 @@ class AudioEngineManager(private val context: Context) {
   private var completionCallback: () -> Unit = {}
   /** Called when the track cannot play; true when the cause is the network. */
   private var errorCallback: (network: Boolean) -> Unit = {}
+  /** Where the last failed track was when it failed, so a retry can go on from there. */
+  var lastErrorPositionMs = 0L
+    private set
+  /** The format of the track that plays now, as its file states it. */
+  private var currentFormat: TrackFormat? = null
 
   private val coroutineScope = CoroutineScope(Dispatchers.Main + Job())
   private var progressJob: Job? = null
@@ -94,8 +144,36 @@ class AudioEngineManager(private val context: Context) {
   private val _spectrumBars = MutableStateFlow<List<Float>>(List(15) { 0.05f })
   val spectrumBars: StateFlow<List<Float>> = _spectrumBars.asStateFlow()
 
+  private val _output = MutableStateFlow(detectOutput())
+  /** The output the music goes to, updated as fones connect and disconnect. */
+  val output: StateFlow<OutputDevice> = _output.asStateFlow()
+  private var outputJob: Job? = null
+
+  /**
+   * Fones connecting and disconnecting. A Bluetooth connection brings several events while the route
+   * settles, so the output is read once they stop.
+   */
+  private val deviceCallback = object : android.media.AudioDeviceCallback() {
+    override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = outputsChanged()
+    override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = outputsChanged()
+  }
+
+  private fun outputsChanged() {
+    outputJob?.cancel()
+    outputJob = coroutineScope.launch {
+      delay(OUTPUT_SETTLE_MS)
+      _output.value = detectOutput()
+      updateCapabilities()
+    }
+  }
+
   init {
     updateCapabilities()
+    // The automatic preamp lowers the level more while the spatial stage is on.
+    com.example.data.audio.spatial.SpatialControl.onActiveChanged = { eqDsp.setSpatialStage(it) }
+    eqDsp.setSpatialStage(com.example.data.audio.spatial.SpatialControl.active)
+    runCatching { audioManager.registerAudioDeviceCallback(deviceCallback, android.os.Handler(android.os.Looper.getMainLooper())) }
+      .onFailure { Log.w(TAG, "No output change events", it) }
   }
 
   // --- audio focus, noisy-output handling ---
@@ -124,6 +202,8 @@ class AudioEngineManager(private val context: Context) {
   private var noisyReceiverRegistered = false
 
   private fun requestFocus(): Boolean {
+    focusRelease?.cancel()
+    focusRelease = null
     val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
         .setAudioAttributes(playbackAttributes)
@@ -140,7 +220,24 @@ class AudioEngineManager(private val context: Context) {
     return granted
   }
 
+  /** Pending release of the focus after a track ended; a new track that starts in time keeps it. */
+  private var focusRelease: Job? = null
+
+  /**
+   * Keeps the focus for a few seconds after a track ends. Giving it back at once lets a paused app (a
+   * podcast, a video) resume over the narration or the next track that is about to start.
+   */
+  private fun releaseFocusSoon() {
+    focusRelease?.cancel()
+    focusRelease = coroutineScope.launch {
+      delay(FOCUS_HOLD_MS)
+      if (!_isPlaying.value && !pendingStart) abandonFocus()
+    }
+  }
+
   private fun abandonFocus() {
+    focusRelease?.cancel()
+    focusRelease = null
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
     } else {
@@ -176,22 +273,24 @@ class AudioEngineManager(private val context: Context) {
     try {
       when (focusPolicy.onChange(change, _isPlaying.value)) {
         AudioFocusPolicy.Action.PAUSE_AND_ABANDON -> {
+          cancelCrossfade()
           p.pause()
           _isPlaying.value = false
           abandonFocus()
           unregisterNoisyReceiver()
         }
         AudioFocusPolicy.Action.PAUSE -> {
+          cancelCrossfade()
           p.pause()
           _isPlaying.value = false
         }
-        AudioFocusPolicy.Action.DUCK -> p.volume = DUCK_VOLUME
+        AudioFocusPolicy.Action.DUCK -> setLevel(DUCK_VOLUME)
         AudioFocusPolicy.Action.RESUME -> {
-          p.volume = 1f
+          setLevel(1f)
           p.play()
           _isPlaying.value = true
         }
-        AudioFocusPolicy.Action.UNDUCK -> p.volume = 1f
+        AudioFocusPolicy.Action.UNDUCK -> setLevel(1f)
         AudioFocusPolicy.Action.NONE -> Unit
       }
     } catch (e: Exception) {
@@ -202,6 +301,8 @@ class AudioEngineManager(private val context: Context) {
   /** Pause that the user (or a noisy-output event) asked for: give the focus back too. */
   private fun pauseByUser() {
     val p = player ?: return
+    // A pause during a crossfade ends it: play resumes the incoming track alone, at full level.
+    cancelCrossfade()
     try {
       p.pause()
     } catch (e: Exception) {
@@ -229,6 +330,9 @@ class AudioEngineManager(private val context: Context) {
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
       val p = player ?: return
       if (reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO || p.currentMediaItemIndex == 0) return
+      // The finished track was measured up to its own last sample (the meter closes it at its end of
+      // stream); its measurement is collected here.
+      startMeasuring(mediaItem?.mediaId, gapless = true)
       // The queued next track started with no gap: drop the finished one so the playlist is
       // always [playing, next].
       p.removeMediaItems(0, p.currentMediaItemIndex)
@@ -243,7 +347,10 @@ class AudioEngineManager(private val context: Context) {
       val p = player ?: return
       when (state) {
         Player.STATE_READY -> {
-          if (p.duration != C.TIME_UNSET) _durationMs.value = p.duration.coerceAtLeast(1L)
+          if (p.duration != C.TIME_UNSET) {
+            _durationMs.value = p.duration.coerceAtLeast(1L)
+            measuringDurationMs = p.duration
+          }
           if (pendingStart) {
             pendingStart = false
             // No focus (for example during a phone call): do not start talking over it.
@@ -252,7 +359,7 @@ class AudioEngineManager(private val context: Context) {
               stopPlayback()
               return
             }
-            p.volume = 1f
+            setLevel(1f)
             p.play()
             registerNoisyReceiver()
             _isPlaying.value = true
@@ -260,8 +367,9 @@ class AudioEngineManager(private val context: Context) {
           }
         }
         Player.STATE_ENDED -> {
-          // Give the focus back between tracks; the next track asks for it again.
-          abandonFocus()
+          startMeasuring(null)
+          // The focus is held a moment longer: the next track or a narration usually follows.
+          releaseFocusSoon()
           unregisterNoisyReceiver()
           _isPlaying.value = false
           _currentPositionMs.value = 0L
@@ -272,10 +380,45 @@ class AudioEngineManager(private val context: Context) {
       }
     }
 
+    override fun onTracksChanged(tracks: Tracks) {
+      // Arrives before a loaded track is ready, and at the moment a queued one takes over: the gain is
+      // set before its first sample is heard (within the player's position reporting at a gapless change).
+      val audio = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO && it.isSelected }
+      if (audio.isEmpty()) return
+      val pairs = mutableListOf<Pair<String, String>>()
+      var format: androidx.media3.common.Format? = null
+      for (group in audio) {
+        for (i in 0 until group.length) {
+          if (!group.isTrackSelected(i)) continue
+          val f = group.getTrackFormat(i)
+          if (format == null) format = f
+          f.metadata?.let { pairs += tagPairs(it) }
+        }
+      }
+      currentTags = LoudnessNormalization.parseTags(pairs)
+      applyNormalization()
+      currentFormat = format?.let { f ->
+        TrackFormat(
+          codec = TrackFormat.codecName(f.sampleMimeType, context.getString(R.string.audio_format_codec_unknown)),
+          sampleRateHz = f.sampleRate.takeIf { it > 0 } ?: 0,
+          channels = f.channelCount.takeIf { it > 0 } ?: 0,
+          bits = TrackFormat.bitsOf(f.pcmEncoding)
+        )
+      }
+      updateCapabilities()
+    }
+
     override fun onPlayerError(error: PlaybackException) {
       Log.e(TAG, "Player error: ${error.errorCodeName}", error)
-      val network = error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
-        error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+      val causes = generateSequence(error.cause) { it.cause }.take(8).toList()
+      val network = PlaybackErrors.isNetwork(
+        network = error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+          error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+        httpStatus = causes.filterIsInstance<androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException>()
+          .firstOrNull()?.responseCode,
+        timeout = causes.any { it is java.net.SocketTimeoutException }
+      )
+      lastErrorPositionMs = player?.currentPosition?.coerceAtLeast(0L) ?: 0L
       stopPlayback()
       errorCallback(network)
     }
@@ -290,7 +433,7 @@ class AudioEngineManager(private val context: Context) {
         enableFloatOutput: Boolean,
         enableAudioTrackPlaybackParams: Boolean
       ): AudioSink = DefaultAudioSink.Builder(context)
-        .setAudioProcessors(arrayOf(eqProcessor))
+        .setAudioProcessorChain(OwnAudioProcessorChain(arrayOf(FloatPcmAudioProcessor(), loudnessMeter, spatialProcessor, eqProcessor)))
         .build()
     }
     val media3Attributes = androidx.media3.common.AudioAttributes.Builder()
@@ -299,7 +442,6 @@ class AudioEngineManager(private val context: Context) {
       .build()
     // A fixed session id, so the visualizer and virtualizer can attach before the first sample plays.
     audioSessionId = Util.generateAudioSessionIdV21(context)
-    com.example.data.systemaudio.GlobalEq.ownPlayerSession = audioSessionId
     return ExoPlayer.Builder(context, renderers)
       // Focus is handled here (AudioFocusPolicy), as before, so ExoPlayer must not also handle it.
       .setAudioAttributes(media3Attributes, false)
@@ -321,18 +463,35 @@ class AudioEngineManager(private val context: Context) {
     return if (isRemoteOrContent) Uri.parse(filePathOrUri) else Uri.fromFile(File(filePathOrUri))
   }
 
+  /** The item for a track; [loudnessKey] (the track id) is what its measured loudness is saved under. */
+  private fun mediaItemFor(uri: Uri, loudnessKey: String?): MediaItem =
+    MediaItem.Builder().setUri(uri).apply { if (loudnessKey != null) setMediaId(loudnessKey) }.build()
+
   /**
    * Loads a track and, with [autoStart], plays it as soon as it is ready. Without it (a track restored at
-   * launch) it waits at [startPositionMs] for play.
+   * launch) it waits at [startPositionMs] for play. [loudnessKey] identifies the track for the volume
+   * normalization; without one it is not measured.
    */
   fun playTrack(
     filePathOrUri: String,
     onCompletion: () -> Unit = {},
     onError: (network: Boolean) -> Unit = {},
     startPositionMs: Long = 0L,
-    autoStart: Boolean = true
+    autoStart: Boolean = true,
+    loudnessKey: String? = null
   ) {
     try {
+      // The incoming side of a crossfade starts silent; any other load ends a crossfade in progress.
+      armCrossfade(null)
+      if (crossfadeHandoff) {
+        crossfadeHandoff = false
+        fadeInPending = true
+        fadeInGain = 0f
+      } else {
+        cancelCrossfade()
+      }
+      // Closes the measurement of the track that was playing before the player empties.
+      startMeasuring(loudnessKey)
       // Between two tracks the focus and the headphones receiver are kept: the next one starts at once.
       resetPlayer()
       val uri = uriFor(filePathOrUri)
@@ -348,7 +507,7 @@ class AudioEngineManager(private val context: Context) {
       upNextAdvanced = null
       pendingStart = autoStart
       eqDsp.update(processedSettings())
-      p.setMediaItem(MediaItem.fromUri(uri), startPositionMs.coerceAtLeast(0L))
+      p.setMediaItem(mediaItemFor(uri, loudnessKey), startPositionMs.coerceAtLeast(0L))
       _currentPositionMs.value = startPositionMs.coerceAtLeast(0L)
       p.prepare()
       if (!autoStart) {
@@ -370,14 +529,14 @@ class AudioEngineManager(private val context: Context) {
    * (gapless). Null removes it, e.g. when the queue changed or the next song needs a narration first.
    * [onAdvanced] runs once the player has moved on to it.
    */
-  fun setUpNext(filePathOrUri: String?, onAdvanced: () -> Unit) {
+  fun setUpNext(filePathOrUri: String?, loudnessKey: String? = null, onAdvanced: () -> Unit) {
     val p = player ?: return
     try {
       if (p.mediaItemCount > 1) p.removeMediaItems(1, p.mediaItemCount)
       upNextAdvanced = null
       val uri = filePathOrUri?.let(::uriFor) ?: return
       if (p.mediaItemCount == 0) return
-      p.addMediaItem(MediaItem.fromUri(uri))
+      p.addMediaItem(mediaItemFor(uri, loudnessKey))
       upNextAdvanced = onAdvanced
     } catch (e: Exception) {
       Log.w(TAG, "Could not queue the next track", e)
@@ -414,15 +573,18 @@ class AudioEngineManager(private val context: Context) {
 
   /** Fades the volume out over [durationMs] and pauses: the sleep timer's end. */
   suspend fun fadeOutAndPause(durationMs: Long) {
-    val p = player ?: return
-    if (!_isPlaying.value) return
+    if (player == null || !_isPlaying.value) return
     val steps = 30
-    for (i in steps downTo 0) {
-      p.volume = i / steps.toFloat()
-      delay(durationMs / steps)
+    try {
+      for (i in steps downTo 0) {
+        setLevel(i / steps.toFloat())
+        delay(durationMs / steps)
+      }
+      pauseByUser()
+    } finally {
+      // Also when the timer is cancelled halfway through the fade.
+      setLevel(1f)
     }
-    pauseByUser()
-    p.volume = 1f
   }
 
   /** Attaches the live spectrum again, after the microphone permission it needs was granted. */
@@ -445,7 +607,7 @@ class AudioEngineManager(private val context: Context) {
         // Still loading a restored track: start as soon as it is ready.
         pendingStart = true
       } else if (requestFocus()) {
-        p.volume = 1f
+        setLevel(1f)
         p.play()
         registerNoisyReceiver()
         _isPlaying.value = true
@@ -458,6 +620,8 @@ class AudioEngineManager(private val context: Context) {
   }
 
   fun seekTo(positionMs: Long) {
+    // Scrubbing during a crossfade ends it, as in Apple Music: the playing track goes to full level.
+    cancelCrossfade()
     try {
       player?.seekTo(positionMs)
       _currentPositionMs.value = positionMs
@@ -467,6 +631,9 @@ class AudioEngineManager(private val context: Context) {
   }
 
   fun stopPlayback() {
+    armCrossfade(null)
+    cancelCrossfade()
+    startMeasuring(null)
     try {
       progressJob?.cancel()
       pendingStart = false
@@ -479,11 +646,13 @@ class AudioEngineManager(private val context: Context) {
       Log.e(TAG, "Error stopping player", e)
     } finally {
       _isPlaying.value = false
-      abandonFocus()
+      // Stopping is usually a switch to another track, a web track or a narration: hold the focus briefly.
+      releaseFocusSoon()
       unregisterNoisyReceiver()
       _currentPositionMs.value = 0L
       _durationMs.value = 0L
       _spectrumBars.value = List(15) { 0.05f }
+      _loudness.value = _loudness.value.copy(hasTrack = false)
       releaseAudioEffects()
       updateCapabilities()
     }
@@ -491,7 +660,9 @@ class AudioEngineManager(private val context: Context) {
 
   /** Frees the player, its audio track and session; the manager is not used after this. */
   fun release() {
+    runCatching { audioManager.unregisterAudioDeviceCallback(deviceCallback) }
     stopPlayback()
+    releaseTail()
     releaseAudioEffects()
     runCatching { player?.release() }
     player = null
@@ -507,12 +678,31 @@ class AudioEngineManager(private val context: Context) {
             if (p.isPlaying) {
               val pos = p.currentPosition
               _currentPositionMs.value = pos
-              if (p.duration != C.TIME_UNSET) _durationMs.value = p.duration.coerceAtLeast(1L)
+              if (p.duration != C.TIME_UNSET) {
+                _durationMs.value = p.duration.coerceAtLeast(1L)
+                measuringDurationMs = p.duration
+                // Time to cross into the next track.
+                val overlap = crossfadeMs
+                if (overlap != null && p.duration - pos <= overlap) {
+                  val start = crossfadeStart
+                  armCrossfade(null)
+                  start?.invoke()
+                }
+              }
+              // The incoming track is playing: both levels start crossing now.
+              if (fadeInPending) {
+                fadeInPending = false
+                runCrossfadeRamp()
+              }
               // Without a real FFT (no RECORD_AUDIO or unsupported device) show a flat floor,
               // never a fake animated spectrum.
               if (!isRealFftActive) {
                 _spectrumBars.value = List(15) { 0.05f }
               }
+              // What the limiter and the clamp did in the last 100 ms, for the equalizer screen.
+              EqActivity.publish(eqDsp.takeActivity())
+            } else {
+              EqActivity.clear()
             }
           }
         } catch (_: Exception) {}
@@ -600,11 +790,198 @@ class AudioEngineManager(private val context: Context) {
     effectsAttached = false
   }
 
+  // --- volume normalization ---
+
+  /** The one place the player's volume is written: focus ducking and fades times the normalization. */
+  private fun setLevel(level: Float) {
+    levelVolume = level
+    player?.volume = level * normalizationGain * fadeInGain
+  }
+
+  // --- crossfade ---
+  //
+  // At the transition the main player moves on to the next track as usual (so the session, focus,
+  // queue and counters see an ordinary change) while a second, plain player plays the rest of the
+  // outgoing track through its own copy of the equalizer, fading out, and then lets go.
+
+  /** Overlap asked by the controller for the playing track, or null; and what to call when it is time. */
+  private var crossfadeMs: Long? = null
+  private var crossfadeStart: (() -> Unit)? = null
+  /** The next [playTrack] is the incoming side of a crossfade: it starts silent and fades in. */
+  private var crossfadeHandoff = false
+  private var fadeInPending = false
+  private var tail: ExoPlayer? = null
+  private var tailGain = 1f
+  private var fadeJob: Job? = null
+
+  /** Asks for a crossfade of [overlapMs] at the end of the playing track ([onStart] then); null disarms it. */
+  fun armCrossfade(overlapMs: Long?, onStart: () -> Unit = {}) {
+    crossfadeMs = overlapMs
+    crossfadeStart = if (overlapMs != null) onStart else null
+  }
+
+  /** True while Tarkas Spatial processes this player: the crossfade tail could not carry it. */
+  val spatialActive: Boolean get() = com.example.data.audio.spatial.SpatialControl.active
+
+  /**
+   * Starts the outgoing side: the rest of the playing track goes on in a second player, through the
+   * same equalizer settings and at the same level. Call it right before loading the next track.
+   */
+  fun startCrossfadeOut() {
+    cancelCrossfade()
+    val p = player ?: return
+    val uri = p.currentMediaItem?.localConfiguration?.uri ?: return
+    val at = p.currentPosition
+    try {
+      val dsp = EqDsp().also { it.update(processedSettings()) }
+      val renderers = object : DefaultRenderersFactory(context) {
+        override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
+          DefaultAudioSink.Builder(context)
+            .setAudioProcessorChain(OwnAudioProcessorChain(arrayOf(FloatPcmAudioProcessor(), ParametricEqAudioProcessor(dsp))))
+            .build()
+      }
+      val attributes = androidx.media3.common.AudioAttributes.Builder()
+        .setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build()
+      tailGain = normalizationGain
+      tail = ExoPlayer.Builder(context, renderers)
+        .setAudioAttributes(attributes, false)
+        .build()
+        .also {
+          it.setMediaItem(MediaItem.fromUri(uri), at)
+          it.volume = levelVolume * tailGain
+          it.prepare()
+          it.play()
+        }
+      crossfadeHandoff = true
+    } catch (e: Exception) {
+      Log.w(TAG, "Crossfade tail failed; plain change", e)
+      cancelCrossfade()
+    }
+  }
+
+  /** Both levels cross over the tail's remaining time; a pause or a change by the user stops it at once. */
+  private fun runCrossfadeRamp() {
+    val t = tail ?: run { fadeInGain = 1f; setLevel(levelVolume); return }
+    val total = (t.duration.takeIf { it != C.TIME_UNSET }?.minus(t.currentPosition) ?: crossfadeMs ?: 0L)
+      .coerceIn(CROSSFADE_MIN_MS, CROSSFADE_MAX_MS)
+    fadeJob?.cancel()
+    Log.i(TAG, "Crossfade over $total ms")
+    fadeJob = coroutineScope.launch {
+      val started = android.os.SystemClock.elapsedRealtime()
+      while (isActive) {
+        // Paused by the user or the focus (playWhenReady false), not a moment of buffering, which the
+        // incoming track often has right after it starts.
+        if (player?.playWhenReady != true) {
+          Log.i(TAG, "Crossfade ended early: playback paused")
+          cancelCrossfade()
+          return@launch
+        }
+        val x = ((android.os.SystemClock.elapsedRealtime() - started).toFloat() / total).coerceIn(0f, 1f)
+        fadeInGain = com.example.data.playback.CrossfadePlanner.inGain(x)
+        setLevel(levelVolume)
+        tail?.volume = levelVolume * tailGain * com.example.data.playback.CrossfadePlanner.outGain(x)
+        if (x >= 1f) break
+        delay(CROSSFADE_STEP_MS)
+      }
+      Log.i(TAG, "Crossfade done in ${android.os.SystemClock.elapsedRealtime() - started} ms")
+      releaseTail()
+      fadeInGain = 1f
+      setLevel(levelVolume)
+    }
+  }
+
+  private fun releaseTail() {
+    tail?.let { runCatching { it.stop(); it.release() } }
+    tail = null
+  }
+
+  /** Ends any crossfade now: the outgoing tail stops, the playing track goes to its full level. */
+  private fun cancelCrossfade() {
+    if (tail != null) Log.i(TAG, "Crossfade cancelled")
+    fadeJob?.cancel()
+    fadeJob = null
+    releaseTail()
+    crossfadeHandoff = false
+    fadeInPending = false
+    if (fadeInGain != 1f) {
+      fadeInGain = 1f
+      setLevel(levelVolume)
+    }
+  }
+
+  /**
+   * Closes the measurement of the track that was playing, saving it when it covered most of the track,
+   * and starts one for [nextKey] (null: nothing to measure next). [gapless]: the next track took over
+   * with no gap and its first audio is already in the meter.
+   */
+  private fun startMeasuring(nextKey: String?, gapless: Boolean = false) {
+    val m = loudnessMeter.take()
+    // A gapless change keeps the next track's audio, already coming in; anything else starts clean.
+    if (!gapless) loudnessMeter.clear()
+    val key = measuringKey
+    if (key != null && m.lufs != null && LoudnessNormalization.isMeasurementComplete(m.seconds, measuringDurationMs)) {
+      loudnessStore.saveMeasured(key, m.lufs)
+      Log.d(TAG, "Loudness of $key: %.1f LUFS over %.0f s".format(m.lufs, m.seconds))
+    }
+    measuringKey = nextKey
+    measuringDurationMs = 0L
+  }
+
+  /** Tracks (by id) that play as part of their album, in order: the automatic mode uses the album's value. */
+  private val albumInOrderKeys = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
+
+  /** Says whether [key] plays as part of its album, in order; set before the track is loaded or queued. */
+  fun markAlbumInOrder(key: String, inOrder: Boolean) {
+    if (inOrder) albumInOrderKeys += key else albumInOrderKeys -= key
+    // Only the latest few matter: the playing track and the one queued after it.
+    while (albumInOrderKeys.size > 8) albumInOrderKeys.remove(albumInOrderKeys.first())
+    if (player?.currentMediaItem?.mediaId == key) applyNormalization()
+  }
+
+  /** Decides the gain of the playing track from its tags, or an earlier measurement, and applies it. */
+  private fun applyNormalization() {
+    val key = player?.currentMediaItem?.mediaId?.takeIf { it.isNotEmpty() }
+    val mode = loudnessStore.mode
+    val decision = LoudnessNormalization.decide(
+      mode, currentTags, key?.let(loudnessStore::measured), albumInOrder = key != null && key in albumInOrderKeys
+    )
+    normalizationGain = decision.linearGain
+    setLevel(levelVolume)
+    _loudness.value = LoudnessUi(mode, decision.source, decision.loudnessLufs, decision.gainDb, hasTrack = true)
+  }
+
+  /**
+   * Changes the mode. It applies at once to the playing track: the listener asked for it and expects to
+   * hear the change.
+   */
+  fun setNormalizationMode(mode: NormalizationMode) {
+    loudnessStore.mode = mode
+    if (player?.currentMediaItem != null) applyNormalization()
+    else _loudness.value = _loudness.value.copy(mode = mode)
+  }
+
+  /** The text tags of [metadata] as key and value: ID3 TXXX, Vorbis comments and MP4 iTunes atoms. */
+  private fun tagPairs(metadata: Metadata): List<Pair<String, String>> {
+    val out = mutableListOf<Pair<String, String>>()
+    for (i in 0 until metadata.length()) {
+      when (val e = metadata.get(i)) {
+        is TextInformationFrame -> {
+          val description = e.description
+          if (e.id == "TXXX" && description != null) e.values.firstOrNull()?.let { out += description to it }
+        }
+        is VorbisComment -> out += e.key to e.value
+        is InternalFrame -> out += e.description to e.text
+      }
+    }
+    return out
+  }
+
   // --- processing chain ---
 
   /** Applies the whole equalizer state. Takes effect on the next audio buffer (a few ms). */
   fun applyEqSettings(settings: EqSettings) {
     _eqSettings.value = settings
+    if (bypass) eqDsp.setCompareReference(processedSettings(ignoreBypass = true))
     eqDsp.update(processedSettings())
     applyVirtualizer()
   }
@@ -617,15 +994,35 @@ class AudioEngineManager(private val context: Context) {
     eqDsp.update(processedSettings())
   }
 
-  private fun processedSettings(): EqSettings =
-    if (coveredByOutputMix) _eqSettings.value.copy(enabled = false) else _eqSettings.value
+  /**
+   * With root, the system-wide equalizer already shapes the output mix, so the curve here goes flat to
+   * avoid applying it twice. Balance, width and the limiter stay: the system equalizer has none of them.
+   */
+  /**
+   * A/B comparison: while true the player is heard without the equalizer. Not saved, and the settings
+   * the screen shows do not change, so letting go returns exactly to the curve that was on.
+   */
+  private var bypass = false
+
+  fun setBypass(on: Boolean) {
+    if (bypass == on) return
+    bypass = on
+    // The untouched signal plays at the volume the curve gives on average, so the A/B judges tone, not loudness.
+    eqDsp.setCompareReference(if (on) processedSettings(ignoreBypass = true) else null)
+    eqDsp.update(processedSettings())
+    applyVirtualizer()
+  }
+
+  private fun processedSettings(ignoreBypass: Boolean = false): EqSettings {
+    return EqChainState.processed(_eqSettings.value, bypass, coveredByOutputMix, ignoreBypass)
+  }
 
 
   private fun applyVirtualizer() {
     val s = _eqSettings.value
     virtualizer?.let { virt ->
       try {
-        virt.enabled = s.enabled && s.virtualizerStrength > 0
+        virt.enabled = EqChainState.virtualizerOn(s, bypass)
         if (virt.strengthSupported) virt.setStrength(s.virtualizerStrength.coerceIn(0, 1000).toShort())
       } catch (e: Exception) {
         Log.e(TAG, "Error setting virtualizer strength", e)
@@ -638,45 +1035,63 @@ class AudioEngineManager(private val context: Context) {
   }
 
   private fun friendlyRouteName(type: Int): String = when (type) {
-    AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Fone com fio"
-    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "Fone Bluetooth"
-    AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> "Áudio USB"
-    AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "Auricular do aparelho"
-    else -> "Alto-falante do aparelho"
+    AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> context.getString(R.string.audio_route_wired)
+    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> context.getString(R.string.audio_route_bluetooth)
+    AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> context.getString(R.string.audio_route_usb)
+    AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> context.getString(R.string.audio_route_earpiece)
+    else -> context.getString(R.string.audio_route_speaker)
+  }
+
+  private fun speakerOutput() = OutputDevice.speaker(context.getString(R.string.audio_route_speaker))
+
+  private fun trackLabels() = TrackFormat.Labels(
+    bits = { context.getString(R.string.audio_format_bits, it) },
+    mono = context.getString(R.string.audio_format_mono),
+    stereo = context.getString(R.string.audio_format_stereo),
+    channels = { context.getString(R.string.audio_format_channels, it) }
+  )
+
+  /** Where music goes now, or null when Android does not say. */
+  private fun activeOutputDevice(): AudioDeviceInfo? {
+    val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+    // Android 13+ says where music actually goes. Before that, an external output wins, then the
+    // loudspeaker: the earpiece is listed first on many phones but only carries calls.
+    val routed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      val media = android.media.AudioAttributes.Builder()
+        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+        .build()
+      audioManager.getAudioDevicesForAttributes(media).firstOrNull()
+    } else null
+    return routed ?: devices.firstOrNull { kindOf(it.type) in EXTERNAL_KINDS }
+      ?: devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER } ?: devices.firstOrNull()
+  }
+
+  private fun kindOf(type: Int): OutputKind = OutputDetection.kindOf(type)
+
+  private fun detectOutput(): OutputDevice = try {
+    activeOutputDevice()?.let { dev ->
+      val address = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) dev.address else null
+      OutputDetection.outputFor(dev.type, dev.productName?.toString(), address, speakerOutput()) { friendlyRouteName(dev.type) }
+    } ?: speakerOutput()
+  } catch (e: Exception) {
+    Log.w(TAG, "Error detecting the output", e)
+    speakerOutput()
   }
 
   private fun detectCapabilities(sessionId: Int): AudioCapabilities {
-    var routeName = "Alto-falante do Dispositivo"
+    var routeName = context.getString(R.string.audio_route_speaker)
     var routeType = "SPEAKER"
+    var outputRates = IntArray(0)
+    var outputChannelCounts = IntArray(0)
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
       try {
-        val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-        val activeDevice = devices.firstOrNull { d ->
-          d.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
-              d.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
-              d.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-              d.type == AudioDeviceInfo.TYPE_USB_DEVICE ||
-              d.type == AudioDeviceInfo.TYPE_USB_HEADSET
-        } ?: devices.firstOrNull()
-
-        activeDevice?.let { dev ->
-          routeType = when (dev.type) {
-            AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> "FONE CABEADO (3.5mm)"
-            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "BLUETOOTH A2DP"
-            AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> "ÁUDIO DIGITAL USB"
-            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "ALTO-FALANTE INTEGRADO"
-            else -> "SAÍDA PADRÃO"
-          }
-          // Built-in outputs report the phone's model code as their product name (e.g. "sdk_gphone64_x86_64"),
-          // which means nothing to a listener; only external devices get their own name.
-          val external = dev.type != AudioDeviceInfo.TYPE_BUILTIN_SPEAKER &&
-            dev.type != AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
-          routeName = if (external) {
-            dev.productName?.toString()?.ifBlank { null } ?: friendlyRouteName(dev.type)
-          } else {
-            friendlyRouteName(dev.type)
-          }
+        activeOutputDevice()?.let { dev ->
+          outputRates = dev.sampleRates ?: IntArray(0)
+          outputChannelCounts = dev.channelCounts ?: IntArray(0)
+          routeType = OutputDetection.routeTypeOf(dev.type)
+          routeName = OutputDetection.routeNameOf(dev.type, dev.productName?.toString()) { friendlyRouteName(dev.type) }
         }
       } catch (e: Exception) {
         Log.w(TAG, "Error detecting audio devices", e)
@@ -715,8 +1130,12 @@ class AudioEngineManager(private val context: Context) {
       activeRouteName = routeName,
       activeRouteType = routeType,
       sampleRateHz = sampleRate,
-      channelCount = 2,
-      channelFormat = "2.0 Estéreo (PCM 16-bit)",
+      channelCount = currentFormat?.channels ?: 2,
+      channelFormat = currentFormat?.describe(trackLabels()) ?: context.getString(R.string.audio_format_none),
+      trackFormat = currentFormat?.describe(trackLabels()),
+      outputBelowTrackRate = currentFormat?.let { TrackFormat.outputBelowTrack(it.sampleRateHz, outputRates) } ?: false,
+      outputMaxRateHz = outputRates.maxOrNull(),
+      outputMaxChannels = TrackFormat.maxOutputChannels(outputChannelCounts),
       isAudioSessionActive = sessionId != 0 && (_isPlaying.value),
       audioSessionId = sessionId,
       isHardwareEqualizerAvailable = isEqAvail,

@@ -17,6 +17,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -87,7 +88,7 @@ class SystemAudioCaptureManager(private val context: Context) {
 
       if (record.state != AudioRecord.STATE_INITIALIZED) {
         record.release()
-        _status.value = _status.value.copy(isCapturing = false, errorMessage = "O Android recusou a captura de áudio dos outros apps.")
+        _status.value = _status.value.copy(isCapturing = false, errorMessage = context.getString(com.example.R.string.audio_capture_denied))
       } else {
         record.startRecording()
         audioRecord = record
@@ -99,16 +100,22 @@ class SystemAudioCaptureManager(private val context: Context) {
 
         captureJob = scope.launch {
           val buffer = ShortArray(1024)
-          while (isActive && audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-            val read = record.read(buffer, 0, buffer.size)
-            if (read > 0) {
-              var sum = 0L
-              for (i in 0 until read) {
-                sum += abs(buffer[i].toInt())
+          try {
+            while (isActive && record.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+              val read = record.read(buffer, 0, buffer.size)
+              if (read > 0) {
+                var sum = 0L
+                for (i in 0 until read) {
+                  sum += abs(buffer[i].toInt())
+                }
+                val avg = ((sum.toFloat() / read) / Short.MAX_VALUE).coerceIn(0f, 1f)
+                // Atomic, and only while capturing: a late read never turns capture back on after stop.
+                _status.update { if (it.isCapturing) it.copy(currentRmsEnergy = avg) else it }
               }
-              val avg = (sum.toFloat() / read) / Short.MAX_VALUE
-              _status.value = _status.value.copy(currentRmsEnergy = avg.coerceIn(0f, 1f))
             }
+          } finally {
+            // Released here, by the thread that reads, never while a read is still in progress.
+            runCatching { record.release() }
           }
         }
       }
@@ -116,7 +123,7 @@ class SystemAudioCaptureManager(private val context: Context) {
       Log.e(TAG, "Error starting AudioPlaybackCapture", e)
       _status.value = _status.value.copy(
         isCapturing = false,
-        errorMessage = "Não foi possível iniciar a captura de áudio neste aparelho."
+        errorMessage = context.getString(com.example.R.string.audio_capture_failed)
       )
     }
   }
@@ -128,14 +135,12 @@ class SystemAudioCaptureManager(private val context: Context) {
 
   fun stopCapture() {
     try {
-      captureJob?.cancel()
+      val record = audioRecord
+      // stop() unblocks the pending read; the capture loop then ends and releases the record.
+      record?.let { if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) it.stop() }
+      val job = captureJob
       captureJob = null
-      audioRecord?.let {
-        if (it.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
-          it.stop()
-        }
-        it.release()
-      }
+      if (job != null) job.cancel() else record?.release()
       // Ending the projection also removes the system's "sharing" indicator.
       projection?.stop()
     } catch (e: Exception) {
@@ -143,7 +148,7 @@ class SystemAudioCaptureManager(private val context: Context) {
     } finally {
       audioRecord = null
       projection = null
-      _status.value = _status.value.copy(isCapturing = false, currentRmsEnergy = 0f)
+      _status.update { it.copy(isCapturing = false, currentRmsEnergy = 0f) }
     }
   }
 }

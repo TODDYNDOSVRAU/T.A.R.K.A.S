@@ -1,4 +1,9 @@
 <resources>
-    <string name="app_name">T.A.R.K.A.S</string>
-    <string name="playback_channel_name">Reprodução</string>
+    <string name="app_name" translatable="false">T.A.R.K.A.S.</string>
+    <string name="playback_channel_name">Playback</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_system">System language</string>
+    <string name="settings_language_pt" translatable="false">Português</string>
+    <string name="settings_language_en" translatable="false">English</string>
+    <string name="settings_language_footer">Texts, numbers and dates follow this choice. The Terms of Use and the Privacy Policy were written in Portuguese; the English version is a translation.</string>
 </resources>

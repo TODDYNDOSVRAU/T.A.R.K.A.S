@@ -6,10 +6,12 @@ import com.example.data.model.AudioProfile
 import com.example.data.model.EqPreset
 import com.example.data.model.EqPresets
 import com.example.data.model.EqSettings
+import com.example.data.storage.PrefsVersion
 import org.json.JSONArray
 import org.json.JSONObject
 
 class PreferencesRepository(context: Context) {
+  private val appContext = context.applicationContext
   private val prefs: SharedPreferences = context.getSharedPreferences("tarkas_prefs", Context.MODE_PRIVATE)
 
   companion object {
@@ -26,6 +28,11 @@ class PreferencesRepository(context: Context) {
     private const val KEY_REPEAT = "repeat_mode"
     private const val KEY_EQ_SETTINGS = "eq_settings"
     private const val KEY_EQ_USER_PRESETS = "eq_user_presets"
+    /** Set once the saved limiter ceiling moved from the old default (-0.5 dB) to the new one (0 dB). */
+    private const val KEY_EQ_CEILING_MIGRATED = "eq_ceiling_migrated"
+    private const val OLD_DEFAULT_CEILING_DB = -0.5
+    private const val CEILING_TOLERANCE_DB = 1e-3
+    private const val TAG = "PreferencesRepository"
   }
 
   fun getShuffle(): Boolean = prefs.getBoolean(KEY_SHUFFLE, false)
@@ -73,10 +80,24 @@ class PreferencesRepository(context: Context) {
   }
 
   /** "Reduzir animações": off by default, so the app animates even when the system scale is zero. */
+  /** Material You: follow the phone's colours instead of the T.A.L. palette. Off by default. */
+  fun getSystemColors(): Boolean = prefs.getBoolean("system_colors", false)
+
+  fun saveSystemColors(on: Boolean) {
+    prefs.edit().putBoolean("system_colors", on).apply()
+  }
+
   fun getReduceMotion(): Boolean = prefs.getBoolean("reduce_motion", false)
 
   fun saveReduceMotion(reduce: Boolean) {
     prefs.edit().putBoolean("reduce_motion", reduce).apply()
+  }
+
+  /** "Animação das listas": the key of a [com.example.ui.theme.ListAnimation]. */
+  fun getListAnimation(): String? = prefs.getString("list_animation", null)
+
+  fun saveListAnimation(key: String) {
+    prefs.edit().putString("list_animation", key).apply()
   }
 
   /** "Reduzir transparência": glass surfaces drawn solid. */
@@ -86,11 +107,10 @@ class PreferencesRepository(context: Context) {
     prefs.edit().putBoolean("reduce_transparency", reduce).apply()
   }
 
-  /** Accent colour key (see AccentColor); "ice" is the brand default. */
-  fun getAccent(): String = prefs.getString("accent", "ice") ?: "ice"
-
-  fun saveAccent(key: String) {
-    prefs.edit().putString("accent", key).apply()
+  init {
+    // The accent picker is gone (the colours follow the T.A.L. palette); drop the old choice so it
+    // does not linger in the settings export.
+    PrefsVersion.upgrade(prefs, listOf({ e -> e.remove("accent") }))
   }
 
   /** First-run setup finished, and which version of the terms the user accepted, and when. */
@@ -121,6 +141,105 @@ class PreferencesRepository(context: Context) {
 
   fun saveEqReach(key: String) {
     prefs.edit().putString("eq_reach", key).apply()
+  }
+
+  /** Crossfade between tracks, in seconds; 0 is off (the default: tracks change gapless). */
+  fun getCrossfadeSeconds(): Int = prefs.getInt("crossfade_seconds", 0)
+
+  fun saveCrossfadeSeconds(seconds: Int) {
+    prefs.edit().putInt("crossfade_seconds", seconds).apply()
+  }
+
+  /** Waveform progress bar in the player (Avançado); on by default (owner decision 2026-11-13); off keeps the thin bar. */
+  /** Início: the user's own music above the Audius and Jamendo rows (default) or below them. Key `home_music_first`. */
+  fun getHomeMusicFirst(): Boolean = prefs.getBoolean("home_music_first", true)
+
+  fun saveHomeMusicFirst(on: Boolean) {
+    prefs.edit().putBoolean("home_music_first", on).apply()
+  }
+
+  fun getWaveformBar(): Boolean = prefs.getBoolean("waveform_bar", true)
+
+  fun saveWaveformBar(on: Boolean) {
+    prefs.edit().putBoolean("waveform_bar", on).apply()
+  }
+
+  /** Which device folders are in the library ("1|path" in, "0|path" out); empty = all. */
+  fun getFolderRules(): Set<String> = prefs.getStringSet("folder_rules", emptySet()).orEmpty().toSet()
+
+  fun saveFolderRules(rules: Set<String>) {
+    prefs.edit().putStringSet("folder_rules", rules).apply()
+  }
+
+  /** How Biblioteca lists the device's songs (SongOrder key). */
+  fun getSongOrder(): String? = prefs.getString("song_order", null)
+
+  fun saveSongOrder(key: String) {
+    prefs.edit().putString("song_order", key).apply()
+  }
+
+  // ---- Fone correction per output ----
+
+  /**
+   * The correction bound to each output (JSON, see OutputRouting); null before the first run. "_v2":
+   * a test build carried the correction in use over to any first fone, so its bindings are not read.
+   */
+  fun getOutputBindings(): String? = prefs.getString("output_bindings_v2", null)
+
+  fun saveOutputBindings(json: String) {
+    prefs.edit().putString("output_bindings_v2", json).remove("output_bindings").apply()
+  }
+
+  /** The whole profile of each output (curve, spatial, correction; JSON, see OutputProfiles); null before the first run. */
+  fun getOutputProfiles(): String? = prefs.getString("output_profiles_v1", null)
+
+  fun saveOutputProfiles(json: String) {
+    prefs.edit().putString("output_profiles_v1", json).apply()
+  }
+
+  /** "Trocar a correção com o fone": on by default. */
+  fun getAutoOutputCorrection(): Boolean = prefs.getBoolean("auto_output_correction", true)
+
+  fun saveAutoOutputCorrection(on: Boolean) {
+    prefs.edit().putBoolean("auto_output_correction", on).apply()
+  }
+
+  /** Outputs already offered an AutoEq correction: each is offered once. */
+  fun getSuggestedOutputs(): Set<String> = prefs.getStringSet("suggested_outputs", emptySet()).orEmpty().toSet()
+
+  fun saveSuggestedOutputs(keys: Set<String>) {
+    prefs.edit().putStringSet("suggested_outputs", keys).apply()
+  }
+
+  // ---- Tarkas Spatial (off until the user turns it on) ----
+
+  fun getHeadTracking(): Boolean = prefs.getBoolean("spatial_head_tracking", false)
+  fun saveHeadTracking(on: Boolean) = prefs.edit().putBoolean("spatial_head_tracking", on).apply()
+
+  fun getSpatialEnabled(): Boolean = prefs.getBoolean("spatial_enabled", false)
+  fun getSpatialPreset(): String? = prefs.getString("spatial_preset", null)
+  fun getSpatialIntensity(): Float = prefs.getFloat("spatial_intensity", 1f)
+
+  fun saveSpatial(enabled: Boolean, preset: String, intensity: Float) {
+    prefs.edit()
+      .putBoolean("spatial_enabled", enabled)
+      .putString("spatial_preset", preset)
+      .putFloat("spatial_intensity", intensity)
+      .apply()
+  }
+
+  /** What the listener set by hand on one preset, as "key=value;key=value" (only the values that differ). */
+  fun getSpatialTuning(preset: String): Map<com.example.data.audio.spatial.SpatialKnob, Double> =
+    (prefs.getString("spatial_tuning_$preset", null) ?: "").split(';').mapNotNull { pair ->
+      val (k, v) = pair.split('=').takeIf { it.size == 2 } ?: return@mapNotNull null
+      val knob = com.example.data.audio.spatial.SpatialKnob.fromKey(k) ?: return@mapNotNull null
+      val value = v.toDoubleOrNull()?.takeIf { it.isFinite() } ?: return@mapNotNull null
+      knob to knob.clamp(value)
+    }.toMap()
+
+  fun saveSpatialTuning(preset: String, values: Map<com.example.data.audio.spatial.SpatialKnob, Double>) {
+    val text = values.entries.joinToString(";") { "${it.key.key}=${it.value}" }
+    prefs.edit().apply { if (text.isEmpty()) remove("spatial_tuning_$preset") else putString("spatial_tuning_$preset", text) }.apply()
   }
 
   fun getCuriosityConfig(): com.example.data.model.CuriosityConfig {
@@ -184,6 +303,7 @@ class PreferencesRepository(context: Context) {
 
   /** The last equalizer state, or null on first launch. */
   fun getEqSettings(): EqSettings? {
+    migrateEqCeilingOnce()
     val raw = prefs.getString(KEY_EQ_SETTINGS, null) ?: return null
     return try {
       EqPresets.settingsFromJson(JSONObject(raw))
@@ -193,11 +313,13 @@ class PreferencesRepository(context: Context) {
   }
 
   fun saveEqSettings(settings: EqSettings) {
+    migrateEqCeilingOnce()
     prefs.edit().putString(KEY_EQ_SETTINGS, EqPresets.settingsToJson(settings).toString()).apply()
   }
 
   /** Presets the user saved. On the first run after the update, old 15-band profiles are converted. */
   fun getUserPresets(): List<EqPreset> {
+    migrateEqCeilingOnce()
     val raw = prefs.getString(KEY_EQ_USER_PRESETS, null)
     if (raw != null) return EqPresets.presetsFromJson(raw)
     val migrated = getLegacyCustomProfiles().map { EqPresets.fromLegacy(it).copy(isCustom = true) }
@@ -206,7 +328,48 @@ class PreferencesRepository(context: Context) {
   }
 
   fun saveUserPresets(presets: List<EqPreset>) {
+    migrateEqCeilingOnce()
     prefs.edit().putString(KEY_EQ_USER_PRESETS, EqPresets.presetsToJson(presets)).apply()
+  }
+
+  /**
+   * The default limiter ceiling went from -0.5 dB to 0 dB (owner decision, 2026-11-13). A saved -0.5 is the
+   * old default as much as a choice, and the two cannot be told apart, so once, the first time the equalizer
+   * is read or written after the update, every saved ceiling of exactly -0.5 (the current settings and the
+   * user presets) becomes 0. Any other value stays; -0.5 set afterwards stays, because the mark is persisted.
+   * Nothing is written unless the whole conversion worked; a failure only logs, leaves the data as it is and
+   * the next call tries again.
+   */
+  private fun migrateEqCeilingOnce() {
+    if (prefs.getBoolean(KEY_EQ_CEILING_MIGRATED, false)) return
+    try {
+      val edit = prefs.edit()
+      prefs.getString(KEY_EQ_SETTINGS, null)?.let { raw ->
+        val o = JSONObject(raw)
+        if (resetOldCeiling(o)) edit.putString(KEY_EQ_SETTINGS, o.toString())
+      }
+      prefs.getString(KEY_EQ_USER_PRESETS, null)?.let { raw ->
+        val arr = JSONArray(raw)
+        var changed = false
+        for (i in 0 until arr.length()) {
+          val s = arr.getJSONObject(i).optJSONObject("settings")
+          if (s != null && resetOldCeiling(s)) changed = true
+        }
+        if (changed) edit.putString(KEY_EQ_USER_PRESETS, arr.toString())
+      }
+      edit.putBoolean(KEY_EQ_CEILING_MIGRATED, true).commit()
+    } catch (e: Exception) {
+      android.util.Log.w(TAG, "Could not move the saved limiter ceiling to the new default; data left as it was", e)
+    }
+  }
+
+  /** True when [settings] held exactly the old default ceiling and now holds 0. */
+  private fun resetOldCeiling(settings: JSONObject): Boolean {
+    if (!settings.has("ceiling")) return false
+    val v = settings.optDouble("ceiling", Double.NaN)
+    if (v.isNaN() || kotlin.math.abs(v - OLD_DEFAULT_CEILING_DB) > CEILING_TOLERANCE_DB) return false
+    settings.put("ceiling", 0.0)
+    return true
   }
 
   /** Profiles saved by the old hardware equalizer, read only to convert them. */
@@ -226,7 +389,7 @@ class PreferencesRepository(context: Context) {
           AudioProfile(
             id = obj.getString("id"),
             name = obj.getString("name"),
-            description = obj.optString("desc", "Perfil customizado pelo usuário"),
+            description = obj.optString("desc", appContext.getString(com.example.R.string.eq_profile_custom_description)),
             bandLevelsMb = bands,
             bassBoostStrength = obj.optInt("bass", 0).toShort(),
             virtualizerStrength = obj.optInt("virt", 0).toShort(),

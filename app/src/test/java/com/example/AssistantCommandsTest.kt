@@ -21,7 +21,8 @@ import org.robolectric.annotation.Config
 
 /** Which sentences become player commands, and what the engine reports after running them. */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
+// The engine's replies come from resources; the commands it understands are Portuguese, so the tests read the PT texts.
+@Config(sdk = [36], qualifiers = "pt-rBR")
 class AssistantCommandsTest {
 
   private fun command(text: String) = playerCommandFor(text.lowercase())?.first
@@ -95,17 +96,67 @@ class AssistantCommandsTest {
     assertNull(command("tocante demais"))
   }
 
+  // --- English synonyms, one test per command ---
+
+  @Test
+  fun `english next and previous`() {
+    listOf("next", "next track", "skip").forEach { assertEquals(it, PlayerCommand.NEXT, command(it)) }
+    listOf("previous", "back").forEach { assertEquals(it, PlayerCommand.PREVIOUS, command(it)) }
+  }
+
+  @Test
+  fun `english play and pause`() {
+    listOf("play", "resume", "play the song").forEach { assertEquals(it, PlayerCommand.PLAY, command(it)) }
+    listOf("pause", "stop").forEach { assertEquals(it, PlayerCommand.PAUSE, command(it)) }
+  }
+
+  @Test
+  fun `english shuffle, repeat and favorite`() {
+    listOf("shuffle", "turn shuffle on").forEach { assertEquals(it, PlayerCommand.TOGGLE_SHUFFLE, command(it)) }
+    listOf("repeat", "repeat this").forEach { assertEquals(it, PlayerCommand.CYCLE_REPEAT, command(it)) }
+    listOf("favorite", "like this song").forEach { assertEquals(it, PlayerCommand.FAVORITE, command(it)) }
+  }
+
+  // --- negation: a negated command word does not run, the sentence does nothing ---
+
+  @Test
+  fun `negated commands do not run`() {
+    listOf("não pausar", "nao pausar", "não toque", "não tocar", "nunca pular").forEach {
+      assertNull(it, command(it))
+    }
+    listOf("don't stop", "do not pause", "don't pause", "never skip", "not play").forEach {
+      assertNull(it, command(it))
+    }
+  }
+
+  @Test
+  fun `a negated word does not cancel another command in the same sentence`() {
+    assertEquals(PlayerCommand.NEXT, command("não pausar e pular"))
+    assertEquals(PlayerCommand.PLAY, command("don't stop and play"))
+  }
+
+  @Test
+  fun `chip texts in both languages run their commands`() {
+    listOf("próxima faixa", "next track").forEach { assertEquals(it, PlayerCommand.NEXT, command(it)) }
+    listOf("aleatório", "shuffle").forEach { assertEquals(it, PlayerCommand.TOGGLE_SHUFFLE, command(it)) }
+    listOf("repetir", "repeat").forEach { assertEquals(it, PlayerCommand.CYCLE_REPEAT, command(it)) }
+    listOf("favoritar", "favorite").forEach { assertEquals(it, PlayerCommand.FAVORITE, command(it)) }
+  }
+
   // --- engine ---
 
   private fun engine(onPlayerCommand: suspend (PlayerCommand) -> String?): AssistantEngine {
     val context = ApplicationProvider.getApplicationContext<Context>()
     return AssistantEngine(
+      context = context,
       musicRepository = MusicRepository(context),
-      curiosityRepository = CuriosityRepository(),
+      curiosityRepository = CuriosityRepository(context),
       audioEngineManager = AudioEngineManager(context),
       onTimerCreated = {},
       onTimerCancelled = {},
-      onPlayerCommand = onPlayerCommand
+      onPlayerCommand = onPlayerCommand,
+      // The test blocks the main thread with runBlocking, so the callbacks must not wait for it.
+      callbackContext = kotlinx.coroutines.Dispatchers.Unconfined
     )
   }
 
@@ -155,5 +206,39 @@ class AssistantCommandsTest {
     assertTrue(reply.text.contains("próxima"))
     assertTrue(reply.text.contains("aleatório"))
     assertTrue(reply.text.contains("favoritar"))
+  }
+
+  @Test
+  fun toneRequestsMoveBassOrTrebleBy3dBAndStopAtTheLimit() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val audio = AudioEngineManager(context)
+    val engine = AssistantEngine(
+      context = context,
+      musicRepository = MusicRepository(context),
+      curiosityRepository = CuriosityRepository(context),
+      audioEngineManager = audio,
+      onTimerCreated = {},
+      onTimerCancelled = {},
+      callbackContext = kotlinx.coroutines.Dispatchers.Unconfined
+    )
+    runBlocking {
+      val up = engine.processUserMessage("aumentar graves")
+      assertEquals(3f, audio.eqSettings.value.bassDb, 0f)
+      assertEquals("adjust_tone", up.toolReport?.toolName)
+      engine.processUserMessage("menos agudos")
+      assertEquals(-3f, audio.eqSettings.value.trebleDb, 0f)
+      repeat(6) { engine.processUserMessage("mais grave") }
+      assertEquals(12f, audio.eqSettings.value.bassDb, 0f)
+      assertTrue(engine.processUserMessage("mais graves").text.contains("limite"))
+      // A preset request without a verb is still a preset, not a tone change.
+      engine.processUserMessage("equalizador agudos")
+    }
+  }
+
+  @Test
+  fun anUnknownRequestSaysSoAndPointsToAjuda() {
+    val reply = runBlocking { engine { "ok" }.processUserMessage("blablabla") }
+    assertTrue(reply.text, reply.text.contains("ajuda"))
+    assertFalse(reply.text.contains("help"))
   }
 }

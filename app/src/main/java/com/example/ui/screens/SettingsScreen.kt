@@ -3,20 +3,22 @@ package com.example.ui.screens
 import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -24,25 +26,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Brightness1
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.SettingsBrightness
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Palette
+import com.example.ui.components.TarkasAlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -50,39 +50,66 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import com.example.ui.layout.readingColumn
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.example.BuildConfig
+import com.example.R
 import com.example.data.model.AudioCapabilities
 import com.example.data.model.CuriosityConfig
 import com.example.data.model.RepeatMode
+import com.example.ui.components.GroupDivider
+import com.example.ui.components.GroupFooter
+import com.example.ui.components.GroupHeader
+import com.example.ui.components.InfoRow
+import com.example.ui.components.InsetGroup
+import com.example.ui.components.ListRow
+import com.example.ui.components.RadioRow
+import com.example.ui.components.Segment
+import com.example.ui.components.SegmentedTabs
+import com.example.ui.components.SubPageHeader
+import com.example.ui.components.SwitchRow
 import com.example.ui.components.TarkasMark
-import com.example.ui.components.TarkasSectionTitle
 import com.example.ui.legal.LegalTexts
-import com.example.ui.theme.AccentColor
+import com.example.ui.legal.currentLegalTexts
 import com.example.ui.theme.AppMotion
+import com.example.ui.theme.ListAnimation
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
+import com.example.ui.theme.gridHeight
 import com.example.ui.theme.LocalBarInset
 import com.example.ui.theme.SurfaceStyle
-import com.example.ui.theme.glassContentColor
-import com.example.ui.theme.glassControl
 import com.example.ui.theme.liquidGlassSupported
 import com.example.ui.theme.rememberReducedMotion
 import com.example.ui.theme.subPageTransition
+import com.example.ui.viewmodel.SettingsSubPage
 
 /** The pages inside Ajustes: the main list, Sobre, and the texts opened from them. */
 private enum class SettingsPage { MAIN, ABOUT, TERMS, PRIVACY, LICENSES, CHANGELOG }
 
+/** The name a sub-page's back control shows for the page it returns to. */
+@Composable
+private fun SettingsPage.backLabel(): String =
+  stringResource(if (this == SettingsPage.ABOUT) R.string.settings_about else R.string.settings_back_settings)
+
 /**
- * Ajustes, organised like the settings of the big music apps: Aparência, Reprodução, Áudio,
- * Curiosidades e assistente, Notificações, Armazenamento, Privacidade and Sobre. Every row either
- * does something or says plainly that it is information. Sobre and the long texts open as sub-pages.
+ * Ajustes, as a grouped list in the manner of the platform's own settings: Aparência, Reprodução,
+ * Áudio, Streaming, Curiosidades e assistente, Notificações, Armazenamento, Privacidade and Sobre.
+ * Every row either does something or plainly informs. Sobre and the long texts open as sub-pages,
+ * and a text goes back to the page it was opened from (Ajustes or Sobre), named in its back control.
+ *
+ * [subPage] is the page open inside Ajustes, kept by the host in its route stack; the host hides its own large
+ * "Ajustes" title while the sub-page draws its own.
  */
 @Composable
 fun SettingsScreen(
@@ -96,10 +123,13 @@ fun SettingsScreen(
   onSurfaceStyleChange: (SurfaceStyle) -> Unit = {},
   reduceMotion: Boolean = false,
   onReduceMotionChange: (Boolean) -> Unit = {},
+  onListAnimationChange: (com.example.ui.theme.ListAnimation) -> Unit = {},
   reduceTransparency: Boolean = false,
   onReduceTransparencyChange: (Boolean) -> Unit = {},
-  accent: AccentColor = AccentColor.ICE,
-  onAccentChange: (AccentColor) -> Unit = {},
+  waveformBar: Boolean = false,
+  onWaveformBarChange: (Boolean) -> Unit = {},
+  homeMusicFirst: Boolean = true,
+  onHomeMusicFirstChange: (Boolean) -> Unit = {},
   isShuffle: Boolean = false,
   repeatMode: RepeatMode = RepeatMode.OFF,
   onToggleShuffle: () -> Unit = {},
@@ -108,17 +138,32 @@ fun SettingsScreen(
   cacheSizeBytes: suspend () -> Long = { 0L },
   onClearCache: (onDone: () -> Unit) -> Unit = {},
   onExportData: (Uri) -> Unit = {},
+  onRestoreData: (Uri) -> Unit = {},
+  onExportDiagnostics: (Uri) -> Unit = {},
   onEraseAllData: () -> Unit = {},
-  onSignOutWeb: () -> Unit = {},
   onRestartOnboarding: () -> Unit = {},
   termsAcceptedAt: Long = 0L,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  onSetRepeatMode: ((RepeatMode) -> Unit)? = null,
+  subPage: SettingsSubPage? = null,
+  onOpenSubPage: (SettingsSubPage) -> Unit = {},
+  onSubPageBack: () -> Unit = {},
+  systemColors: Boolean = false,
+  onSystemColorsChange: (Boolean) -> Unit = {}
 ) {
-  var page by rememberSaveable { mutableStateOf(SettingsPage.MAIN) }
+  // Which page shows comes from the host's route stack, so back, the saved state and the tab bar agree.
+  val page = subPage?.let { SettingsPage.valueOf(it.name) } ?: SettingsPage.MAIN
+  // Where the open text was reached from, so back returns there (Terms and Privacy open from both).
+  var textOrigin by rememberSaveable { mutableStateOf(SettingsPage.MAIN) }
   val reduced = rememberReducedMotion()
-  BackHandler(enabled = page != SettingsPage.MAIN) {
-    page = if (page == SettingsPage.ABOUT) SettingsPage.MAIN else SettingsPage.ABOUT
+  // Kept here, outside the page switch, so coming back from Sobre lands where the list was left.
+  val mainListState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+  fun openText(target: SettingsPage, from: SettingsPage) {
+    textOrigin = from
+    onOpenSubPage(SettingsSubPage.valueOf(target.name))
   }
+  val back = onSubPageBack
 
   AnimatedContent(
     targetState = page,
@@ -129,23 +174,50 @@ fun SettingsScreen(
     when (shown) {
       SettingsPage.MAIN -> MainSettings(
         themeMode, capabilities, onThemeModeChange, curiosityConfig, onOpenCuriositySettings, hasGeminiKey,
-        surfaceStyle, onSurfaceStyleChange, reduceMotion, onReduceMotionChange, reduceTransparency, onReduceTransparencyChange,
-        accent, onAccentChange, isShuffle, repeatMode, onToggleShuffle, onCycleRepeat, onOpenAudio,
-        cacheSizeBytes, onClearCache, onExportData, onEraseAllData, onSignOutWeb,
-        onOpenAbout = { page = SettingsPage.ABOUT },
-        onOpenTerms = { page = SettingsPage.TERMS },
-        onOpenPrivacy = { page = SettingsPage.PRIVACY }
+        surfaceStyle, onSurfaceStyleChange, reduceMotion, onReduceMotionChange, onListAnimationChange, reduceTransparency, onReduceTransparencyChange,
+        waveformBar, onWaveformBarChange,
+        homeMusicFirst, onHomeMusicFirstChange,
+        isShuffle, repeatMode, onToggleShuffle,
+        onSetRepeatMode = { target ->
+          // Without a direct setter, step the cycle (Desligado → Lista → Faixa) until it lands on the choice.
+          if (onSetRepeatMode != null) onSetRepeatMode(target)
+          else repeat((target.ordinal - repeatMode.ordinal + RepeatMode.entries.size) % RepeatMode.entries.size) { onCycleRepeat() }
+        },
+        onOpenAudio, cacheSizeBytes, onClearCache, onExportData, onRestoreData, onExportDiagnostics, onEraseAllData,
+        onOpenAbout = { onOpenSubPage(SettingsSubPage.ABOUT) },
+        onOpenTerms = { openText(SettingsPage.TERMS, SettingsPage.MAIN) },
+        onOpenPrivacy = { openText(SettingsPage.PRIVACY, SettingsPage.MAIN) },
+        listState = mainListState,
+        systemColors = systemColors,
+        onSystemColorsChange = onSystemColorsChange
       )
       SettingsPage.ABOUT -> AboutPage(
         termsAcceptedAt = termsAcceptedAt,
-        onBack = { page = SettingsPage.MAIN },
-        onOpen = { page = it },
+        onBack = back,
+        onOpen = { openText(it, SettingsPage.ABOUT) },
         onRestartOnboarding = onRestartOnboarding
       )
-      SettingsPage.TERMS -> LegalScreen(LegalTexts.terms, "Sobre", onBack = { page = SettingsPage.ABOUT })
-      SettingsPage.PRIVACY -> LegalScreen(LegalTexts.privacy, "Sobre", onBack = { page = SettingsPage.ABOUT })
-      SettingsPage.LICENSES -> LegalScreen(LegalTexts.licenses, "Sobre", onBack = { page = SettingsPage.ABOUT })
-      SettingsPage.CHANGELOG -> LegalScreen(LegalTexts.changelog, "Sobre", onBack = { page = SettingsPage.ABOUT })
+      // These pages draw their own header, so they keep it below the status bar themselves.
+      SettingsPage.TERMS -> LegalScreen(currentLegalTexts().terms, textOrigin.backLabel(), onBack = back, modifier = Modifier.statusBarsPadding())
+      SettingsPage.PRIVACY -> LegalScreen(currentLegalTexts().privacy, textOrigin.backLabel(), onBack = back, modifier = Modifier.statusBarsPadding())
+      SettingsPage.LICENSES -> LegalScreen(currentLegalTexts().licenses, textOrigin.backLabel(), onBack = back, modifier = Modifier.statusBarsPadding())
+      SettingsPage.CHANGELOG -> LegalScreen(currentLegalTexts().changelog, textOrigin.backLabel(), onBack = back, modifier = Modifier.statusBarsPadding())
+    }
+  }
+}
+
+/** Adds a group with an optional header and footer, spaced from the group above. */
+internal fun LazyListScope.settingsGroup(
+  header: String?,
+  footer: String? = null,
+  tag: String? = null,
+  content: @Composable () -> Unit
+) {
+  item {
+    Column(Modifier.padding(top = Grid.u24)) {
+      if (header != null) GroupHeader(header)
+      InsetGroup(modifier = if (tag != null) Modifier.testTag(tag) else Modifier) { content() }
+      if (footer != null) GroupFooter(footer)
     }
   }
 }
@@ -162,329 +234,438 @@ private fun MainSettings(
   onSurfaceStyleChange: (SurfaceStyle) -> Unit,
   reduceMotion: Boolean,
   onReduceMotionChange: (Boolean) -> Unit,
+  onListAnimationChange: (ListAnimation) -> Unit,
   reduceTransparency: Boolean,
   onReduceTransparencyChange: (Boolean) -> Unit,
-  accent: AccentColor,
-  onAccentChange: (AccentColor) -> Unit,
+  waveformBar: Boolean,
+  onWaveformBarChange: (Boolean) -> Unit,
+  homeMusicFirst: Boolean,
+  onHomeMusicFirstChange: (Boolean) -> Unit,
   isShuffle: Boolean,
   repeatMode: RepeatMode,
   onToggleShuffle: () -> Unit,
-  onCycleRepeat: () -> Unit,
+  onSetRepeatMode: (RepeatMode) -> Unit,
   onOpenAudio: () -> Unit,
   cacheSizeBytes: suspend () -> Long,
   onClearCache: (onDone: () -> Unit) -> Unit,
   onExportData: (Uri) -> Unit,
+  onRestoreData: (Uri) -> Unit,
+  onExportDiagnostics: (Uri) -> Unit,
   onEraseAllData: () -> Unit,
-  onSignOutWeb: () -> Unit,
   onOpenAbout: () -> Unit,
   onOpenTerms: () -> Unit,
-  onOpenPrivacy: () -> Unit
+  onOpenPrivacy: () -> Unit,
+  listState: androidx.compose.foundation.lazy.LazyListState,
+  systemColors: Boolean = false,
+  onSystemColorsChange: (Boolean) -> Unit = {}
 ) {
   val colors = MaterialTheme.colorScheme
   val context = LocalContext.current
-  val hairline = colors.outline.copy(alpha = 0.4f)
-  var confirmErase by remember { mutableStateOf(false) }
-  var showLogin by rememberSaveable { mutableStateOf(false) }
-  var showSpotifyLogin by rememberSaveable { mutableStateOf(false) }
+  val resources = LocalResources.current
+  var confirmErase by rememberSaveable { mutableStateOf(false) }
   var cacheSize by remember { mutableStateOf<Long?>(null) }
-  var cacheRefresh by remember { mutableStateOf(0) }
+  var cacheRefresh by remember { mutableIntStateOf(0) }
   LaunchedEffect(cacheRefresh) { cacheSize = cacheSizeBytes() }
   val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
     if (uri != null) onExportData(uri)
   }
+  val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    if (uri != null) onRestoreData(uri)
+  }
+  val diagnosticsLauncher =rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+    if (uri != null) onExportDiagnostics(uri)
+  }
+  val languageHeader = stringResource(R.string.settings_language)
+  val languageFooter = stringResource(R.string.settings_language_footer)
+  val diagnosticsHeader = stringResource(R.string.settings_diagnostics)
+  val diagnosticsFooter = stringResource(R.string.settings_diagnostics_footer)
+  val savedCrashes = remember { com.example.data.diagnostics.Diagnostics.crashCount() }
   fun openSystem(intent: Intent) {
     runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
   }
   val appDetails = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(Uri.fromParts("package", context.packageName, null))
-  val notificationsOn = NotificationManagerCompat.from(context).areNotificationsEnabled()
+  // Read again every time the app comes back, since the usual way to change it is the system page.
+  var notificationsOn by remember { mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled()) }
+  LifecycleResumeEffect(Unit) {
+    notificationsOn = NotificationManagerCompat.from(context).areNotificationsEnabled()
+    onPauseOrDispose {}
+  }
+
+  // Row titles the search looks in, read here (not inside the list builder) so they follow the language.
+  val rows1 = listOf(stringResource(R.string.settings_reduce_transparency), stringResource(R.string.settings_reduce_motion))
+  val rows2 = listOf(stringResource(R.string.settings_shuffle))
+  val rows3 = listOf(stringResource(R.string.settings_repeat_off), stringResource(R.string.settings_repeat_all), stringResource(R.string.settings_repeat_one))
+  val rows4 = listOf(stringResource(R.string.settings_audio_eq), stringResource(R.string.settings_audio_output))
+  val rows5 = listOf(stringResource(R.string.settings_curiosity_title), stringResource(R.string.settings_gemini))
+  val rows6 = listOf(stringResource(R.string.settings_clear_cache))
+  val rows7 = listOf(stringResource(R.string.settings_permissions), stringResource(R.string.settings_export), stringResource(R.string.settings_restore), stringResource(R.string.settings_privacy_policy), stringResource(R.string.settings_terms))
+  val rows8 = listOf(stringResource(R.string.settings_home_music_first))
+  val rows9 = listOf(stringResource(R.string.settings_waveform))
+  val rows10 = listOf(stringResource(R.string.settings_diagnostics_export))
+  val rows11 = listOf(stringResource(R.string.settings_erase))
+  val rows12 = listOf(stringResource(R.string.settings_about_row))
+
+  var layerKey by rememberSaveable { mutableStateOf(SettingsLayer.ESSENTIAL.key) }
+  var query by rememberSaveable { mutableStateOf("") }
+  val layer = SettingsLayer.fromKey(layerKey)
+  val searching = query.isNotBlank()
 
   LazyColumn(
-    modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
-    contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp + LocalBarInset.current),
-    verticalArrangement = Arrangement.spacedBy(6.dp)
+    state = listState,
+    modifier = Modifier.readingColumn().fillMaxHeight(),
+    contentPadding = PaddingValues(bottom = LocalBarInset.current + Grid.u24)
   ) {
-
-    // Aparência
-    item { SectionTitle("Aparência") }
     item {
-      SettingsGroup(modifier = Modifier.testTag("settings_theme_card")) {
-        Row(
-          modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-          horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-          listOf(
-            Triple("amoled", "AMOLED", Icons.Default.Brightness1),
-            Triple("dark", "Escuro", Icons.Default.DarkMode),
-            Triple("light", "Claro", Icons.Default.LightMode),
-            Triple("system", "Sistema", Icons.Default.SettingsBrightness)
-          ).forEach { (modeKey, label, icon) ->
-            val selected = themeMode == modeKey
-            Column(
-              modifier = Modifier
-                .weight(1f)
-                .glassControl(RoundedCornerShape(18.dp), selected = selected)
-                .clickable { onThemeModeChange(modeKey) }
-                .padding(vertical = 12.dp)
-                .testTag("theme_chip_$modeKey"),
-              horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-              Icon(icon, contentDescription = null, tint = glassContentColor(selected), modifier = Modifier.size(22.dp))
-              Spacer(Modifier.height(6.dp))
-              Text(label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal, color = glassContentColor(selected), maxLines = 1)
-            }
+      Column(Modifier.padding(horizontal = Grid.margin)) {
+        com.example.ui.components.SearchField(
+          value = query,
+          onValueChange = { query = it },
+          placeholder = stringResource(R.string.settings_search_hint),
+          modifier = Modifier.testTag("settings_search")
+        )
+        // A search looks in every layer, so the layer control only applies while the box is empty.
+        SegmentedTabs(modifier = Modifier.padding(top = Grid.u12)) {
+          SettingsLayer.entries.forEach { l ->
+            Segment(
+              label = stringResource(layerLabel(l)),
+              selected = !searching && layer == l,
+              onClick = { query = ""; layerKey = l.key },
+              modifier = Modifier.testTag("settings_layer_${l.key}")
+            )
           }
         }
-        HorizontalDivider(color = hairline)
-        Column(Modifier.padding(vertical = 14.dp)) {
-          Text("Cor de destaque", fontSize = 17.sp, color = colors.onSurface)
-          Spacer(Modifier.height(10.dp))
-          AccentPicker(accent, onAccentChange)
-        }
-        HorizontalDivider(color = hairline)
-        SurfaceStyle.entries.forEach { style ->
-          val selected = surfaceStyle == style
-          val unavailable = style == SurfaceStyle.LIQUID && !liquidGlassSupported
-          SettingsRow(
-            title = style.label,
-            subtitle = if (unavailable) "${style.description} Neste aparelho, aparece como vidro fosco." else style.description,
-            titleColor = if (selected) colors.primary else colors.onSurface,
-            onClick = { onSurfaceStyleChange(style) },
-            modifier = Modifier.testTag("surface_style_${style.key}"),
-            trailing = { if (selected) Icon(Icons.Default.Check, contentDescription = "Selecionado", tint = colors.primary) }
-          )
-          HorizontalDivider(color = hairline)
-        }
-        SwitchRow(
-          title = "Reduzir transparência",
-          subtitle = if (AppMotion.systemBlurOff) "O sistema já pediu menos transparência, e o app segue." else "Barras e cápsulas sólidas, sem vidro. Mais fácil de ler e mais leve.",
-          checked = reduceTransparency || AppMotion.systemBlurOff,
-          enabled = !AppMotion.systemBlurOff,
-          onChange = onReduceTransparencyChange,
-          tag = "settings_reduce_transparency"
-        )
-        HorizontalDivider(color = hairline)
-        SwitchRow(
-          title = "Reduzir animações",
-          subtitle = if (AppMotion.systemReduced) "As animações estão removidas no sistema, e o app segue essa configuração." else "Pula a abertura e troca de tela sem movimento, só no app.",
-          checked = reduceMotion || AppMotion.systemReduced,
-          enabled = !AppMotion.systemReduced,
-          onChange = onReduceMotionChange,
-          tag = "settings_reduce_motion"
-        )
       }
+    }
+    var shownGroups = 0
+    fun group(
+      groupLayer: SettingsLayer,
+      header: String?,
+      rows: List<String> = emptyList(),
+      footer: String? = null,
+      tag: String? = null,
+      content: @Composable () -> Unit
+    ) {
+      if (!settingsGroupVisible(query, layer, groupLayer, listOfNotNull(header) + rows)) return
+      shownGroups++
+      settingsGroup(header, footer, tag, content)
+    }
+
+    // Aparência
+    group(SettingsLayer.ESSENTIAL, resources.getString(R.string.settings_theme), tag = "settings_theme_card") {
+      ThemeOptionRows(themeMode, onThemeModeChange, tagPrefix = "theme_chip_", systemColors = systemColors, onSystemColors = onSystemColorsChange)
+    }
+    group(
+      SettingsLayer.ADVANCED,
+      resources.getString(R.string.settings_floating_bars),
+      footer = resources.getString(R.string.settings_floating_bars_footer)
+    ) {
+      SurfaceOptionRows(surfaceStyle, onSurfaceStyleChange, tagPrefix = "surface_style_")
+    }
+    group(
+      SettingsLayer.ADVANCED,
+      resources.getString(R.string.settings_list_animation),
+      footer = resources.getString(R.string.settings_list_animation_footer)
+    ) {
+      Row(
+        modifier = Modifier
+          .horizontalScroll(rememberScrollState())
+          .padding(Grid.inset)
+          .selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(Grid.u6)
+      ) {
+        ListAnimation.entries.forEach { style ->
+          com.example.ui.components.FilterChip(
+            label = stringResource(style.labelRes),
+            selected = AppMotion.listAnimation == style,
+            onClick = { onListAnimationChange(style) },
+            modifier = Modifier.testTag("list_animation_${style.key}")
+          )
+        }
+      }
+    }
+    group(SettingsLayer.ESSENTIAL, resources.getString(R.string.settings_accessibility), rows = rows1) {
+      SwitchRow(
+        title = stringResource(R.string.settings_reduce_transparency),
+        subtitle = if (AppMotion.systemBlurOff) stringResource(R.string.settings_on_in_android) else stringResource(R.string.settings_reduce_transparency_hint),
+        checked = reduceTransparency || AppMotion.systemBlurOff,
+        enabled = !AppMotion.systemBlurOff,
+        onCheckedChange = onReduceTransparencyChange,
+        modifier = Modifier.testTag("settings_reduce_transparency")
+      )
+      GroupDivider()
+      SwitchRow(
+        title = stringResource(R.string.settings_reduce_motion),
+        subtitle = if (AppMotion.systemReduced) stringResource(R.string.settings_on_in_android) else stringResource(R.string.settings_reduce_motion_hint),
+        checked = reduceMotion || AppMotion.systemReduced,
+        enabled = !AppMotion.systemReduced,
+        onCheckedChange = onReduceMotionChange,
+        modifier = Modifier.testTag("settings_reduce_motion")
+      )
+    }
+
+    // Idioma: Android keeps a per-app language only from version 13; below it the app follows the system.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      group(SettingsLayer.ESSENTIAL, languageHeader, footer = languageFooter, tag = "settings_language_card") { LanguageOptionRows() }
     }
 
     // Reprodução
-    item { SectionTitle("Reprodução") }
-    item {
-      SettingsGroup {
-        SwitchRow(
-          title = "Aleatório",
-          subtitle = "Toca a lista em ordem aleatória. Também no botão do player.",
-          checked = isShuffle,
-          onChange = { onToggleShuffle() },
-          tag = "settings_shuffle"
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Repetir",
-          subtitle = when (repeatMode) {
-            RepeatMode.OFF -> "Desligado. Toque para repetir a lista toda."
-            RepeatMode.ALL -> "Repetindo a lista toda. Toque para repetir só uma faixa."
-            RepeatMode.ONE -> "Repetindo uma faixa. Toque para desligar."
-          },
-          onClick = onCycleRepeat,
-          modifier = Modifier.testTag("settings_repeat")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Ao desconectar o fone",
-          subtitle = "A música pausa sozinha quando o fone com fio ou Bluetooth desconecta, para não tocar no alto-falante."
-        )
+    group(SettingsLayer.ESSENTIAL, resources.getString(R.string.settings_playback), rows = rows2) {
+      SwitchRow(
+        title = stringResource(R.string.settings_shuffle),
+        checked = isShuffle,
+        onCheckedChange = { onToggleShuffle() },
+        modifier = Modifier.testTag("settings_shuffle")
+      )
+    }
+    group(
+      SettingsLayer.ESSENTIAL,
+      resources.getString(R.string.settings_repeat),
+      rows = rows3,
+      footer = resources.getString(R.string.settings_repeat_footer),
+      tag = "settings_repeat"
+    ) {
+      Column(Modifier.selectableGroup()) {
+        RepeatChoices.forEachIndexed { i, (mode, label) ->
+          if (i > 0) GroupDivider()
+          RadioRow(
+            title = stringResource(label),
+            selected = repeatMode == mode,
+            onClick = { if (repeatMode != mode) onSetRepeatMode(mode) },
+            modifier = Modifier.testTag("settings_repeat_${mode.name.lowercase()}")
+          )
+        }
       }
     }
 
     // Áudio
-    item { SectionTitle("Áudio") }
-    item {
-      SettingsGroup {
-        SettingsRow(
-          title = "Equalizador",
-          subtitle = "Gráfico de 15 bandas ou paramétrico, com correção para o seu fone. Começa em 0 dB (Flat).",
-          onClick = onOpenAudio,
-          chevron = true,
-          modifier = Modifier.testTag("settings_open_audio")
+    group(
+      SettingsLayer.ESSENTIAL,
+      resources.getString(R.string.settings_audio),
+      rows = rows4,
+      footer = resources.getString(R.string.settings_audio_footer)
+    ) {
+      ListRow(
+        title = stringResource(R.string.settings_audio_eq),
+        subtitle = stringResource(R.string.settings_audio_eq_subtitle),
+        onClick = onOpenAudio,
+        modifier = Modifier.testTag("settings_open_audio")
+      )
+      GroupDivider()
+      InfoRow(
+        title = stringResource(R.string.settings_audio_output),
+        value = stringResource(
+          R.string.settings_audio_output_value,
+          capabilities.activeRouteName,
+          String.format("%.1f", capabilities.sampleRateHz / 1000f)
         )
-        HorizontalDivider(color = hairline)
-        SettingsRow(title = "Saída atual", subtitle = "${capabilities.activeRouteName} • ${String.format("%.1f", capabilities.sampleRateHz / 1000f)} kHz")
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Áudio de outros apps",
-          subtitle = "Para equalizar Spotify, YouTube e os outros apps, escolha ADB ou Root em Áudio > Ajustes avançados.",
-          onClick = onOpenAudio,
-          chevron = true
-        )
+      )
+      capabilities.trackFormat?.let { format ->
+        GroupDivider()
+        InfoRow(title = stringResource(R.string.settings_audio_playing), value = format)
       }
     }
 
-    // Contas
-    item { SectionTitle("Streaming") }
-    item {
-      SettingsGroup {
-        SettingsRow(
-          title = "Entrar no YouTube Music",
-          subtitle = "Com o Premium, as músicas do YouTube tocam sem anúncios e com a tela apagada. Use a busca do Início para achar músicas.",
-          onClick = { showLogin = true },
-          chevron = true,
-          modifier = Modifier.testTag("settings_web_login")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Entrar no Spotify",
-          subtitle = "Sem Premium, toca no plano grátis dele (com anúncios). Precisa da conta para tocar.",
-          onClick = { showSpotifyLogin = true },
-          chevron = true,
-          modifier = Modifier.testTag("settings_spotify_login")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Sair das contas",
-          subtitle = "Apaga neste aparelho as sessões guardadas do YouTube Music e do Spotify.",
-          onClick = onSignOutWeb,
-          modifier = Modifier.testTag("settings_web_signout")
-        )
-      }
-    }
-    item {
-      if (showLogin) WebLoginDialog(onClose = { showLogin = false })
-      if (showSpotifyLogin) WebLoginDialog(spotify = true, onClose = { showSpotifyLogin = false })
+    // Catálogos online
+    group(
+      SettingsLayer.ADVANCED,
+      resources.getString(R.string.settings_catalogs),
+      rows = listOf("Audius", "Jamendo", "MusicBrainz"),
+      footer = resources.getString(R.string.settings_catalogs_footer)
+    ) {
+      InfoRow(title = "Audius", value = stringResource(R.string.settings_catalog_active))
+      GroupDivider()
+      InfoRow(
+        title = "Jamendo",
+        value = if (com.example.data.jamendo.JamendoApiService.isConfigured) stringResource(R.string.settings_catalog_active)
+        else stringResource(R.string.settings_catalog_no_key)
+      )
+      GroupDivider()
+      InfoRow(title = "MusicBrainz", value = stringResource(R.string.settings_catalog_active))
     }
 
     // Curiosidades e assistente
-    item { SectionTitle("Curiosidades e assistente") }
-    item {
-      SettingsGroup {
-        val enabled = curiosityConfig?.enabled != false
-        SettingsRow(
-          title = "Curiosidades musicais",
-          subtitle = "${if (enabled) "Ativadas" else "Desativadas"} • ${curiosityConfig?.timing?.label ?: "Ao final da música"}",
-          onClick = onOpenCuriositySettings,
-          chevron = true,
-          modifier = Modifier.testTag("settings_curiosidades_musicais_card")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "IA online (Gemini)",
-          subtitle = if (hasGeminiKey) "Conectada. Mensagens que não são comandos locais vão para o Gemini." else "Não configurada. O assistente responde só com comandos locais."
-        )
-      }
+    group(
+      SettingsLayer.ADVANCED,
+      resources.getString(R.string.settings_assistant),
+      rows = rows5,
+      footer = if (hasGeminiKey) resources.getString(R.string.settings_assistant_footer_gemini)
+      else resources.getString(R.string.settings_assistant_footer_local)
+    ) {
+      val enabled = curiosityConfig?.enabled != false
+      val timing = curiosityConfig?.timing
+      ListRow(
+        title = stringResource(R.string.settings_curiosity_title),
+        value = if (!enabled) stringResource(R.string.settings_curiosity_state_off)
+        else stringResource(curiosityTimingChoices.firstOrNull { it.timing == timing }?.short ?: R.string.settings_curiosity_state_on),
+        onClick = onOpenCuriositySettings,
+        modifier = Modifier.testTag("settings_curiosidades_musicais_card")
+      )
+      GroupDivider()
+      InfoRow(
+        title = stringResource(R.string.settings_gemini),
+        value = if (hasGeminiKey) stringResource(R.string.settings_gemini_connected) else stringResource(R.string.settings_gemini_not_set)
+      )
     }
 
     // Notificações
-    item { SectionTitle("Notificações") }
-    item {
-      SettingsGroup {
-        SettingsRow(
-          title = if (notificationsOn) "Notificações ligadas" else "Notificações desligadas",
-          subtitle = if (notificationsOn) "Controles da música na tela bloqueada e na barra, com a curiosidade da faixa quando houver. Toque para ajustar no sistema."
-          else "Sem os controles na tela bloqueada. Toque para ligar nas configurações do Android.",
-          onClick = {
-            openSystem(
-              Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-            )
-          },
-          chevron = true,
-          modifier = Modifier.testTag("settings_notifications")
-        )
-      }
+    group(
+      SettingsLayer.ESSENTIAL,
+      resources.getString(R.string.settings_notifications),
+      footer = if (notificationsOn) resources.getString(R.string.settings_notifications_footer_on)
+      else resources.getString(R.string.settings_notifications_footer_off)
+    ) {
+      ListRow(
+        title = stringResource(R.string.settings_notifications),
+        value = if (notificationsOn) stringResource(R.string.settings_notifications_on) else stringResource(R.string.settings_notifications_off),
+        onClick = {
+          openSystem(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+        },
+        modifier = Modifier.testTag("settings_notifications")
+      )
+    }
+
+    val updateHeader = resources.getString(R.string.settings_update_header)
+    if (settingsGroupVisible(query, layer, SettingsLayer.ESSENTIAL, listOf(updateHeader))) {
+      shownGroups++
+      updateSettingsGroup(updateHeader)
     }
 
     // Armazenamento
-    item { SectionTitle("Armazenamento") }
-    item {
-      SettingsGroup {
-        SettingsRow(
-          title = "Limpar cache",
-          subtitle = "Capas e lista de fones guardadas: ${cacheSize?.let { formatBytes(it) } ?: "calculando…"}. Elas voltam a ser baixadas quando precisar.",
-          onClick = { onClearCache { cacheRefresh++ } },
-          modifier = Modifier.testTag("settings_clear_cache")
-        )
-      }
+    group(SettingsLayer.ADVANCED, resources.getString(R.string.settings_storage), rows = rows6, footer = resources.getString(R.string.settings_storage_footer)) {
+      ListRow(
+        title = stringResource(R.string.settings_clear_cache),
+        value = cacheSize?.let { formatBytes(it) } ?: stringResource(R.string.settings_calculating),
+        onClick = { onClearCache { cacheRefresh++ } },
+        chevron = false,
+        modifier = Modifier.testTag("settings_clear_cache")
+      )
     }
 
     // Privacidade
-    item { SectionTitle("Privacidade") }
-    item {
-      SettingsGroup {
-        SettingsRow(
-          title = "Dados neste aparelho",
-          subtitle = "Favoritos, playlists e ajustes ficam só aqui. O T.A.R.K.A.S. não tem conta nem servidor próprio."
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Permissões",
-          subtitle = "Microfone (espectro ao vivo) e notificações. O app pede cada uma na hora de usar. Toque para revisar.",
-          onClick = { openSystem(appDetails) },
-          chevron = true,
-          modifier = Modifier.testTag("settings_open_permissions")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Exportar meus dados",
-          subtitle = "Salva um arquivo com seus ajustes, favoritos e playlists (LGPD: acesso e portabilidade).",
-          onClick = { exportLauncher.launch("tarkas-meus-dados.json") },
-          chevron = true,
-          modifier = Modifier.testTag("settings_export")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(title = "Política de Privacidade", onClick = onOpenPrivacy, chevron = true, modifier = Modifier.testTag("settings_privacy"))
-        HorizontalDivider(color = hairline)
-        SettingsRow(title = "Termos de Uso", onClick = onOpenTerms, chevron = true)
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Apagar todos os dados",
-          subtitle = "Apaga ajustes, favoritos, playlists e o cache deste aparelho, e fecha o app.",
-          titleColor = colors.error,
-          onClick = { confirmErase = true },
-          modifier = Modifier.testTag("settings_erase")
-        )
-      }
+    group(
+      SettingsLayer.ADVANCED,
+      resources.getString(R.string.settings_privacy),
+      rows = rows7,
+      footer = resources.getString(R.string.settings_privacy_footer)
+    ) {
+      ListRow(
+        title = stringResource(R.string.settings_permissions),
+        subtitle = stringResource(R.string.settings_permissions_subtitle),
+        onClick = { openSystem(appDetails) },
+        modifier = Modifier.testTag("settings_open_permissions")
+      )
+      GroupDivider()
+      ListRow(title = stringResource(R.string.settings_export), onClick = { exportLauncher.launch("tarkas-meus-dados.json") }, modifier = Modifier.testTag("settings_export"))
+      GroupDivider()
+      ListRow(
+        title = stringResource(R.string.settings_restore),
+        subtitle = stringResource(R.string.settings_restore_subtitle),
+        onClick = { restoreLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
+        modifier = Modifier.testTag("settings_restore")
+      )
+      GroupDivider()
+      ListRow(title = stringResource(R.string.settings_privacy_policy), onClick = onOpenPrivacy, modifier = Modifier.testTag("settings_privacy"))
+      GroupDivider()
+      ListRow(title = stringResource(R.string.settings_terms), onClick = onOpenTerms, modifier = Modifier.testTag("settings_terms"))
+    }
+    group(
+      SettingsLayer.ESSENTIAL,
+      resources.getString(R.string.settings_home_header),
+      rows = rows8,
+      footer = resources.getString(R.string.settings_home_footer)
+    ) {
+      SwitchRow(
+        title = stringResource(R.string.settings_home_music_first),
+        checked = homeMusicFirst,
+        onCheckedChange = onHomeMusicFirstChange,
+        modifier = Modifier.testTag("settings_home_music_first")
+      )
+    }
+    group(
+      SettingsLayer.ADVANCED,
+      null,
+      rows = rows9,
+      footer = resources.getString(R.string.settings_waveform_footer)
+    ) {
+      SwitchRow(
+        title = stringResource(R.string.settings_waveform),
+        checked = waveformBar,
+        onCheckedChange = onWaveformBarChange,
+        modifier = Modifier.testTag("settings_waveform")
+      )
+    }
+    // Diagnóstico
+    group(
+      SettingsLayer.ENGINEERING,
+      diagnosticsHeader,
+      rows = rows10,
+      footer = diagnosticsFooter
+    ) {
+      ListRow(
+        title = stringResource(R.string.settings_diagnostics_export),
+        subtitle = pluralStringResource(R.plurals.settings_diagnostics_crashes, savedCrashes, savedCrashes),
+        onClick = { diagnosticsLauncher.launch("tarkas-diagnostics.txt") },
+        modifier = Modifier.testTag("settings_diagnostics_export")
+      )
+    }
+    group(SettingsLayer.ADVANCED, header = null, rows = rows11, footer = resources.getString(R.string.settings_erase_footer)) {
+      ListRow(
+        title = stringResource(R.string.settings_erase),
+        onClick = { confirmErase = true },
+        chevron = false,
+        destructive = true,
+        modifier = Modifier.testTag("settings_erase")
+      )
     }
 
     // Sobre
-    item { SectionTitle("Sobre") }
-    item {
-      SettingsGroup {
-        SettingsRow(
-          title = "T.A.R.K.A.S.",
-          subtitle = "Versão ${BuildConfig.VERSION_NAME} • licenças, novidades e contato",
-          onClick = onOpenAbout,
-          chevron = true,
-          modifier = Modifier.testTag("settings_about")
+    group(SettingsLayer.ESSENTIAL, resources.getString(R.string.settings_about), rows = rows12) {
+      ListRow(
+        title = stringResource(R.string.settings_about_row),
+        value = BuildConfig.VERSION_NAME,
+        onClick = onOpenAbout,
+        modifier = Modifier.testTag("settings_about")
+      )
+    }
+    if (searching && shownGroups == 0) {
+      item {
+        Text(
+          stringResource(R.string.settings_search_empty, query.trim()),
+          style = GridText.Body,
+          color = colors.onSurfaceVariant,
+          modifier = Modifier.padding(start = Grid.margin, end = Grid.margin, top = Grid.u24).testTag("settings_search_empty")
         )
       }
     }
   }
 
+  // Outside the list, so a dialog never closes because its row scrolled out of composition.
   if (confirmErase) {
-    AlertDialog(
+    TarkasAlertDialog(
       onDismissRequest = { confirmErase = false },
-      title = { Text("Apagar todos os dados?") },
-      text = {
-        Text(
-          "Favoritos, playlists, predefinições do equalizador, ajustes e o cache serão apagados deste aparelho. " +
-            "Isso não pode ser desfeito. O app vai fechar, e na próxima abertura começa do zero. Se quiser guardar uma cópia, use antes \"Exportar meus dados\"."
-        )
-      },
+      title = { Text(stringResource(R.string.settings_erase_dialog_title), style = GridText.Title) },
+      text = { Text(stringResource(R.string.settings_erase_dialog_text)) },
       confirmButton = {
         TextButton(onClick = { confirmErase = false; onEraseAllData() }, modifier = Modifier.testTag("settings_erase_confirm")) {
-          Text("Apagar tudo", color = colors.error)
+          Text(stringResource(R.string.settings_erase_confirm), color = colors.error)
         }
       },
-      dismissButton = { TextButton(onClick = { confirmErase = false }) { Text("Cancelar") } }
+      dismissButton = { TextButton(onClick = { confirmErase = false }) { Text(stringResource(R.string.settings_cancel)) } }
     )
   }
 }
+
+private fun layerLabel(layer: SettingsLayer): Int = when (layer) {
+  SettingsLayer.ESSENTIAL -> R.string.settings_layer_essential
+  SettingsLayer.ADVANCED -> R.string.settings_layer_advanced
+  SettingsLayer.ENGINEERING -> R.string.settings_layer_engineering
+}
+
+private val RepeatChoices = listOf(
+  RepeatMode.OFF to R.string.settings_repeat_off,
+  RepeatMode.ALL to R.string.settings_repeat_all,
+  RepeatMode.ONE to R.string.settings_repeat_one
+)
 
 @Composable
 private fun AboutPage(
@@ -495,119 +676,146 @@ private fun AboutPage(
 ) {
   val colors = MaterialTheme.colorScheme
   val context = LocalContext.current
-  val hairline = colors.outline.copy(alpha = 0.4f)
+  val resources = LocalResources.current
+  val credits = currentLegalTexts().credits
+  val contactHeader = stringResource(R.string.settings_about_contact)
+  val restartFooter = stringResource(R.string.settings_about_restart_footer)
   var copied by remember { mutableStateOf(false) }
   fun open(url: String) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
   }
 
   LazyColumn(
-    modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp).testTag("settings_about_page"),
-    contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp + LocalBarInset.current),
-    verticalArrangement = Arrangement.spacedBy(6.dp)
+    modifier = Modifier.statusBarsPadding().fillMaxSize().testTag("settings_about_page"),
+    contentPadding = PaddingValues(bottom = LocalBarInset.current + Grid.u24)
   ) {
     item {
-      Row(
-        modifier = Modifier
-          .heightIn(min = 48.dp)
-          .clip(RoundedCornerShape(12.dp))
-          .clickable(onClick = onBack)
-          .padding(end = 12.dp)
-          .testTag("about_back"),
-        verticalAlignment = Alignment.CenterVertically
+      SubPageHeader(
+        title = stringResource(R.string.settings_about),
+        backLabel = stringResource(R.string.settings_back_settings),
+        onBack = onBack,
+        modifier = Modifier.testTag("about_back")
+      )
+    }
+    item {
+      Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Grid.margin, vertical = Grid.u12).gridHeight()
       ) {
-        Icon(Icons.Default.ChevronLeft, contentDescription = "Voltar", tint = colors.primary, modifier = Modifier.size(32.dp))
-        Text("Ajustes", fontSize = 20.sp, color = colors.primary)
+        // The mark sits on the grid chain: 96 x 48.
+        TarkasMark(modifier = Modifier.size(width = Grid.u96, height = Grid.u48))
+        Spacer(Modifier.height(Grid.u12))
+        Text("T.A.R.K.A.S.", style = GridText.Title, color = colors.onSurface)
+        Text(
+          stringResource(R.string.settings_about_tagline),
+          style = GridText.Small,
+          color = colors.onSurfaceVariant,
+          textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(Grid.u6))
+        // Authorship line, in English as the T.A.L. identity asks for every product's About page.
+        Text(
+          "Developed by Totally Accurate Labs.",
+          style = GridText.Small,
+          color = colors.onSurfaceVariant,
+          textAlign = TextAlign.Center,
+          modifier = Modifier.testTag("about_developer")
+        )
       }
     }
-    item {
-      Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-        Box(
+    settingsGroup(header = null) {
+      ListRow(
+        title = stringResource(R.string.settings_about_version),
+        value = if (copied) stringResource(R.string.settings_about_copied) else "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+        chevron = false,
+        onClick = {
+          val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+          cm?.setPrimaryClip(ClipData.newPlainText(resources.getString(R.string.settings_about_clip_label), "T.A.R.K.A.S. ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}), Android ${android.os.Build.VERSION.RELEASE}, ${android.os.Build.MODEL}"))
+          copied = true
+        },
+        modifier = Modifier.testTag("about_version")
+      )
+      GroupDivider()
+      ListRow(title = stringResource(R.string.settings_about_whats_new), onClick = { onOpen(SettingsPage.CHANGELOG) }, modifier = Modifier.testTag("about_changelog"))
+      GroupDivider()
+      ListRow(
+        title = stringResource(R.string.settings_about_all_versions),
+        subtitle = stringResource(R.string.settings_about_all_versions_subtitle),
+        onClick = { open(LegalTexts.RELEASES_URL) }
+      )
+    }
+    settingsGroup(resources.getString(R.string.settings_about_legal)) {
+      ListRow(title = stringResource(R.string.settings_terms), onClick = { onOpen(SettingsPage.TERMS) }, modifier = Modifier.testTag("about_terms"))
+      GroupDivider()
+      ListRow(
+        title = stringResource(R.string.settings_privacy_policy),
+        subtitle = if (termsAcceptedAt > 0) {
+          stringResource(
+            R.string.settings_about_accepted_on,
+            java.text.DateFormat.getDateInstance(java.text.DateFormat.SHORT, java.util.Locale.getDefault()).format(java.util.Date(termsAcceptedAt))
+          )
+        } else null,
+        onClick = { onOpen(SettingsPage.PRIVACY) },
+        modifier = Modifier.testTag("about_privacy")
+      )
+      GroupDivider()
+      ListRow(title = stringResource(R.string.settings_about_licenses), onClick = { onOpen(SettingsPage.LICENSES) }, modifier = Modifier.testTag("about_licenses"))
+    }
+    settingsGroup(resources.getString(R.string.settings_about_credits)) {
+      credits.forEachIndexed { i, (title, body) ->
+        if (i > 0) GroupDivider()
+        Column(
           modifier = Modifier
-            .size(96.dp)
-            .clip(RoundedCornerShape(26.dp))
-            .background(Brush.linearGradient(listOf(colors.primary, colors.primary.copy(alpha = 0.45f)))),
-          contentAlignment = Alignment.Center
+            .fillMaxWidth()
+            .gridHeight(min = Grid.u48)
+            .padding(horizontal = Grid.inset, vertical = Grid.u6)
+            .semantics(mergeDescendants = true) {}
         ) {
-          TarkasMark(modifier = Modifier.size(width = 58.dp, height = 35.dp), symbolColor = Color.White, accentColor = Color.White)
-        }
-        Spacer(Modifier.height(14.dp))
-        Text("T.A.R.K.A.S.", fontWeight = FontWeight.Bold, fontSize = 26.sp, color = colors.onBackground)
-        Text("Música, equalizador e curiosidades", fontSize = 15.sp, color = colors.onSurfaceVariant, textAlign = TextAlign.Center)
-      }
-    }
-    item {
-      SettingsGroup {
-        SettingsRow(
-          title = "Versão",
-          subtitle = if (copied) "Copiado" else "${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE}) · toque para copiar",
-          onClick = {
-            val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-            cm?.setPrimaryClip(ClipData.newPlainText("Versão do T.A.R.K.A.S.", "T.A.R.K.A.S. ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}), Android ${android.os.Build.VERSION.RELEASE}, ${android.os.Build.MODEL}"))
-            copied = true
-          },
-          modifier = Modifier.testTag("about_version")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(title = "Novidades", subtitle = "O que mudou em cada versão", onClick = { onOpen(SettingsPage.CHANGELOG) }, chevron = true, modifier = Modifier.testTag("about_changelog"))
-        HorizontalDivider(color = hairline)
-        SettingsRow(title = "Todas as versões no GitHub", subtitle = "Baixe o APK mais recente", onClick = { open(LegalTexts.RELEASES_URL) }, chevron = true)
-      }
-    }
-    item { SectionTitle("Legal") }
-    item {
-      SettingsGroup {
-        SettingsRow(title = "Termos de Uso", onClick = { onOpen(SettingsPage.TERMS) }, chevron = true, modifier = Modifier.testTag("about_terms"))
-        HorizontalDivider(color = hairline)
-        SettingsRow(
-          title = "Política de Privacidade",
-          subtitle = if (termsAcceptedAt > 0) "Aceita em ${java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale("pt", "BR")).format(java.util.Date(termsAcceptedAt))}" else null,
-          onClick = { onOpen(SettingsPage.PRIVACY) },
-          chevron = true,
-          modifier = Modifier.testTag("about_privacy")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(title = "Licenças de código aberto", onClick = { onOpen(SettingsPage.LICENSES) }, chevron = true, modifier = Modifier.testTag("about_licenses"))
-      }
-    }
-    item { SectionTitle("Créditos") }
-    item {
-      SettingsGroup {
-        LegalTexts.credits.forEachIndexed { i, (title, body) ->
-          if (i > 0) HorizontalDivider(color = hairline)
-          SettingsRow(title = title, subtitle = body)
+          Text(title, style = GridText.Body, color = colors.onSurface)
+          Text(body, style = GridText.Small, color = colors.onSurfaceVariant)
         }
       }
     }
-    item { SectionTitle("Contato") }
-    item {
-      SettingsGroup {
-        SettingsRow(
-          title = "Enviar e-mail",
-          subtitle = LegalTexts.CONTACT_EMAIL,
-          onClick = {
-            val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${LegalTexts.CONTACT_EMAIL}"))
-              .putExtra(Intent.EXTRA_SUBJECT, "T.A.R.K.A.S. ${BuildConfig.VERSION_NAME}")
-            runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-          },
-          chevron = true,
-          modifier = Modifier.testTag("about_email")
-        )
-        HorizontalDivider(color = hairline)
-        SettingsRow(title = "Instagram", subtitle = LegalTexts.CONTACT_INSTAGRAM, onClick = { open(LegalTexts.INSTAGRAM_URL) }, chevron = true)
-      }
+    settingsGroup(contactHeader) {
+      ListRow(
+        title = stringResource(R.string.settings_about_send_email),
+        subtitle = LegalTexts.CONTACT_EMAIL,
+        onClick = {
+          val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:${LegalTexts.CONTACT_EMAIL}"))
+            .putExtra(Intent.EXTRA_SUBJECT, "T.A.R.K.A.S. ${BuildConfig.VERSION_NAME}")
+          runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        },
+        modifier = Modifier.testTag("about_email")
+      )
+      GroupDivider()
+      ListRow(title = "Instagram", subtitle = LegalTexts.CONTACT_INSTAGRAM, onClick = { open(LegalTexts.INSTAGRAM_URL) })
     }
-    item { SectionTitle("Configuração") }
+    settingsGroup(header = null, footer = restartFooter) {
+      ListRow(
+        title = stringResource(R.string.settings_about_restart),
+        onClick = onRestartOnboarding,
+        modifier = Modifier.testTag("about_restart_onboarding")
+      )
+    }
     item {
-      SettingsGroup {
-        SettingsRow(
-          title = "Refazer configuração inicial",
-          subtitle = "Mostra de novo as boas-vindas, a aparência e as curiosidades. Seus dados ficam como estão.",
-          onClick = onRestartOnboarding,
-          chevron = true,
-          modifier = Modifier.testTag("about_restart_onboarding")
-        )
-      }
+      // The official T.A.L. logo, single colour: white on the dark pages, black on the light one.
+      val onDark = colors.background.luminance() < 0.5f
+      androidx.compose.foundation.Image(
+        painter = androidx.compose.ui.res.painterResource(
+          if (onDark) com.example.R.drawable.tal_logo_negative else com.example.R.drawable.tal_logo_positive
+        ),
+        contentDescription = "Totally Accurate Labs",
+        modifier = Modifier.fillMaxWidth().padding(top = Grid.u24).size(Grid.u48).testTag("about_tal_logo")
+      )
+    }
+    item {
+      Text(
+        "© 2026 Totally Accurate Labs · MADE BY T.A.L.",
+        style = GridText.Label,
+        color = colors.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(vertical = Grid.u12).gridHeight().padding(horizontal = Grid.margin).testTag("about_seal")
+      )
     }
   }
 }
@@ -618,85 +826,80 @@ private fun formatBytes(bytes: Long): String = when {
   else -> "$bytes B"
 }
 
-@Composable
-private fun SectionTitle(text: String) {
-  TarkasSectionTitle(text, modifier = Modifier.padding(top = 20.dp, bottom = 4.dp))
-}
+// ---- appearance choices, shared with the first-run setup so both look and read the same ----
 
-/** Flat list between hairlines, like an Apple Music list: no card behind the rows. */
+/** The theme options, in the order shown in Ajustes and in the setup. */
+internal val ThemeChoices = listOf(
+  Triple("system", R.string.settings_theme_system, R.string.settings_theme_system_desc),
+  Triple("light", R.string.settings_theme_light, null),
+  Triple("dark", R.string.settings_theme_dark, null),
+  Triple("amoled", R.string.settings_theme_amoled, R.string.settings_theme_amoled_desc)
+)
+
+/**
+ * The theme as radio rows; put inside an [InsetGroup]. With [onSystemColors], a last row offers the phone's
+ * colours (Material You). It only appears where Android has them (12 and later): no dead switch on older phones.
+ */
 @Composable
-private fun SettingsGroup(
-  modifier: Modifier = Modifier,
-  content: @Composable () -> Unit
+internal fun ThemeOptionRows(
+  themeMode: String,
+  onThemeMode: (String) -> Unit,
+  tagPrefix: String,
+  systemColors: Boolean = false,
+  onSystemColors: ((Boolean) -> Unit)? = null,
+  systemColorsAvailable: Boolean = com.example.ui.theme.systemColorsSupported()
 ) {
-  Column(modifier = modifier.fillMaxWidth()) {
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-    content()
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+  Column(Modifier.selectableGroup()) {
+    ThemeChoices.forEachIndexed { i, (key, label, subtitle) ->
+      if (i > 0) GroupDivider()
+      RadioRow(
+        title = stringResource(label),
+        subtitle = subtitle?.let { stringResource(it) },
+        selected = themeMode == key,
+        onClick = { onThemeMode(key) },
+        modifier = Modifier.testTag("$tagPrefix$key")
+      )
+    }
+    if (onSystemColors != null && systemColorsAvailable) {
+      GroupDivider()
+      SwitchRow(
+        title = stringResource(R.string.settings_system_colors),
+        subtitle = stringResource(R.string.settings_system_colors_desc),
+        checked = systemColors,
+        onCheckedChange = onSystemColors,
+        modifier = Modifier.testTag("${tagPrefix}system_colors")
+      )
+    }
   }
 }
 
 /**
- * A row of text. Tappable rows have [onClick] (and a chevron when they open something); rows
- * without it are information and do not react to touch.
+ * One line each, so the three options scan quickly. Liquid glass needs Android 13; on older devices
+ * it says it falls back to frosted glass instead of silently looking the same.
  */
 @Composable
-private fun SettingsRow(
-  title: String,
-  subtitle: String? = null,
-  onClick: (() -> Unit)? = null,
-  chevron: Boolean = false,
-  titleColor: Color = MaterialTheme.colorScheme.onSurface,
-  modifier: Modifier = Modifier,
-  trailing: (@Composable () -> Unit)? = null
-) {
-  Row(
-    modifier = modifier
-      .fillMaxWidth()
-      .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
-      .padding(vertical = 14.dp),
-    verticalAlignment = Alignment.CenterVertically
-  ) {
-    Column(modifier = Modifier.weight(1f)) {
-      Text(text = title, fontSize = 17.sp, color = titleColor)
-      if (subtitle != null) {
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(text = subtitle, fontSize = 15.sp, lineHeight = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-      }
-    }
-    if (trailing != null) {
-      Spacer(modifier = Modifier.width(12.dp))
-      trailing()
-    }
-    if (chevron) {
-      Spacer(modifier = Modifier.width(8.dp))
-      Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun SurfaceStyle.shortDescription(): String = stringResource(
+  when (this) {
+    SurfaceStyle.SOLID -> R.string.settings_surface_solid_desc
+    SurfaceStyle.FROSTED -> R.string.settings_surface_frosted_desc
+    SurfaceStyle.LIQUID -> if (liquidGlassSupported) R.string.settings_surface_liquid_desc else R.string.settings_surface_liquid_unsupported
+  }
+)
+
+/** The floating-surface style as radio rows; put inside an [InsetGroup]. */
+@Composable
+internal fun SurfaceOptionRows(surfaceStyle: SurfaceStyle, onSurfaceStyle: (SurfaceStyle) -> Unit, tagPrefix: String) {
+  Column(Modifier.selectableGroup()) {
+    SurfaceStyle.entries.forEachIndexed { i, style ->
+      if (i > 0) GroupDivider()
+      RadioRow(
+        title = stringResource(style.labelRes),
+        subtitle = style.shortDescription(),
+        selected = surfaceStyle == style,
+        onClick = { onSurfaceStyle(style) },
+        modifier = Modifier.testTag("$tagPrefix${style.key}")
+      )
     }
   }
 }
 
-@Composable
-private fun SwitchRow(
-  title: String,
-  subtitle: String,
-  checked: Boolean,
-  onChange: (Boolean) -> Unit,
-  tag: String,
-  enabled: Boolean = true
-) {
-  Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .clickable(enabled = enabled) { onChange(!checked) }
-      .padding(vertical = 14.dp)
-      .testTag(tag),
-    verticalAlignment = Alignment.CenterVertically
-  ) {
-    Column(modifier = Modifier.weight(1f)) {
-      Text(title, fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurface)
-      Text(subtitle, fontSize = 15.sp, lineHeight = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    Spacer(modifier = Modifier.width(12.dp))
-    Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
-  }
-}

@@ -1,0 +1,3 @@
+numpy>=1.24
+matplotlib>=3.7  # só para --plot e demo.py
+h5py>=3.8        # só para HRTF medida (--hrtf arquivo.sofa)

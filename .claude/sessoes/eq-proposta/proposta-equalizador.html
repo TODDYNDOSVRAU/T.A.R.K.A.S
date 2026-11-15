@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Equalizer: proposta</title>
+<style>
+:root{
+  --ink:#080808; --raised:#141414; --container:#181818; --high:#1D1D1D; --line:#2D2D2D;
+  --white:#F2F2F0; --gray:#8C8C8C; --ice:#7EE3EA; --ice-wash:#1B2B2C;
+  --display:"Space Grotesk",system-ui,sans-serif; --body:Inter,system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0}
+body{background:#0c0c0c;color:var(--white);font:15px/1.5 var(--body);padding:32px 16px 64px}
+.wrap{max-width:1240px;margin:0 auto}
+h1{font:600 28px/1.15 var(--display);letter-spacing:-.02em}
+h2{font:600 20px/1.2 var(--display);letter-spacing:-.01em;margin:44px 0 12px}
+h3{font:600 14px/1.3 var(--display);margin:0 0 6px}
+p,li{color:#c9c9c6}
+.sub{color:var(--gray);margin-top:6px;max-width:70ch}
+.mono{font-family:var(--mono)}
+.frames{display:flex;gap:28px;flex-wrap:wrap;margin-top:24px;align-items:flex-start}
+.cap{font:500 12px var(--mono);color:var(--gray);margin:0 0 10px;letter-spacing:.04em;text-transform:uppercase}
+.cap b{color:var(--ice);font-weight:500}
+.phone{width:360px;height:740px;background:var(--ink);border:1px solid var(--line);border-radius:28px;overflow:hidden;position:relative;display:flex;flex-direction:column}
+.status{height:28px;flex:none}
+.top{padding:4px 20px 0;display:flex;align-items:flex-start;justify-content:space-between}
+.title{font:600 28px/1.1 var(--display);letter-spacing:-.02em}
+.route{font:400 11px var(--mono);color:var(--gray);margin-top:4px;display:flex;gap:6px;align-items:center}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--gray)}
+.dot.on{background:var(--ice)}
+.power{display:flex;align-items:center;gap:8px;height:48px;padding:0 14px;border-radius:24px;background:var(--high);font:600 12px var(--body)}
+.sw{width:34px;height:20px;border-radius:10px;background:#3a3a3a;position:relative}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--white)}
+.sw.on{background:var(--ice)}.sw.on::after{left:16px;background:var(--ink)}
+.preset{margin:14px 20px 0;display:flex;gap:8px}
+.pill{flex:1;height:48px;border-radius:24px;background:var(--high);display:flex;align-items:center;justify-content:space-between;padding:0 16px;font:600 14px var(--body)}
+.pill small{font:400 11px var(--mono);color:var(--gray)}
+.icobtn{width:48px;height:48px;border-radius:24px;background:var(--high);display:grid;place-items:center;color:var(--white);font-size:18px}
+.card{margin:12px 20px 0;background:var(--raised);border:1px solid var(--line);border-radius:14px}
+.curve{height:132px;position:relative;padding:8px 8px 0}
+.curve svg{width:100%;height:100%}
+.axis{display:flex;justify-content:space-between;padding:0 12px 8px;font:400 10px var(--mono);color:var(--gray)}
+.faders{margin:12px 20px 0;flex:1;min-height:0;display:flex;gap:0;justify-content:space-between;position:relative}
+.f{width:30px;display:flex;flex-direction:column;align-items:center;font:400 10px var(--mono);color:var(--gray);position:relative}
+.f .v{height:16px;color:var(--white)}
+.f .tr{flex:1;width:2px;background:var(--line);position:relative;border-radius:1px}
+.f .th{position:absolute;left:50%;width:26px;height:34px;margin-left:-13px;border-radius:8px;background:#e6e6e3;border:0}
+.f.sel .th{background:var(--ice)}
+.f.sel .v{color:var(--ice)}
+.f .hz{height:18px;padding-top:4px}
+.zero{position:absolute;left:0;right:0;border-top:1px dashed #3a3a3a}
+.dock{margin:10px 20px 0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seg{display:flex;background:var(--high);border-radius:24px;padding:2px;height:48px}
+.seg span{flex:1;display:grid;place-items:center;border-radius:22px;font:500 12px var(--body);color:var(--gray)}
+.seg span.on{background:var(--ice-wash);color:var(--white);font-weight:600}
+.btn{height:48px;border-radius:24px;background:var(--high);display:flex;align-items:center;justify-content:center;gap:8px;font:600 12px var(--body)}
+.tone{display:flex;gap:8px;align-items:center;justify-content:center;font:600 12px var(--body);height:48px;background:var(--high);border-radius:24px}
+.knob{width:30px;height:30px;border-radius:50%;border:2px solid #444;position:relative}
+.knob::after{content:"";position:absolute;left:50%;top:2px;width:2px;height:9px;background:var(--white);transform-origin:50% 11px;transform:translateX(-50%) rotate(var(--r,0deg))}
+.path{margin:10px 20px 14px;height:48px;border-radius:14px;border:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 14px;font:400 11px var(--mono);color:var(--gray)}
+.path b{color:var(--white);font-weight:500}
+.sheet{position:absolute;left:0;right:0;bottom:0;top:96px;background:var(--raised);border-top:1px solid var(--line);border-radius:20px 20px 0 0;padding:10px 20px 16px;overflow:hidden}
+.sheet .grab{width:36px;height:4px;background:#444;border-radius:2px;margin:0 auto 12px}
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.sec{font:600 11px var(--mono);color:var(--gray);letter-spacing:.06em;text-transform:uppercase;margin:16px 0 6px}
+.row{display:flex;align-items:center;justify-content:space-between;min-height:48px;border-bottom:1px solid var(--line);font-size:14px}
+.row span:last-child{font:400 12px var(--mono);color:var(--gray)}
+.row .sw{flex:none}
+.m{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.m div{background:var(--container);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.m small{display:block;font:400 10px var(--mono);color:var(--gray);text-transform:uppercase;letter-spacing:.05em}
+.m strong{font:500 18px var(--mono)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:12px}
+.box{background:#121212;border:1px solid var(--line);border-radius:14px;padding:16px}
+ul{padding-left:18px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+td,th{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{font:500 11px var(--mono);color:var(--gray);text-transform:uppercase;letter-spacing:.05em}
+.tag{font:500 11px var(--mono);color:var(--ice)}
+.warn{color:#e0c27a}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Equalizer: proposta de nova tela</h1>
+<p class="sub">Mockup de estrutura e ritmo, não é tela final. Os dados são exemplos. Nada foi implementado: a decisão sobre a mudança visual é do dono. Fontes do mockup caem para as do sistema se Space Grotesk, Inter e JetBrains Mono não estiverem instaladas aqui; no app são as três da identidade.</p>
+
+<div class="frames">
+
+<!-- 1. ESSENCIAL -->
+<div>
+<div class="cap"><b>01</b> · Essencial (tela da aba)</div>
+<div class="phone">
+  <div class="status"></div>
+  <div class="top">
+    <div>
+      <div class="title">Equalizer</div>
+      <div class="route"><span class="dot on"></span>Galaxy Buds2 Pro · 48 kHz</div>
+    </div>
+    <div class="power" title="Toque longo: ouvir sem EQ, volume igualado">EQ <span class="sw on"></span></div>
+  </div>
+  <div class="preset">
+    <div class="pill"><span>Rock</span><small>modificado</small></div>
+    <div class="icobtn" title="Comparar sem EQ, restaurar, copiar, importar">⋯</div>
+  </div>
+  <div class="card">
+    <div class="curve"><svg id="curve" viewBox="0 0 320 116" preserveAspectRatio="none"></svg></div>
+    <div class="axis"><span>20</span><span>100</span><span>1k</span><span>10k</span><span>20k</span></div>
+  </div>
+  <div class="faders" id="faders"></div>
+  <div class="dock">
+    <div class="seg"><span class="on">Gráfico</span><span>Paramétrico</span></div>
+    <div class="btn" style="flex-direction:column;gap:0;line-height:1.2;white-space:nowrap"><span>Tarkas Spatial</span><span class="mono" style="color:var(--ice);font-weight:400;font-size:10px">Cinema 5.1 · 70%</span></div>
+  </div>
+  <div class="path"><span>Sinal <b>−3,0 dB</b> de folga · limitador <b>desligado</b> · sem corte</span><span>›</span></div>
+</div>
+</div>
+
+<!-- 2. AVANÇADO -->
+<div>
+<div class="cap"><b>02</b> · Avançado (folha “Ajustes”, pelo ⋯)</div>
+<div class="phone">
+  <div class="status"></div>
+  <div class="top"><div><div class="title">Equalizer</div></div></div>
+  <div class="scrim"></div>
+  <div class="sheet">
+    <div class="grab"></div>
+    <div class="title" style="font-size:20px">Ajustes</div>
+    <div class="sec">Alcance</div>
+    <div class="row"><span>Só o Tarkas</span><span>seleccionado</span></div>
+    <div class="row"><span>Todo o sistema</span><span>precisa de root</span></div>
+    <div class="sec">Fone</div>
+    <div class="row"><span>Correção do fone</span><span>Buds2 Pro · AutoEq</span></div>
+    <div class="row"><span>Uma correção por saída</span><span class="sw on"></span></div>
+    <div class="sec">Tom</div>
+    <div class="row"><span>Graves (prateleira)</span><span>+2 dB</span></div>
+    <div class="row"><span>Agudos (prateleira)</span><span>0 dB</span></div>
+    <div class="sec">Espaço</div>
+    <div class="row"><span>Tarkas Spatial</span><span class="sw on"></span></div>
+    <div class="row"><span>Modo fixado na tela principal</span><span>Cinema 5.1 ›</span></div>
+    <div class="row"><span>Sutil · Padrão · Amplo · Cinema 5.1</span><span>ajuste fino ›</span></div>
+    <div class="row"><span>Intensidade</span><span>70%</span></div>
+    <div class="row"><span>Rastreio de cabeça</span><span>Android 13+</span></div>
+    <div class="sec">Volume</div>
+    <div class="row"><span>Normalização</span><span>por faixa</span></div>
+    <div class="row"><span>Crossfade</span><span>4 s</span></div>
+    <div class="sec">Curvas</div>
+    <div class="row"><span>Copiar curva</span><span>texto</span></div>
+    <div class="row"><span>Importar curva</span><span>área de transferência</span></div>
+  </div>
+</div>
+</div>
+
+<!-- 3. ENGENHARIA -->
+<div>
+<div class="cap"><b>03</b> · Engenharia (folha “Sinal”, pela linha de baixo)</div>
+<div class="phone">
+  <div class="status"></div>
+  <div class="top"><div><div class="title">Equalizer</div></div></div>
+  <div class="scrim"></div>
+  <div class="sheet">
+    <div class="grab"></div>
+    <div class="title" style="font-size:20px">Sinal</div>
+    <div class="sec">Caminho</div>
+    <div class="row"><span>Entrada</span><span>faixa · 44,1 kHz</span></div>
+    <div class="row"><span>EQ + tom</span><span>10 bandas</span></div>
+    <div class="row"><span>Espaço</span><span>desligado</span></div>
+    <div class="row"><span>Limitador</span><span>desligado</span></div>
+    <div class="row"><span>Saída</span><span>Buds2 Pro · 48 kHz</span></div>
+    <div class="sec">Medidas</div>
+    <div class="m">
+      <div><small>Folga</small><strong>−3,0 dB</strong></div>
+      <div><small>Pico</small><strong>−1,8 dBFS</strong></div>
+      <div><small>Corte</small><strong>0</strong></div>
+      <div><small>Limitador</small><strong>0,0 dB</strong></div>
+    </div>
+    <div class="sec">Espectro</div>
+    <div class="row"><span>Mostrar espectro</span><span class="sw on"></span></div>
+    <div class="row"><span>Banda 4 · frequência, ganho, Q</span><span>250 Hz · +3,0 · 1,10</span></div>
+  </div>
+</div>
+</div>
+
+</div>
+
+<h2>O que muda e o que não muda</h2>
+<div class="grid2">
+<div class="box"><h3>Muda</h3><ul>
+<li><b>A curva vira o centro.</b> Hoje ela tem 80 dp e fica embaixo; passa a ter 132 dp no alto, com o espectro ao fundo, e é a primeira coisa que se lê.</li>
+<li><b>Um título e uma linha de rota.</b> “Equalizer” e a saída em mono, no lugar de uma linha cinza solta.</li>
+<li><b>Liga/desliga único</b> no canto (EQ). O limitador vai para a folha Sinal e para a linha de baixo.</li>
+<li><b>Faders com valor e frequência em mono</b>, linha do zero, e só a banda selecionada em Ice.</li>
+<li><b>Três camadas explícitas</b> em vez de um menu ⋯ que mistura tudo.</li>
+</ul></div>
+<div class="box"><h3>Não muda</h3><ul>
+<li>Nenhuma função some: gráfico e paramétrico, graves e agudos, comparar, presets, importar e exportar curva, correção do fone, alcance, espacial, rastreio de cabeça, normalização, crossfade.</li>
+<li>Paleta, fontes, movimento de 150 a 300 ms, Haze nos materiais.</li>
+<li>Os controles de toque do EqKnob, do fader e do gráfico (gestos e testTags).</li>
+<li>O paisagem em duas colunas.</li>
+</ul></div>
+<div class="box"><h3>Ritmo visual (contra monotonia)</h3><ul>
+<li>Três tamanhos de peso: título 28, controles 14 e dados em mono 10 a 12.</li>
+<li>Uma peça densa (curva e faders) entre duas calmas (cabeçalho e dock).</li>
+<li>Ice só no que está ativo: EQ ligado, banda selecionada, graves ou agudos fora de zero. Abaixo de 5% da composição.</li>
+<li>Elevação por cor de superfície e fio de 1 dp, sem sombra.</li>
+</ul></div>
+</div>
+
+<h2>Análise: o que cada elemento faz e onde deve ficar</h2>
+<p class="sub">Julgamento com base no código atual (função confirmada por leitura; utilidade é minha avaliação, não medida em uso).</p>
+<table>
+<tr><th>Elemento</th><th>Para que serve</th><th>Veredito</th></tr>
+<tr><td>Liga/desliga EQ</td><td>Contorna toda a cadeia.</td><td><b>Fica na principal.</b> Ação mais básica.</td></tr>
+<tr><td>Preset (nome + modificado)</td><td>Escolhe, salva e compara curvas.</td><td><b>Fica.</b> Ponto de partida de quem não quer mexer banda a banda.</td></tr>
+<tr><td>Saída e taxa (Buds2 Pro · 48 kHz)</td><td>Mostra para onde o som vai; a correção do fone depende disso.</td><td><b>Fica</b>, só como texto. Explica por que a curva muda ao trocar de fone.</td></tr>
+<tr><td>Curva de resposta + espectro</td><td>Mostra o resultado real (filtros + preamp). O espectro mostra o que está tocando.</td><td><b>Fica e cresce.</b> É a prova visual do que se ouve. O espectro é opcional (consome CPU).</td></tr>
+<tr><td>Faders das bandas</td><td>Ajuste principal.</td><td><b>Fica.</b> Precisa de alternativa por toque (campo numérico, já existe).</td></tr>
+<tr><td>Gráfico / Paramétrico</td><td>Troca entre faders fixos e bandas com frequência, Q e tipo.</td><td><b>Fica.</b> Sem isso o público audiófilo não ajusta Q nem tipo de filtro.</td></tr>
+<tr><td>Graves e Agudos (knobs)</td><td>Duas prateleiras rápidas.</td><td class="warn"><b>Discutível na principal.</b> Repete o que as bandas de baixo e de cima já fazem. Sugiro tirar da principal e deixar em Avançado, ou manter só se você usa muito. Decisão sua.</td></tr>
+<tr><td>Tarkas Spatial (novo no lugar de "Segurar")</td><td>Abre a folha do espacial (cenário, intensidade, rastreio de cabeça).</td><td><b>Fica.</b> Atalho para a função que diferencia o app.</td></tr>
+<tr><td>"Segurar: sem EQ" (removido da principal por você)</td><td>Compara com e sem EQ, com volume igualado ("Volume matched").</td><td class="warn"><b>Existe e é a função mais importante para ouvido treinado.</b> Sem volume igualado, o mais alto parece melhor. Sugiro mantê-la, mas fora do dock: toque longo no liga/desliga EQ e item no menu ⋯ do preset.</td></tr>
+<tr><td>Linha de sinal (folga, limitador, corte)</td><td>Diz se há risco de distorção.</td><td><b>Fica como uma linha.</b> Detalhe vai para a folha Engenharia.</td></tr>
+<tr><td>Alcance (só Tarkas / sistema)</td><td>Define onde o EQ atua.</td><td><b>Avançado.</b> Muda raramente.</td></tr>
+<tr><td>Normalização, crossfade</td><td>Volume entre faixas e transição.</td><td><b>Avançado.</b> Pertencem ao player, mas já estão na aba; manter, sem destaque.</td></tr>
+<tr><td>Preamp, preamp automático, balanço, largura, teto do limitador</td><td>Já existem em Avançado.</td><td><b>Ficam em Avançado.</b> Preamp automático é a proteção contra clipping; merece resumo na linha de sinal.</td></tr>
+</table>
+<p class="sub">Nada aqui precisa deixar de existir no app. A única dúvida real é graves/agudos na tela principal.</p>
+
+<h2>O que falta para ser um bom equalizador</h2>
+<p class="sub">Já existem: bandas paramétricas com tipo de filtro (pico, prateleiras, passa-alta, entre outros), Q, preamp manual e automático, balanço, largura estéreo, limitador, importar e exportar no formato AutoEq/APO, correção por fone, comparação com volume igualado. Lacunas que não achei no código:</p>
+<table>
+<tr><th>Falta</th><th>Por que importa</th><th>Custo</th></tr>
+<tr><td><b>Desfazer / refazer geral</b></td><td>Hoje só desfaz a exclusão de banda. Quem ajusta por ouvido erra e quer voltar.</td><td>Baixo: pilha de estados do EQ.</td></tr>
+<tr><td><b>Ouvir uma banda isolada (solo)</b></td><td>Achar o problema em uma frequência.</td><td>Médio: filtro passa-faixa temporário no motor.</td></tr>
+<tr><td><b>Dois slots A/B de curva</b></td><td>Comparar duas curvas, não só "com e sem".</td><td>Baixo a médio.</td></tr>
+<tr><td><b>Mono e inversão de polaridade</b></td><td>Verificar fase e compatibilidade; comum em ferramentas de áudio sério.</td><td>Baixo no motor, um interruptor cada.</td></tr>
+<tr><td><b>Indicador de pico em tempo real</b></td><td>Ver o clipping acontecendo, não só a folga calculada.</td><td>Médio; parte já existe no medidor de loudness.</td></tr>
+<tr><td><b>Alvo de resposta (curva Harman, por exemplo)</b></td><td>Referência para comparar a curva do fone.</td><td>Médio; exige dados de referência e licença conferida.</td></tr>
+</table>
+<p class="sub warn">Não fiz uma varredura completa do motor: a lista acima vem de busca por termos no código, então algo pode existir com outro nome. Confirmo antes de implementar qualquer item.</p>
+
+<h2>Critérios que a implementação vai provar</h2>
+<table>
+<tr><th>Critério</th><th>Como se verifica</th></tr>
+<tr><td>Contraste AA</td><td>Texto 4,5:1 e componentes 3:1, calculado para cada par de cor; cinza #8C8C8C sobre #080808 = 5,96. Teste nos dois temas.</td></tr>
+<tr><td>Alvos de toque</td><td>Todos ≥ 48 dp com 8 dp entre eles. Faders têm alternativa por toque e por botão (WCAG 2.5.7).</td></tr>
+<tr><td>TalkBack</td><td>Ordem de leitura: título, EQ, preset, curva, bandas, dock, sinal. Cada fader anuncia banda, frequência e ganho; ajuste por ação, sem arrastar.</td></tr>
+<tr><td>Texto escalável</td><td>Teste a 200% e em paisagem: nada fica coberto. A linha “Sinal” quebra em duas linhas em vez de cortar.</td></tr>
+<tr><td>Desempenho</td><td>Build perf no S23 (120 Hz): troca de aba com no máximo 1 quadro ≥ 16 ms, medido antes e depois com dumpsys gfxinfo. Animações próprias param quando a aba não está visível.</td></tr>
+<tr><td>Estados</td><td>Matriz com EQ desligado, sem espectro permitido, sem fone, alto-falante com correção, limitador atuando, corte.</td></tr>
+<tr><td>Testes existentes</td><td>testTags e semântica mantidos; suíte e lint iguais ou melhores.</td></tr>
+</table>
+
+<h2>Limites desta proposta</h2>
+<ul>
+<li class="warn">Não vi a tela atual rodando: o S23 não foi usado. A comparação “antes” vem do código (EqPowerConsole, EqStrip, EqGraph), não de captura.</li>
+<li class="warn">O mockup é HTML estático: não prova movimento, gesto nem desempenho. Esses itens só se verificam no aparelho.</li>
+<li class="warn">O ganho do fader mostrado em cada banda e a altura de 132 dp para a curva são sugestões; a altura dos faders cai uns 50 dp em tela de 6,1 pol. A alternativa é manter a curva em 80 dp e destacar só o cabeçalho e o dock.</li>
+</ul>
+</div>
+
+<script>
+const gains=[1,2,3,3,1,0,-1,-1,0,2], hz=["31","62","125","250","500","1k","2k","4k","8k","16k"];
+const el=document.getElementById('faders');
+gains.forEach((g,i)=>{
+  const f=document.createElement('div');f.className='f'+(i===3?' sel':'');
+  f.innerHTML=`<div class="v">${g>0?'+':''}${g}</div><div class="tr"><div class="th" style="top:${50-g*3.6}%;transform:translateY(-50%)"></div></div><div class="hz">${hz[i]}</div>`;
+  el.appendChild(f);
+});
+const z=document.createElement('div');z.className='zero';z.style.top='calc(50% + 4px)';el.appendChild(z);
+// curve + spectrum
+const s=document.getElementById('curve');
+let bars='';for(let i=0;i<48;i++){const h=10+Math.abs(Math.sin(i*.4)*50)*(1-i/70)+Math.random()*10;bars+=`<rect x="${i*6.6+1}" y="${116-h}" width="4.4" height="${h}" fill="#F2F2F0" opacity=".07"/>`;}
+let pts=[];gains.forEach((g,i)=>pts.push([20+i*31.1,58-g*5.5]));
+let d='M'+pts.map(p=>p.join(',')).join(' L');
+s.innerHTML=`<line x1="0" x2="320" y1="58" y2="58" stroke="#2D2D2D" stroke-dasharray="3 3"/>${bars}<path d="${d}" fill="none" stroke="#F2F2F0" stroke-width="2" stroke-linejoin="round"/><circle cx="${pts[3][0]}" cy="${pts[3][1]}" r="5" fill="#7EE3EA"/>`;
+</script>
+</body>
+</html>

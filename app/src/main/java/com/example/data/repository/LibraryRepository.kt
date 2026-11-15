@@ -1,145 +1,175 @@
 package com.example.data.repository
 
 import android.content.Context
+import androidx.room.withTransaction
+import com.example.R
+import com.example.data.db.AppDatabase
+import com.example.data.db.FavoriteEntity
+import com.example.data.db.PlaylistEntity
+import com.example.data.db.PlaylistTrackEntity
+import com.example.data.diagnostics.Diagnostics
+import com.example.data.library.LibraryMigration
+import com.example.data.library.SerialWorker
+import com.example.data.library.TrackIds
+import com.example.data.library.toEntity
+import com.example.data.library.toTrack
 import com.example.data.model.Playlist
 import com.example.data.model.Track
-import com.example.data.model.TrackJson
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import org.json.JSONArray
-import org.json.JSONObject
 
 /**
- * Favorites and playlists, persisted locally.
+ * Favorites and playlists, stored in Room (`favorites`, `playlists`, `playlist_tracks`, `tracks`).
  *
- * Playlists only keep track ids, so a snapshot of every saved track is stored too.
- * That way streamed or local tracks still show up after the app restarts.
- * Local `content://` files may need to be re-added if Android revoked access to them.
+ * Every database access runs on one background worker, in order; the state the screens read is
+ * published from there once the row is written. On the first start the old SharedPreferences JSON is
+ * moved in ([LibraryMigration]). Playlists only keep track ids, so a snapshot of every saved track is
+ * kept too; local `content://` files may need to be re-added if Android revoked access to them.
  */
-class LibraryRepository(context: Context) {
-  private val prefs = context.getSharedPreferences("tarkas_library", Context.MODE_PRIVATE)
+class LibraryRepository(
+  context: Context,
+  private val db: AppDatabase,
+  scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+) {
+  private val appContext = context.applicationContext
+  private val worker = SerialWorker(scope) { Diagnostics.record("LibraryRepository", "a library write failed", it) }
 
-  private val _favorites = MutableStateFlow(loadFavorites())
+  private val _favorites = MutableStateFlow<List<String>>(emptyList())
   /** Favorite track ids, newest first. */
   val favorites: StateFlow<List<String>> = _favorites.asStateFlow()
 
-  private val _playlists = MutableStateFlow(loadPlaylists())
+  private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
   val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
 
-  private val _savedTracks = MutableStateFlow(loadSavedTracks())
+  private val _savedTracks = MutableStateFlow<Map<String, Track>>(emptyMap())
   val savedTracks: StateFlow<Map<String, Track>> = _savedTracks.asStateFlow()
+
+  private var lastStamp = 0L
+
+  init {
+    worker.submit {
+      LibraryMigration.ensure(appContext, db)
+      load()
+    }
+  }
+
+  /** Returns once everything asked so far is written and published. */
+  suspend fun idle() = worker.idle()
 
   fun isFavorite(trackId: String): Boolean = trackId in _favorites.value
 
-  fun toggleFavorite(track: Track) {
+  fun toggleFavorite(track: Track) = worker.submit {
     val current = _favorites.value
     if (track.id in current) {
+      db.favorites().remove(track.id)
       _favorites.value = current - track.id
+      prune()
     } else {
       remember(track)
+      db.favorites().add(FavoriteEntity(track.id, nextStamp()))
       _favorites.value = listOf(track.id) + current
     }
-    persistFavorites()
-    persistSavedTracks()
   }
 
   fun createPlaylist(name: String, firstTrack: Track? = null): Playlist {
     val playlist = Playlist(
-      id = "pl_${System.currentTimeMillis()}",
-      name = name.trim().ifBlank { "Nova playlist" },
+      id = TrackIds.newPlaylist(),
+      name = name.trim().ifBlank { appContext.getString(R.string.library_new_playlist_title) },
       trackIds = if (firstTrack != null) listOf(firstTrack.id) else emptyList()
     )
-    if (firstTrack != null) remember(firstTrack)
-    _playlists.value = _playlists.value + playlist
-    persistPlaylists()
-    persistSavedTracks()
+    worker.submit {
+      db.withTransaction {
+        if (firstTrack != null) remember(firstTrack)
+        db.playlists().insert(PlaylistEntity(playlist.id, playlist.name, nextStamp()))
+        if (firstTrack != null) db.playlists().setTracks(playlist.id, playlist.trackIds)
+      }
+      _playlists.value = _playlists.value + playlist
+    }
+    return playlist
+  }
+
+  /** A playlist with all of [tracks], in that order and with repeats (the queue saved as a playlist). */
+  fun createPlaylist(name: String, tracks: List<Track>): Playlist {
+    val playlist = Playlist(
+      id = TrackIds.newPlaylist(),
+      name = name.trim().ifBlank { appContext.getString(R.string.library_new_playlist_title) },
+      trackIds = tracks.map { it.id }
+    )
+    worker.submit {
+      db.withTransaction {
+        tracks.distinctBy { it.id }.forEach { remember(it) }
+        db.playlists().insert(PlaylistEntity(playlist.id, playlist.name, nextStamp()))
+        db.playlists().setTracks(playlist.id, playlist.trackIds)
+      }
+      _playlists.value = _playlists.value + playlist
+    }
     return playlist
   }
 
   fun renamePlaylist(playlistId: String, name: String) {
     if (name.isBlank()) return
-    _playlists.value = _playlists.value.map { if (it.id == playlistId) it.copy(name = name.trim()) else it }
-    persistPlaylists()
+    worker.submit {
+      db.playlists().rename(playlistId, name.trim())
+      _playlists.value = _playlists.value.map { if (it.id == playlistId) it.copy(name = name.trim()) else it }
+    }
   }
 
-  fun deletePlaylist(playlistId: String) {
+  fun deletePlaylist(playlistId: String) = worker.submit {
+    db.playlists().delete(playlistId)
     _playlists.value = _playlists.value.filter { it.id != playlistId }
-    persistPlaylists()
+    prune()
   }
 
-  fun addToPlaylist(playlistId: String, track: Track) {
-    remember(track)
-    _playlists.value = _playlists.value.map {
-      if (it.id == playlistId && track.id !in it.trackIds) it.copy(trackIds = it.trackIds + track.id) else it
+  fun addToPlaylist(playlistId: String, track: Track) = worker.submit {
+    val playlist = _playlists.value.firstOrNull { it.id == playlistId } ?: return@submit
+    if (track.id in playlist.trackIds) return@submit
+    db.withTransaction {
+      remember(track)
+      db.playlists().insertEntries(listOf(PlaylistTrackEntity(playlistId, playlist.trackIds.size, track.id)))
     }
-    persistPlaylists()
-    persistSavedTracks()
+    _playlists.value = _playlists.value.map { if (it.id == playlistId) it.copy(trackIds = it.trackIds + track.id) else it }
   }
 
-  fun removeFromPlaylist(playlistId: String, trackId: String) {
-    _playlists.value = _playlists.value.map {
-      if (it.id == playlistId) it.copy(trackIds = it.trackIds - trackId) else it
-    }
-    persistPlaylists()
+  fun removeFromPlaylist(playlistId: String, trackId: String) = worker.submit {
+    val playlist = _playlists.value.firstOrNull { it.id == playlistId } ?: return@submit
+    val ids = playlist.trackIds - trackId // the first occurrence only
+    db.playlists().setTracks(playlistId, ids)
+    _playlists.value = _playlists.value.map { if (it.id == playlistId) it.copy(trackIds = ids) else it }
+    prune()
   }
 
-  private fun remember(track: Track) {
+  // --- inside the worker ---
+
+  private suspend fun load() {
+    val entries = db.playlists().entries().groupBy({ it.playlistId }, { it.trackId })
+    _favorites.value = db.favorites().all()
+    _playlists.value = db.playlists().all().map { Playlist(it.id, it.name, entries[it.id].orEmpty()) }
+    lastStamp = maxOf(lastStamp, db.playlists().all().maxOfOrNull { it.createdAt } ?: 0L)
+    val used = (_favorites.value + entries.values.flatten()).distinct()
+    _savedTracks.value = used.chunked(500).flatMap { db.tracks().byIds(it) }.map { it.toTrack() }.associateBy { it.id }
+  }
+
+  /** Keeps the snapshot of a track; a picked file's own row is left as it is. */
+  private suspend fun remember(track: Track) {
+    val existing = db.tracks().byIds(listOf(track.id)).firstOrNull()
+    if (existing == null || !existing.picked) db.tracks().upsert(listOf(track.toEntity()))
     _savedTracks.value = _savedTracks.value + (track.id to track)
   }
 
-  // --- persistence ---
-
-  private fun persistFavorites() {
-    val array = JSONArray()
-    _favorites.value.forEach { array.put(it) }
-    prefs.edit().putString(KEY_FAVORITES, array.toString()).apply()
-  }
-
-  private fun persistPlaylists() {
-    val array = JSONArray()
-    _playlists.value.forEach { p ->
-      val ids = JSONArray()
-      p.trackIds.forEach { ids.put(it) }
-      array.put(JSONObject().put("id", p.id).put("name", p.name).put("tracks", ids))
-    }
-    prefs.edit().putString(KEY_PLAYLISTS, array.toString()).apply()
-  }
-
-  private fun persistSavedTracks() {
-    // Keep only tracks that something still points at.
+  /** Drops the snapshots nothing points at any more. */
+  private suspend fun prune() {
+    db.tracks().deleteUnreferenced()
     val used = _favorites.value.toSet() + _playlists.value.flatMap { it.trackIds }
-    val array = TrackJson.listToJson(_savedTracks.value.values.filter { it.id in used })
-    prefs.edit().putString(KEY_TRACKS, array.toString()).apply()
+    _savedTracks.value = _savedTracks.value.filterKeys { it in used }
   }
 
-  private fun loadFavorites(): List<String> = try {
-    val array = JSONArray(prefs.getString(KEY_FAVORITES, "[]"))
-    (0 until array.length()).map { array.getString(it) }
-  } catch (_: Exception) {
-    emptyList()
-  }
-
-  private fun loadPlaylists(): List<Playlist> = try {
-    val array = JSONArray(prefs.getString(KEY_PLAYLISTS, "[]"))
-    (0 until array.length()).map { i ->
-      val o = array.getJSONObject(i)
-      val ids = o.optJSONArray("tracks") ?: JSONArray()
-      Playlist(o.getString("id"), o.getString("name"), (0 until ids.length()).map { ids.getString(it) })
-    }
-  } catch (_: Exception) {
-    emptyList()
-  }
-
-  private fun loadSavedTracks(): Map<String, Track> = try {
-    TrackJson.listFromJson(JSONArray(prefs.getString(KEY_TRACKS, "[]"))).associateBy { it.id }
-  } catch (_: Exception) {
-    emptyMap()
-  }
-
-  private companion object {
-    const val KEY_FAVORITES = "favorites"
-    const val KEY_PLAYLISTS = "playlists"
-    const val KEY_TRACKS = "saved_tracks"
+  /** A time that never repeats, so the order of two quick actions is kept. */
+  private fun nextStamp(): Long {
+    lastStamp = maxOf(System.currentTimeMillis(), lastStamp + 1)
+    return lastStamp
   }
 }

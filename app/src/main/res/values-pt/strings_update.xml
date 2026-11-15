@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_later">Depois</string>
+    <string name="update_permission_title">Permitir instalar atualizações</string>
+    <string name="update_permission_message">Para instalar versões novas, o Android precisa que você permita a este app instalar apps. Abra a configuração e ative a permissão para o T.A.R.K.A.S. O app só instala as próprias atualizações, conferidas pela assinatura publicada, e nunca enquanto há música tocando.</string>
+    <string name="update_permission_open">Abrir configuração</string>
+    <string name="update_popup_title">Versão %1$s disponível</string>
+    <string name="update_popup_message">Há uma versão nova para baixar. Ela é verificada antes de ser instalada.</string>
+    <string name="update_popup_message_size">Há uma versão nova para baixar (%1$s). Ela é verificada antes de ser instalada.</string>
+    <string name="update_popup_ready">A versão nova já foi baixada e verificada. Instalar agora?</string>
+    <string name="update_popup_dev">Existe uma versão mais nova. Esta versão de desenvolvimento não se atualiza sozinha; abra a página da versão para obtê-la.</string>
+    <string name="update_popup_confirm">Atualizar agora</string>
+    <string name="update_dev_build_notice">Esta é a versão de desenvolvimento, assinada com outra chave que a versão publicada. Por isso ela não se atualiza sozinha: o Android recusaria a instalação ou apagaria os dados. Ela só avisa quando há versão nova. Para atualizá-la, instale pelo adb.</string>
+    <string name="update_problem_no_network">Não foi possível verificar atualizações: sem conexão com a internet. Conecte-se e tente de novo.</string>
+    <string name="update_problem_rate_limited">Não foi possível verificar atualizações: o GitHub limitou as consultas deste aparelho. Tente de novo em cerca de uma hora.</string>
+    <string name="update_problem_server">Não foi possível verificar atualizações: o GitHub não respondeu como esperado. Tente de novo mais tarde.</string>
+    <string name="update_problem_unreadable">Não foi possível ler a resposta do GitHub sobre a última versão. Tente de novo mais tarde; se continuar, baixe o APK pela página de versões.</string>
+    <string name="update_problem_no_apk">A versão publicada não traz um arquivo APK que o app possa instalar. Baixe pela página de versões, se quiser.</string>
+    <string name="update_problem_metered">A atualização espera por uma rede Wi-Fi. Conecte-se a uma, ou desligue \"Só no Wi-Fi\" para baixar agora.</string>
+    <string name="update_problem_download">Não foi possível baixar a atualização: a conexão foi interrompida. Tente de novo.</string>
+    <string name="update_problem_disk">Não foi possível baixar a atualização: não há espaço livre suficiente. Libere espaço e tente de novo.</string>
+    <string name="update_problem_checksum">O arquivo baixado não confere com o checksum publicado e foi descartado. Tente de novo; se repetir, avise a T.A.L.</string>
+    <string name="update_problem_not_an_apk">O arquivo baixado não é um APK válido e foi descartado. Tente de novo; se repetir, avise a T.A.L.</string>
+    <string name="update_problem_wrong_package">O arquivo baixado é de outro app e foi descartado. Nada foi instalado.</string>
+    <string name="update_problem_not_newer">O arquivo baixado não é mais novo que a versão instalada e foi descartado. Nada foi instalado.</string>
+    <string name="update_problem_signature">O arquivo baixado foi assinado com outra chave, e o Android não o instalaria por cima. Nada foi alterado. Instale a nova versão manualmente, mantendo ou apagando os dados.</string>
+    <string name="update_problem_not_allowed">Para instalar atualizações, permita que o T.A.R.K.A.S. instale apps. Abra a permissão, ative e volte.</string>
+    <string name="update_problem_install_failed">O Android recusou a instalação da atualização. Nada foi alterado; tente de novo.</string>
+    <string name="update_problem_busy_playing">A atualização está pronta e espera a música parar para não interromper a reprodução. Toque em \"Instalar agora\" quando quiser.</string>
+    <string name="settings_surface_solid">Sólido</string>
+    <string name="settings_surface_frosted">Vidro fosco</string>
+    <string name="settings_surface_liquid">Liquid glass</string>
+    <string name="list_anim_none">Nenhuma</string>
+    <string name="list_anim_slide">Deslizar</string>
+    <string name="list_anim_fade">Esmaecer</string>
+    <string name="list_anim_zoom">Zoom</string>
+    <string name="list_anim_side">Lateral</string>
+    <string name="list_anim_flip">Virar</string>
+    <string name="list_anim_bounce">Quicar</string>
+    <string name="update_channel_name">Atualizações</string>
+    <string name="update_ready_title">Atualização do T.A.R.K.A.S. pronta</string>
+    <string name="update_ready_text">Toque para confirmar a instalação.</string>
+    <string name="player_more_options_for">Mais opções para %1$s</string>
+    <string name="update_problem_hash_unavailable">A atualização não foi instalada: não foi possível obter o checksum publicado, então o arquivo não pode ser verificado. Conecte-se à internet e toque em \"Instalar agora\" de novo.</string>
+    <string name="settings_update_cancel_download">Cancelar download</string>
+    <string name="settings_update_notes_title">Novidades em %1$s</string>
+</resources>

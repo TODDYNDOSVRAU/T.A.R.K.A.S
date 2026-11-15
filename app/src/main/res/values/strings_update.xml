@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_later">Later</string>
+    <string name="update_permission_title">Allow installing updates</string>
+    <string name="update_permission_message">To install new versions, Android needs you to allow this app to install apps. Open the setting and turn on the permission for T.A.R.K.A.S. The app only installs its own updates, checked against the published signature, and never while music is playing.</string>
+    <string name="update_permission_open">Open setting</string>
+    <string name="update_popup_title">Version %1$s available</string>
+    <string name="update_popup_message">A new version is ready to download. It is verified before it is installed.</string>
+    <string name="update_popup_message_size">A new version is ready to download (%1$s). It is verified before it is installed.</string>
+    <string name="update_popup_ready">The new version is downloaded and verified. Install it now?</string>
+    <string name="update_popup_dev">A newer version exists. This development build does not update itself; open the release page to get it.</string>
+    <string name="update_popup_confirm">Update now</string>
+    <string name="update_dev_build_notice">This is the development build, signed with a different key from the published one. For that reason it does not update itself: Android would refuse the install or erase the data. It only tells you when a new version exists. To update it, install through adb.</string>
+    <string name="update_problem_no_network">Could not check for updates: no internet connection. Connect and try again.</string>
+    <string name="update_problem_rate_limited">Could not check for updates: GitHub has limited requests from this device. Try again in about an hour.</string>
+    <string name="update_problem_server">Could not check for updates: GitHub did not respond as expected. Try again later.</string>
+    <string name="update_problem_unreadable">Could not read GitHub\'s answer about the latest version. Try again later; if it keeps happening, download the APK from the releases page.</string>
+    <string name="update_problem_no_apk">The published version has no APK file the app can install. Download it from the releases page if you want it.</string>
+    <string name="update_problem_metered">The update is waiting for a Wi-Fi network. Connect to one, or turn off \"Wi-Fi only\" to download now.</string>
+    <string name="update_problem_download">Could not download the update: the connection was interrupted. Try again.</string>
+    <string name="update_problem_disk">Could not download the update: there is not enough free space. Free some space and try again.</string>
+    <string name="update_problem_checksum">The downloaded file does not match the published checksum and was discarded. Try again; if it repeats, tell T.A.L.</string>
+    <string name="update_problem_not_an_apk">The downloaded file is not a valid APK and was discarded. Try again; if it repeats, tell T.A.L.</string>
+    <string name="update_problem_wrong_package">The downloaded file belongs to another app and was discarded. Nothing was installed.</string>
+    <string name="update_problem_not_newer">The downloaded file is not newer than the installed version and was discarded. Nothing was installed.</string>
+    <string name="update_problem_signature">The downloaded file was signed with a different key, and Android would not install it over this one. Nothing was changed. Install the new version manually, keeping or erasing the data.</string>
+    <string name="update_problem_not_allowed">To install updates, allow T.A.R.K.A.S. to install apps. Open the permission, turn it on and come back.</string>
+    <string name="update_problem_install_failed">Android refused to install the update. Nothing was changed; try again.</string>
+    <string name="update_problem_busy_playing">The update is ready and waits for the music to stop so playback is not interrupted. Tap \"Install now\" whenever you like.</string>
+    <string name="settings_surface_solid">Solid</string>
+    <string name="settings_surface_frosted">Frosted glass</string>
+    <string name="settings_surface_liquid">Liquid glass</string>
+    <string name="list_anim_none">None</string>
+    <string name="list_anim_slide">Slide</string>
+    <string name="list_anim_fade">Fade</string>
+    <string name="list_anim_zoom">Zoom</string>
+    <string name="list_anim_side">Side</string>
+    <string name="list_anim_flip">Flip</string>
+    <string name="list_anim_bounce">Bounce</string>
+    <string name="update_channel_name">Updates</string>
+    <string name="update_ready_title">T.A.R.K.A.S. update ready</string>
+    <string name="update_ready_text">Tap to confirm the installation.</string>
+    <string name="player_more_options_for">More options for %1$s</string>
+    <string name="update_problem_hash_unavailable">The update was not installed: the published checksum could not be fetched, so the file cannot be verified. Connect to the internet and tap \"Install now\" again.</string>
+    <string name="settings_update_cancel_download">Cancel download</string>
+    <string name="settings_update_notes_title">What is new in %1$s</string>
+</resources>

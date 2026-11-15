@@ -3,7 +3,9 @@ package com.example.data.audio.dsp
 import com.example.data.model.EqBand
 import com.example.data.model.EqSettings
 import com.example.data.model.FilterType
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.abs
+import kotlin.math.log10
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
@@ -34,14 +36,20 @@ class EqDsp {
     val rightGain: Float,
     val width: Float,
     val limiterEnabled: Boolean,
-    val ceiling: Float
+    val ceiling: Float,
+    /** Gain on the untouched signal, so a comparison without the equalizer plays at the same volume; 1 = none. */
+    val dryGain: Float = 1f
   ) {
     val slots: Int get() = coefs.size / 5
   }
 
   @Volatile private var settings: EqSettings = EqSettings()
   @Volatile private var sampleRate = DEFAULT_RATE
-  @Volatile private var plan: Plan = buildPlan(settings, DEFAULT_RATE)
+  /** True while the spatial stage (which runs before this equalizer) is on; see [SPATIAL_HEADROOM_DB]. */
+  @Volatile private var spatialStage = false
+  /** The equalizer state to match in volume while comparing without it, or null when not comparing. */
+  @Volatile private var reference: EqSettings? = null
+  @Volatile private var plan: Plan = buildPlan(settings, DEFAULT_RATE, false, null)
 
   private var channels = 2
 
@@ -58,6 +66,8 @@ class EqDsp {
   private var width = 1f
   /** 0 = bypassed, 1 = fully processed; glides when the equalizer is switched. */
   private var mix = 1f
+  /** Gain of the untouched signal heard now, gliding towards the plan's. */
+  private var dryGain = 1f
 
   private var smoothCoef = smoothCoefFor(DEFAULT_RATE)
 
@@ -74,19 +84,43 @@ class EqDsp {
   private var holdLeft = 0
   private var releaseCoef = releaseCoefFor(DEFAULT_RATE)
 
+  // What the limiter and the final clamp did since the last [takeActivity]; written by the audio thread, read by the UI.
+  private val lowestGainBits = AtomicInteger(java.lang.Float.floatToIntBits(1f))
+  private val clippedSamples = AtomicInteger(0)
+
   fun configure(sampleRate: Int, channels: Int) {
     this.channels = channels.coerceAtLeast(1)
     smoothCoef = smoothCoefFor(sampleRate)
     releaseCoef = releaseCoefFor(sampleRate)
     lookahead = lookaheadFor(sampleRate)
     this.sampleRate = sampleRate
-    plan = buildPlan(settings, sampleRate)
+    plan = buildPlan(settings, sampleRate, spatialStage, reference)
     reset()
   }
 
   fun update(newSettings: EqSettings) {
     settings = newSettings
-    plan = buildPlan(newSettings, sampleRate)
+    plan = buildPlan(newSettings, sampleRate, spatialStage, reference)
+  }
+
+  /**
+   * Tells the equalizer whether the spatial stage is on. With the automatic preamp on, the level then drops
+   * by [SPATIAL_HEADROOM_DB] more; the preamp glides to it like to any other change, so switching the
+   * effect while music plays does not click.
+   */
+  fun setSpatialStage(on: Boolean) {
+    spatialStage = on
+    plan = buildPlan(settings, sampleRate, on, reference)
+  }
+
+  /**
+   * While comparing without the equalizer, [reference] is the equalizer that was on: the untouched signal then
+   * plays at the volume that curve would have given on average ([loudnessMatchDb]), so the comparison judges
+   * the tone and not the loudness. Null ends it. The gain glides, like any other change.
+   */
+  fun setCompareReference(reference: EqSettings?) {
+    this.reference = reference
+    plan = buildPlan(settings, sampleRate, spatialStage, reference)
   }
 
   /** Clears filter memory, e.g. after a seek, so old samples do not ring into new ones. */
@@ -105,6 +139,7 @@ class EqDsp {
     right = p.rightGain
     width = p.width
     mix = if (p.enabled) 1f else 0f
+    dryGain = p.dryGain
   }
 
   /** Processes [frames] interleaved frames of [buffer] in place. Samples are in -1..1. */
@@ -112,10 +147,10 @@ class EqDsp {
     var p = plan
     if (p.sampleRate != sampleRate) {
       // A plan built for the previous rate (an update raced with configure): rebuild for this one.
-      p = buildPlan(settings, sampleRate)
+      p = buildPlan(settings, sampleRate, spatialStage, reference)
       plan = p
     }
-    if (!p.enabled && mix <= 0f) return
+    if (!p.enabled && mix <= 0f && dryGain == 1f && p.dryGain == 1f) return
     val ch = channels
     val nf = p.slots
     val target = p.coefs
@@ -137,6 +172,8 @@ class EqDsp {
     val kf = k.toFloat()
     val mixTarget = if (p.enabled) 1f else 0f
     var gliding = !cur.contentEquals(target)
+    var lowestGain = 1f
+    var clips = 0
 
     for (frame in 0 until frames) {
       if (gliding) {
@@ -157,11 +194,12 @@ class EqDsp {
       right = glide(right, p.rightGain, kf)
       width = glide(width, p.width, kf)
       mix = glide(mix, mixTarget, kf)
+      dryGain = glide(dryGain, p.dryGain, kf)
 
       val base = frame * ch
       for (c in 0 until ch) {
         val dry = buffer[base + c]
-        dryFrame[c] = dry
+        dryFrame[c] = dry * dryGain
         var x = (dry * preamp).toDouble()
         val s = c * 2
         for (f in 0 until nf) {
@@ -194,10 +232,40 @@ class EqDsp {
         for (c in 0 until ch) buffer[base + c] = buffer[base + c] * mix + dryFrame[c] * (1f - mix)
       }
 
-      if (p.limiterEnabled) limit(buffer, base, ch, p.ceiling)
-      // Safety: never hand the sink a sample outside the legal range.
-      for (c in 0 until ch) buffer[base + c] = buffer[base + c].coerceIn(-1f, 1f)
+      if (p.limiterEnabled) {
+        limit(buffer, base, ch, p.ceiling)
+        if (limiterGain < lowestGain) lowestGain = limiterGain
+      }
+      // Safety: never hand the sink a sample outside the legal range. A sample caught here is a clip.
+      for (c in 0 until ch) {
+        val v = buffer[base + c]
+        if (v > 1f || v < -1f) {
+          clips++
+          buffer[base + c] = v.coerceIn(-1f, 1f)
+        }
+      }
     }
+    publishActivity(lowestGain, clips)
+  }
+
+  /** Folds this buffer's lowest limiter gain and clip count into what [takeActivity] will report. */
+  private fun publishActivity(lowestGain: Float, clips: Int) {
+    if (clips > 0) clippedSamples.addAndGet(clips)
+    if (lowestGain >= 1f) return
+    while (true) {
+      val seen = lowestGainBits.get()
+      if (java.lang.Float.intBitsToFloat(seen) <= lowestGain) return
+      if (lowestGainBits.compareAndSet(seen, java.lang.Float.floatToIntBits(lowestGain))) return
+    }
+  }
+
+  /**
+   * What the limiter and the clamp did since the last call, then starts over. Called from the UI thread a
+   * few times a second; the audio thread only does two atomic updates per buffer.
+   */
+  fun takeActivity(): LimiterActivity {
+    val gain = java.lang.Float.intBitsToFloat(lowestGainBits.getAndSet(java.lang.Float.floatToIntBits(1f)))
+    return LimiterActivity(reductionDb = gainToReductionDb(gain), clippedSamples = clippedSamples.getAndSet(0))
   }
 
   /** One step of a smooth approach to [target], landing on it exactly once inaudibly close. */
@@ -246,6 +314,19 @@ class EqDsp {
 
   companion object {
     private const val DEFAULT_RATE = 48000
+    /**
+     * PROVISIONAL display threshold (not a product target; the owner has not set one): the limiter is shown as
+     * working only when it lowered the level by at least this many dB, so the settling tail of the release does
+     * not flicker the indicator.
+     */
+    const val LIMITER_SHOWN_DB = 0.1f
+
+    /** Largest volume correction the comparison applies, in dB. */
+    const val MATCH_LIMIT_DB = 12f
+
+    /** How far down a limiter gain is, in dB, 0 when it did nothing. */
+    fun gainToReductionDb(gain: Float): Float = if (gain >= 1f) 0f else (-20.0 * log10(gain.coerceAtLeast(1e-6f).toDouble())).toFloat()
+
     private const val RELEASE_SECONDS = 0.12
     private const val LOOKAHEAD_SECONDS = 0.002
     /** How long a change of coefficients or gain takes to settle (about 63% after this). */
@@ -253,6 +334,14 @@ class EqDsp {
     private const val TONE_Q = 0.707
     /** Below this, the automatic preamp leaves the level alone. */
     private const val AUTO_PREAMP_MIN_DB = 0.05
+
+    /**
+     * Extra attenuation of the automatic preamp while the spatial stage is on, in dB. The owner decided it
+     * (2026-11-13) from one measurement: on a real 44.1 kHz track the upmix and virtualizer with the room at
+     * 0.35 raised the peak by up to 3.33 dB (sample peak) and 2.16 dB (true peak, 4x oversampled); see
+     * tools/spatial_proto/peak_headroom.py. A single track, so it is a decision, not a guarantee.
+     */
+    const val SPATIAL_HEADROOM_DB = 3.5f
 
     private fun releaseCoefFor(rate: Int): Float = (1.0 - exp(-1.0 / (RELEASE_SECONDS * rate))).toFloat()
     private fun smoothCoefFor(rate: Int): Double = 1.0 - exp(-1.0 / (SMOOTH_SECONDS * rate))
@@ -263,7 +352,7 @@ class EqDsp {
     /** Frequencies where the automatic preamp looks for the loudest boost: 1/6 octave, 20 Hz to 20 kHz. */
     private val PROBE_FREQS: DoubleArray = DoubleArray(61) { 20.0 * 2.0.pow(it / 6.0) }.filter { it <= 20000.0 }.toDoubleArray()
 
-    private fun bandsOf(s: EqSettings): List<EqBand> = s.device?.bands.orEmpty() + s.activeBands
+    private fun bandsOf(s: EqSettings): List<EqBand> = s.device?.bands.orEmpty() + s.bands
 
     /** The filters that actually change the sound; flat peaks and shelves are skipped. Used for the curve. */
     fun activeFilters(s: EqSettings, sampleRate: Int): List<BiquadCoefficients> {
@@ -305,16 +394,17 @@ class EqDsp {
       return out
     }
 
-    private fun buildPlan(s: EqSettings, sampleRate: Int): Plan = Plan(
+    private fun buildPlan(s: EqSettings, sampleRate: Int, spatialStage: Boolean, reference: EqSettings?): Plan = Plan(
       sampleRate = sampleRate,
       enabled = s.enabled,
       coefs = slotCoefficients(s, sampleRate),
-      preampGain = dbToGain(totalPreampDb(s)),
+      preampGain = dbToGain(totalPreampDb(s, spatialStage)),
       leftGain = min(1f, 1f - s.balance),
       rightGain = min(1f, 1f + s.balance),
       width = s.stereoWidth,
       limiterEnabled = s.limiterEnabled,
-      ceiling = dbToGain(s.limiterCeilingDb)
+      ceiling = dbToGain(s.limiterCeilingDb),
+      dryGain = if (reference == null || s.enabled) 1f else dbToGain(loudnessMatchDb(reference, spatialStage))
     )
 
     /**
@@ -328,14 +418,40 @@ class EqDsp {
       return db
     }
 
+    /**
+     * By how much the equalizer [s] changes the average level, in dB (negative: it lowers it), with the spatial
+     * headroom included. Averages the response over 1/6-octave points from 20 Hz to 20 kHz in the power domain,
+     * which weighs every octave equally (the spectrum of pink noise, close to music).
+     *
+     * PROVISIONAL: this weighting is not a product target. A perceptual weighting (K or A) may suit better;
+     * only listening on a device can say. Limited to +-[MATCH_LIMIT_DB] so a wild curve cannot make the untouched
+     * signal unreasonably loud or quiet.
+     */
+    fun loudnessMatchDb(s: EqSettings, spatialStage: Boolean = false): Float {
+      if (!s.enabled) return 0f
+      val headroom = spatialHeadroomDb(s, spatialStage).toDouble()
+      var power = 0.0
+      for (f in PROBE_FREQS) power += 10.0.pow((responseDb(s, f) + headroom) / 10.0)
+      val db = 10.0 * log10(power / PROBE_FREQS.size)
+      return db.toFloat().coerceIn(-MATCH_LIMIT_DB, MATCH_LIMIT_DB)
+    }
+
     /** The user's preamp, the headroom the fone correction asks for and, if on, the automatic preamp. */
-    fun totalPreampDb(s: EqSettings): Float = cached(s, DEFAULT_RATE).second
+    fun totalPreampDb(s: EqSettings, spatialStage: Boolean = false): Float =
+      cached(s, DEFAULT_RATE).second + spatialHeadroomDb(s, spatialStage)
+
+    /** What the spatial stage adds to the automatic preamp: [SPATIAL_HEADROOM_DB] lower, only with the automatic preamp on. */
+    private fun spatialHeadroomDb(s: EqSettings, spatialStage: Boolean): Float =
+      if (spatialStage && s.autoPreamp) -SPATIAL_HEADROOM_DB else 0f
 
     /**
      * How much the automatic preamp lowers the level: the loudest boost of the curve, so the curve never
      * goes above 0 dB and the limiter has nothing to do with ordinary music. 0 when nothing is boosted.
      */
-    fun autoPreampDb(s: EqSettings): Float {
+    fun autoPreampDb(s: EqSettings, spatialStage: Boolean = false): Float =
+      curveAutoPreampDb(s) + spatialHeadroomDb(s, spatialStage)
+
+    private fun curveAutoPreampDb(s: EqSettings): Float {
       if (!s.autoPreamp) return 0f
       val filters = activeFilters(s, DEFAULT_RATE)
       if (filters.isEmpty()) return 0f
@@ -355,10 +471,17 @@ class EqDsp {
 
     private fun cached(s: EqSettings, sampleRate: Int): Pair<List<BiquadCoefficients>, Float> {
       cache?.let { if (it.rate == sampleRate && it.settings == s) return it.filters to it.preamp }
-      val preamp = s.preampDb + (s.device?.preampDb ?: 0f) + autoPreampDb(s)
+      val preamp = s.preampDb + (s.device?.preampDb ?: 0f) + curveAutoPreampDb(s)
       val c = Cache(s, sampleRate, activeFilters(s, sampleRate), preamp)
       cache = c
       return c.filters to c.preamp
     }
   }
+}
+
+/** What the output stage did over a stretch of audio: the deepest limiter reduction, and clamped samples. */
+data class LimiterActivity(val reductionDb: Float = 0f, val clippedSamples: Int = 0) {
+  /** The limiter lowered the level enough to show ([EqDsp.LIMITER_SHOWN_DB], provisional). */
+  val limiting: Boolean get() = reductionDb >= EqDsp.LIMITER_SHOWN_DB
+  val clipped: Boolean get() = clippedSamples > 0
 }

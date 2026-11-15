@@ -1,9 +1,12 @@
 package com.example.data.model
 
-enum class VerificationStatus(val label: String) {
-  VERIFIED_FACT("Fato Documentado & Verificado"),
-  HISTORICAL_ANALYSIS("Análise Histórica & Musical"),
-  TECHNICAL_SPEC("Especificação Técnica Acústica")
+import androidx.annotation.StringRes
+import com.example.R
+
+enum class VerificationStatus(@StringRes val labelRes: Int) {
+  VERIFIED_FACT(R.string.assistant_curiosity_status_verified),
+  HISTORICAL_ANALYSIS(R.string.assistant_curiosity_status_historical),
+  TECHNICAL_SPEC(R.string.assistant_curiosity_status_technical)
 }
 
 data class Curiosity(

@@ -5,22 +5,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** How far the equalizer reaches. Chosen on the Áudio screen. */
-enum class EqReach(val key: String, val label: String, val description: String) {
-  APP(
-    "app", "Sem root",
-    "Equaliza as músicas e os áudios que o T.A.R.K.A.S. toca. Não precisa de nada."
-  ),
-  ADB(
-    "adb", "ADB",
-    "Equaliza também os outros apps (Spotify, YouTube, jogos), como o Poweramp Equalizer. " +
-      "Precisa da permissão DUMP, liberada uma vez por um computador."
-  ),
-  ROOT(
-    "root", "Root",
-    "Tudo do modo ADB sem computador: o app libera a permissão sozinho pelo root e usa a saída " +
-      "geral quando o aparelho deixa, para alcançar também os sons sem sessão própria."
-  );
+/** How far the equalizer reaches. Chosen on the Áudio screen; its texts are string resources, mapped in the UI. */
+enum class EqReach(val key: String) {
+  APP("app"),
+  ADB("adb"),
+  ROOT("root");
 
   companion object {
     fun fromKey(key: String?): EqReach = entries.firstOrNull { it.key == key } ?: APP
@@ -37,16 +26,19 @@ data class GlobalEqStatus(
   /** Root mode, but `su` is missing or the user refused it. */
   val rootUnavailable: Boolean = false,
   /** Root mode reached the global output (sounds without a session of their own). */
-  val globalOutput: Boolean = false
+  val globalOutput: Boolean = false,
+  /** Sessions carrying Tarkas Spatial (Android's Virtualizer) right now. */
+  val spatialApps: Int = 0,
+  /** The device refused the Virtualizer: no spatial for other apps here. */
+  val spatialUnsupported: Boolean = false,
+  /** Apps where another equalizer app has the control of the effect, so this curve is not heard. */
+  val appsWithoutControl: Int = 0
 )
 
 /** Shared between the view model (which owns the curve) and [GlobalEqService] (which applies it). */
 object GlobalEq {
   val settings = MutableStateFlow(EqSettings())
   val reach = MutableStateFlow(EqReach.APP)
-
-  /** Audio session of the app's own player, which has its equalizer already (not applied twice). */
-  @Volatile var ownPlayerSession = 0
 
   /**
    * True once the app has put the user's curve and reach here. A service the system restarts on its own
@@ -61,4 +53,10 @@ object GlobalEq {
   internal fun publish(status: GlobalEqStatus) {
     _status.value = status
   }
+
+  /** On/off asked from outside the app's screens (the quick settings tile); the view model applies it. */
+  val enabledRequests = kotlinx.coroutines.flow.MutableSharedFlow<Boolean>(extraBufferCapacity = 4)
+
+  /** Whether a view model collects [enabledRequests]; otherwise the tile writes the preference itself. */
+  @Volatile var appListening = false
 }

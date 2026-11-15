@@ -1,71 +1,95 @@
 package com.example.ui.screens
 
-import androidx.compose.runtime.saveable.rememberSaveable
-import com.example.ui.theme.opensPlayer
+import androidx.compose.foundation.layout.fillMaxHeight
+import com.example.ui.layout.readingColumn
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.snapping.SnapPosition
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.ui.theme.LocalBarInset
-import com.example.ui.theme.pressClickable
-import com.example.ui.theme.glassControl
+import com.example.R
 import com.example.data.model.Playlist
 import com.example.data.model.Track
 import com.example.ui.components.EmptyState
-import com.example.ui.components.TarkasMark
-import com.example.ui.components.TrackArtwork
-import com.example.ui.components.TarkasSectionTitle
+import com.example.ui.components.SearchField
+import com.example.ui.components.SectionHeader
+import com.example.ui.components.topScrollFade
 import com.example.ui.components.TrackActionsMenu
+import com.example.ui.components.TrackArtwork
+import com.example.ui.components.TrackRow
+import com.example.ui.components.highlightClickable
+import com.example.ui.screens.library.TrackDivider
+import com.example.ui.screens.library.itemMotion
+import com.example.ui.screens.library.trackSubtitle
+import com.example.ui.screens.library.trailingEdge
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
+import com.example.ui.theme.LocalBarInset
+import com.example.ui.theme.opensPlayer
+import com.example.ui.theme.pressClickable
+import com.example.ui.theme.listEntrance
+import com.example.ui.viewmodel.OnlineSearchState
 import com.example.ui.viewmodel.TrendingState
-import com.example.ui.theme.staggeredEntrance
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Brush
+import kotlinx.coroutines.delay
+
+/** How long typing must pause before the query goes out to the three services. */
+private const val SearchDebounceMs = 350L
+
+/** Width of a tile in the trending carousel: two and a bit fit a phone, so the next one peeks in. */
+private val TileWidth = Grid.u96 + Grid.u48
+
+/** "Tocadas recentemente" shows this many songs: a shortcut; the full list is in Biblioteca. */
+private const val RecentLimit = 5
+
+private fun clock(ms: Long): String {
+  val totalSec = (ms / 1000).coerceAtLeast(0)
+  return String.format(java.util.Locale.ROOT, "%d:%02d", totalSec / 60, totalSec % 60)
+}
 
 @Composable
 fun HomeScreen(
@@ -89,504 +113,458 @@ fun HomeScreen(
   audiusOffline: Boolean = false,
   onSearchAudiusOnline: (String) -> Unit = {},
   onPlayAudiusResult: (Track) -> Unit = {},
-  youtubeResults: List<Track> = emptyList(),
-  youtubeSearching: Boolean = false,
-  youtubeOffline: Boolean = false,
-  onSearchYouTubeOnline: (String) -> Unit = {},
-  onPlayYouTubeResult: (Track) -> Unit = {},
-  spotifyResults: List<Track> = emptyList(),
-  spotifySearching: Boolean = false,
-  onSearchSpotifyOnline: (String) -> Unit = {},
-  onPlaySpotifyResult: (Track) -> Unit = {},
+  jamendo: OnlineSearchState = OnlineSearchState(),
+  onSearchJamendoOnline: (String) -> Unit = {},
+  onPlayJamendoResult: (Track) -> Unit = {},
+  jamendoPopular: TrendingState = TrendingState(),
+  /** The user's own music above the online rows (default) or below them; set in Ajustes. */
+  musicFirst: Boolean = true,
+  /** Plays and last plays per track id, for "Tocadas recentemente". */
+  onLoadPlayStats: suspend () -> Map<String, com.example.data.playback.TrackStats> = { emptyMap() },
+  /** Where the saved track stopped, for "Continuar ouvindo"; null when there is nothing to continue. */
+  onLoadResume: suspend () -> com.example.data.playback.ResumeInfo? = { null },
+  onResume: () -> Unit = {},
+  onRetryJamendoPopular: () -> Unit = {},
+  onPlayJamendoPopular: (Track) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   var searchQuery by rememberSaveable { mutableStateOf("") }
+  // The query the services were last asked about. Saved with the query, so coming back to Início
+  // (closing the player, rotating) does not send the same searches again.
+  var searchedQuery by rememberSaveable { mutableStateOf("") }
   var showDemos by rememberSaveable { mutableStateOf(false) }
 
-  // The same search bar also searches Audius (the ViewModel waits for a pause in typing).
+  var playStats by remember { mutableStateOf<Map<String, com.example.data.playback.TrackStats>>(emptyMap()) }
+  // Read again when the song that plays changes: a play may have just been counted.
+  LaunchedEffect(currentTrack?.id) { playStats = onLoadPlayStats() }
+
+  var resume by remember { mutableStateOf<com.example.data.playback.ResumeInfo?>(null) }
+  // Read again when the song or the play state changes: pausing is what saves the position.
+  LaunchedEffect(currentTrack?.id, isPlaying) { resume = onLoadResume() }
+
+  val searchAudius by rememberUpdatedState(onSearchAudiusOnline)
+  val searchJamendo by rememberUpdatedState(onSearchJamendoOnline)
   LaunchedEffect(searchQuery) {
-    onSearchAudiusOnline(searchQuery)
-    onSearchYouTubeOnline(searchQuery)
-    onSearchSpotifyOnline(searchQuery)
+    if (searchQuery == searchedQuery) return@LaunchedEffect
+    // Clearing the field empties the results at once; a new query waits for a pause in typing.
+    if (searchQuery.isNotBlank()) delay(SearchDebounceMs)
+    searchedQuery = searchQuery
+    searchAudius(searchQuery)
+    searchJamendo(searchQuery)
   }
 
   // The user's own music; the synthesized demo tracks sit in their own section at the bottom.
   val myTracks = tracks.filter { !it.isDemo }
   val demoTracks = tracks.filter { it.isDemo }
-  val searchMatches = if (searchQuery.isBlank()) emptyList() else tracks.filter { track ->
-    track.title.contains(searchQuery, ignoreCase = true) ||
-      track.artist.contains(searchQuery, ignoreCase = true) ||
-      track.album.contains(searchQuery, ignoreCase = true)
+  val recent = remember(myTracks, playStats) {
+    com.example.data.library.AutoLists.build(com.example.data.library.AutoList.RECENTLY_PLAYED, myTracks, playStats, RecentLimit)
+  }
+  // Accents and case do not matter: "acao" finds "Ação".
+  val searchMatches = if (searchQuery.isBlank()) emptyList() else androidx.compose.runtime.remember(searchQuery, tracks) { tracks.filter { track ->
+    com.example.data.TextMatch.contains(track.title, searchQuery) ||
+      com.example.data.TextMatch.contains(track.artist, searchQuery) ||
+      com.example.data.TextMatch.contains(track.album, searchQuery)
+  } }
+
+  /** A song with its actions sheet; [showSource] adds the service to the subtitle. */
+  fun LazyListScope.songs(
+    list: List<Track>,
+    keyPrefix: String,
+    tagPrefix: String,
+    showSource: Boolean,
+    stagger: Boolean,
+    onClick: (Track) -> Unit
+  ) {
+    itemsIndexed(list, key = { _, t -> "${keyPrefix}_${t.id}" }) { index, track ->
+      Column(modifier = itemMotion(index, stagger)) {
+        if (index > 0) TrackDivider()
+        TrackRow(
+          track = track,
+          subtitle = trackSubtitle(track, showSource),
+          onClick = { onClick(track) },
+          isCurrent = currentTrack?.id == track.id,
+          isPlaying = isPlaying,
+          modifier = Modifier.opensPlayer().testTag("${tagPrefix}_${track.id}"),
+          trailing = {
+            TrackActionsMenu(
+              track = track,
+              isFavorite = track.id in favoriteIds,
+              playlists = playlists,
+              onToggleFavorite = { onToggleFavorite(track) },
+              onPlayNext = { onPlayNext(track) },
+              onAddToQueue = { onAddToQueue(track) },
+              onAddToPlaylist = { id -> onAddToPlaylist(id, track) },
+              onCreatePlaylist = { name -> onCreatePlaylist(name, track) },
+              modifier = Modifier.trailingEdge()
+            )
+          }
+        )
+      }
+    }
   }
 
-  @Composable
-  fun SongRow(track: Track, testTag: String, onClick: () -> Unit, modifier: Modifier = Modifier) = TrackRow(
-    track = track,
-    isSelected = currentTrack?.id == track.id,
-    isPlaying = isPlaying,
-    isFavorite = track.id in favoriteIds,
-    playlists = playlists,
-    onClick = onClick,
-    onToggleFavorite = { onToggleFavorite(track) },
-    onPlayNext = { onPlayNext(track) },
-    onAddToQueue = { onAddToQueue(track) },
-    onAddToPlaylist = { id -> onAddToPlaylist(id, track) },
-    onCreatePlaylist = { name -> onCreatePlaylist(name, track) },
-    modifier = modifier.testTag(testTag)
-  )
-
+  val listState = androidx.compose.foundation.lazy.rememberLazyListState()
   LazyColumn(
-    modifier = modifier
-      .fillMaxSize()
-      .padding(horizontal = 20.dp),
-    contentPadding = PaddingValues(top = 4.dp, bottom = 32.dp + LocalBarInset.current),
-    verticalArrangement = Arrangement.spacedBy(28.dp)
+    state = listState,
+    modifier = modifier.readingColumn().fillMaxHeight().topScrollFade(listState),
+    contentPadding = PaddingValues(top = Grid.u6, bottom = LocalBarInset.current + Grid.u24)
   ) {
-
-    // 1. Search pill
     item(key = "search") {
-      TextField(
+      SearchField(
         value = searchQuery,
         onValueChange = { searchQuery = it },
-        placeholder = { Text("Artistas, músicas, álbuns", fontSize = 17.sp) },
-        leadingIcon = {
-          Icon(
-            imageVector = Icons.Default.Search,
-            contentDescription = "Buscar",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp)
-          )
-        },
-        trailingIcon = {
-          if (searchQuery.isNotEmpty()) {
-            IconButton(onClick = { searchQuery = "" }) {
-              Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = "Limpar busca",
-                modifier = Modifier.size(18.dp)
-              )
-            }
-          }
-        },
-        singleLine = true,
-        // Same capsule of glass as the tab bar and mini player.
-        shape = RoundedCornerShape(28.dp),
-        colors = TextFieldDefaults.colors(
-          unfocusedContainerColor = Color.Transparent,
-          focusedContainerColor = Color.Transparent,
-          unfocusedIndicatorColor = Color.Transparent,
-          focusedIndicatorColor = Color.Transparent
-        ),
+        placeholder = stringResource(R.string.home_search_placeholder),
         modifier = Modifier
-          .fillMaxWidth()
-          .glassControl(RoundedCornerShape(28.dp))
+          .padding(horizontal = Grid.margin)
           .testTag("home_search_input")
       )
     }
 
-    if (searchQuery.isBlank()) {
-      // 2. Em alta no Audius: cards with the cover, like Apple Music's featured row
+    fun LazyListScope.onlineSections() {
       item(key = "trending") {
-        Column {
-          TarkasSectionTitle("Em alta no Audius")
-          Spacer(modifier = Modifier.height(14.dp))
-          when {
-            // Cards waiting for the network: placeholders of the same size with a soft shimmer.
-            trending.tracks.isEmpty() && trending.loading -> TrendingSkeleton()
-            trending.tracks.isNotEmpty() -> TrendingRow(
-              tracks = trending.tracks,
-              currentTrack = currentTrack,
-              isPlaying = isPlaying,
-              onPlay = onPlayTrending
-            )
-            trending.offline -> EmptyState(
-              icon = Icons.Default.CloudOff,
-              title = "Sem conexão com o Audius",
-              message = "Confira a internet e tente de novo. Suas músicas do aparelho continuam tocando.",
-              actionLabel = "Tentar de novo",
-              onAction = onRetryTrending,
-              modifier = Modifier.testTag("trending_offline")
-            )
-            !trending.loading -> Text(
-              "O Audius não mandou nada em alta agora.",
-              fontSize = 15.sp,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-          }
+        CatalogSection(
+          title = stringResource(R.string.home_trending_title),
+          service = "Audius",
+          state = trending,
+          onRetry = onRetryTrending,
+          onPlay = onPlayTrending,
+          tagPrefix = "trending",
+          currentTrack = currentTrack,
+          isPlaying = isPlaying
+        )
+      }
+      item(key = "jamendo_popular") {
+        CatalogSection(
+          title = stringResource(R.string.home_jamendo_popular_title),
+          service = "Jamendo",
+          state = jamendoPopular,
+          onRetry = onRetryJamendoPopular,
+          onPlay = onPlayJamendoPopular,
+          tagPrefix = "jamendo_popular",
+          currentTrack = currentTrack,
+          isPlaying = isPlaying
+        )
+      }
+    }
+
+    fun LazyListScope.mySections() {
+      // Only for the track that is loaded and paused: tapping it continues exactly where it stopped.
+      val resumeTrack = currentTrack?.takeIf { t -> !isPlaying && resume?.trackId == t.id && !t.isDemo }
+      val resumeAt = resume
+      if (resumeTrack != null && resumeAt != null) {
+        item(key = "resume_header") {
+          SectionHeader(stringResource(R.string.home_resume_header), modifier = Modifier.padding(top = Grid.u48, bottom = Grid.u6))
+        }
+        songs(listOf(resumeTrack), "resume", "resume_track", showSource = true, stagger = false, onClick = { onResume() })
+        item(key = "resume_position") {
+          Text(
+            text = resumeAt.durationMs?.let { stringResource(R.string.home_resume_position_of, clock(resumeAt.positionMs), clock(it)) }
+              ?: stringResource(R.string.home_resume_position, clock(resumeAt.positionMs)),
+            style = GridText.Small,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = Grid.margin, vertical = Grid.u6).testTag("resume_position")
+          )
         }
       }
 
-      // 3. Suas músicas
-      item(key = "mine_header") {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.Bottom
-        ) {
-          TarkasSectionTitle("Suas músicas")
-          if (myTracks.isNotEmpty()) {
-            Text(
-              text = if (myTracks.size == 1) "1 faixa" else "${myTracks.size} faixas",
-              fontSize = 15.sp,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-          }
+      if (recent.isNotEmpty()) {
+        item(key = "recent_header") {
+          SectionHeader(stringResource(R.string.home_recent_header), modifier = Modifier.padding(top = Grid.u48, bottom = Grid.u6))
         }
+        songs(recent, "recent", "recent_track", showSource = true, stagger = false, onClick = onPlayTrack)
+      }
+
+      item(key = "mine_header") {
+        SectionHeader(stringResource(R.string.home_mine_header), modifier = Modifier.padding(top = Grid.u48, bottom = Grid.u6))
       }
       if (myTracks.isEmpty()) {
         item(key = "mine_empty") {
           EmptyState(
-            icon = Icons.Default.LibraryMusic,
-            title = "Nenhuma música sua ainda",
-            message = "Busque uma música acima ou adicione um arquivo do aparelho pela Biblioteca.",
-            actionLabel = "Abrir Biblioteca",
+            icon = Icons.Rounded.LibraryMusic,
+            title = stringResource(R.string.home_mine_empty_title),
+            message = stringResource(R.string.home_mine_empty_message),
+            actionLabel = stringResource(R.string.home_mine_empty_action),
             onAction = onOpenLibrary,
-            modifier = Modifier.testTag("home_empty")
+            modifier = Modifier.padding(horizontal = Grid.margin).testTag("home_empty")
           )
         }
       }
-      itemsIndexed(myTracks, key = { _, t -> t.id }) { index, track ->
-        SongRow(track, "lib_track_${track.id}", onClick = { onPlayTrack(track) }, modifier = Modifier.animateItem().staggeredEntrance(index))
-      }
+      songs(myTracks, "mine", "lib_track", showSource = true, stagger = true, onClick = onPlayTrack)
 
-      // 4. Demonstração: the short synthesized tracks, folded away
+      // The short synthesized tracks, folded away under one row.
       if (demoTracks.isNotEmpty()) {
         item(key = "demo_header") {
-          Row(
-            modifier = Modifier
-              .fillMaxWidth()
-              .pressClickable(pressedScale = 0.98f) { showDemos = !showDemos }
-              .padding(vertical = 4.dp)
-              .testTag("home_demo_toggle"),
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Column(modifier = Modifier.weight(1f)) {
-              Text("Faixas de demonstração", fontSize = 17.sp, color = MaterialTheme.colorScheme.onBackground)
-              Text(
-                "${demoTracks.size} trechos curtos gerados pelo app, para testar o som e o equalizador",
-                fontSize = 15.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-              )
-            }
-            Icon(
-              imageVector = if (showDemos) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-              contentDescription = if (showDemos) "Esconder" else "Mostrar",
-              tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-          }
-        }
-        if (showDemos) {
-          items(demoTracks, key = { "demo_${it.id}" }) { track ->
-            SongRow(track, "demo_track_${track.id}", onClick = { onPlayTrack(track) }, modifier = Modifier.animateItem())
-          }
-        }
-      }
-    } else {
-      // While searching: the library first, then the same query on Audius. Its songs play in the app.
-      item(key = "search_lib_header") { TarkasSectionTitle("Na sua biblioteca") }
-      if (searchMatches.isEmpty()) {
-        item(key = "search_lib_empty") {
-          Text(
-            text = "Nada na sua biblioteca para \"$searchQuery\".",
-            fontSize = 15.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+          DemoToggle(
+            count = demoTracks.size,
+            expanded = showDemos,
+            onToggle = { showDemos = !showDemos },
+            modifier = Modifier.padding(top = Grid.u24)
           )
         }
-      }
-      items(searchMatches, key = { it.id }) { track ->
-        SongRow(track, "lib_track_${track.id}", onClick = { onPlayTrack(track) }, modifier = Modifier.animateItem())
-      }
-
-      item(key = "audius_header") {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          TarkasSectionTitle("No Audius", modifier = Modifier.weight(1f))
-          if (audiusSearching) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        if (showDemos) {
+          songs(demoTracks, "demo", "demo_track", showSource = false, stagger = false, onClick = onPlayTrack)
         }
       }
-      itemsIndexed(audiusResults, key = { _, t -> "audius_result_${t.id}" }) { index, track ->
-        SongRow(track, "audius_result_${track.id}", onClick = { onPlayAudiusResult(track) }, modifier = Modifier.animateItem().staggeredEntrance(index))
+    }
+
+    if (searchQuery.isBlank()) {
+      if (musicFirst) { mySections(); onlineSections() } else { onlineSections(); mySections() }
+    } else {
+      // While searching: the library first, then the same query on each service. All of it plays here.
+      item(key = "search_lib_header") { ResultsHeader(stringResource(R.string.home_search_library_header), searching = false) }
+      if (searchMatches.isEmpty()) {
+        item(key = "search_lib_empty") { Note(stringResource(R.string.home_search_library_empty, searchQuery)) }
       }
+      songs(searchMatches, "lib", "lib_track", showSource = true, stagger = false, onClick = onPlayTrack)
+
+      item(key = "audius_header") { ResultsHeader("Audius", searching = audiusSearching) }
+      songs(audiusResults, "audius_result", "audius_result", showSource = false, stagger = true, onClick = onPlayAudiusResult)
       if (audiusResults.isEmpty() && !audiusSearching) {
         item(key = "audius_empty") {
           if (audiusOffline) {
             EmptyState(
-              icon = Icons.Default.CloudOff,
-              title = "Sem conexão com o Audius",
-              message = "Confira a internet e tente de novo.",
-              actionLabel = "Tentar de novo",
+              icon = Icons.Rounded.CloudOff,
+              title = stringResource(R.string.home_offline_title, "Audius"),
+              message = stringResource(R.string.home_offline_message),
+              actionLabel = stringResource(R.string.home_retry),
               onAction = { onSearchAudiusOnline(searchQuery) },
-              modifier = Modifier.testTag("audius_offline")
+              modifier = Modifier.padding(horizontal = Grid.margin).testTag("audius_offline")
             )
           } else {
-            Text(
-              "Nada encontrado no Audius.",
-              fontSize = 15.sp,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Note(stringResource(R.string.home_nothing_found, "Audius"))
           }
         }
       }
 
-      item(key = "youtube_header") {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          TarkasSectionTitle("No YouTube Music", modifier = Modifier.weight(1f))
-          if (youtubeSearching) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-        }
-      }
-      itemsIndexed(youtubeResults.take(10), key = { _, t -> "youtube_result_${t.id}" }) { index, track ->
-        SongRow(track, "youtube_result_${track.id}", onClick = { onPlayYouTubeResult(track) }, modifier = Modifier.animateItem().staggeredEntrance(index))
-      }
-      if (youtubeResults.isEmpty() && !youtubeSearching) {
-        item(key = "youtube_empty") {
-          Text(
-            if (youtubeOffline) "Sem conexão com o YouTube Music." else "Nada encontrado no YouTube Music.",
-            fontSize = 15.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.testTag("youtube_empty")
-          )
-        }
-      }
-
-      item(key = "spotify_header") {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          TarkasSectionTitle("No Spotify", modifier = Modifier.weight(1f))
-          if (spotifySearching) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-        }
-      }
-      itemsIndexed(spotifyResults.take(10), key = { _, t -> "spotify_result_${t.id}" }) { index, track ->
-        SongRow(track, "spotify_result_${track.id}", onClick = { onPlaySpotifyResult(track) }, modifier = Modifier.animateItem().staggeredEntrance(index))
-      }
-      if (spotifyResults.isEmpty() && !spotifySearching) {
-        item(key = "spotify_empty") {
-          Text(
-            "Nada encontrado no Spotify.",
-            fontSize = 15.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.testTag("spotify_empty")
-          )
-        }
-      }
-    }
-  }
-}
-
-/** Under a streamed result: which service it comes from. */
-@Composable
-private fun SourceBadge(track: Track) {
-  val spotify = track.webSource == "spotify"
-  Row(
-    modifier = Modifier.padding(top = 3.dp),
-    verticalAlignment = Alignment.CenterVertically
-  ) {
-    Box(
-      modifier = Modifier
-        .size(14.dp)
-        .clip(RoundedCornerShape(4.dp))
-        .background(if (spotify) Color(0xFF1DB954) else Color(0xFFE5322D)),
-      contentAlignment = Alignment.Center
-    ) {
-      Icon(
-        imageVector = Icons.Default.PlayArrow,
-        contentDescription = null,
-        tint = Color.White,
-        modifier = Modifier.size(10.dp)
-      )
-    }
-    Spacer(Modifier.width(6.dp))
-    Text(if (spotify) "Spotify" else "YouTube Music", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-  }
-}
-
-/** The trending cards: cover, genre, title and artist, in a row that scrolls sideways. */
-@Composable
-private fun TrendingRow(
-  tracks: List<Track>,
-  currentTrack: Track?,
-  isPlaying: Boolean,
-  onPlay: (Track) -> Unit
-) {
-  LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-    itemsIndexed(tracks.take(12), key = { _, t -> "trending_${t.id}" }) { index, track ->
-      val isCurrent = currentTrack?.id == track.id
-      Column(
-        modifier = Modifier
-          .width(220.dp)
-          .staggeredEntrance(index)
-          .opensPlayer()
-          .pressClickable(pressedScale = 0.97f) { onPlay(track) }
-          .testTag("trending_track_${track.id}")
-      ) {
-        Column(
-          modifier = Modifier
-            .fillMaxWidth()
-            .glassControl(RoundedCornerShape(20.dp))
-            .padding(12.dp)
-        ) {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Text(
-              text = track.genre,
-              fontSize = 17.sp,
-              fontWeight = FontWeight.Bold,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-              color = MaterialTheme.colorScheme.onSurface,
-              modifier = Modifier.weight(1f)
+      item(key = "jamendo_header") { ResultsHeader("Jamendo", searching = jamendo.searching) }
+      songs(jamendo.results, "jamendo_result", "jamendo_result", showSource = false, stagger = true, onClick = onPlayJamendoResult)
+      if (jamendo.results.isEmpty() && !jamendo.searching) {
+        item(key = "jamendo_empty") {
+          when {
+            jamendo.notConfigured -> Note(stringResource(R.string.home_jamendo_missing_key), Modifier.testTag("jamendo_not_configured"))
+            jamendo.offline -> EmptyState(
+              icon = Icons.Rounded.CloudOff,
+              title = stringResource(R.string.home_offline_title, "Jamendo"),
+              message = stringResource(R.string.home_offline_message),
+              actionLabel = stringResource(R.string.home_retry),
+              onAction = { onSearchJamendoOnline(searchQuery) },
+              modifier = Modifier.padding(horizontal = Grid.margin).testTag("jamendo_offline")
             )
-            TarkasMark(
-              modifier = Modifier.size(width = 28.dp, height = 17.dp),
-              symbolColor = MaterialTheme.colorScheme.onSurface
-            )
+            else -> Note(stringResource(R.string.home_nothing_found, "Jamendo"), Modifier.testTag("jamendo_empty"))
           }
-          Spacer(modifier = Modifier.height(10.dp))
-          TrackArtwork(
-            track = track,
-            shape = RoundedCornerShape(12.dp),
-            iconSize = 44.dp,
-            playing = isCurrent && isPlaying,
-            gradientEndAlpha = 0.55f,
-            modifier = Modifier.fillMaxWidth().aspectRatio(1f)
-          )
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-          text = track.title,
-          fontSize = 17.sp,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-          color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground
-        )
-        Text(
-          text = track.artist,
-          fontSize = 15.sp,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis
-        )
       }
     }
   }
 }
 
 /**
- * Three card-shaped placeholders while trending loads. A faint light sweeps across them (8% at
- * most, 1.4 s a pass); with reduced motion they stay still.
+ * A catalogue's row of Início ("Em alta no Audius", "Popular no Jamendo"): the covers, a skeleton
+ * while they load, and what went wrong otherwise. Nothing is shown for a catalogue the build has no
+ * key for, so Início never opens on an error the user cannot fix.
  */
 @Composable
-private fun TrendingSkeleton() {
-  val reduced = com.example.ui.theme.rememberReducedMotion()
-  val base = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
-  val light = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-  val sweep = if (reduced) null else androidx.compose.animation.core.rememberInfiniteTransition(label = "shimmer").animateFloat(
-    initialValue = -1f,
-    targetValue = 2f,
-    animationSpec = androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(1400)),
-    label = "shimmerX"
-  )
+private fun CatalogSection(
+  title: String,
+  service: String,
+  state: TrendingState,
+  onRetry: () -> Unit,
+  onPlay: (Track) -> Unit,
+  tagPrefix: String,
+  currentTrack: Track?,
+  isPlaying: Boolean
+) {
+  if (state.notConfigured) return
+  Column {
+    SectionHeader(title, modifier = Modifier.padding(top = Grid.u24, bottom = Grid.u12))
+    when {
+      state.tracks.isEmpty() && state.loading -> TrendingSkeleton()
+      state.tracks.isNotEmpty() -> TrendingRow(
+        tracks = state.tracks,
+        currentTrack = currentTrack,
+        isPlaying = isPlaying,
+        onPlay = onPlay,
+        tagPrefix = tagPrefix
+      )
+      state.offline -> EmptyState(
+        icon = Icons.Rounded.CloudOff,
+        title = stringResource(R.string.home_offline_title, service),
+        message = stringResource(R.string.home_offline_catalog_message),
+        actionLabel = stringResource(R.string.home_retry),
+        onAction = onRetry,
+        modifier = Modifier.padding(horizontal = Grid.margin).testTag("${tagPrefix}_offline")
+      )
+      !state.loading -> Note(stringResource(R.string.home_catalog_empty, service))
+    }
+  }
+}
+
+/** How long a search runs before its spinner shows. */
+private const val SPINNER_DELAY_MS = 1500L
+
+/** A section title over search results, with a small spinner while that service is still answering. */
+@Composable
+private fun ResultsHeader(title: String, searching: Boolean) {
+  val searchingDescription = stringResource(R.string.home_searching)
   Row(
-    horizontalArrangement = Arrangement.spacedBy(14.dp),
-    modifier = Modifier.testTag("trending_loading")
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(top = Grid.u24, bottom = Grid.u6, end = Grid.margin),
+    verticalAlignment = Alignment.CenterVertically
   ) {
-    repeat(3) {
-      Column(modifier = Modifier.width(220.dp)) {
-        Box(
-          modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(0.86f)
-            .clip(RoundedCornerShape(20.dp))
-            .drawBehind {
-              drawRect(base)
-              sweep?.let { s ->
-                val x = size.width * s.value
-                drawRect(
-                  Brush.linearGradient(
-                    listOf(Color.Transparent, light, Color.Transparent),
-                    start = androidx.compose.ui.geometry.Offset(x - size.width * 0.5f, 0f),
-                    end = androidx.compose.ui.geometry.Offset(x, size.height)
-                  )
-                )
-              }
-            }
+    SectionHeader(title, modifier = Modifier.weight(1f))
+    // A quick answer never flashes a spinner: it shows only once the search takes a while.
+    var slow by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(searching) {
+      slow = false
+      if (searching) {
+        kotlinx.coroutines.delay(SPINNER_DELAY_MS)
+        slow = true
+      }
+    }
+    if (searching && slow) {
+      CircularProgressIndicator(
+        modifier = Modifier
+          .size(Grid.icon)
+          .semantics { stateDescription = searchingDescription },
+        strokeWidth = Grid.hairline * 2,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+    }
+  }
+}
+
+/** One line of secondary text inside a section: "nothing found" and the like. */
+@Composable
+private fun Note(text: String, modifier: Modifier = Modifier) {
+  Text(
+    text = text,
+    style = GridText.Small,
+    color = MaterialTheme.colorScheme.onSurfaceVariant,
+    modifier = modifier.padding(horizontal = Grid.margin, vertical = Grid.u6)
+  )
+}
+
+/** The row that folds the demo tracks in and out, announced with its state. */
+@Composable
+private fun DemoToggle(count: Int, expanded: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+  val toggleState = stringResource(if (expanded) R.string.home_demo_state_open else R.string.home_demo_state_closed)
+  Row(
+    modifier = modifier
+      .fillMaxWidth()
+      .heightIn(min = Grid.u48)
+      .highlightClickable(role = Role.Button, onClickLabel = stringResource(if (expanded) R.string.home_demo_hide else R.string.home_demo_show), onClick = onToggle)
+      .semantics { stateDescription = toggleState }
+      .padding(horizontal = Grid.margin, vertical = Grid.u6)
+      .testTag("home_demo_toggle"),
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    Column(modifier = Modifier.weight(1f)) {
+      Text(stringResource(R.string.home_demo_title), style = GridText.Body, color = MaterialTheme.colorScheme.onSurface)
+      Text(
+        pluralStringResource(R.plurals.home_demo_summary, count, count),
+        style = GridText.Small,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+    }
+    Spacer(Modifier.width(Grid.u12))
+    Icon(
+      imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+      contentDescription = null,
+      tint = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+  }
+}
+
+/**
+ * The trending carousel: square covers with the title, artist and genre under them, no card around
+ * them. It starts at the page margin, snaps tile by tile and lets the next tile peek in.
+ */
+@Composable
+private fun TrendingRow(
+  tracks: List<Track>,
+  currentTrack: Track?,
+  isPlaying: Boolean,
+  onPlay: (Track) -> Unit,
+  tagPrefix: String = "trending"
+) {
+  val state = rememberLazyListState()
+  LazyRow(
+    state = state,
+    flingBehavior = rememberSnapFlingBehavior(state, SnapPosition.Start),
+    contentPadding = PaddingValues(horizontal = Grid.margin),
+    horizontalArrangement = Arrangement.spacedBy(Grid.u12)
+  ) {
+    itemsIndexed(tracks.take(12), key = { _, t -> "${tagPrefix}_${t.id}" }) { index, track ->
+      val isCurrent = currentTrack?.id == track.id
+      val playLabel = stringResource(R.string.home_play_track, track.title)
+      Column(
+        modifier = Modifier
+          .width(TileWidth)
+          .listEntrance(index)
+          .opensPlayer()
+          .pressClickable(pressedScale = 0.97f, onClickLabel = playLabel) { onPlay(track) }
+          .testTag("${tagPrefix}_track_${track.id}")
+      ) {
+        TrackArtwork(
+          track = track,
+          shape = Grid.r12,
+          iconSize = Grid.u48,
+          playing = isCurrent && isPlaying,
+          modifier = Modifier.size(TileWidth)
         )
-        Spacer(modifier = Modifier.height(10.dp))
-        Box(Modifier.width(150.dp).height(14.dp).clip(RoundedCornerShape(7.dp)).background(base))
-        Spacer(modifier = Modifier.height(6.dp))
-        Box(Modifier.width(100.dp).height(12.dp).clip(RoundedCornerShape(6.dp)).background(base))
+        Spacer(Modifier.height(Grid.u6))
+        Text(
+          text = track.title,
+          style = GridText.Small.copy(fontWeight = FontWeight.SemiBold),
+          color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis
+        )
+        Text(
+          text = track.artist,
+          style = GridText.Small,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis
+        )
+        if (track.genre.isNotBlank()) {
+          Text(
+            text = track.genre,
+            style = GridText.Small,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+          )
+        }
       }
     }
   }
 }
 
-/** A song row: cover, title, artist and album, and the ⋮ menu. */
+/** Tiles of the same size as the carousel's while trending loads; still, with nothing sweeping. */
 @Composable
-private fun TrackRow(
-  track: Track,
-  isSelected: Boolean,
-  isPlaying: Boolean,
-  isFavorite: Boolean,
-  playlists: List<Playlist>,
-  onClick: () -> Unit,
-  onToggleFavorite: () -> Unit,
-  onPlayNext: () -> Unit,
-  onAddToQueue: () -> Unit,
-  onAddToPlaylist: (String) -> Unit,
-  onCreatePlaylist: (String) -> Unit,
-  modifier: Modifier = Modifier
-) {
-  Column(modifier = modifier) {
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .opensPlayer()
-        .pressClickable(pressedScale = 0.97f, onClick = onClick)
-        .padding(vertical = 4.dp),
-      verticalAlignment = Alignment.CenterVertically
-    ) {
-      TrackArtwork(
-        track = track,
-        shape = RoundedCornerShape(6.dp),
-        iconSize = 26.dp,
-        playing = isSelected && isPlaying,
-        modifier = Modifier.size(64.dp)
-      )
-
-      Spacer(modifier = Modifier.width(14.dp))
-
-      Column(modifier = Modifier.weight(1f)) {
-        Text(
-          text = track.title,
-          fontSize = 17.sp,
-          color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis
-        )
-        Text(
-          text = if (track.isWeb) track.artist.ifBlank { track.album } else "${track.artist} • ${track.album}",
-          fontSize = 15.sp,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis
-        )
-        if (track.isWeb) SourceBadge(track)
+private fun TrendingSkeleton() {
+  val loadingDescription = stringResource(R.string.home_loading)
+  val fill = MaterialTheme.colorScheme.surfaceContainer
+  Row(
+    horizontalArrangement = Arrangement.spacedBy(Grid.u12),
+    // Laid out at full size and cut by the screen edge, as the real carousel is.
+    modifier = Modifier
+      .fillMaxWidth()
+      .wrapContentWidth(Alignment.Start, unbounded = true)
+      .padding(horizontal = Grid.margin)
+      .semantics { stateDescription = loadingDescription }
+      .testTag("trending_loading")
+  ) {
+    repeat(3) {
+      Column(modifier = Modifier.width(TileWidth)) {
+        Box(Modifier.size(TileWidth).clip(Grid.r12).background(fill))
+        Spacer(Modifier.height(Grid.u6))
+        Box(Modifier.width(Grid.u96).height(Grid.u12).clip(Grid.r6).background(fill))
+        Spacer(Modifier.height(Grid.u6))
+        Box(Modifier.width(Grid.u48 + Grid.u24).height(Grid.u12).clip(Grid.r6).background(fill))
       }
-
-      TrackActionsMenu(
-        track = track,
-        isFavorite = isFavorite,
-        playlists = playlists,
-        onToggleFavorite = onToggleFavorite,
-        onPlayNext = onPlayNext,
-        onAddToQueue = onAddToQueue,
-        onAddToPlaylist = onAddToPlaylist,
-        onCreatePlaylist = onCreatePlaylist
-      )
     }
-    HorizontalDivider(
-      modifier = Modifier.padding(start = 78.dp, top = 4.dp),
-      color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-    )
   }
 }

@@ -1,10 +1,31 @@
 package com.example.ui.legal
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.platform.LocalConfiguration
+
 /** A titled text shown in the reading screen: Terms, Privacy, licences, what's new. */
 data class LegalDoc(val title: String, val subtitle: String, val sections: List<Pair<String, String>>)
 
+/** The legal texts in the language the screen is showing. */
+@Composable
+@ReadOnlyComposable
+fun currentLegalTexts(): LegalSet = LegalTexts.forLanguage(LocalConfiguration.current.locales[0].language)
+
+/** Every text of the reading screens and of About, in one language. */
+class LegalSet(
+  val summary: List<String>,
+  val terms: LegalDoc,
+  val privacy: LegalDoc,
+  val changelog: LegalDoc,
+  val licenses: LegalDoc,
+  val credits: List<Pair<String, String>>
+)
+
 /**
  * The legal texts and the "Sobre" content, written in Portuguese for Brazilian users.
+ * The members of this object are the Portuguese text, the original; [LegalTextsEn] is its translation,
+ * and [forLanguage] picks the one to show.
  * Raise [TERMS_VERSION] whenever the Terms or the Privacy Policy change in substance: users who
  * accepted an older version see the acceptance step again on the next launch (LGPD, art. 9 §2).
  *
@@ -12,8 +33,8 @@ data class LegalDoc(val title: String, val subtitle: String, val sections: List<
  * publishing on the Play Store, which also needs the Privacy Policy at a public web address.
  */
 object LegalTexts {
-  const val TERMS_VERSION = 2
-  const val UPDATED = "25 de outubro de 2026"
+  const val TERMS_VERSION = 3
+  const val UPDATED = "29 de outubro de 2026"
 
   const val CONTROLLER = "Roger Moreira"
   const val CONTACT_EMAIL = "roger.moreiraa8@gmail.com"
@@ -24,8 +45,8 @@ object LegalTexts {
   /** The short version shown on the acceptance step. */
   val summary = listOf(
     "Seus ajustes, favoritos e playlists ficam só neste aparelho. O T.A.R.K.A.S. não tem conta nem servidor próprio.",
-    "Quando você busca no Início, o termo da busca vai para o Audius, o YouTube Music e o Spotify, que entregam as músicas.",
-    "A lista de fones do equalizador é baixada do projeto AutoEq, no GitHub.",
+    "Quando você busca no Início, o termo da busca vai para o Audius e o Jamendo, que entregam as músicas. O título e o artista da faixa vão ao MusicBrainz quando você abre Sobre a faixa.",
+    "As curvas de fones do equalizador vêm do projeto AutoEq e estão no próprio app; fones novos são buscados no GitHub.",
     "O assistente só usa IA online (Gemini) se uma chave for configurada no app.",
     "Você pode exportar ou apagar todos os seus dados em Ajustes > Privacidade, quando quiser."
   )
@@ -43,10 +64,11 @@ object LegalTexts {
         "Com o Modo ADB ou root, que você ativa por conta própria, o equalizador também pode atuar no áudio de outros apps.",
       "3. Uso gratuito e \"como está\"" to
         "O app é oferecido gratuitamente, no estado em que se encontra, sem garantia de funcionamento contínuo ou livre de erros. " +
-        "Serviços de terceiros, como o Audius e o AutoEq, podem mudar ou ficar fora do ar sem aviso.",
+        "Serviços de terceiros, como o Audius, o Jamendo, o MusicBrainz e o AutoEq, podem mudar ou ficar fora do ar sem aviso.",
       "4. Conteúdo de terceiros" to
-        "As músicas do YouTube Music e do Spotify pertencem aos seus titulares e são entregues pelos próprios serviços, segundo os termos e o plano da sua conta; o T.A.R.K.A.S. não baixa nem guarda essas músicas. " +
         "As músicas do Audius pertencem aos seus artistas e são entregues pelo próprio Audius, de acordo com os termos dele. " +
+        "As músicas do Jamendo pertencem aos seus artistas e são distribuídas pelo Jamendo sob licenças Creative Commons, para ouvir; o T.A.R.K.A.S. não baixa nem guarda essas músicas. " +
+        "Os dados de álbum, data e gêneros vêm do MusicBrainz (domínio público, CC0) e as capas do Cover Art Archive. " +
         "As curvas de fones vêm do projeto AutoEq (licença MIT). O T.A.R.K.A.S. não hospeda nem vende músicas.",
       "5. Uso adequado" to
         "Não use o app para infringir direitos autorais, contornar proteções de conteúdo ou violar leis. " +
@@ -74,12 +96,13 @@ object LegalTexts {
         "O controlador dos dados é $CONTROLLER, desenvolvedor do T.A.R.K.A.S. Contato para assuntos de privacidade e para exercer seus direitos: " +
         "$CONTACT_EMAIL, ou $CONTACT_INSTAGRAM no Instagram.",
       "Dados que ficam só no seu aparelho" to
-        "Ajustes do app (tema, aparência, equalizador e predefinições), favoritos, playlists, a fila de reprodução e a aceitação destes termos (versão e data). " +
+        "Ajustes do app (tema, aparência, equalizador e predefinições), favoritos, playlists, a fila de reprodução, quantas vezes cada música foi ouvida ou pulada (para a ordem Mais tocadas) e a aceitação destes termos (versão e data). " +
         "Esses dados não são enviados para nenhum servidor nosso: o T.A.R.K.A.S. não tem servidor nem conta de usuário.",
       "Dados enviados a terceiros, e para quê" to
         "• Audius: o texto que você busca no Início e os pedidos das faixas que você toca, para listar e transmitir as músicas. O Audius recebe também o endereço IP da conexão, como qualquer site.\n" +
-        "• YouTube Music e Spotify: o texto que você busca no Início e os pedidos das músicas que você toca, feitos pelas páginas web desses serviços dentro do app. Se você entrar na sua conta, o login é feito na página do próprio serviço (o T.A.R.K.A.S. não vê a sua senha) e os cookies de sessão ficam só no aparelho; \"Sair das contas\" em Ajustes os apaga. Esses serviços recebem o IP e seguem as próprias políticas.\n" +
-        "• GitHub (projeto AutoEq): pedidos para baixar a lista de fones e a curva do fone escolhido. Nenhum dado seu vai junto além do IP.\n" +
+        "• Jamendo: o texto que você busca no Início, o pedido das músicas populares e os pedidos das faixas que você toca, para listar e transmitir as músicas. O Jamendo recebe o IP da conexão e a identificação do app (não a sua).\n" +
+        "• MusicBrainz e Cover Art Archive: o título e o artista da faixa, só quando você abre Sobre a faixa no player, para mostrar álbum, data, gêneros e capa. Recebem o IP da conexão.\n" +
+        "• GitHub (projeto AutoEq): as curvas dos fones vêm no próprio app; até uma vez por semana ele consulta a lista do AutoEq para fones novos e baixa a curva de um fone novo quando você o escolhe. Nenhum dado seu vai junto além do IP.\n" +
         "• Google Gemini: só se uma chave de IA estiver configurada no app, as mensagens que você escreve ao assistente que não são comandos locais.\n" +
         "• Reconhecimento de voz e leitura em voz alta: feitos pelos serviços do próprio Android, segundo as regras do fabricante do seu aparelho.",
       "Permissões do aparelho" to
@@ -112,6 +135,62 @@ object LegalTexts {
     title = "Novidades",
     subtitle = "O que mudou em cada versão",
     sections = listOf(
+      "2.0" to
+        "• Nova grade T.A.L. em todas as telas: margens, tamanhos e alinhamento iguais em Início, Biblioteca, Áudio, Assistente, Ajustes, folhas e diálogos.\n" +
+        "• Novo equalizador: curva, faders na mesma escala de frequência, paramétrico em peças com balão de edição e predefinições em lista. Toque duplo redefine.\n" +
+        "• Tarkas Spatial no dock do equalizador, com palco 3D e os modos Sutil, Padrão, Amplo e Cinema 5.1.\n" +
+        "• Opção de seguir as cores do celular (Material You), desligada por padrão.\n" +
+        "• Banco de dados local, backup e restauração, diagnóstico de falhas e textos legais em português e inglês.\n" +
+        "• Paisagem e telas grandes: coluna de leitura e folhas com largura fixa.",
+      "1.17" to
+        "• Novo: áudio espacial com HRTF medida (KU100), sala virtual e palco Cinema 5.1; faixas 5.1 tocam virtualizadas no fone.\n" +
+        "• Com o espacial ligado, o pré-amp desconta 3,5 dB automaticamente para não saturar.\n" +
+        "• Limitador com teto em 0 dBFS; o ajuste antigo é convertido uma vez, na primeira abertura.\n" +
+        "• Barra de progresso em forma de onda ligada por padrão.\n" +
+        "• Biblioteca: filtro por pasta.\n" +
+        "• Aviso de atualização e pedidos de permissão aparecem ao abrir o app.\n" +
+        "• Movimento: listas, abas, painéis e mini player usam a mesma mola, com um leve passar do ponto.\n" +
+        "• Textos, números e datas seguem o idioma do sistema (português e inglês).\n" +
+        "• Ajustes pequenos de interface.",
+      "1.16" to
+        "• Paisagem: mini player e abas numa linha só, mais espaço na biblioteca e no player, e a área da câmera coberta.\n" +
+        "• Biblioteca: menu da faixa nas Músicas, faixa A-Z maior e acessível, e a ordem escolhida sempre à vista.\n" +
+        "• Equalizador: rótulos sem corte, layout em paisagem, seletor maior e aviso quando a busca de perfis não acha nada.\n" +
+        "• Assistente: a conversa rola até a resposta nova, e a ajuda explica o que fazer no app.\n" +
+        "• Sobre e Novidades não ficam mais sob a barra de status, e Ajustes volta na mesma posição.\n" +
+        "• Ajustes de leitura e contraste em vários pontos.",
+      "1.15" to
+        "• Novo: atualização pelo GitHub. O app avisa quando sai uma versão nova e, na versão final, baixa, confere e instala.\n" +
+        "• Novo: correções AutoEq offline, com 8.849 perfis de fones no app, e cada fone guarda a própria correção.\n" +
+        "• Novo: crossfade entre faixas (1 a 12 s, desligado por padrão) e normalização de volume entre faixas.\n" +
+        "• Novo: fila com arrastar para reordenar, deslizar para remover com desfazer, e o que toca depois; mover e remover também pelo menu da faixa.\n" +
+        "• Novo: busca em Músicas e Favoritas, ordem \"Mais tocadas\" e faixa A-Z na biblioteca.\n" +
+        "• Equalizador: valor exato por campo numérico, desfazer ao restaurar, apagar banda ou trocar de predefinição, e nomes por extenso.\n" +
+        "• Player em paisagem dividido ao meio, e o player abre crescendo a partir do mini player.\n" +
+        "• Textos do app em português e inglês.\n" +
+        "• Correção: a reprodução não trava mais no fim da faixa com o áudio espacial.",
+      "1.14" to
+        "• Novo: músicas do Jamendo na busca e na linha Popular no Jamendo do Início, tocadas inteiras pelo player do app, com equalizador e áudio espacial.\n" +
+        "• Novo: Sobre a faixa, no menu ⋯ do player: álbum, lançamento e gêneros do MusicBrainz, com a capa do Cover Art Archive.\n" +
+        "• YouTube Music e Spotify saíram do app. As sessões guardadas no aparelho foram apagadas.\n" +
+        "• Termos de Uso e Política de Privacidade atualizados para os novos serviços.",
+      "1.13" to
+        "• Spotify e YouTube Music: a próxima faixa não fica mais muda nem pausa sozinha.\n" +
+        "• O login do Spotify, que abria uma tela preta, voltou a funcionar; os Ajustes mostram quando a conta está conectada.\n" +
+        "• Animação das listas, em Ajustes: Deslizar, Esmaecer, Zoom, Lateral, Virar ou Quicar ao rolar as músicas.\n" +
+        "• Correção no áudio ao passar de uma faixa para outra com formato diferente.",
+      "1.12" to
+        "• A tela de Áudio ficou mais curta, com abas: Curva, Predefinições e Espacial.\n" +
+        "• O áudio espacial funciona em qualquer saída, não só nos fones, e não pausa mais quando o áudio espacial do Android está ligado.\n" +
+        "• Com o modo ADB ou root, o áudio espacial também chega aos outros apps (Spotify, YouTube), nos aparelhos que aceitam o efeito.",
+      "1.11" to
+        "• Visual refeito do zero: tipografia, espaçamentos e listas no padrão dos apps da Apple, com menos vidro e mais clareza.\n" +
+        "• Nova animação de abertura.\n" +
+        "• Áudio espacial para fones, com intensidade ajustável, na aba Áudio.\n" +
+        "• Animações mais fluidas e precisas; o botão de play se transforma em pause.\n" +
+        "• O botão voltar segue o caminho que você fez, e o app volta para a mesma tela depois de girar ou ser fechado pelo Android.\n" +
+        "• Faders, botões giratórios e barra de progresso funcionam com o TalkBack.\n" +
+        "• Correções: a música parava entre as faixas em alguns aparelhos; o YouTube e o Spotify travavam se a página fechasse sozinha; a curiosidade não pausava; avisos sumiam rápido demais.",
       "1.10" to
         "• A música continua tocando com a tela apagada e com o app fechado, com controles na notificação, na tela de bloqueio, no fone e no Bluetooth.\n" +
         "• Biblioteca > Músicas: todas as músicas do celular, com capa, artista e álbum.\n" +
@@ -148,23 +227,32 @@ object LegalTexts {
   val licenses = LegalDoc(
     title = "Licenças de código aberto",
     subtitle = "O T.A.R.K.A.S. usa estes projetos. Obrigado aos autores.",
-    sections = listOf(
-      "Jetpack Compose, AndroidX, Material 3" to "Google · Apache License 2.0",
-      "AndroidX Media3 (ExoPlayer)" to "Google · Apache License 2.0",
-      "Kotlin e kotlinx.coroutines" to "JetBrains · Apache License 2.0",
-      "Coil" to "Coil Contributors · Apache License 2.0",
-      "Haze" to "Chris Banes · Apache License 2.0",
-      "Backdrop (AndroidLiquidGlass)" to "Kyant · Apache License 2.0",
-      "OkHttp" to "Square · Apache License 2.0",
+    sections = OpenSourceNotices.librarySections + listOf(
       "AutoEq" to "Jaakko Pasanen · MIT License · curvas de correção de fones",
+      "SADIE II (HRTF medida, Neumann KU100)" to "Copyright 2018, University of York · Apache License 2.0 · respostas da cabeça usadas na virtualização 5.1",
+      "Inter" to "The Inter Project Authors · SIL Open Font License 1.1",
+      "Space Grotesk" to "The Space Grotesk Project Authors · SIL Open Font License 1.1",
+      "JetBrains Mono" to "The JetBrains Mono Project Authors · SIL Open Font License 1.1",
+      "SIL Open Font License 1.1" to "As fontes podem ser usadas, estudadas, modificadas e redistribuídas livremente, inclusive embutidas em software, " +
+        "desde que não sejam vendidas sozinhas. Texto completo em https://openfontlicense.org.",
+      "Licença MIT (AutoEq)" to OpenSourceNotices.AUTOEQ_MIT,
       "Apache License 2.0" to "Licenciado sob a Apache License, Versão 2.0. Você pode obter uma cópia em https://www.apache.org/licenses/LICENSE-2.0. " +
         "O software é distribuído \"como está\", sem garantias ou condições de qualquer tipo."
     )
   )
 
   val credits = listOf(
-    "Músicas em streaming" to "Audius, rede aberta de música dos próprios artistas",
+    "Músicas em streaming" to "Audius, rede aberta de música dos próprios artistas, e Jamendo, música independente em Creative Commons",
+    "Dados das músicas" to "MusicBrainz (CC0) e Cover Art Archive",
     "Correção de fones" to "Projeto AutoEq e quem mediu cada fone (oratory1990, crinacle, Rtings e outros)",
     "Desenvolvimento" to "$CONTROLLER · $CONTACT_INSTAGRAM"
   )
+
+  private val portuguese by lazy { LegalSet(summary, terms, privacy, changelog, licenses, credits) }
+  private val english by lazy {
+    LegalSet(LegalTextsEn.summary, LegalTextsEn.terms, LegalTextsEn.privacy, LegalTextsEn.changelog, LegalTextsEn.licenses, LegalTextsEn.credits)
+  }
+
+  /** The texts for a language code such as "pt" or "en": Portuguese for "pt", English for every other. */
+  fun forLanguage(language: String): LegalSet = if (language.equals("pt", ignoreCase = true)) portuguese else english
 }

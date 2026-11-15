@@ -1,14 +1,14 @@
 package com.example.data.audius
 
+import com.example.data.net.Http
 import android.util.Log
+import com.example.data.model.Placeholders
 import com.example.data.model.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.net.URLEncoder
-import java.util.concurrent.TimeUnit
 
 object AudiusApiService {
   private const val TAG = "AudiusApiService"
@@ -23,12 +23,7 @@ object AudiusApiService {
     "https://dn1.nodeoperator.io/v1"
   )
 
-  private val client = OkHttpClient.Builder()
-    .connectTimeout(15, TimeUnit.SECONDS)
-    .readTimeout(20, TimeUnit.SECONDS)
-    .followRedirects(true)
-    .followSslRedirects(true)
-    .build()
+  private val client = Http.client
 
   /** Throws [java.io.IOException] when no server answered, so the screen can tell "offline" from "nothing found". */
   suspend fun searchTracks(query: String): List<Track> = withContext(Dispatchers.IO) {
@@ -63,29 +58,31 @@ object AudiusApiService {
         .addHeader("Accept", "application/json")
         .build()
 
-      val response = client.newCall(request).execute()
-      if (!response.isSuccessful) {
-        Log.w(TAG, "Audius node returned code ${response.code} for $url")
-        return null
-      }
-
-      val body = response.body?.string() ?: return null
+      // use{} closes the response on every path, so a failed node never leaks its connection.
+      val body = client.newCall(request).execute().use { response ->
+        if (!response.isSuccessful) {
+          Log.w(TAG, "Audius node returned code ${response.code} for $url")
+          return null
+        }
+        response.body?.string()
+      } ?: return null
       val json = JSONObject(body)
       val data = json.optJSONArray("data") ?: return null
 
       val result = mutableListOf<Track>()
       for (i in 0 until data.length()) {
-        val item = data.getJSONObject(i)
+        // One malformed entry is skipped instead of throwing away the whole node's results.
+        val item = data.optJSONObject(i) ?: continue
         val id = item.optString("id").ifBlank { item.optInt("track_id", 0).toString() }
         if (id.isBlank() || id == "0") continue
         // Unstreamable tracks (gated or removed) answer 404 on /stream: leave them out.
         if (!item.optBoolean("is_streamable", true)) continue
 
-        val title = item.optString("title", "Sem título")
+        val title = item.optString("title", Placeholders.untitled())
         val durationSec = item.optLong("duration", 180L)
         val genre = item.optString("genre", "Audius Music")
         val userObj = item.optJSONObject("user")
-        val artist = userObj?.optString("name", "Artista Audius") ?: "Artista Audius"
+        val artist = userObj?.optString("name", Placeholders.catalogArtist("Audius")) ?: Placeholders.catalogArtist("Audius")
 
         // Stream URL from direct node stream endpoint
         val streamUrl = "$baseNode/tracks/$id/stream?app_name=$APP_NAME&api_key=$API_KEY"

@@ -168,8 +168,88 @@ class PlaybackOrderTest {
   }
 
   @Test
-  fun `shuffle with a single track returns that track`() {
-    assertEquals(a, next(a, list = listOf(a), shuffle = true).track)
+  fun `shuffle with a single track returns that track on Next and stops at its end`() {
+    assertEquals(a, next(a, list = listOf(a), shuffle = true, auto = false).track)
+    assertNull(next(a, list = listOf(a), shuffle = true).track)
+    assertEquals(a, next(a, list = listOf(a), shuffle = true, repeat = RepeatMode.ALL).track)
+  }
+
+  @Test
+  fun `a shuffled pass plays every track once before any repeats`() {
+    val list = (1..12).map { track("t$it") }
+    val random = Random(5)
+    var order = emptyList<String>()
+    var current: Track = list[4]
+    val played = mutableListOf(current.id)
+    repeat(list.size - 1) {
+      order = PlaybackOrder.shuffleOrderFor(list, current, order, random)
+      val n = PlaybackOrder.resolveNext(current, emptyList(), list, true, RepeatMode.OFF, true, random, order)
+      order = n.shuffleOrder!!
+      current = n.track!!
+      played += current.id
+    }
+    assertEquals(list.map { it.id }.toSet(), played.toSet())
+    assertEquals(list.size, played.size)
+    // Repeat off: the pass ends like the end of the list.
+    assertNull(PlaybackOrder.resolveNext(current, emptyList(), list, true, RepeatMode.OFF, true, random, order).track)
+  }
+
+  @Test
+  fun `with repeat all a new pass starts and never with the track that just ended`() {
+    val random = Random(11)
+    repeat(100) {
+      val order = PlaybackOrder.shuffled(library, "a", random)
+      val last = library.first { it.id == order.last() }
+      val n = PlaybackOrder.resolveNext(last, emptyList(), library, true, RepeatMode.ALL, true, random, order)
+      assertNotEquals(last, n.track)
+      assertEquals(library.size, n.shuffleOrder!!.size)
+    }
+  }
+
+  @Test
+  fun `the order is kept while it fits the list and rebuilt when the list changes`() {
+    val order = listOf("c", "a", "b")
+    assertEquals(order, PlaybackOrder.shuffleOrderFor(library, a, order))
+    val bigger = library + d
+    val rebuilt = PlaybackOrder.shuffleOrderFor(bigger, a, order, Random(1))
+    assertEquals("a", rebuilt.first())
+    assertEquals(bigger.map { it.id }.toSet(), rebuilt.toSet())
+  }
+
+  @Test
+  fun `a lost connection never skips and a bad file skips up to three in a row`() {
+    assertFalse(PlaybackOrder.skipAfterFailure(network = true, failuresInARow = 1, canAdvance = true))
+    assertTrue(PlaybackOrder.skipAfterFailure(network = false, failuresInARow = 1, canAdvance = true))
+    assertTrue(PlaybackOrder.skipAfterFailure(network = false, failuresInARow = 2, canAdvance = true))
+    assertFalse(PlaybackOrder.skipAfterFailure(network = false, failuresInARow = 3, canAdvance = true))
+    assertFalse(PlaybackOrder.skipAfterFailure(network = false, failuresInARow = 1, canAdvance = false))
+  }
+
+  @Test
+  fun `after the queue the list goes on from the current track`() {
+    val list = listOf(a, b, c, d)
+    assertEquals(listOf(c, d), PlaybackOrder.upcoming(b, list, false, emptyList(), RepeatMode.OFF, 10))
+    assertEquals(listOf(c, d, a), PlaybackOrder.upcoming(b, list, false, emptyList(), RepeatMode.ALL, 10))
+    assertEquals(listOf(c), PlaybackOrder.upcoming(b, list, false, emptyList(), RepeatMode.OFF, 1))
+    assertTrue(PlaybackOrder.upcoming(b, list, false, emptyList(), RepeatMode.ONE, 10).isEmpty())
+    // Shuffled: the order of the pass, not the list's.
+    assertEquals(listOf(a, c), PlaybackOrder.upcoming(d, list, true, listOf("b", "d", "a", "c"), RepeatMode.OFF, 10))
+    // A track from outside the list: the list from its start.
+    assertEquals(listOf(a, b), PlaybackOrder.upcoming(track("x"), listOf(a, b), false, emptyList(), RepeatMode.OFF, 10))
+  }
+
+  @Test
+  fun `queue keys stay with their entry when it moves`() {
+    assertEquals(listOf("a#0", "b#0", "a#1"), PlaybackOrder.entryKeys(listOf(a, b, a)))
+    val before = PlaybackOrder.entryKeys(listOf(a, b, c))
+    val after = PlaybackOrder.entryKeys(listOf(c, a, b))
+    assertEquals(before.toSet(), after.toSet())
+    assertEquals("c#0", after.first())
+  }
+
+  @Test
+  fun `a shuffled order starts at the chosen track`() {
+    repeat(50) { assertEquals("b", PlaybackOrder.shuffled(library, "b", Random(it)).first()) }
   }
 
   @Test

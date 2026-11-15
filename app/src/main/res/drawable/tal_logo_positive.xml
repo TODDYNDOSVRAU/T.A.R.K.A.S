@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Official T.A.L. logo, converted by script from C:/dev/TAL/logo/AB-topo SVG. Single colour, no accent. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="109dp"
+    android:height="155dp"
+    android:viewportWidth="217.8"
+    android:viewportHeight="310">
+  <group android:translateX="56.961524" android:translateY="185">
+    <path
+        android:fillColor="#F2F2F0"
+        android:pathData="M0.00,-180.00L51.96,-150.00L0.00,-120.00L-51.96,-150.00Z"
+        android:strokeColor="#080808"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#F2F2F0"
+        android:pathData="M51.96,30.00L0.00,60.00L0.00,-120.00L51.96,-150.00Z"
+        android:strokeColor="#080808"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#F2F2F0"
+        android:pathData="M-51.96,30.00L0.00,60.00L0.00,-120.00L-51.96,-150.00Z"
+        android:strokeColor="#080808"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M-24.44,-150.00L0.00,-164.11"
+        android:strokeColor="#080808"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M-12.22,-157.06L13.09,-142.44"
+        android:strokeColor="#080808"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#F2F2F0"
+        android:pathData="M51.96,-90.00L103.92,-60.00L51.96,-30.00L0.00,-60.00Z"
+        android:strokeColor="#080808"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#F2F2F0"
+        android:pathData="M103.92,60.00L51.96,90.00L51.96,-30.00L103.92,-60.00Z"
+        android:strokeColor="#080808"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#F2F2F0"
+        android:pathData="M0.00,60.00L51.96,90.00L51.96,-30.00L0.00,-60.00Z"
+        android:strokeColor="#080808"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M53.71,-45.89L38.87,-67.56L76.40,-58.99"
+        android:strokeColor="#080808"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M48.03,-54.71L61.13,-62.27"
+        android:strokeColor="#080808"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#F2F2F0"
+        android:pathData="M103.92,0.00L155.88,30.00L103.92,60.00L51.96,30.00Z"
+        android:strokeColor="#080808"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#F2F2F0"
+        android:pathData="M155.88,90.00L103.92,120.00L103.92,60.00L155.88,30.00Z"
+        android:strokeColor="#080808"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:fillColor="#F2F2F0"
+        android:pathData="M51.96,90.00L103.92,120.00L103.92,60.00L51.96,30.00Z"
+        android:strokeColor="#080808"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M82.10,27.48L108.29,42.60L127.49,31.51"
+        android:strokeColor="#080808"
+        android:strokeWidth="4.5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round" />
+  </group>
+</vector>
