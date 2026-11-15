@@ -266,7 +266,7 @@ fun Hairline(modifier: Modifier = Modifier) {
   Box(
     modifier = modifier
       .fillMaxWidth()
-      .height(0.5.dp)
+      .height(Grid.hairline)
       .background(MaterialTheme.colorScheme.outline)
   )
 }
@@ -535,7 +535,7 @@ private fun ButtonLayout(
       .clip(Grid.r24)
       .background(container)
       .highlightClickable(enabled = enabled, onClick = onClick)
-      .padding(horizontal = Grid.u24, vertical = Grid.u12),
+      .padding(horizontal = Grid.u24),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.Center
   ) {
@@ -576,7 +576,7 @@ fun IconAction(
   modifier: Modifier = Modifier,
   tint: Color = LocalContentColor.current,
   filled: Boolean = false,
-  size: Dp = 40.dp
+  size: Dp = Grid.u48
 ) {
   Box(
     modifier = modifier

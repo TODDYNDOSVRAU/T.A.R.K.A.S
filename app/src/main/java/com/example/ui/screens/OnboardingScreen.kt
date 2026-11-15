@@ -68,8 +68,8 @@ import com.example.ui.legal.LegalDoc
 import com.example.ui.legal.LegalTexts
 import com.example.ui.legal.currentLegalTexts
 import com.example.ui.theme.AppText
+import com.example.ui.theme.Grid
 import com.example.ui.theme.Size
-import com.example.ui.theme.Space
 import com.example.ui.theme.SurfaceStyle
 import com.example.ui.theme.rememberReducedMotion
 import com.example.ui.theme.subPageTransition
@@ -177,8 +177,8 @@ fun OnboardingScreen(
           Box(
             modifier = Modifier
               .fillMaxWidth()
-              .heightIn(min = Size.touch)
-              .padding(horizontal = Space.s)
+              .heightIn(min = Grid.u48)
+              .padding(horizontal = Grid.u6)
           ) {
             if (index > 0) {
               TextAction(stringResource(R.string.onboarding_back), onClick = { index-- }, modifier = Modifier.align(Alignment.CenterStart).testTag("onboarding_back"))
@@ -202,7 +202,7 @@ fun OnboardingScreen(
               modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = Space.xl),
+                .padding(bottom = Grid.u24),
               horizontalAlignment = Alignment.CenterHorizontally
             ) {
               Column(Modifier.widthIn(max = ContentWidth).fillMaxWidth()) {
@@ -225,12 +225,12 @@ fun OnboardingScreen(
           Column(
             modifier = Modifier
               .fillMaxWidth()
-              .padding(horizontal = Space.page, vertical = Space.l),
+              .padding(horizontal = Grid.margin, vertical = Grid.u12),
             horizontalAlignment = Alignment.CenterHorizontally
           ) {
             if (steps.size > 1) {
               PageIndicator(index, steps.size)
-              Spacer(Modifier.height(Space.l))
+              Spacer(Modifier.height(Grid.u12))
             }
             PrimaryButton(
               text = stringResource(if (step == Step.DONE) R.string.onboarding_start else R.string.onboarding_continue),
@@ -260,13 +260,13 @@ private fun PageIndicator(current: Int, count: Int) {
   val colors = MaterialTheme.colorScheme
   val description = stringResource(R.string.onboarding_step_of, current + 1, count)
   Row(
-    horizontalArrangement = Arrangement.spacedBy(Space.s),
+    horizontalArrangement = Arrangement.spacedBy(Grid.u6),
     modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = description }
   ) {
     repeat(count) { i ->
       Box(
         Modifier
-          .size(7.dp)
+          .size(Grid.u6)
           .background(if (i == current) colors.onSurface else colors.outline, CircleShape)
       )
     }
@@ -279,11 +279,11 @@ private fun StepHeader(title: String, body: String, mark: Boolean = false) {
   val colors = MaterialTheme.colorScheme
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
-    modifier = Modifier.fillMaxWidth().padding(horizontal = Space.page, vertical = Space.l)
+    modifier = Modifier.fillMaxWidth().padding(horizontal = Grid.margin, vertical = Grid.u12)
   ) {
     if (mark) {
       TarkasMark(modifier = Modifier.size(width = 88.dp, height = 54.dp))
-      Spacer(Modifier.height(Space.xl))
+      Spacer(Modifier.height(Grid.u24))
     }
     Text(
       title,
@@ -292,13 +292,13 @@ private fun StepHeader(title: String, body: String, mark: Boolean = false) {
       textAlign = TextAlign.Center,
       modifier = Modifier.semantics { heading() }
     )
-    Spacer(Modifier.height(Space.s))
+    Spacer(Modifier.height(Grid.u6))
     Text(body, style = AppText.Body, color = colors.onSurfaceVariant, textAlign = TextAlign.Center)
   }
 }
 
 @Composable
-private fun SectionGap() = Spacer(Modifier.height(Space.xl))
+private fun SectionGap() = Spacer(Modifier.height(Grid.u24))
 
 @Composable
 private fun WelcomeStep() {
@@ -320,12 +320,12 @@ private fun FeatureRow(icon: ImageVector, title: String, body: String) {
   Row(
     modifier = Modifier
       .fillMaxWidth()
-      .padding(horizontal = Space.page + Space.s, vertical = Space.m)
+      .padding(horizontal = Grid.margin, vertical = Grid.u12)
       .semantics(mergeDescendants = true) {},
     verticalAlignment = Alignment.Top
   ) {
     RowIcon(icon)
-    Spacer(Modifier.width(Space.l))
+    Spacer(Modifier.width(Grid.u12))
     Column(Modifier.weight(1f)) {
       Text(title, style = AppText.Headline, color = colors.onSurface)
       Text(body, style = AppText.Subhead, color = colors.onSurfaceVariant)
@@ -348,7 +348,7 @@ private fun TermsStep(accepted: Boolean, onAccepted: (Boolean) -> Unit, onRead: 
         line,
         style = AppText.Subhead,
         color = colors.onSurface,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = Space.l, vertical = Space.m)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Grid.inset, vertical = Grid.u12)
       )
     }
   }
@@ -364,9 +364,9 @@ private fun TermsStep(accepted: Boolean, onAccepted: (Boolean) -> Unit, onRead: 
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .heightIn(min = Size.row)
+        .heightIn(min = Grid.u48)
         .toggleable(value = accepted, role = Role.Checkbox, onValueChange = onAccepted)
-        .padding(start = Space.xs, end = Space.l, top = Space.xs, bottom = Space.xs)
+        .padding(start = Grid.u6, end = Grid.inset)
         .testTag("onboarding_accept"),
       verticalAlignment = Alignment.CenterVertically
     ) {
@@ -452,7 +452,7 @@ private fun DoneStep() {
         line,
         style = AppText.Subhead,
         color = colors.onSurface,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = Space.l, vertical = Space.m)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Grid.inset, vertical = Grid.u12)
       )
     }
   }
