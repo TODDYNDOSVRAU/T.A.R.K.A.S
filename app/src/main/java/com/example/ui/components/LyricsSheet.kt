@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -35,17 +36,14 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.example.R
 import com.example.data.lyrics.LyricLine
 import com.example.data.lyrics.Lyrics
 import com.example.data.lyrics.LyricsState
 import com.example.data.model.Track
-import com.example.ui.theme.AppText
-import com.example.ui.theme.Radius
-import com.example.ui.theme.Size
-import com.example.ui.theme.Space
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
 
 /**
  * The lyrics of the playing song. When the lines carry times, the one being sung is the brightest and
@@ -65,21 +63,21 @@ fun LyricsSheet(
     onDismissRequest = onDismiss,
     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     containerColor = MaterialTheme.colorScheme.surfaceContainer,
-    shape = RoundedCornerShape(topStart = Radius.l, topEnd = Radius.l),
+    shape = RoundedCornerShape(topStart = Grid.u24, topEnd = Grid.u24),
     dragHandle = { SheetHandle() }
   ) {
     Column(modifier = Modifier.fillMaxSize().testTag("lyrics_sheet")) {
-      Column(modifier = Modifier.fillMaxWidth().padding(horizontal = Space.page, vertical = Space.s)) {
+      Column(modifier = Modifier.fillMaxWidth().padding(horizontal = Grid.margin, vertical = Grid.u6)) {
         Text(
           stringResource(R.string.lyrics_title),
-          style = AppText.Footnote,
+          style = GridText.Small,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
           modifier = Modifier.semantics { heading() }
         )
-        Text(track.title, style = AppText.Title3, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(track.artist, style = AppText.Subhead, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(track.title, style = GridText.BodyStrong, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(track.artist, style = GridText.Small, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
       }
-      Hairline(Modifier.padding(vertical = Space.xs))
+      Hairline(Modifier.padding(vertical = Grid.u6))
       val lyrics = state.lyrics
       when {
         state.loading || state.trackId != track.id -> Centered {
@@ -97,16 +95,16 @@ fun LyricsSheet(
 
 @Composable
 private fun Centered(content: @Composable () -> Unit) {
-  Box(modifier = Modifier.fillMaxWidth().padding(vertical = Space.xl), contentAlignment = Alignment.Center) { content() }
+  Box(modifier = Modifier.fillMaxWidth().padding(vertical = Grid.u24), contentAlignment = Alignment.Center) { content() }
 }
 
 @Composable
 private fun Message(text: String) {
   Text(
     text,
-    style = AppText.Body,
+    style = GridText.Body,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
-    modifier = Modifier.padding(horizontal = Space.page, vertical = Space.l).testTag("lyrics_message")
+    modifier = Modifier.padding(horizontal = Grid.margin, vertical = Grid.u12).testTag("lyrics_message")
   )
 }
 
@@ -130,16 +128,16 @@ private fun LyricsList(lyrics: Lyrics, currentPositionMs: () -> Long, onSeek: (L
   LazyColumn(
     state = listState,
     modifier = Modifier.fillMaxSize().testTag("lyrics_list"),
-    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = Space.page, vertical = Space.m),
-    verticalArrangement = Arrangement.spacedBy(Space.xs)
+    contentPadding = PaddingValues(horizontal = Grid.margin, vertical = Grid.u12),
+    verticalArrangement = Arrangement.spacedBy(Grid.u6)
   ) {
     if (!lyrics.synced) {
       item(key = "plain_note") {
         Text(
           stringResource(R.string.lyrics_plain_note),
-          style = AppText.Footnote,
+          style = GridText.Small,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.padding(bottom = Space.s)
+          modifier = Modifier.padding(bottom = Grid.u6)
         )
       }
     }
@@ -162,20 +160,20 @@ private fun LyricRow(line: LyricLine, isActive: Boolean, synced: Boolean, onSeek
   val time = line.timeMs
   if (line.text.isEmpty()) {
     // A pause between verses: space only, nothing for TalkBack to read.
-    Box(modifier = Modifier.heightIn(min = Space.m).fillMaxWidth())
+    Box(modifier = Modifier.heightIn(min = Grid.u12).fillMaxWidth())
     return
   }
   Text(
     line.text,
-    style = AppText.Title3.copy(fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal),
+    style = if (isActive) GridText.BodyStrong else GridText.Body,
     color = color,
     modifier = Modifier
       .fillMaxWidth()
-      .heightIn(min = Size.touch)
+      .heightIn(min = Grid.u48)
       .then(
         if (synced && time != null) Modifier.clickable(onClickLabel = seekLabel, role = Role.Button) { onSeek(time) } else Modifier
       )
       .semantics { if (isActive) stateDescription = nowLabel }
-      .padding(vertical = Space.s)
+      .padding(vertical = Grid.u12)
   )
 }

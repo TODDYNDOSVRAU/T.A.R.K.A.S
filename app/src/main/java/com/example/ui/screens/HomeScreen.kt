@@ -52,7 +52,6 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.model.Playlist
 import com.example.data.model.Track
@@ -68,12 +67,9 @@ import com.example.ui.screens.library.TrackDivider
 import com.example.ui.screens.library.itemMotion
 import com.example.ui.screens.library.trackSubtitle
 import com.example.ui.screens.library.trailingEdge
-import com.example.ui.theme.AppText
 import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
 import com.example.ui.theme.LocalBarInset
-import com.example.ui.theme.Shapes
-import com.example.ui.theme.Size
-import com.example.ui.theme.Space
 import com.example.ui.theme.opensPlayer
 import com.example.ui.theme.pressClickable
 import com.example.ui.theme.listEntrance
@@ -85,7 +81,7 @@ import kotlinx.coroutines.delay
 private const val SearchDebounceMs = 350L
 
 /** Width of a tile in the trending carousel: two and a bit fit a phone, so the next one peeks in. */
-private val TileWidth = 144.dp
+private val TileWidth = Grid.u96 + Grid.u48
 
 /** "Tocadas recentemente" shows this many songs: a shortcut; the full list is in Biblioteca. */
 private const val RecentLimit = 5
@@ -257,14 +253,14 @@ fun HomeScreen(
       val resumeAt = resume
       if (resumeTrack != null && resumeAt != null) {
         item(key = "resume_header") {
-          SectionHeader(stringResource(R.string.home_resume_header), modifier = Modifier.padding(top = Space.section, bottom = Grid.u6))
+          SectionHeader(stringResource(R.string.home_resume_header), modifier = Modifier.padding(top = Grid.u48, bottom = Grid.u6))
         }
         songs(listOf(resumeTrack), "resume", "resume_track", showSource = true, stagger = false, onClick = { onResume() })
         item(key = "resume_position") {
           Text(
             text = resumeAt.durationMs?.let { stringResource(R.string.home_resume_position_of, clock(resumeAt.positionMs), clock(it)) }
               ?: stringResource(R.string.home_resume_position, clock(resumeAt.positionMs)),
-            style = AppText.Footnote,
+            style = GridText.Small,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = Grid.margin, vertical = Grid.u6).testTag("resume_position")
           )
@@ -273,13 +269,13 @@ fun HomeScreen(
 
       if (recent.isNotEmpty()) {
         item(key = "recent_header") {
-          SectionHeader(stringResource(R.string.home_recent_header), modifier = Modifier.padding(top = Space.section, bottom = Grid.u6))
+          SectionHeader(stringResource(R.string.home_recent_header), modifier = Modifier.padding(top = Grid.u48, bottom = Grid.u6))
         }
         songs(recent, "recent", "recent_track", showSource = true, stagger = false, onClick = onPlayTrack)
       }
 
       item(key = "mine_header") {
-        SectionHeader(stringResource(R.string.home_mine_header), modifier = Modifier.padding(top = Space.section, bottom = Grid.u6))
+        SectionHeader(stringResource(R.string.home_mine_header), modifier = Modifier.padding(top = Grid.u48, bottom = Grid.u6))
       }
       if (myTracks.isEmpty()) {
         item(key = "mine_empty") {
@@ -302,7 +298,7 @@ fun HomeScreen(
             count = demoTracks.size,
             expanded = showDemos,
             onToggle = { showDemos = !showDemos },
-            modifier = Modifier.padding(top = Space.xl)
+            modifier = Modifier.padding(top = Grid.u24)
           )
         }
         if (showDemos) {
@@ -380,7 +376,7 @@ private fun CatalogSection(
 ) {
   if (state.notConfigured) return
   Column {
-    SectionHeader(title, modifier = Modifier.padding(top = Space.xl, bottom = Grid.u12))
+    SectionHeader(title, modifier = Modifier.padding(top = Grid.u24, bottom = Grid.u12))
     when {
       state.tracks.isEmpty() && state.loading -> TrendingSkeleton()
       state.tracks.isNotEmpty() -> TrendingRow(
@@ -413,7 +409,7 @@ private fun ResultsHeader(title: String, searching: Boolean) {
   Row(
     modifier = Modifier
       .fillMaxWidth()
-      .padding(top = Space.xl, bottom = Grid.u6, end = Grid.margin),
+      .padding(top = Grid.u24, bottom = Grid.u6, end = Grid.margin),
     verticalAlignment = Alignment.CenterVertically
   ) {
     SectionHeader(title, modifier = Modifier.weight(1f))
@@ -429,9 +425,9 @@ private fun ResultsHeader(title: String, searching: Boolean) {
     if (searching && slow) {
       CircularProgressIndicator(
         modifier = Modifier
-          .size(Size.iconSmall)
+          .size(Grid.icon)
           .semantics { stateDescription = searchingDescription },
-        strokeWidth = Space.xxs,
+        strokeWidth = Grid.hairline * 2,
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )
     }
@@ -443,7 +439,7 @@ private fun ResultsHeader(title: String, searching: Boolean) {
 private fun Note(text: String, modifier: Modifier = Modifier) {
   Text(
     text = text,
-    style = AppText.Subhead,
+    style = GridText.Small,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
     modifier = modifier.padding(horizontal = Grid.margin, vertical = Grid.u6)
   )
@@ -464,14 +460,14 @@ private fun DemoToggle(count: Int, expanded: Boolean, onToggle: () -> Unit, modi
     verticalAlignment = Alignment.CenterVertically
   ) {
     Column(modifier = Modifier.weight(1f)) {
-      Text(stringResource(R.string.home_demo_title), style = AppText.Body, color = MaterialTheme.colorScheme.onSurface)
+      Text(stringResource(R.string.home_demo_title), style = GridText.Body, color = MaterialTheme.colorScheme.onSurface)
       Text(
         pluralStringResource(R.plurals.home_demo_summary, count, count),
-        style = AppText.Subhead,
+        style = GridText.Small,
         color = MaterialTheme.colorScheme.onSurfaceVariant
       )
     }
-    Spacer(Modifier.width(Space.m))
+    Spacer(Modifier.width(Grid.u12))
     Icon(
       imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
       contentDescription = null,
@@ -497,7 +493,7 @@ private fun TrendingRow(
     state = state,
     flingBehavior = rememberSnapFlingBehavior(state, SnapPosition.Start),
     contentPadding = PaddingValues(horizontal = Grid.margin),
-    horizontalArrangement = Arrangement.spacedBy(Space.m)
+    horizontalArrangement = Arrangement.spacedBy(Grid.u12)
   ) {
     itemsIndexed(tracks.take(12), key = { _, t -> "${tagPrefix}_${t.id}" }) { index, track ->
       val isCurrent = currentTrack?.id == track.id
@@ -512,7 +508,7 @@ private fun TrendingRow(
       ) {
         TrackArtwork(
           track = track,
-          shape = Shapes.s,
+          shape = Grid.r12,
           iconSize = Grid.u48,
           playing = isCurrent && isPlaying,
           modifier = Modifier.size(TileWidth)
@@ -520,14 +516,14 @@ private fun TrendingRow(
         Spacer(Modifier.height(Grid.u6))
         Text(
           text = track.title,
-          style = AppText.Subhead.copy(fontWeight = FontWeight.SemiBold),
+          style = GridText.Small.copy(fontWeight = FontWeight.SemiBold),
           color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis
         )
         Text(
           text = track.artist,
-          style = AppText.Footnote,
+          style = GridText.Small,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis
@@ -535,7 +531,7 @@ private fun TrendingRow(
         if (track.genre.isNotBlank()) {
           Text(
             text = track.genre,
-            style = AppText.Caption1,
+            style = GridText.Small,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -552,7 +548,7 @@ private fun TrendingSkeleton() {
   val loadingDescription = stringResource(R.string.home_loading)
   val fill = MaterialTheme.colorScheme.surfaceContainer
   Row(
-    horizontalArrangement = Arrangement.spacedBy(Space.m),
+    horizontalArrangement = Arrangement.spacedBy(Grid.u12),
     // Laid out at full size and cut by the screen edge, as the real carousel is.
     modifier = Modifier
       .fillMaxWidth()
@@ -563,11 +559,11 @@ private fun TrendingSkeleton() {
   ) {
     repeat(3) {
       Column(modifier = Modifier.width(TileWidth)) {
-        Box(Modifier.size(TileWidth).clip(Shapes.s).background(fill))
+        Box(Modifier.size(TileWidth).clip(Grid.r12).background(fill))
         Spacer(Modifier.height(Grid.u6))
-        Box(Modifier.width(Grid.u96).height(Space.m).clip(Shapes.xs).background(fill))
-        Spacer(Modifier.height(Space.xs))
-        Box(Modifier.width(Grid.u48 + Grid.u24).height(Space.m).clip(Shapes.xs).background(fill))
+        Box(Modifier.width(Grid.u96).height(Grid.u12).clip(Grid.r6).background(fill))
+        Spacer(Modifier.height(Grid.u6))
+        Box(Modifier.width(Grid.u48 + Grid.u24).height(Grid.u12).clip(Grid.r6).background(fill))
       }
     }
   }

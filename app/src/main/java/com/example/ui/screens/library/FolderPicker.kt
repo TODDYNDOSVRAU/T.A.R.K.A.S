@@ -48,9 +48,6 @@ import com.example.data.library.FolderRules
 import com.example.data.library.FolderTree
 import com.example.ui.components.EmptyState
 import com.example.ui.components.SubPageHeader
-import com.example.ui.theme.AppText
-import com.example.ui.theme.Size
-import com.example.ui.theme.Space
 
 /**
  * Which folders of the device are in the library. The tree shows the folders that hold music; ticking one

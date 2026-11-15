@@ -239,11 +239,11 @@ fun AssistantScreen(
   val suggestions = remember(playback) { SuggestionCommands.filter { it.offeredWhen(playback) } }
   val hasUserMessage = messages.any { it.sender == MessageSender.USER }
 
-  Column(modifier = modifier.fillMaxSize().padding(bottom = LocalBarInset.current)) {
+  Column(modifier = modifier.fillMaxSize().readingColumn().padding(bottom = LocalBarInset.current)) {
     // The live region: one dot-sized node, so it is announced but adds nothing visible.
     Box(
       Modifier
-        .size(1.dp)
+        .size(Grid.u6)
         .semantics {
           liveRegion = LiveRegionMode.Polite
           contentDescription = announcement
@@ -251,7 +251,7 @@ fun AssistantScreen(
     )
     LazyColumn(
       state = listState,
-      modifier = Modifier.weight(1f).readingColumn(),
+      modifier = Modifier.weight(1f),
       contentPadding = PaddingValues(start = Grid.margin, end = Grid.margin, top = Grid.u6, bottom = Grid.u12),
       verticalArrangement = Arrangement.spacedBy(Grid.u12)
     ) {
@@ -396,7 +396,7 @@ fun AssistantScreen(
         icon = Icons.Rounded.Mic,
         contentDescription = stringResource(if (isListening) R.string.assistant_listening else R.string.assistant_mic_idle),
         onClick = ::launchVoiceInput,
-        tint = colors.primary,
+        tint = if (isListening) colors.primary else colors.onSurface,
         modifier = Modifier.testTag("siri_voice_orb")
       )
       IconAction(
@@ -421,7 +421,7 @@ private fun ClearConversation(confirming: Boolean, onAsk: () -> Unit, onConfirm:
       onClick = onAsk,
       modifier = Modifier.minimumInteractiveComponentSize().testTag("assistant_clear")
     ) {
-      Text(stringResource(R.string.assistant_clear), style = GridText.Small, color = colors.primary)
+      Text(stringResource(R.string.assistant_clear), style = GridText.Small, color = colors.onSurface)
     }
   } else {
     Row(
@@ -525,7 +525,7 @@ private fun MessageBubble(message: AssistantMessage, onRetry: (String) -> Unit) 
   )
   // A bubble takes what its text needs, up to most of the row; long replies wrap instead of stopping at a fixed width.
   BoxWithConstraints(Modifier.fillMaxWidth()) {
-    val bubbleMax = maxWidth * 0.82f
+    val bubbleMax = maxWidth * 2f / 3f
     Column(
       modifier = Modifier.fillMaxWidth(),
       horizontalAlignment = if (isUser) Alignment.End else Alignment.Start

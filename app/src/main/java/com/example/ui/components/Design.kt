@@ -66,14 +66,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.data.model.Track
-import com.example.ui.theme.AppText
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
 import com.example.ui.theme.gridHeight
-import com.example.ui.theme.Radius
-import com.example.ui.theme.Shapes
-import com.example.ui.theme.Size
-import com.example.ui.theme.Space
 
 /*
  * The app's building blocks. Every screen is made of these, so a row, a group, a button or a header
@@ -204,7 +199,7 @@ fun SubPageHeader(
           Icons.AutoMirrored.Rounded.ArrowBackIos,
           contentDescription = null,
           tint = MaterialTheme.colorScheme.primary,
-          modifier = Modifier.size(18.dp)
+          modifier = Modifier.size(Grid.icon)
         )
         Spacer(Modifier.width(Grid.u6))
         Text(backLabel, style = GridText.Body, color = MaterialTheme.colorScheme.primary, maxLines = 1)
@@ -580,7 +575,7 @@ fun IconAction(
 ) {
   Box(
     modifier = modifier
-      .size(maxOf(size, Size.touch))
+      .size(maxOf(size, Grid.u48))
       .clip(androidx.compose.foundation.shape.CircleShape)
       .clickable(role = Role.Button, onClick = onClick)
       .semantics { this.contentDescription = contentDescription },
@@ -593,7 +588,7 @@ fun IconAction(
         .then(if (filled) Modifier.background(MaterialTheme.colorScheme.surfaceContainer) else Modifier),
       contentAlignment = Alignment.Center
     ) {
-      Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(Size.icon))
+      Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(Grid.icon))
     }
   }
 }
@@ -761,23 +756,23 @@ fun TrackRow(
   ) {
     TrackArtwork(
       track = track,
-      shape = Shapes.xs,
-      iconSize = 22.dp,
+      shape = Grid.r6,
+      iconSize = Grid.icon,
       playing = isCurrent && isPlaying,
-      modifier = Modifier.size(Size.rowArtwork)
+      modifier = Modifier.size(Grid.u48)
     )
-    Spacer(Modifier.width(Space.m))
+    Spacer(Modifier.width(Grid.u12))
     Column(modifier = Modifier.weight(1f)) {
       Text(
         track.title,
-        style = AppText.Body,
+        style = GridText.Body,
         color = if (isCurrent) colors.primary else colors.onSurface,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis
       )
       Text(
         subtitle,
-        style = AppText.Subhead,
+        style = GridText.Small,
         color = colors.onSurfaceVariant,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis

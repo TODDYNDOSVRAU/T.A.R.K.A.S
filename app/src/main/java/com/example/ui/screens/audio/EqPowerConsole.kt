@@ -156,9 +156,11 @@ internal fun EqPowerConsole(
             bands(Modifier.weight(1f).fillMaxWidth())
           }
         }
+        // On a short window the four rows of the control column sit 6 dp apart, so the last one clears the
+        // floating bar without scrolling; taller windows keep 12.
         Column(
           modifier = Modifier.width(Grid.u384).fillMaxHeight().verticalScroll(rememberScrollState()),
-          verticalArrangement = Arrangement.spacedBy(Grid.u12)
+          verticalArrangement = Arrangement.spacedBy(if (pageHeight < Grid.u384) Grid.u6 else Grid.u12)
         ) {
           top()
           presets()
@@ -172,7 +174,8 @@ internal fun EqPowerConsole(
     // Rows 48 + 48 + 48 + 48 + 48, the curve card 192, and five gaps of 12 around the band area.
     val bandHeight = (maxHeight - FIXED_HEIGHT).coerceIn(BANDS_MIN, BANDS_MAX)
     Column(
-      modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Grid.margin),
+      modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+        .padding(start = Grid.margin, end = Grid.margin, bottom = Grid.u12),
       verticalArrangement = Arrangement.spacedBy(Grid.u12)
     ) {
       top()
@@ -185,10 +188,14 @@ internal fun EqPowerConsole(
   }
 }
 
-private val SIDE_MIN_WIDTH = 720.dp
-private val BANDS_MIN = Grid.u96 + Grid.u48
+// Side by side needs the 384 dp control column and as much again for the curve.
+private val SIDE_MIN_WIDTH = Grid.u384 * 2
+// Two rows of 48 dp tiles with their 24 dp gap. The band area is the block that flexes, so on a phone the
+// last row keeps its 12 dp above the floating bar without scrolling.
+private val BANDS_MIN = Grid.u96 + Grid.u24
 private val BANDS_MAX = Grid.u192 + Grid.u96
-private val FIXED_HEIGHT = Grid.u48 * 4 + Grid.u192 + Grid.u12 * 5
+// Four 48 dp rows, the 192 dp curve, five gaps of 12 and 12 below the last row (room above the floating bar).
+private val FIXED_HEIGHT = Grid.u48 * 4 + Grid.u192 + Grid.u12 * 6
 
 /** Title and route line on the left; the power pill on the right. Holding the pill plays without the EQ. */
 @Composable

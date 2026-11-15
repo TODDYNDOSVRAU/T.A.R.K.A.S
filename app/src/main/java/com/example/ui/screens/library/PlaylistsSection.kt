@@ -56,14 +56,10 @@ import com.example.ui.components.highlightClickable
 import com.example.ui.screens.library.TrackDivider
 import com.example.ui.screens.library.itemMotion
 import com.example.ui.screens.library.trailingEdge
-import com.example.ui.theme.AppText
 import com.example.ui.theme.LocalBarInset
-import com.example.ui.theme.Shapes
-import com.example.ui.theme.Size
-import com.example.ui.theme.Space
 
 /** Artwork of a playlist row. */
-internal val PlaylistArtworkSize = 48.dp
+internal val PlaylistArtworkSize = Grid.u48
 
 @Composable
 internal fun PlaylistsList(
@@ -189,7 +185,7 @@ internal fun PlaylistArtwork(tracks: List<Track>) {
         covers.chunked(2).forEach { pair ->
           Row {
             pair.forEach { t ->
-              TrackArtwork(track = t, shape = RectangleShape, iconSize = 12.dp, modifier = Modifier.size(PlaylistArtworkSize / 2))
+              TrackArtwork(track = t, shape = RectangleShape, iconSize = Grid.u12, modifier = Modifier.size(PlaylistArtworkSize / 2))
             }
           }
         }

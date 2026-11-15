@@ -29,19 +29,15 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.example.R
 import com.example.data.audio.spatial.SpatialPreset
-import com.example.ui.theme.AppText
 import com.example.ui.theme.Grid
-import com.example.ui.theme.JetBrainsMono
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -57,7 +53,7 @@ internal fun spatialStageCaption(enabled: Boolean, preset: SpatialPreset): Strin
   }
 )
 
-private val StageLabelStyle = AppText.Caption1.copy(fontFamily = JetBrainsMono, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+private val StageLabelStyle = EqType.MonoStrong
 private val LabelIds = arrayOf("L", "R", "C", "Ls", "Rs", "LFE")
 
 /**
@@ -115,7 +111,7 @@ internal fun SpatialStage(enabled: Boolean, preset: SpatialPreset, intensity: Fl
       .height(Grid.u192)
       .clip(shape)
       .background(colors.surfaceContainer)
-      .border(1.dp, colors.outline.copy(alpha = 0.5f), shape)
+      .border(Grid.hairline, colors.outline.copy(alpha = 0.5f), shape)
       .semantics { contentDescription = description }
       .pointerInput(Unit) {
         // Decorative orbit: the head turns with the finger and springs back when it lifts.

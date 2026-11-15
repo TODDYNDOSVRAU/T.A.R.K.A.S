@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Equalizer: exemplo violeta</title>
+<style>
+:root{
+  --ink:#080808; --raised:#141414; --high:#1D1D1D; --line:#2D2D2D;
+  --white:#F2F2F0; --gray:#8C8C8C; --ice:#8B5CFF; --ice-wash:#2A1B52;
+  --display:"Space Grotesk",system-ui,sans-serif; --body:Inter,system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  --ease:cubic-bezier(.2,.8,.2,1);
+}
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+body{background:#0c0c0c;color:var(--white);font:14px/1.4 var(--body);min-height:100vh;display:grid;place-items:center;padding:16px}
+.note{max-width:360px;color:var(--gray);font:400 11px/1.5 var(--mono);margin-top:12px}
+.phone{width:360px;height:740px;background:var(--ink);border:1px solid var(--line);border-radius:28px;overflow:hidden;position:relative;display:flex;flex-direction:column;user-select:none;touch-action:manipulation}
+.status{height:28px;flex:none}
+.top{padding:4px 20px 0;display:flex;justify-content:space-between;align-items:flex-start}
+.title{font:600 28px/1.1 var(--display);letter-spacing:-.02em}
+.route{font:400 11px var(--mono);color:var(--gray);margin-top:4px;display:flex;gap:6px;align-items:center}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--ice)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,.f:focus-visible .th{outline:2px solid var(--ice);outline-offset:2px}
+.power{display:flex;align-items:center;gap:8px;height:48px;padding:0 14px;border-radius:24px;background:var(--high);font:600 12px var(--body);transition:transform .15s var(--ease)}
+.power:active{transform:scale(.96)}
+.sw{width:34px;height:20px;border-radius:10px;background:#3a3a3a;position:relative;transition:background .2s var(--ease)}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--white);transition:transform .25s var(--ease),background .2s}
+.sw.on{background:var(--ice)}.sw.on::after{transform:translateX(14px);background:var(--ink)}
+.preset{margin:14px 20px 0;display:flex;gap:8px}
+.pill{flex:1;height:48px;border-radius:24px;background:var(--high);display:flex;align-items:center;justify-content:space-between;padding:0 16px;font:600 14px var(--body);transition:transform .15s var(--ease)}
+.pill:active,.icobtn:active,.btn:active{transform:scale(.97)}
+.pill small{font:400 11px var(--mono);color:var(--gray)}
+.icobtn{width:48px;height:48px;border-radius:24px;background:var(--high);display:grid;place-items:center;font-size:18px;transition:transform .15s var(--ease)}
+.card{margin:12px 20px 0;background:var(--raised);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.curve{height:132px;padding:8px 8px 0}
+.curve svg{width:100%;height:100%;display:block}
+.axis{display:flex;justify-content:space-between;padding:0 12px 8px;font:400 10px var(--mono);color:var(--gray)}
+.faders{margin:12px 20px 0;flex:1;min-height:0;display:flex;justify-content:space-between;position:relative}
+.f{width:30px;display:flex;flex-direction:column;align-items:center;font:400 10px var(--mono);color:var(--gray);cursor:ns-resize;touch-action:none;outline:none}
+.f .v{height:16px;color:var(--white);transition:color .2s}
+.f .tr{flex:1;width:2px;background:var(--line);position:relative;border-radius:1px}
+.f .th{position:absolute;left:50%;width:26px;height:34px;margin-left:-13px;margin-top:-17px;border-radius:8px;background:#e6e6e3;transition:background .2s}
+.f.sel .th{background:var(--ice)}.f.sel .v{color:var(--ice)}
+.f .hz{height:18px;padding-top:4px}
+.zero{position:absolute;left:0;right:0;border-top:1px dashed #3a3a3a;pointer-events:none}
+.dock{margin:10px 20px 0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seg{display:flex;background:var(--high);border-radius:24px;padding:2px;height:48px;position:relative}
+.seg button{flex:1;border-radius:22px;font:500 12px var(--body);color:var(--gray);z-index:1;transition:color .2s}
+.seg button.on{color:var(--white);font-weight:600}
+.seg i{position:absolute;top:2px;bottom:2px;left:2px;width:calc(50% - 2px);border-radius:22px;background:var(--ice-wash);transition:transform .3s var(--ease)}
+.seg.par i{transform:translateX(100%)}
+.btn{height:48px;border-radius:24px;background:var(--high);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.2;white-space:nowrap;font:600 12px var(--body);transition:transform .15s var(--ease)}
+.btn small{font:400 10px var(--mono);color:var(--ice)}
+.btn.off small{color:var(--gray)}
+.path{margin:10px 20px 14px;min-height:48px;border-radius:14px;border:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 14px;font:400 11px var(--mono);color:var(--gray)}
+.path b{color:var(--white);font-weight:500}
+.cmp{position:absolute;left:20px;right:20px;top:92px;height:28px;border-radius:14px;display:grid;place-items:center;font:500 11px var(--mono);color:var(--ink);background:var(--ice);opacity:0;transform:translateY(-6px);transition:opacity .2s var(--ease),transform .25s var(--ease);pointer-events:none;z-index:3}
+.cmp.show{opacity:1;transform:none}
+/* glass sheets */
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .25s var(--ease);z-index:4}
+.scrim.show{opacity:1;pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;top:150px;z-index:5;border-radius:20px 20px 0 0;padding:10px 20px 16px;overflow:auto;
+  background:rgba(24,24,24,.62);-webkit-backdrop-filter:blur(22px) saturate(1.2);backdrop-filter:blur(22px) saturate(1.2);border-top:1px solid rgba(242,242,240,.14);
+  transform:translateY(105%);transition:transform .32s var(--ease);will-change:transform}
+.sheet.show{transform:none}
+.sheet.sp{top:auto;height:420px}
+@media (prefers-reduced-transparency:reduce){.sheet{background:#181818;-webkit-backdrop-filter:none;backdrop-filter:none}}
+.grab{width:36px;height:4px;background:#555;border-radius:2px;margin:0 auto 12px}
+.sheet h2{font:600 20px var(--display);letter-spacing:-.01em}
+.sec{font:600 11px var(--mono);color:var(--gray);letter-spacing:.06em;text-transform:uppercase;margin:16px 0 6px}
+.row{display:flex;align-items:center;justify-content:space-between;min-height:48px;border-bottom:1px solid rgba(242,242,240,.1);font-size:14px;width:100%;text-align:left}
+.row span:last-child{font:400 12px var(--mono);color:var(--gray)}
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.modes button{height:48px;border-radius:24px;background:rgba(255,255,255,.07);font:600 12px var(--body);transition:background .2s,color .2s}
+.modes button.on{background:var(--ice-wash);box-shadow:inset 0 0 0 1px var(--ice)}
+.slider{margin-top:10px}
+.slider label{display:flex;justify-content:space-between;font:400 12px var(--mono);color:var(--gray)}
+input[type=range]{width:100%;height:48px;accent-color:var(--ice);background:none}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+<div>
+<div class="phone" id="phone">
+  <div class="status"></div>
+  <div class="top">
+    <div>
+      <div class="title">Equalizer</div>
+      <div class="route"><span class="dot"></span>Galaxy Buds2 Pro · 48 kHz</div>
+    </div>
+    <button class="power" id="power" aria-label="Equalizador ligado. Toque para desligar, segure para ouvir sem EQ">EQ <span class="sw on" id="sw"></span></button>
+  </div>
+  <div class="cmp" id="cmp">Sem EQ · volume igualado</div>
+  <div class="preset">
+    <button class="pill" id="presetBtn"><span id="presetName">Rock</span><small id="presetState">toque: trocar</small></button>
+    <button class="icobtn" id="more" aria-label="Ajustes">⋯</button>
+  </div>
+  <div class="card">
+    <div class="curve"><svg id="curve" viewBox="0 0 320 116" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+    <div class="axis"><span>20</span><span>100</span><span>1k</span><span>10k</span><span>20k</span></div>
+  </div>
+  <div class="faders" id="faders"></div>
+  <div class="dock">
+    <div class="seg" id="seg"><i></i><button class="on" data-m="g">Gráfico</button><button data-m="p">Paramétrico</button></div>
+    <button class="btn" id="spBtn"><span>Tarkas Spatial</span><small id="spSub">Cinema 5.1 · 70%</small></button>
+  </div>
+  <div class="path"><span>Sinal <b id="head">−3,0 dB</b> de folga · limitador <b>desligado</b></span></div>
+
+  <div class="scrim" id="scrim"></div>
+
+  <div class="sheet" id="sheetAdj" role="dialog" aria-label="Ajustes">
+    <div class="grab"></div>
+    <h2>Ajustes</h2>
+    <div class="sec">Tarkas Spatial</div>
+    <div style="font:400 12px var(--mono);color:var(--gray)">Modo fixado na tela principal</div>
+    <div class="modes" id="modes">
+      <button data-k="Sutil">Sutil</button><button data-k="Padrão">Padrão</button>
+      <button data-k="Amplo">Amplo</button><button data-k="Cinema 5.1" class="on">Cinema 5.1</button>
+    </div>
+    <div class="sec">Tom</div>
+    <div class="row"><span>Graves (prateleira)</span><span>+2 dB</span></div>
+    <div class="row"><span>Agudos (prateleira)</span><span>0 dB</span></div>
+    <div class="sec">Fone</div>
+    <div class="row"><span>Correção do fone</span><span>Buds2 Pro · AutoEq</span></div>
+    <div class="sec">Volume</div>
+    <div class="row"><span>Normalização</span><span>por faixa</span></div>
+    <div class="row"><span>Crossfade</span><span>4 s</span></div>
+  </div>
+
+  <div class="sheet sp" id="sheetSp" role="dialog" aria-label="Tarkas Spatial">
+    <div class="grab"></div>
+    <h2>Tarkas Spatial</h2>
+    <div class="row" style="margin-top:8px"><span>Ligado</span><span class="sw on" id="spSw"></span></div>
+    <div class="slider"><label><span>Intensidade</span><span id="spVal">70%</span></label>
+      <input id="spRange" type="range" min="0" max="100" value="70" aria-label="Intensidade"></div>
+    <div class="row"><span>Mais modos e ajuste fino</span><span>›</span></div>
+  </div>
+</div>
+<p class="note">Exemplo de comportamento, não é o app. Arraste os faders (ou use as setas), toque em “Rock” para trocar de preset, segure “EQ” para comparar, toque em Spatial ou ⋯. A curva e as folhas usam molas e vidro; a fluidez real só se prova no S23.</p>
+</div>
+
+<script>
+const HZ=["31","62","125","250","500","1k","2k","4k","8k","16k"];
+const PRESETS=[["Rock",[3,2,1,0,-1,0,2,3,3,2]],["Plano",[0,0,0,0,0,0,0,0,0,0]],["Vocal",[-2,-1,0,2,3,3,2,1,0,-1]],["Graves",[6,5,3,1,0,0,0,0,0,0]]];
+let pi=0,gains=PRESETS[0][1].slice(),shown=gains.slice(),vel=new Array(10).fill(0),sel=3,eqOn=true,comparing=false,mode="g";
+let start=new Array(10).fill(0); // per-band stagger start time
+const $=id=>document.getElementById(id);
+const fd=$('faders'),curve=$('curve');
+const MAX=12;
+
+// faders
+const els=HZ.map((h,i)=>{
+  const f=document.createElement('div');f.className='f';f.tabIndex=0;f.setAttribute('role','slider');
+  f.setAttribute('aria-label','Banda '+h+' Hz');f.setAttribute('aria-valuemin',-MAX);f.setAttribute('aria-valuemax',MAX);
+  f.innerHTML='<div class="v"></div><div class="tr"><div class="th"></div></div><div class="hz">'+h+'</div>';
+  fd.appendChild(f);return f;
+});
+const zero=document.createElement('div');zero.className='zero';fd.appendChild(zero);
+
+function trackBox(i){const tr=els[i].querySelector('.tr');const r=tr.getBoundingClientRect(),p=fd.getBoundingClientRect();return {top:r.top-p.top,h:r.height,y:r.top};}
+function place(){
+  els.forEach((f,i)=>{
+    const tr=f.querySelector('.tr'),h=tr.clientHeight,v=shown[i];
+    f.querySelector('.th').style.top=(h/2-(v/MAX)*(h/2-17))+'px';
+    f.querySelector('.v').textContent=(Math.abs(v)<.05?'0':(v>0?'+':'−')+Math.abs(v).toFixed(Math.abs(v-Math.round(v))<.05?0:1).replace('.',','));
+    f.classList.toggle('sel',i===sel);
+    // a cor da banda selecionada ganha força com o tamanho do ajuste, para cima ou para baixo
+    const th=f.querySelector('.th'),vv=f.querySelector('.v');
+    if(i===sel){const s=Math.min(1,Math.abs(v)/MAX),c='color-mix(in srgb, var(--ice) '+Math.round(35+65*s)+'%, #8f88a8)';th.style.background=c;vv.style.color='';}
+    else{th.style.background='';vv.style.color='';}
+    f.setAttribute('aria-valuenow',gains[i].toFixed(1));
+    f.setAttribute('aria-valuetext',HZ[i]+' Hz, '+gains[i].toFixed(1)+' dB');
+  });
+  const t=els[0].querySelector('.tr');zero.style.top=(els[0].querySelector('.v').offsetHeight+t.clientHeight/2)+'px';
+}
+// curve: Catmull-Rom through shown gains + faint spectrum
+function drawCurve(t){
+  const pts=shown.map((g,i)=>[20+i*(280/9),58-g*(46/MAX)]);
+  let d='M'+pts[0][0]+','+pts[0][1];
+  for(let i=0;i<pts.length-1;i++){
+    const p0=pts[i-1]||pts[i],p1=pts[i],p2=pts[i+1],p3=pts[i+2]||p2;
+    d+=' C'+(p1[0]+(p2[0]-p0[0])/6)+','+(p1[1]+(p2[1]-p0[1])/6)+' '+(p2[0]-(p3[0]-p1[0])/6)+','+(p2[1]-(p3[1]-p1[1])/6)+' '+p2[0]+','+p2[1];
+  }
+  let bars='';
+  for(let i=0;i<48;i++){const h=8+Math.abs(Math.sin(i*.4+t/900)*38)*(1-i/70)+Math.abs(Math.sin(i*1.7+t/500))*8;bars+='<rect x="'+(i*6.6+1)+'" y="'+(116-h)+'" width="4.4" height="'+h+'" fill="#F2F2F0" opacity=".07"/>';}
+  curve.innerHTML='<line x1="0" x2="320" y1="58" y2="58" stroke="#2D2D2D" stroke-dasharray="3 3"/>'+bars+
+    '<path d="'+d+'" fill="none" stroke="#F2F2F0" stroke-width="2" stroke-linejoin="round"/><circle cx="'+pts[sel][0]+'" cy="'+pts[sel][1]+'" r="5" fill="color-mix(in srgb, #8B5CFF '+Math.round(35+65*Math.min(1,Math.abs(shown[sel])/MAX))+'%, #8f88a8)"/>';
+  const peak=Math.max(0,...shown);$('head').textContent='−'+(3+Math.max(0,peak-3)*0).toFixed(1).replace('.',',')+' dB';
+  $('head').textContent=(peak>0?'−'+peak.toFixed(1).replace('.',','):'0,0')+' dB';
+}
+
+// spring loop: only runs while something moves or the spectrum is visible
+let raf=0,last=0,drag=-1;
+function target(i){return comparing||!eqOn?0:gains[i];}
+function tick(t){
+  raf=0;
+  const dt=Math.min(.032,(t-last)/1000||.016);last=t;
+  let moving=false;
+  for(let i=0;i<10;i++){
+    if(t<start[i])continue;
+    const k=420,c=2*Math.sqrt(k)*.92,x=shown[i]-target(i);
+    vel[i]+=(-k*x-c*vel[i])*dt;shown[i]+=vel[i]*dt;
+    if(Math.abs(x)>.01||Math.abs(vel[i])>.02)moving=true;else{shown[i]=target(i);vel[i]=0;}
+  }
+  place();drawCurve(t);
+  if(!document.hidden)raf=requestAnimationFrame(tick); // spectrum keeps drawing while visible
+}
+function wake(){if(!raf){last=performance.now();raf=requestAnimationFrame(tick);}}
+document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelAnimationFrame(raf);raf=0;}else wake();});
+
+// drag + keys
+els.forEach((f,i)=>{
+  const set=y=>{const tr=f.querySelector('.tr').getBoundingClientRect();let v=((tr.top+tr.height/2-y)/(tr.height/2-17))*MAX;v=Math.max(-MAX,Math.min(MAX,Math.round(v*2)/2));gains[i]=v;shown[i]=v;vel[i]=0;sel=i;place();};
+  f.addEventListener('pointerdown',e=>{if(!eqOn)return;drag=i;sel=i;f.setPointerCapture(e.pointerId);set(e.clientY);markEdited();});
+  f.addEventListener('pointermove',e=>{if(drag===i)set(e.clientY);});
+  f.addEventListener('pointerup',()=>{drag=-1;});
+  // duplo clique: redefine a banda para o valor padrão (0 dB), com a mola animando
+  f.addEventListener('dblclick',()=>{if(!eqOn)return;gains[i]=0;sel=i;markEdited();});
+  f.addEventListener('keydown',e=>{
+    const d={ArrowUp:.5,ArrowRight:.5,ArrowDown:-.5,ArrowLeft:-.5}[e.key];
+    if(d===undefined||!eqOn)return;e.preventDefault();sel=i;gains[i]=Math.max(-MAX,Math.min(MAX,gains[i]+d));markEdited();wake();
+  });
+  f.addEventListener('focus',()=>{sel=i;});
+});
+function markEdited(){$('presetState').textContent='modificado';wake();}
+
+// preset: cascade with 18 ms stagger
+$('presetBtn').onclick=()=>{
+  pi=(pi+1)%PRESETS.length;gains=PRESETS[pi][1].slice();
+  $('presetName').textContent=PRESETS[pi][0];$('presetState').textContent='toque: trocar';
+  const now=performance.now();for(let i=0;i<10;i++)start[i]=now+i*18;wake();
+};
+
+// power: tap toggles; hold compares
+let holdT=0,held=false;
+const power=$('power');
+power.addEventListener('pointerdown',()=>{held=false;holdT=setTimeout(()=>{held=true;comparing=true;$('cmp').classList.add('show');wake();},350);});
+const release=()=>{clearTimeout(holdT);if(comparing){comparing=false;$('cmp').classList.remove('show');wake();}};
+power.addEventListener('pointerup',release);power.addEventListener('pointerleave',release);
+power.addEventListener('click',()=>{if(held)return;eqOn=!eqOn;$('sw').classList.toggle('on',eqOn);wake();});
+
+// segmented
+document.querySelectorAll('#seg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#seg button').forEach(x=>x.classList.toggle('on',x===b));
+  $('seg').classList.toggle('par',b.dataset.m==='p');
+});
+
+// sheets (glass)
+const scrim=$('scrim'),adj=$('sheetAdj'),sp=$('sheetSp');
+function openS(s){scrim.classList.add('show');s.classList.add('show');}
+function closeS(){scrim.classList.remove('show');adj.classList.remove('show');sp.classList.remove('show');}
+$('more').onclick=()=>openS(adj);$('spBtn').onclick=()=>openS(sp);scrim.onclick=closeS;
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeS();});
+$('modes').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  document.querySelectorAll('#modes button').forEach(x=>x.classList.toggle('on',x===b));updateSp();});
+const rng=$('spRange'),spSw=$('spSw');
+function updateSp(){const on=spSw.classList.contains('on');const m=document.querySelector('#modes .on').dataset.k;
+  $('spVal').textContent=rng.value+'%';$('spSub').textContent=on?m+' · '+rng.value+'%':m+' · desligado';$('spBtn').classList.toggle('off',!on);}
+rng.oninput=updateSp;spSw.parentElement.onclick=e=>{if(e.target===rng)return;spSw.classList.toggle('on');updateSp();};
+
+place();wake();
+addEventListener('resize',()=>{place();});
+</script>
+</body>
+</html>

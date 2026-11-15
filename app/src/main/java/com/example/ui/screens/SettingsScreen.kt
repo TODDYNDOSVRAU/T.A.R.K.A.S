@@ -61,7 +61,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.example.BuildConfig
@@ -85,14 +84,10 @@ import com.example.ui.legal.LegalTexts
 import com.example.ui.legal.currentLegalTexts
 import com.example.ui.theme.AppMotion
 import com.example.ui.theme.ListAnimation
-import com.example.ui.theme.AppText
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
 import com.example.ui.theme.gridHeight
 import com.example.ui.theme.LocalBarInset
-import com.example.ui.theme.Shapes
-import com.example.ui.theme.Size
-import com.example.ui.theme.Space
 import com.example.ui.theme.SurfaceStyle
 import com.example.ui.theme.liquidGlassSupported
 import com.example.ui.theme.rememberReducedMotion
@@ -707,8 +702,8 @@ private fun AboutPage(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth().padding(horizontal = Grid.margin, vertical = Grid.u12).gridHeight()
       ) {
-        // The mark is drawn 132 wide by 80 tall; 96 x 60 keeps that shape on the 12 dp rhythm.
-        TarkasMark(modifier = Modifier.size(width = Grid.u96, height = 60.dp))
+        // The mark sits on the grid chain: 96 x 48.
+        TarkasMark(modifier = Modifier.size(width = Grid.u96, height = Grid.u48))
         Spacer(Modifier.height(Grid.u12))
         Text("T.A.R.K.A.S.", style = GridText.Title, color = colors.onSurface)
         Text(

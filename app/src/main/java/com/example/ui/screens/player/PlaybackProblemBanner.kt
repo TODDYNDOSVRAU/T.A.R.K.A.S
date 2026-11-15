@@ -1,6 +1,9 @@
 package com.example.ui.screens.player
 
 import androidx.compose.foundation.background
+import com.example.ui.theme.TalWhite
+import com.example.ui.theme.GridText
+import com.example.ui.theme.Grid
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,9 +40,9 @@ fun PlaybackProblemBanner(problem: PlaybackProblem?, onRetry: () -> Unit, modifi
   Row(
     modifier = modifier
       .fillMaxWidth()
-      .clip(RoundedCornerShape(PlayerGrid.radius12))
+      .clip(Grid.r12)
       .background(Color.White.copy(alpha = 0.1f))
-      .padding(start = PlayerGrid.g12)
+      .padding(start = Grid.inset)
       .semantics { liveRegion = LiveRegionMode.Polite }
       .testTag("playback_problem"),
     verticalAlignment = Alignment.CenterVertically,
@@ -47,19 +50,18 @@ fun PlaybackProblemBanner(problem: PlaybackProblem?, onRetry: () -> Unit, modifi
   ) {
     Text(
       text = stringResource(if (problem.network) R.string.player_problem_offline else R.string.player_problem_failed),
-      color = Color(0xFFF2F2F0),
-      fontSize = PlayerGrid.text12,
-      modifier = Modifier.weight(1f).padding(vertical = PlayerGrid.g12)
+      color = TalWhite,
+      style = GridText.Small,
+      modifier = Modifier.weight(1f).padding(vertical = Grid.inset)
     )
     Text(
       text = stringResource(R.string.player_notice_retry),
-      color = Color(0xFF7EE3EA),
-      fontSize = PlayerGrid.text12,
-      fontWeight = FontWeight.SemiBold,
+      color = TalWhite,
+      style = GridText.Small.copy(fontWeight = FontWeight.SemiBold),
       modifier = Modifier
-        .heightIn(min = PlayerGrid.g48)
+        .heightIn(min = Grid.u48)
         .clickable(role = Role.Button, onClick = onRetry)
-        .padding(horizontal = PlayerGrid.g12, vertical = PlayerGrid.g12)
+        .padding(horizontal = Grid.inset, vertical = Grid.inset)
         .testTag("playback_problem_retry")
     )
   }

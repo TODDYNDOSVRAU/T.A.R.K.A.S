@@ -171,7 +171,7 @@ fun Modifier.expandFromOrigin(
   }
   val closing = scope.transition.targetState == EnterExitState.PostExit
   val self = remember { arrayOf(Offset.Zero) }
-  val cornerStart = Radius.l
+  val cornerStart = Grid.u24
   SideEffect {
     PlayerOrigin.progress = progress
     PlayerOrigin.closing = closing

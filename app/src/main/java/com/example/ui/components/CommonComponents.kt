@@ -95,6 +95,7 @@ import com.example.data.model.ToolExecutionReport
 import com.example.data.model.Track
 import com.example.ui.theme.AppText
 import com.example.ui.theme.Motion
+import com.example.ui.theme.Grid
 import com.example.ui.theme.Shapes
 import com.example.ui.theme.Space
 import com.example.ui.theme.glassContentColor
@@ -160,13 +161,13 @@ fun GlassChip(
       .glassControl(Shapes.pill, selected = selected)
       .then(interactive)
       .background(overlay)
-      .padding(horizontal = Space.l, vertical = Space.s),
+      .padding(horizontal = Grid.u12, vertical = Grid.u6),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.Center
   ) {
     if (icon != null) {
-      Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
-      Spacer(modifier = Modifier.width(Space.s))
+      Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(Grid.icon))
+      Spacer(modifier = Modifier.width(Grid.u6))
     }
     Text(
       text = label,
@@ -194,11 +195,11 @@ fun EmptyState(
   Column(
     modifier = modifier
       .fillMaxWidth()
-      .padding(horizontal = Space.page, vertical = Space.xl),
+      .padding(horizontal = Grid.margin, vertical = Grid.u24),
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
-    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(36.dp))
-    Spacer(modifier = Modifier.height(Space.m))
+    Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(Grid.u48))
+    Spacer(modifier = Modifier.height(Grid.u12))
     Text(
       text = title,
       style = AppText.Headline,
@@ -206,7 +207,7 @@ fun EmptyState(
       textAlign = TextAlign.Center,
       modifier = Modifier.semantics { heading() }
     )
-    Spacer(modifier = Modifier.height(Space.xs))
+    Spacer(modifier = Modifier.height(Grid.u6))
     Text(
       text = message,
       style = AppText.Subhead,
@@ -214,7 +215,7 @@ fun EmptyState(
       textAlign = TextAlign.Center
     )
     if (actionLabel != null) {
-      Spacer(modifier = Modifier.height(Space.l))
+      Spacer(modifier = Modifier.height(Grid.u24))
       TonalButton(text = actionLabel, onClick = onAction)
     }
   }
@@ -236,6 +237,7 @@ fun TarkasLargeTitle(
   fadeBelow: Boolean = true
 ) {
   val page = MaterialTheme.colorScheme.background
+  val shortWindow = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp < 480
   Row(
     modifier = modifier
       // Above the list that scrolls under it, with a short fade below, so content leaves under the
@@ -243,7 +245,7 @@ fun TarkasLargeTitle(
       .zIndex(1f)
       .drawBehind {
         // Only while content is scrolled under the title; at rest the first control below is not dimmed.
-        val fade = if (fadeBelow) 14.dp.toPx() else 0f
+        val fade = if (fadeBelow) Grid.u12.toPx() else 0f
         drawRect(
           brush = androidx.compose.ui.graphics.Brush.verticalGradient(
             colors = listOf(page, page.copy(alpha = 0f)),
@@ -259,12 +261,14 @@ fun TarkasLargeTitle(
       .fillMaxWidth()
       // On the T.A.L. grid: a 48 dp line with 12 dp above and below; the title starts at the 24 dp margin
       // (the back button is a 48 dp target, so its 24 dp glyph starts at the margin too).
-      .heightIn(min = com.example.ui.theme.Grid.u48 + com.example.ui.theme.Grid.u24)
+      // A short window (a phone on its side, under 480 dp) drops the 12 dp above and below, so the page keeps
+      // the height; every tab uses this row, so the title does not move between tabs.
+      .heightIn(min = com.example.ui.theme.Grid.u48 + if (shortWindow) 0.dp else com.example.ui.theme.Grid.u24)
       .padding(
         start = if (onBack != null) com.example.ui.theme.Grid.inset else com.example.ui.theme.Grid.margin,
         end = com.example.ui.theme.Grid.inset,
-        top = com.example.ui.theme.Grid.u12,
-        bottom = com.example.ui.theme.Grid.u12
+        top = if (shortWindow) 0.dp else com.example.ui.theme.Grid.u12,
+        bottom = if (shortWindow) 0.dp else com.example.ui.theme.Grid.u12
       ),
     verticalAlignment = Alignment.CenterVertically
   ) {
@@ -315,7 +319,7 @@ fun TarkasSectionTitle(
         if (onClick != null) {
           Modifier
             .heightIn(min = Sizes.touch)
-            .clip(Shapes.s)
+            .clip(Grid.r12)
             .clickable(role = Role.Button, onClick = onClick)
         } else {
           Modifier
@@ -459,12 +463,12 @@ fun TarkasBottomNav(
     with(density) {
       geometry.icon = Sizes.icon.toPx()
       geometry.touch = Sizes.touch.toPx()
-      geometry.slide = Space.s.toPx()
-      geometry.height = (6.dp * 2 + Sizes.icon + Space.xxs).roundToPx() + textHeight
-      geometry.gapWide = 6.dp.toPx()
-      geometry.gapTight = Space.xs.toPx()
-      geometry.padWide = 14.dp.toPx()
-      geometry.padTight = Space.s.toPx()
+      geometry.slide = Grid.u6.toPx()
+      geometry.height = (Grid.u6 * 2 + Sizes.icon + Space.xxs).roundToPx() + textHeight
+      geometry.gapWide = Grid.u6.toPx()
+      geometry.gapTight = Grid.u6.toPx()
+      geometry.padWide = Grid.u12.toPx()
+      geometry.padTight = Grid.u6.toPx()
     }
     true
   }
@@ -482,7 +486,7 @@ fun TarkasBottomNav(
         transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
       }
       .glassSurface(Shapes.pill)
-      .padding(Space.xs + Space.xxs)
+      .padding(Grid.u6)
   ) {
     Layout(
       content = {
@@ -807,7 +811,7 @@ fun MiniPlayerBar(
         val h = Space.xxs.toPx()
         val inset = size.height / 2f
         val w = size.width - inset * 2
-        val top = size.height - h - 1.dp.toPx()
+        val top = size.height - h - Grid.hairline.toPx()
         drawRoundRect(rail, topLeft = Offset(inset, top), size = Size(w, h), cornerRadius = CornerRadius(h))
         drawRoundRect(fill, topLeft = Offset(inset, top), size = Size(w * progress().coerceIn(0f, 1f), h), cornerRadius = CornerRadius(h))
       }
@@ -821,19 +825,19 @@ fun MiniPlayerBar(
           alpha = 1f - (kotlin.math.abs(swipe) / size.width.coerceAtLeast(1f)).coerceIn(0f, 0.6f)
         }
         // The start gap clears the capsule's round end, so the thumbnail's corners stay inside it.
-        .padding(start = Space.m, end = Space.xs, top = Space.s, bottom = Space.s),
+        .padding(start = Grid.u12, end = Grid.u6, top = Grid.u6, bottom = Grid.u6),
       verticalAlignment = Alignment.CenterVertically
     ) {
       TrackArtwork(
         track = track,
-        shape = Shapes.s,
-        iconSize = 20.dp,
+        shape = Grid.r6,
+        iconSize = Grid.icon,
         modifier = Modifier
-          .size(40.dp)
+          .size(Grid.u48)
           // The player's cover starts here and lands back here when it closes.
           .onGloballyPositioned { com.example.ui.theme.PlayerOrigin.miniCover = it.boundsInWindow() }
       )
-      Spacer(modifier = Modifier.width(Space.m))
+      Spacer(modifier = Modifier.width(Grid.u12))
       Column(
         modifier = Modifier
           .weight(1f)
@@ -867,7 +871,7 @@ fun MiniPlayerBar(
           isPlaying = isPlaying,
           tint = MaterialTheme.colorScheme.onSurface,
           modifier = Modifier
-            .size(28.dp)
+            .size(Grid.icon)
             // The player's play glyph goes to and from here.
             .onGloballyPositioned { com.example.ui.theme.PlayerOrigin.miniPlay = it.boundsInWindow() }
         )
@@ -949,9 +953,9 @@ fun ToolReportCard(
   Row(
     modifier = modifier
       .fillMaxWidth()
-      .clip(Shapes.s)
+      .clip(Grid.r12)
       .background(colors.surfaceContainer)
-      .padding(horizontal = Space.m, vertical = Space.s)
+      .padding(horizontal = Grid.u12, vertical = Grid.u6)
       .semantics(mergeDescendants = true) {}
       .testTag("tool_report_${report.toolName}"),
     verticalAlignment = Alignment.Top
@@ -961,10 +965,10 @@ fun ToolReportCard(
       contentDescription = stringResource(if (report.success) R.string.player_common_done else R.string.player_common_not_done),
       tint = if (report.success) colors.primary else colors.error,
       modifier = Modifier
-        .padding(top = 1.dp)
-        .size(Space.l)
+        .padding(top = Grid.hairline)
+        .size(Grid.icon)
     )
-    Spacer(modifier = Modifier.width(Space.s))
+    Spacer(modifier = Modifier.width(Grid.u6))
     Column {
       Text(
         text = toolTitle(report.toolName, report.success),
@@ -1016,11 +1020,11 @@ fun CuriosityDetailDialog(
     text = {
       Column(
         modifier = Modifier.verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(Space.l)
+        verticalArrangement = Arrangement.spacedBy(Grid.u12)
       ) {
         Text(text = curiosity.shortTrivia, style = AppText.Body, color = colors.onSurface)
         if (curiosity.documentedFacts.isNotBlank()) {
-          Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+          Column(verticalArrangement = Arrangement.spacedBy(Grid.u6)) {
             Text(
               text = stringResource(R.string.player_common_curiosity_facts),
               style = AppText.Footnote.copy(fontWeight = FontWeight.SemiBold),
@@ -1031,7 +1035,7 @@ fun CuriosityDetailDialog(
           }
         }
         if (curiosity.sources.isNotEmpty()) {
-          Column(verticalArrangement = Arrangement.spacedBy(Space.xs)) {
+          Column(verticalArrangement = Arrangement.spacedBy(Grid.u6)) {
             Text(
               text = stringResource(R.string.player_common_curiosity_sources),
               style = AppText.Footnote.copy(fontWeight = FontWeight.SemiBold),

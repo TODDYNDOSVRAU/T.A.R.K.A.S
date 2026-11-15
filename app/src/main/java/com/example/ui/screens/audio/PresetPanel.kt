@@ -61,12 +61,8 @@ import com.example.ui.components.GroupDivider
 import com.example.ui.components.SearchField
 import com.example.ui.components.TextAction
 import com.example.ui.components.highlightClickable
-import com.example.ui.theme.AppText
 import com.example.ui.theme.Motion
-import com.example.ui.theme.Shapes
-import com.example.ui.theme.Size
 import com.example.ui.theme.Grid
-import com.example.ui.theme.Space
 import com.example.ui.viewmodel.DeviceSearchState
 
 // The label is a string resource id: the chip text is resolved where it is drawn.
@@ -78,8 +74,8 @@ private enum class PresetFilter(@StringRes val labelRes: Int) {
 }
 
 /** Size of the curve thumbnail in a preset row, and the leading slot of every row in the list. */
-private val THUMB_W = 64.dp
-private val THUMB_H = Space.xxl
+private val THUMB_W = Grid.u48
+private val THUMB_H = Grid.u24
 private const val THUMB_POINTS = 48
 
 /**
@@ -122,11 +118,11 @@ internal fun PresetPanel(
   Column(modifier = modifier.fillMaxWidth().testTag("eq_preset_panel")) {
     Text(
       stringResource(R.string.audio_presets_title),
-      style = AppText.Title3,
+      style = EqType.Title,
       color = colors.onSurface,
       modifier = Modifier
         .padding(horizontal = Grid.margin)
-        .padding(bottom = Space.m)
+        .padding(bottom = Grid.u12)
         .semantics { heading() }
     )
     SearchField(
@@ -137,8 +133,8 @@ internal fun PresetPanel(
     )
 
     LazyRow(
-      horizontalArrangement = Arrangement.spacedBy(Space.xs),
-      contentPadding = PaddingValues(horizontal = Grid.margin - Space.xs, vertical = Space.xs)
+      horizontalArrangement = Arrangement.spacedBy(Grid.u12),
+      contentPadding = PaddingValues(horizontal = Grid.margin, vertical = Grid.u12)
     ) {
       items(PresetFilter.entries) { f ->
         FilterChip(label = stringResource(f.labelRes), selected = filter == f, onClick = { filter = f }, modifier = Modifier.testTag("preset_filter_${f.name}"))
@@ -146,8 +142,8 @@ internal fun PresetPanel(
     }
     if (filter == PresetFilter.FONES && deviceSearch.sources.isNotEmpty()) {
       LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(Space.xs),
-        contentPadding = PaddingValues(start = Grid.margin - Space.xs, end = Grid.margin - Space.xs, bottom = Space.xs)
+        horizontalArrangement = Arrangement.spacedBy(Grid.u12),
+        contentPadding = PaddingValues(start = Grid.margin, end = Grid.margin, bottom = Grid.u12)
       ) {
         item { FilterChip(label = stringResource(R.string.audio_filter_all_sources), selected = deviceSearch.source == null, onClick = { onSearchDevices(query, null) }) }
         items(deviceSearch.sources.take(10)) { s ->
@@ -161,23 +157,24 @@ internal fun PresetPanel(
       Row(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(horizontal = Grid.margin, vertical = Space.xs)
-          .clip(Shapes.m)
+          .padding(horizontal = Grid.margin, vertical = Grid.u6)
+          .heightIn(min = Grid.u48)
+          .clip(Grid.r12)
           .background(colors.surfaceContainer)
-          .padding(start = Space.l, end = Space.xs, top = Space.xs, bottom = Space.xs),
+          .padding(start = Grid.inset),
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Icon(Icons.Rounded.Headphones, contentDescription = null, tint = colors.primary, modifier = Modifier.size(Size.iconSmall))
-        Spacer(Modifier.width(Space.m))
+        Icon(Icons.Rounded.Headphones, contentDescription = null, tint = colors.primary, modifier = Modifier.size(Grid.icon))
+        Spacer(Modifier.width(Grid.u12))
         Column(modifier = Modifier.weight(1f)) {
-          Text(device.name, style = AppText.Body, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          Text(device.name, style = EqType.Body, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
           Text(
             listOfNotNull(
               deviceOutput?.let { stringResource(R.string.audio_device_for_output, it) },
               device.source,
               pluralStringResource(R.plurals.audio_device_filters, device.bands.size, device.bands.size)
             ).joinToString(" · "),
-            style = AppText.Footnote,
+            style = EqType.Label,
             color = colors.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -190,20 +187,21 @@ internal fun PresetPanel(
       Row(
         modifier = Modifier
           .fillMaxWidth()
-          .padding(horizontal = Grid.margin, vertical = Space.xs)
-          .clip(Shapes.m)
+          .padding(horizontal = Grid.margin, vertical = Grid.u6)
+          .heightIn(min = Grid.u48)
+          .clip(Grid.r12)
           .background(colors.surfaceContainer)
-          .padding(start = Space.l, end = Space.xs, top = Space.xs, bottom = Space.xs)
+          .padding(start = Grid.inset)
           .testTag("device_suggestion"),
         verticalAlignment = Alignment.CenterVertically
       ) {
-        Icon(Icons.Rounded.Headphones, contentDescription = null, tint = colors.primary, modifier = Modifier.size(Size.iconSmall))
-        Spacer(Modifier.width(Space.m))
+        Icon(Icons.Rounded.Headphones, contentDescription = null, tint = colors.primary, modifier = Modifier.size(Grid.icon))
+        Spacer(Modifier.width(Grid.u12))
         Column(modifier = Modifier.weight(1f)) {
-          Text(stringResource(R.string.audio_device_suggest_title, suggestion.second), style = AppText.Body, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          Text(stringResource(R.string.audio_device_suggest_title, suggestion.second), style = EqType.Body, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
           Text(
             stringResource(R.string.audio_device_suggest_sub, suggestion.first),
-            style = AppText.Footnote,
+            style = EqType.Label,
             color = colors.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -218,23 +216,22 @@ internal fun PresetPanel(
 
     LazyColumn(
       modifier = Modifier.fillMaxWidth().heightIn(max = EqSize.presetListMax),
-      contentPadding = PaddingValues(bottom = Space.xl + navBar)
+      contentPadding = PaddingValues(bottom = Grid.u24 + navBar)
     ) {
       val nothing = !deviceSearch.loading && deviceSearch.error == null &&
         (!showMine || mine.isEmpty()) && (!showBuiltIn || builtIn.isEmpty()) && (!showFones || fones.isEmpty())
       if (nothing && (words.isNotEmpty() || filter == PresetFilter.MINE)) {
         item(key = "empty") {
-          Column(modifier = Modifier.fillMaxWidth().padding(horizontal = Grid.margin, vertical = Space.l).testTag("preset_empty")) {
+          Column(modifier = Modifier.fillMaxWidth().padding(horizontal = Grid.margin, vertical = Grid.u12).testTag("preset_empty")) {
             Text(
               if (words.isNotEmpty()) stringResource(R.string.audio_empty_title, query.trim()) else stringResource(R.string.audio_empty_mine_title),
-              style = AppText.Headline,
+              style = EqType.BodyStrong,
               color = colors.onSurface
             )
             Text(
               stringResource(if (words.isNotEmpty()) R.string.audio_empty_hint else R.string.audio_empty_mine_hint),
-              style = AppText.Footnote,
-              color = colors.onSurfaceVariant,
-              modifier = Modifier.padding(top = Space.xs)
+              style = EqType.Label,
+              color = colors.onSurfaceVariant
             )
             if (words.isNotEmpty()) {
               TextAction(stringResource(R.string.audio_search_clear), onClick = { onSearchDevices("", deviceSearch.source) })
@@ -261,19 +258,19 @@ internal fun PresetPanel(
             when {
               deviceSearch.loading -> Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = Grid.margin, vertical = Space.s)
+                modifier = Modifier.padding(horizontal = Grid.margin, vertical = Grid.u12)
               ) {
-                CircularProgressIndicator(modifier = Modifier.size(EqSize.progress), strokeWidth = Space.xxs)
-                Spacer(Modifier.width(Space.m))
-                Text(stringResource(R.string.audio_device_downloading), style = AppText.Footnote, color = colors.onSurfaceVariant)
+                CircularProgressIndicator(modifier = Modifier.size(Grid.icon), strokeWidth = EqSize.lineFine)
+                Spacer(Modifier.width(Grid.u12))
+                Text(stringResource(R.string.audio_device_downloading), style = EqType.Label, color = colors.onSurfaceVariant)
               }
               deviceSearch.error != null && deviceSearch.total == 0 -> Column(modifier = Modifier.padding(horizontal = Grid.margin)) {
-                Text(deviceSearch.error, style = AppText.Footnote, color = colors.error)
+                Text(deviceSearch.error, style = EqType.Label, color = colors.error)
                 TextAction(stringResource(R.string.audio_action_retry), onRetryDevices)
               }
               else -> {
                 if (deviceSearch.error != null) {
-                  Text(deviceSearch.error, style = AppText.Footnote, color = colors.error, modifier = Modifier.padding(horizontal = Grid.margin))
+                  Text(deviceSearch.error, style = EqType.Label, color = colors.error, modifier = Modifier.padding(horizontal = Grid.margin))
                 }
                 Text(
                   if (words.isEmpty() && deviceSearch.onlineOnly > 0) {
@@ -281,9 +278,9 @@ internal fun PresetPanel(
                     pluralStringResource(R.plurals.audio_device_total_online, deviceSearch.total, deviceSearch.total, nf.format(deviceSearch.total), nf.format(deviceSearch.total - deviceSearch.onlineOnly), nf.format(deviceSearch.onlineOnly))
                   } else if (words.isEmpty()) pluralStringResource(R.plurals.audio_device_total, deviceSearch.total, deviceSearch.total, java.text.NumberFormat.getIntegerInstance().format(deviceSearch.total))
                   else pluralStringResource(R.plurals.audio_device_results, deviceSearch.results.size, deviceSearch.results.size, java.text.NumberFormat.getIntegerInstance().format(deviceSearch.results.size)),
-                  style = AppText.Footnote,
+                  style = EqType.Label,
                   color = colors.onSurfaceVariant,
-                  modifier = Modifier.padding(horizontal = Grid.margin, vertical = Space.xxs)
+                  modifier = Modifier.padding(horizontal = Grid.margin, vertical = Grid.u6)
                 )
               }
             }
@@ -296,9 +293,9 @@ internal fun PresetPanel(
         item(key = "credit") {
           Text(
             stringResource(R.string.audio_device_credit),
-            style = AppText.Caption1,
+            style = EqType.Label,
             color = colors.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = Grid.margin, vertical = Space.m)
+            modifier = Modifier.padding(horizontal = Grid.margin, vertical = Grid.u12)
           )
         }
       }
@@ -310,10 +307,10 @@ internal fun PresetPanel(
 private fun ListSection(title: String) {
   Text(
     title,
-    style = AppText.Footnote,
+    style = EqType.Label,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
     modifier = Modifier
-      .padding(start = Grid.margin, end = Grid.margin, top = Space.l, bottom = Space.xs)
+      .padding(start = Grid.margin, end = Grid.margin, top = Grid.u12, bottom = Grid.u6)
       .semantics { heading() }
   )
 }
@@ -336,21 +333,21 @@ private fun PickRow(
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .heightIn(min = Size.row)
+        .heightIn(min = Grid.u48)
         .highlightClickable(role = Role.RadioButton, onClick = onClick)
         .semantics { this.selected = selected }
-        .padding(horizontal = Grid.margin, vertical = Space.s),
+        .padding(horizontal = Grid.margin),
       verticalAlignment = Alignment.CenterVertically
     ) {
       leading()
-      Spacer(Modifier.width(Space.m))
+      Spacer(Modifier.width(Grid.u12))
       Column(modifier = Modifier.weight(1f)) {
-        Text(title, style = AppText.Body, color = if (selected) colors.primary else colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(subtitle, style = AppText.Footnote, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(title, style = EqType.Body, color = if (selected) colors.primary else colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(subtitle, style = EqType.Label, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
       }
-      Box(modifier = Modifier.size(Size.icon), contentAlignment = Alignment.Center) { trailing() }
+      Box(modifier = Modifier.size(Grid.icon), contentAlignment = Alignment.Center) { trailing() }
     }
-    GroupDivider(inset = Grid.margin + THUMB_W + Space.m)
+    GroupDivider(inset = Grid.margin + THUMB_W + Grid.u12)
   }
 }
 
@@ -371,15 +368,15 @@ private fun FoneRow(entry: AutoEqEntry, selected: Boolean, applying: Boolean, on
     modifier = modifier,
     leading = {
       Box(
-        modifier = Modifier.size(width = THUMB_W, height = THUMB_H).clip(Shapes.xs).background(colors.surfaceContainer),
+        modifier = Modifier.size(width = THUMB_W, height = THUMB_H).clip(Grid.r6).background(colors.surfaceContainer),
         contentAlignment = Alignment.Center
       ) {
-        Icon(Icons.Rounded.Headphones, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(Size.iconSmall))
+        Icon(Icons.Rounded.Headphones, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(Grid.icon))
       }
     },
     trailing = {
       when {
-        applying -> CircularProgressIndicator(modifier = Modifier.size(Size.iconSmall), strokeWidth = Space.xxs)
+        applying -> CircularProgressIndicator(modifier = Modifier.size(Grid.icon), strokeWidth = EqSize.lineFine)
         selected -> Icon(Icons.Rounded.Check, contentDescription = null, tint = colors.primary)
       }
     }
@@ -396,7 +393,7 @@ private fun CurveThumb(settings: EqSettings) {
   }
   val zero = colors.onSurface.copy(alpha = 0.16f)
   val line = colors.primary
-  Canvas(modifier = Modifier.size(width = THUMB_W, height = THUMB_H).clip(Shapes.xs).background(colors.surfaceContainer)) {
+  Canvas(modifier = Modifier.size(width = THUMB_W, height = THUMB_H).clip(Grid.r6).background(colors.surfaceContainer)) {
     val w = size.width
     val h = size.height
     val mid = h / 2f

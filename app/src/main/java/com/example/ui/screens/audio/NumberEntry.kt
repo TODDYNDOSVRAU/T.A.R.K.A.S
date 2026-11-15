@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.KeyboardOptions
+import com.example.ui.theme.Grid
 import com.example.ui.components.TarkasAlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -24,9 +25,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
-import com.example.ui.theme.AppText
-import com.example.ui.theme.Size
-import com.example.ui.theme.Space
 import java.util.Locale
 
 /**
@@ -79,7 +77,7 @@ internal fun NumberEntryDialog(
   }
   TarkasAlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text(title, style = AppText.Title3) },
+    title = { Text(title, style = EqType.Title) },
     text = {
       androidx.compose.foundation.layout.Column {
         OutlinedTextField(
@@ -91,26 +89,26 @@ internal fun NumberEntryDialog(
           supportingText = {
             Text(
               if (parsed == null) stringResource(R.string.audio_number_invalid) else stringResource(R.string.audio_number_range, show(min), show(max), unit),
-              style = AppText.Footnote
+              style = EqType.Label
             )
           },
           keyboardOptions = KeyboardOptions(keyboardType = if (allowK) KeyboardType.Text else KeyboardType.Decimal),
           modifier = Modifier.fillMaxWidth().testTag("number_entry_field")
         )
-        Spacer(Modifier.height(Space.s))
-        Row(horizontalArrangement = Arrangement.spacedBy(Space.s), modifier = Modifier.fillMaxWidth()) {
+        Spacer(Modifier.height(Grid.u12))
+        Row(horizontalArrangement = Arrangement.spacedBy(Grid.u12), modifier = Modifier.fillMaxWidth()) {
           OutlinedButton(
             onClick = { nudge(-step) },
-            modifier = Modifier.weight(1f).height(Size.touch).semantics { contentDescription = decreaseLabel }
+            modifier = Modifier.weight(1f).height(Grid.u48).semantics { contentDescription = decreaseLabel }
           ) { Text("−") }
           OutlinedButton(
             onClick = { nudge(step) },
-            modifier = Modifier.weight(1f).height(Size.touch).semantics { contentDescription = increaseLabel }
+            modifier = Modifier.weight(1f).height(Grid.u48).semantics { contentDescription = increaseLabel }
           ) { Text("+") }
           if (defaultValue != null) {
             OutlinedButton(
               onClick = { text = show(defaultValue) },
-              modifier = Modifier.weight(1.4f).height(Size.touch).testTag("number_entry_reset")
+              modifier = Modifier.weight(2f).height(Grid.u48).testTag("number_entry_reset")
             ) { Text(resetText, maxLines = 1) }
           }
         }

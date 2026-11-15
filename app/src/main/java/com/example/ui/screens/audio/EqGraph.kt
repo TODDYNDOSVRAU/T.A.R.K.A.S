@@ -1,6 +1,5 @@
 package com.example.ui.screens.audio
 
-import com.example.ui.theme.Size as ThemeSize
 import com.example.ui.theme.EqSize
 import androidx.compose.ui.platform.LocalContext
 import com.example.R
@@ -152,7 +151,7 @@ internal fun EqGraph(
       .clip(shape)
       .background(colors.surfaceContainer)
       // Drawn inside the box: the outline never changes the size.
-      .border(ThemeSize.hairline, colors.onSurface.copy(alpha = 0.08f), shape)
+      .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), shape)
       .semantics { contentDescription = curveDescription }
   ) {
     Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
@@ -164,7 +163,7 @@ internal fun EqGraph(
 
           // Grid: 0 dB, ±6 and ±12 dB; the 200 Hz and 2 kHz marks of the axis row
           listOf(-12f, -6f, 6f, 12f).forEach { db -> drawLine(grid, Offset(0f, dbToY(db, h)), Offset(w, dbToY(db, h)), 1f) }
-          drawLine(zero, Offset(0f, dbToY(0f, h)), Offset(w, dbToY(0f, h)), ThemeSize.hairline.toPx())
+          drawLine(zero, Offset(0f, dbToY(0f, h)), Offset(w, dbToY(0f, h)), Grid.hairline.toPx())
           listOf(200f, 2000f).forEach { f ->
             val x = freqToX(f) * w
             drawLine(grid, Offset(x, 0f), Offset(x, h), 1f)
@@ -194,7 +193,7 @@ internal fun EqGraph(
             drawPath(
               guide,
               label.copy(alpha = 0.6f * dim),
-              style = Stroke(width = ThemeSize.hairline.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f)))
+              style = Stroke(width = Grid.hairline.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f)))
             )
           }
 
@@ -207,7 +206,7 @@ internal fun EqGraph(
               val y = dbToY(db.coerceIn(-GRAPH_DB_RANGE - 3f, GRAPH_DB_RANGE + 3f), h)
               if (i == 0) bp.moveTo(x, y) else bp.lineTo(x, y)
             }
-            drawPath(bp, bandTints[bi].copy(alpha = 0.7f * dim), style = Stroke(width = ThemeSize.hairline.toPx(), cap = StrokeCap.Round))
+            drawPath(bp, bandTints[bi].copy(alpha = 0.7f * dim), style = Stroke(width = Grid.hairline.toPx(), cap = StrokeCap.Round))
           }
 
           // Response curve with a light fill towards 0 dB

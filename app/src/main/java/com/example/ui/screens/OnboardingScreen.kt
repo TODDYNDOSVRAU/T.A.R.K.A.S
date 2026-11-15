@@ -51,7 +51,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.model.CuriosityConfig
 import com.example.ui.components.GroupDivider
@@ -67,9 +66,8 @@ import com.example.ui.components.TextAction
 import com.example.ui.legal.LegalDoc
 import com.example.ui.legal.LegalTexts
 import com.example.ui.legal.currentLegalTexts
-import com.example.ui.theme.AppText
+import com.example.ui.theme.GridText
 import com.example.ui.theme.Grid
-import com.example.ui.theme.Size
 import com.example.ui.theme.SurfaceStyle
 import com.example.ui.theme.rememberReducedMotion
 import com.example.ui.theme.subPageTransition
@@ -85,7 +83,7 @@ private enum class Step {
 }
 
 /** Content stays at a comfortable reading width on tablets and in landscape. */
-private val ContentWidth = 560.dp
+private val ContentWidth = Grid.u384 + Grid.u192
 
 /**
  * First-run setup, shown once after the opening animation: welcome, the Terms and Privacy Policy
@@ -282,18 +280,18 @@ private fun StepHeader(title: String, body: String, mark: Boolean = false) {
     modifier = Modifier.fillMaxWidth().padding(horizontal = Grid.margin, vertical = Grid.u12)
   ) {
     if (mark) {
-      TarkasMark(modifier = Modifier.size(width = 88.dp, height = 54.dp))
+      TarkasMark(modifier = Modifier.size(width = Grid.u96, height = Grid.u48))
       Spacer(Modifier.height(Grid.u24))
     }
     Text(
       title,
-      style = AppText.LargeTitle,
+      style = GridText.Title,
       color = colors.onSurface,
       textAlign = TextAlign.Center,
       modifier = Modifier.semantics { heading() }
     )
     Spacer(Modifier.height(Grid.u6))
-    Text(body, style = AppText.Body, color = colors.onSurfaceVariant, textAlign = TextAlign.Center)
+    Text(body, style = GridText.Body, color = colors.onSurfaceVariant, textAlign = TextAlign.Center)
   }
 }
 
@@ -327,8 +325,8 @@ private fun FeatureRow(icon: ImageVector, title: String, body: String) {
     RowIcon(icon)
     Spacer(Modifier.width(Grid.u12))
     Column(Modifier.weight(1f)) {
-      Text(title, style = AppText.Headline, color = colors.onSurface)
-      Text(body, style = AppText.Subhead, color = colors.onSurfaceVariant)
+      Text(title, style = GridText.BodyStrong, color = colors.onSurface)
+      Text(body, style = GridText.Small, color = colors.onSurfaceVariant)
     }
   }
 }
@@ -346,7 +344,7 @@ private fun TermsStep(accepted: Boolean, onAccepted: (Boolean) -> Unit, onRead: 
       if (i > 0) GroupDivider()
       Text(
         line,
-        style = AppText.Subhead,
+        style = GridText.Small,
         color = colors.onSurface,
         modifier = Modifier.fillMaxWidth().padding(horizontal = Grid.inset, vertical = Grid.u12)
       )
@@ -374,9 +372,9 @@ private fun TermsStep(accepted: Boolean, onAccepted: (Boolean) -> Unit, onRead: 
         checked = accepted,
         onCheckedChange = null,
         colors = CheckboxDefaults.colors(checkedColor = colors.primary, checkmarkColor = colors.onPrimary),
-        modifier = Modifier.size(Size.touch)
+        modifier = Modifier.size(Grid.u48)
       )
-      Text(stringResource(R.string.onboarding_accept), style = AppText.Body, color = colors.onSurface, modifier = Modifier.padding(vertical = Grid.u6))
+      Text(stringResource(R.string.onboarding_accept), style = GridText.Body, color = colors.onSurface, modifier = Modifier.padding(vertical = Grid.u6))
     }
   }
   GroupFooter(stringResource(R.string.onboarding_controller, LegalTexts.CONTROLLER, LegalTexts.CONTACT_EMAIL))
@@ -450,7 +448,7 @@ private fun DoneStep() {
       if (i > 0) GroupDivider()
       Text(
         line,
-        style = AppText.Subhead,
+        style = GridText.Small,
         color = colors.onSurface,
         modifier = Modifier.fillMaxWidth().padding(horizontal = Grid.inset, vertical = Grid.u12)
       )

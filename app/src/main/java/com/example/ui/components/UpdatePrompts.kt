@@ -13,11 +13,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import com.example.data.update.ReleaseNotes
 import com.example.data.update.UpdateState.Phase
-import com.example.ui.theme.AppText
-import com.example.ui.theme.Space
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -96,7 +95,7 @@ fun StartupUpdatePrompts(enabled: Boolean) {
               else -> stringResource(R.string.update_popup_message)
             }
           )
-          UpdateNotes(release.notes, release.tag, maxHeight = 160.dp, modifier = Modifier.padding(top = Space.m))
+          UpdateNotes(release.notes, release.tag, maxHeight = Grid.u192, modifier = Modifier.padding(top = Grid.u12))
         }
       },
       confirmButton = {
@@ -134,12 +133,12 @@ fun UpdateNotes(rawNotes: String, tag: String, maxHeight: Dp, modifier: Modifier
   val notes = remember(rawNotes) { ReleaseNotes.plain(rawNotes) } ?: return
   val colors = MaterialTheme.colorScheme
   Column(modifier.testTag("update_notes")) {
-    Text(stringResource(R.string.settings_update_notes_title, tag), style = AppText.Footnote, color = colors.onSurfaceVariant)
+    Text(stringResource(R.string.settings_update_notes_title, tag), style = GridText.Small, color = colors.onSurfaceVariant)
     Text(
       text = notes,
-      style = AppText.Subhead,
+      style = GridText.Body,
       color = colors.onSurface,
-      modifier = Modifier.padding(top = Space.xs).heightIn(max = maxHeight).verticalScroll(rememberScrollState())
+      modifier = Modifier.padding(top = Grid.u6).heightIn(max = maxHeight).verticalScroll(rememberScrollState())
     )
   }
 }

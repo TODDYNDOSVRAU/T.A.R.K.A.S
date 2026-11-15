@@ -71,7 +71,6 @@ import androidx.compose.ui.unit.dp
 import com.example.ui.theme.GridText
 import com.example.ui.theme.Grid
 import com.example.ui.theme.Motion
-import com.example.ui.theme.Space
 import com.example.ui.theme.rememberReducedMotion
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -308,7 +307,7 @@ private fun SpatialTuning(preset: SpatialPreset, ui: SpatialUi, actions: Spatial
     }
     GroupDivider()
     Row(
-      modifier = Modifier.fillMaxWidth().padding(horizontal = Space.s),
+      modifier = Modifier.fillMaxWidth().padding(horizontal = Grid.inset),
       horizontalArrangement = Arrangement.SpaceBetween
     ) {
       TextAction(stringResource(R.string.audio_spatial_reset_mode), onClick = { actions.onResetTuning(preset) }, enabled = values.isNotEmpty())

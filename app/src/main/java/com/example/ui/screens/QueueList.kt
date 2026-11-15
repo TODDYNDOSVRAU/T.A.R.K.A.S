@@ -1,6 +1,8 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import com.example.ui.theme.GridText
+import com.example.ui.theme.Grid
 import com.example.ui.theme.Motion
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.scrollBy
@@ -65,10 +67,7 @@ import com.example.ui.components.TextAction
 import com.example.ui.components.TrackRow
 import com.example.ui.screens.library.TrackDivider
 import com.example.ui.screens.library.trackSubtitle
-import com.example.ui.theme.AppText
 import com.example.ui.theme.LocalBarInset
-import com.example.ui.theme.Size
-import com.example.ui.theme.Space
 import com.example.ui.theme.opensPlayer
 import kotlinx.coroutines.launch
 
@@ -156,7 +155,7 @@ internal fun QueueList(
   LazyColumn(
     state = listState,
     modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.xl)
+    contentPadding = PaddingValues(bottom = LocalBarInset.current + Grid.margin)
   ) {
     if (queue.isEmpty() && upcoming.isEmpty()) {
       item(key = "empty") {
@@ -164,7 +163,7 @@ internal fun QueueList(
           icon = Icons.AutoMirrored.Rounded.QueueMusic,
           title = stringResource(R.string.queue_empty_title),
           message = stringResource(R.string.queue_empty_message),
-          modifier = Modifier.padding(horizontal = Space.xl)
+          modifier = Modifier.padding(horizontal = Grid.margin)
         )
       }
       return@LazyColumn
@@ -174,13 +173,13 @@ internal fun QueueList(
       Row(
         modifier = Modifier
           .fillMaxWidth()
-          .heightIn(min = Size.touch)
-          .padding(start = Space.xl, end = Space.xl - Space.m, top = Space.m),
+          .heightIn(min = Grid.u48)
+          .padding(start = Grid.margin, end = Grid.margin - Grid.u12, top = Grid.u12),
         verticalAlignment = Alignment.CenterVertically
       ) {
         Text(
           stringResource(R.string.queue_header),
-          style = AppText.Title2.copy(fontSize = 24.sp, lineHeight = 30.sp),
+          style = GridText.Title,
           color = colors.onSurface,
           modifier = Modifier
             .weight(1f)
@@ -212,7 +211,7 @@ internal fun QueueList(
             modifier = Modifier
               .fillMaxSize()
               .background(colors.surfaceContainerHigh)
-              .padding(horizontal = Space.xl),
+              .padding(horizontal = Grid.margin),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = if (dismiss.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Arrangement.Start else Arrangement.End
           ) {
@@ -226,7 +225,7 @@ internal fun QueueList(
             if (isDragged) {
               val item = dragged()
               translationY = if (item != null) dragStartOffset + dragDelta - item.offset else 0f
-              shadowElevation = Space.s.toPx()
+              shadowElevation = Grid.u6.toPx()
             }
           }
           .then(if (isDragged) Modifier else Modifier.animateItem(placementSpec = Motion.gel(androidx.compose.ui.unit.IntOffset(1, 1))))
@@ -259,7 +258,7 @@ internal fun QueueList(
               )
               Box(
                 modifier = Modifier
-                  .size(Size.touch)
+                  .size(Grid.u48)
                   .testTag("queue_handle_$index")
                   .semantics {
                     contentDescription = handleLabel
@@ -301,9 +300,9 @@ internal fun QueueList(
       item(key = "queue_empty_note") {
         Text(
           stringResource(R.string.queue_empty_note),
-          style = AppText.Footnote,
+          style = GridText.Small,
           color = colors.onSurfaceVariant,
-          modifier = Modifier.padding(horizontal = Space.xl, vertical = Space.m)
+          modifier = Modifier.padding(horizontal = Grid.margin, vertical = Grid.u12)
         )
       }
     }
@@ -312,10 +311,10 @@ internal fun QueueList(
       item(key = "upcoming_header") {
         Text(
           stringResource(R.string.queue_upcoming_header),
-          style = AppText.Title3,
+          style = GridText.BodyStrong,
           color = colors.onSurface,
           modifier = Modifier
-            .padding(start = Space.xl, end = Space.xl, top = Space.xl, bottom = Space.xs)
+            .padding(start = Grid.margin, end = Grid.margin, top = Grid.margin, bottom = Grid.u6)
             .semantics { heading() }
         )
       }
@@ -346,11 +345,11 @@ internal fun QueueList(
   if (confirmClear) {
     TarkasAlertDialog(
       onDismissRequest = { confirmClear = false },
-      title = { Text(stringResource(R.string.queue_clear_title), style = AppText.Title3) },
+      title = { Text(stringResource(R.string.queue_clear_title), style = GridText.BodyStrong) },
       text = {
         Text(
           pluralStringResource(R.plurals.queue_clear_message, queue.size, queue.size),
-          style = AppText.Body
+          style = GridText.Body
         )
       },
       confirmButton = { TextButton(onClick = { confirmClear = false; onClear() }) { Text(stringResource(R.string.queue_clear)) } },

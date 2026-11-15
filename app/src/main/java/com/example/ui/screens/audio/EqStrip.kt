@@ -1,5 +1,23 @@
 package com.example.ui.screens.audio
 
+import android.view.View
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
+import com.example.ui.components.FilterShapeIcon
+import kotlin.math.roundToInt
 import com.example.R
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
@@ -26,7 +44,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -44,12 +61,9 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Undo
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -120,7 +134,7 @@ private fun Modifier.stagger(index: Int, stepMs: Int = 16): Modifier {
   }
   return this.graphicsLayer {
     alpha = progress.value
-    translationY = (1f - progress.value) * 6.dp.toPx()
+    translationY = (1f - progress.value) * Grid.u6.toPx()
   }
 }
 
@@ -132,7 +146,6 @@ private class RemovedBand(val index: Int, val band: EqBand, val number: Int, val
  * in the parametric one. A parametric tile opens the band editor. The two views cross-fade: the old one
  * leaves in 150 ms, the new one arrives in 260 ms with a short stagger between its items.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BandArea(
   settings: EqSettings,
@@ -168,7 +181,17 @@ internal fun BandArea(
     onSelectBand((i - 1).coerceAtLeast(0))
   }
 
-  Column(modifier = modifier) {
+  val open = editing >= 0 && mode == EqMode.PARAMETRIC && settings.bands.getOrNull(editing) != null
+  // The band the bubble shows, kept while it closes so its content does not vanish before it has left.
+  val shown = remember { intArrayOf(-1) }
+  if (open) shown[0] = editing
+  val bubble = remember { MutableTransitionState(false) }
+  bubble.targetState = open
+  val view = LocalView.current
+  var area by remember { mutableStateOf(IntRect.Zero) }
+
+  Box(modifier = modifier.onGloballyPositioned { area = it.onScreen(view) }) {
+  Column(modifier = Modifier.fillMaxSize()) {
     AnimatedContent(
       targetState = mode,
       transitionSpec = {
@@ -183,6 +206,7 @@ internal fun BandArea(
         EqMode.PARAMETRIC -> ParametricTiles(
           settings = settings,
           selected = selectedBand,
+          dimmed = open,
           onOpen = { i -> onSelectBand(i); editing = i },
           onAdd = {
             onUpdateEq { s -> s.copy(bands = s.bands + EqBand(freqHz = 1000f, q = 1.4f)) }
@@ -212,20 +236,88 @@ internal fun BandArea(
     }
   }
 
-  val band = settings.bands.getOrNull(editing)
-  if (editing >= 0 && band != null && mode == EqMode.PARAMETRIC) {
-    ModalBottomSheet(
-      onDismissRequest = { editing = -1 },
-      sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-      containerColor = MaterialTheme.colorScheme.surface
-    ) {
+  val band = settings.bands.getOrNull(shown[0])
+  if ((bubble.currentState || bubble.targetState) && band != null && mode == EqMode.PARAMETRIC) {
+    val index = shown[0]
+    BandBubble(state = bubble, area = area, onDismiss = { editing = -1 }) {
       BandEditor(
-        index = editing,
+        index = index,
         band = band,
         eqEnabled = settings.enabled,
-        onChange = { t -> onUpdateBand(editing, t) },
-        onDelete = { deleteBand(editing) }
+        onChange = { t -> onUpdateBand(index, t) },
+        onDelete = { shown[0] = -1; deleteBand(index) }
       )
+    }
+  }
+  }
+}
+
+/** Where a layout sits on the screen, so two windows (the screen and a popup) can share one position. */
+private fun LayoutCoordinates.onScreen(view: View): IntRect {
+  val at = IntArray(2).also { view.getLocationOnScreen(it) }
+  val root = positionInRoot()
+  val left = at[0] + root.x.roundToInt()
+  val top = at[1] + root.y.roundToInt()
+  return IntRect(left, top, left + size.width, top + size.height)
+}
+
+/** Width of the band bubble as a share of the tile grid it covers. */
+private const val BUBBLE_SHARE = 0.75f
+
+/** Five 48 dp rows (header, type, Hz, dB, Q) inside a 6 dp inset. */
+private val BUBBLE_HEIGHT = Grid.u48 * 5 + Grid.u12
+
+/**
+ * The band editor as a bubble over the tile grid: centred on the grid's columns, its top on the grid's
+ * top, 0.75x as wide. It grows from 0.25 in 280 ms and leaves in 220 ms. A tap outside or Back closes it.
+ */
+@Composable
+private fun BandBubble(state: MutableTransitionState<Boolean>, area: IntRect, onDismiss: () -> Unit, content: @Composable () -> Unit) {
+  val colors = MaterialTheme.colorScheme
+  val reduced = rememberReducedMotion()
+  Popup(
+    onDismissRequest = onDismiss,
+    properties = PopupProperties(focusable = true, dismissOnBackPress = true, dismissOnClickOutside = false)
+  ) {
+    val view = LocalView.current
+    var window by remember { mutableStateOf(IntRect.Zero) }
+    val density = LocalDensity.current
+    val width = with(density) { (area.width * BUBBLE_SHARE).toDp() }
+    Box(
+      modifier = Modifier
+        .fillMaxSize()
+        .onGloballyPositioned { window = it.onScreen(view) }
+        .pointerInput(Unit) { detectTapGestures { onDismiss() } }
+    ) {
+      Box(
+        modifier = Modifier
+          .offset {
+            val w = (area.width * BUBBLE_SHARE).roundToInt()
+            val h = BUBBLE_HEIGHT.roundToPx()
+            val edge = Grid.u24.roundToPx()
+            val x = area.left + (area.width - w) / 2 - window.left
+            val y = (area.top - window.top).coerceAtMost(window.height - h - edge).coerceAtLeast(edge)
+            IntOffset(x, y)
+          }
+          .size(width, BUBBLE_HEIGHT)
+      ) {
+        AnimatedVisibility(
+          visibleState = state,
+          enter = if (reduced) EnterTransition.None else scaleIn(tween(280), initialScale = 0.25f) + fadeIn(tween(200)),
+          exit = if (reduced) ExitTransition.None else scaleOut(tween(220), targetScale = 0.25f) + fadeOut(tween(160))
+        ) {
+          Box(
+            modifier = Modifier
+              .fillMaxSize()
+              .clip(Grid.r24)
+              .background(colors.surfaceContainerHigh)
+              .border(Grid.hairline, colors.outlineVariant, Grid.r24)
+              .pointerInput(Unit) { detectTapGestures { } }
+              .padding(Grid.u6)
+              .testTag("band_bubble")
+          ) { content() }
+        }
+      }
     }
   }
 }
@@ -251,8 +343,8 @@ private fun GraphicBands(settings: EqSettings, onBandGain: (Int, Float) -> Unit)
         color = zeroLine,
         start = Offset(Grid.inset.toPx(), y),
         end = Offset(size.width - Grid.inset.toPx(), y),
-        strokeWidth = 1.dp.toPx(),
-        pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 6.dp.toPx()))
+        strokeWidth = Grid.hairline.toPx(),
+        pathEffect = PathEffect.dashPathEffect(floatArrayOf(Grid.u6.toPx(), Grid.u6.toPx()))
       )
     }
     settings.bands.forEachIndexed { i, band ->
@@ -316,10 +408,16 @@ private fun GraphicBands(settings: EqSettings, onBandGain: (Int, Float) -> Unit)
 
 /** The parametric mode: three tiles per row, then a dashed tile that adds a band. */
 @Composable
-private fun ParametricTiles(settings: EqSettings, selected: Int, onOpen: (Int) -> Unit, onAdd: () -> Unit) {
+private fun ParametricTiles(settings: EqSettings, selected: Int, dimmed: Boolean, onOpen: (Int) -> Unit, onAdd: () -> Unit) {
   val cells = settings.bands.size + 1
+  // Behind the open bubble the tiles step back: slightly blurred and at half strength, in 240 ms.
+  val dim by animateFloatAsState(if (dimmed) 1f else 0f, tween(240), label = "tilesDim")
   Column(
-    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+    modifier = Modifier
+      .fillMaxSize()
+      .blur(Grid.u6 / 2 * dim)
+      .graphicsLayer { alpha = 1f - 0.5f * dim }
+      .verticalScroll(rememberScrollState()),
     verticalArrangement = Arrangement.spacedBy(Grid.u24)
   ) {
     for (rowStart in 0 until cells step 3) {
@@ -393,13 +491,13 @@ private fun AddTile(onClick: () -> Unit, modifier: Modifier) {
       .clip(Grid.r12)
       // The dashed outline is drawn inside the box, so it never grows past its neighbours.
       .drawBehind {
-        val w = 1.dp.toPx()
+        val w = Grid.hairline.toPx()
         drawRoundRect(
           color = edge,
           topLeft = Offset(w / 2f, w / 2f),
           size = androidx.compose.ui.geometry.Size(size.width - w, size.height - w),
-          cornerRadius = CornerRadius(12.dp.toPx()),
-          style = Stroke(width = w, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 6.dp.toPx())))
+          cornerRadius = CornerRadius(Grid.u12.toPx()),
+          style = Stroke(width = w, pathEffect = PathEffect.dashPathEffect(floatArrayOf(Grid.u6.toPx(), Grid.u6.toPx())))
         )
       }
       .clickable(interactionSource = source, indication = null, role = Role.Button, onClickLabel = label, onClick = onClick)
@@ -412,25 +510,22 @@ private fun AddTile(onClick: () -> Unit, modifier: Modifier) {
 }
 
 /**
- * Everything one parametric band has: power and delete, the filter type as a segmented control, and
- * steppers for frequency, gain and Q. A tap on a value opens number entry; a double tap restores the default.
+ * Everything one parametric band has, on the bubble's columns 48 | 48 | 1fr | 48: the header (power,
+ * title with the filter type under it, delete), the filter type as five shapes, and steppers for Hz, dB
+ * and Q under their unit. A tap on a value opens number entry; a double tap restores the default.
  */
 @Composable
 private fun BandEditor(index: Int, band: EqBand, eqEnabled: Boolean, onChange: ((EqBand) -> EqBand) -> Unit, onDelete: () -> Unit) {
   val colors = MaterialTheme.colorScheme
   val number = index + 1
   val live = eqEnabled && band.enabled
-  Column(
-    modifier = Modifier
-      .verticalScroll(rememberScrollState())
-      .navigationBarsPadding()
-      .padding(horizontal = Grid.margin)
-      .padding(bottom = Grid.u24),
-    verticalArrangement = Arrangement.spacedBy(Grid.u12)
-  ) {
+  Column(modifier = Modifier.fillMaxSize()) {
     Row(modifier = Modifier.fillMaxWidth().height(Grid.u48), verticalAlignment = Alignment.CenterVertically) {
-      Text(stringResource(R.string.audio_band_title, number), style = EqType.Title, color = colors.onSurface, modifier = Modifier.weight(1f))
       BandPowerToggle(number, band.enabled, bandColor(index)) { on -> onChange { it.copy(enabled = on) } }
+      Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(stringResource(R.string.audio_band_title, number), style = EqType.BodyStrong, color = colors.onSurface, maxLines = 1)
+        Text(filterTypeLabel(band.type), style = EqType.Label, color = colors.onSurfaceVariant, maxLines = 1)
+      }
       IconAction(
         icon = Icons.Rounded.Delete,
         contentDescription = stringResource(R.string.audio_band_delete, number),
@@ -448,8 +543,10 @@ private fun BandEditor(index: Int, band: EqBand, eqEnabled: Boolean, onChange: (
       onApply = { v -> onChange { it.copy(freqHz = v) } }
     )
     StepperRow(
-      label = stringResource(R.string.audio_freq_short),
-      value = "${formatHz(band.freqHz)} Hz".replace("k Hz", " kHz"),
+      label = "Hz",
+      spoken = stringResource(R.string.audio_freq_short),
+      compact = true,
+      value = formatHz(band.freqHz),
       enabled = live,
       onLess = { onChange { it.copy(freqHz = (it.freqHz / SIXTH_OCTAVE).coerceIn(EqBand.MIN_FREQ, EqBand.MAX_FREQ)) } },
       onMore = { onChange { it.copy(freqHz = (it.freqHz * SIXTH_OCTAVE).coerceIn(EqBand.MIN_FREQ, EqBand.MAX_FREQ)) } },
@@ -457,24 +554,26 @@ private fun BandEditor(index: Int, band: EqBand, eqEnabled: Boolean, onChange: (
       edit = freqEdit,
       tag = "band_freq_$index"
     )
-    if (band.type.usesGain) {
-      StepperRow(
-        label = stringResource(R.string.audio_gain),
-        value = "${formatDb(band.gainDb)} dB",
-        enabled = live,
-        onLess = { onChange { it.copy(gainDb = (it.gainDb - 0.5f).coerceIn(EqBand.MIN_GAIN, EqBand.MAX_GAIN)) } },
-        onMore = { onChange { it.copy(gainDb = (it.gainDb + 0.5f).coerceIn(EqBand.MIN_GAIN, EqBand.MAX_GAIN)) } },
-        onReset = { onChange { it.copy(gainDb = 0f) } },
-        edit = NumberEdit(
-          title = stringResource(R.string.audio_band_gain_label, number), unit = "dB", value = band.gainDb,
-          min = EqBand.MIN_GAIN, max = EqBand.MAX_GAIN, step = 0.5f, decimals = 1, defaultValue = 0f,
-          onApply = { v -> onChange { it.copy(gainDb = v) } }
-        ),
-        tag = "band_gain_$index"
-      )
-    }
+    // The row stays when the filter has no gain, so the bubble never changes height.
+    StepperRow(
+      label = "dB",
+      spoken = stringResource(R.string.audio_gain),
+      compact = true,
+      value = if (band.type.usesGain) formatDb(band.gainDb) else "\u2014",
+      enabled = live && band.type.usesGain,
+      onLess = { onChange { it.copy(gainDb = (it.gainDb - 0.5f).coerceIn(EqBand.MIN_GAIN, EqBand.MAX_GAIN)) } },
+      onMore = { onChange { it.copy(gainDb = (it.gainDb + 0.5f).coerceIn(EqBand.MIN_GAIN, EqBand.MAX_GAIN)) } },
+      onReset = { onChange { it.copy(gainDb = 0f) } },
+      edit = NumberEdit(
+        title = stringResource(R.string.audio_band_gain_label, number), unit = "dB", value = band.gainDb,
+        min = EqBand.MIN_GAIN, max = EqBand.MAX_GAIN, step = 0.5f, decimals = 1, defaultValue = 0f,
+        onApply = { v -> onChange { it.copy(gainDb = v) } }
+      ),
+      tag = "band_gain_$index"
+    )
     StepperRow(
       label = "Q",
+      compact = true,
       value = formatQ(band.q),
       enabled = live,
       onLess = { onChange { it.copy(q = (it.q - 0.1f).coerceIn(EqBand.MIN_Q, EqBand.MAX_Q)) } },
@@ -503,14 +602,22 @@ internal fun StepperRow(
   onMore: () -> Unit,
   onReset: (() -> Unit)?,
   edit: NumberEdit?,
-  tag: String
+  tag: String,
+  /** What a screen reader says for [label], when the label on screen is only a unit. */
+  spoken: String = label,
+  /** In a bubble the label is a unit in the first 48 dp column; in a sheet it is a word 96 dp wide. */
+  compact: Boolean = false
 ) {
   val colors = MaterialTheme.colorScheme
   var editing by remember { mutableStateOf(false) }
   if (editing && edit != null) NumberEntryFor(edit) { editing = false }
   Row(modifier = Modifier.fillMaxWidth().height(Grid.u48), verticalAlignment = Alignment.CenterVertically) {
-    Text(label, style = EqType.Body, color = colors.onSurface, maxLines = 1, modifier = Modifier.width(Grid.u96))
-    StepButton(Icons.Rounded.Remove, stringResource(R.string.audio_stepper_less, label), enabled, onLess)
+    if (compact) {
+      Text(label, style = EqType.Label, color = colors.onSurface, maxLines = 1, modifier = Modifier.width(Grid.u48).padding(start = Grid.u6))
+    } else {
+      Text(label, style = EqType.Body, color = colors.onSurface, maxLines = 1, modifier = Modifier.width(Grid.u96))
+    }
+    StepButton(Icons.Rounded.Remove, stringResource(R.string.audio_stepper_less, spoken), enabled, onLess)
     Box(
       modifier = Modifier
         .weight(1f)
@@ -521,7 +628,7 @@ internal fun StepperRow(
         }
         .semantics {
           role = Role.Button
-          contentDescription = "$label $value"
+          contentDescription = "$spoken $value"
           onClick { if (enabled && edit != null) { editing = true; true } else false }
         }
         .testTag(tag),
@@ -529,7 +636,7 @@ internal fun StepperRow(
     ) {
       Text(value, style = EqType.MonoStrong, color = if (enabled) colors.onSurface else colors.onSurfaceVariant, maxLines = 1)
     }
-    StepButton(Icons.Rounded.Add, stringResource(R.string.audio_stepper_more, label), enabled, onMore)
+    StepButton(Icons.Rounded.Add, stringResource(R.string.audio_stepper_more, spoken), enabled, onMore)
   }
 }
 
@@ -554,57 +661,36 @@ internal fun StepButton(icon: androidx.compose.ui.graphics.vector.ImageVector, d
   }
 }
 
-/** The filter type as a segmented control: three shapes on the first row, two filters on the second. */
+/** The filter type as a segmented control: the five response shapes in one row, each a full 48 dp target. */
 @Composable
 private fun TypeSegments(index: Int, type: FilterType, enabled: Boolean, onPick: (FilterType) -> Unit) {
   val colors = MaterialTheme.colorScheme
-  val rows = listOf(
-    listOf(FilterType.PEAK, FilterType.LOW_SHELF, FilterType.HIGH_SHELF),
-    listOf(FilterType.HIGH_PASS, FilterType.LOW_PASS)
-  )
-  Column(
-    modifier = Modifier
-      .fillMaxWidth()
-      .clip(Grid.r12)
-      .background(colors.surfaceContainer)
-      .selectableGroup()
-      .testTag("band_type_$index")
-  ) {
-    rows.forEach { row ->
-      Row(modifier = Modifier.fillMaxWidth()) {
-        row.forEachIndexed { position, option ->
-          val chosen = option == type
-          // The touch target is the full 48 dp row; the highlight is inset 6 inside it.
-          Box(
-            modifier = Modifier
-              .weight(1f)
-              .height(Grid.u48)
-              .selectable(selected = chosen, enabled = enabled, role = Role.RadioButton, onClick = { onPick(option) })
-              .testTag("band_type_${index}_${option.key}")
-          ) {
-            Box(
-              modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                  start = if (position == 0) Grid.u6 else Grid.u6 / 2,
-                  end = if (position == row.size - 1) Grid.u6 else Grid.u6 / 2,
-                  top = Grid.u6,
-                  bottom = Grid.u6
-                )
-                .clip(Grid.r6)
-                .background(if (chosen) colors.primary.copy(alpha = 0.14f) else Color.Transparent),
-              contentAlignment = Alignment.Center
-            ) {
-              Text(
-                filterTypeLabel(option),
-                style = if (chosen) EqType.LabelStrong else EqType.Label,
-                color = if (enabled) colors.onSurface else colors.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-              )
-            }
+  val options = listOf(FilterType.PEAK, FilterType.LOW_SHELF, FilterType.HIGH_SHELF, FilterType.HIGH_PASS, FilterType.LOW_PASS)
+  Row(modifier = Modifier.fillMaxWidth().height(Grid.u48).selectableGroup().testTag("band_type_$index")) {
+    options.forEach { option ->
+      val chosen = option == type
+      val name = filterTypeLabel(option)
+      // The touch target is the full cell; the highlight is inset 6 inside it.
+      Box(
+        modifier = Modifier
+          .weight(1f)
+          .fillMaxHeight()
+          .selectable(selected = chosen, enabled = enabled, role = Role.RadioButton, onClick = { onPick(option) })
+          .semantics { contentDescription = name }
+          .testTag("band_type_${index}_${option.key}")
+          .padding(Grid.u6)
+          .clip(Grid.r6)
+          .background(if (chosen) colors.primary.copy(alpha = 0.14f) else Color.Transparent),
+        contentAlignment = Alignment.Center
+      ) {
+        FilterShapeIcon(
+          type = option,
+          color = when {
+            !enabled -> colors.onSurface.copy(alpha = 0.38f)
+            chosen -> colors.primary
+            else -> colors.onSurface
           }
-        }
+        )
       }
     }
   }

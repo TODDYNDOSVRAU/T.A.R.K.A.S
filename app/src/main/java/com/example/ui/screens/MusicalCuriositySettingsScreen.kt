@@ -48,10 +48,9 @@ import com.example.ui.components.RadioRow
 import com.example.ui.components.SubPageHeader
 import com.example.ui.components.SwitchRow
 import com.example.ui.components.TonalButton
-import com.example.ui.theme.AppText
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
 import com.example.ui.theme.LocalBarInset
-import com.example.ui.theme.Size
-import com.example.ui.theme.Space
 
 /** One "when to speak" option: [short] is the value shown on the Ajustes row. */
 internal data class TimingChoice(
@@ -147,7 +146,7 @@ fun MusicalCuriositySettingsScreen(
 
   LazyColumn(
     modifier = modifier.fillMaxSize(),
-    contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
+    contentPadding = PaddingValues(bottom = LocalBarInset.current + Grid.u24)
   ) {
     item {
       SubPageHeader(
@@ -235,8 +234,8 @@ fun MusicalCuriositySettingsScreen(
         Row(
           modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = Size.row)
-            .padding(start = Space.l, end = Space.xs, top = Space.s, bottom = Space.s),
+            .heightIn(min = Grid.u48)
+            .padding(start = Grid.u12, end = Grid.u6, top = Grid.u6, bottom = Grid.u6),
           verticalAlignment = Alignment.CenterVertically
         ) {
           Column(
@@ -244,8 +243,8 @@ fun MusicalCuriositySettingsScreen(
               .weight(1f)
               .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }
           ) {
-            Text(stringResource(R.string.settings_curiosity_speaking_now), style = AppText.Footnote, color = colors.primary)
-            Text(currentSpokenText, style = AppText.Subhead, color = colors.onSurface, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Text(stringResource(R.string.settings_curiosity_speaking_now), style = GridText.Small, color = colors.primary)
+            Text(currentSpokenText, style = GridText.Small, color = colors.onSurface, maxLines = 3, overflow = TextOverflow.Ellipsis)
           }
           IconAction(icon = Icons.Rounded.Stop, contentDescription = stringResource(R.string.settings_curiosity_stop_demo_cd), onClick = onStopVoice, tint = colors.primary)
         }
@@ -258,7 +257,7 @@ fun MusicalCuriositySettingsScreen(
         icon = if (isSpeaking) Icons.Rounded.Stop else Icons.Rounded.PlayArrow,
         onClick = { if (isSpeaking) onStopVoice() else onTestVoice() },
         modifier = Modifier
-          .padding(start = Space.page, end = Space.page, top = Space.xl)
+          .padding(start = Grid.margin, end = Grid.margin, top = Grid.u24)
           .fillMaxWidth()
           .testTag("btn_test_curiosity_voice")
       )
@@ -281,11 +280,11 @@ private fun VoiceSlider(
 ) {
   val colors = MaterialTheme.colorScheme
   var local by remember(value) { mutableFloatStateOf(value) }
-  Column(Modifier.padding(horizontal = Space.l, vertical = Space.m)) {
+  Column(Modifier.padding(horizontal = Grid.u12, vertical = Grid.u12)) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-      Text(title, style = AppText.Body, color = colors.onSurface, modifier = Modifier.weight(1f))
-      Spacer(Modifier.width(Space.s))
-      Text(label(local), style = AppText.Body, color = colors.onSurfaceVariant)
+      Text(title, style = GridText.Body, color = colors.onSurface, modifier = Modifier.weight(1f))
+      Spacer(Modifier.width(Grid.u6))
+      Text(label(local), style = GridText.Body, color = colors.onSurfaceVariant)
     }
     Slider(
       value = local,

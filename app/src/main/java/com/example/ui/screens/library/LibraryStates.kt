@@ -30,9 +30,6 @@ import com.example.R
 import com.example.ui.components.EmptyState
 import com.example.ui.components.PrimaryButton
 import com.example.ui.components.TextAction
-import com.example.ui.theme.AppText
-import com.example.ui.theme.Size
-import com.example.ui.theme.Space
 
 /** Asks for the device's music in plain words, with the one action that can still grant it. */
 @Composable
@@ -112,7 +109,7 @@ internal fun Loading(text: String) {
   ) {
     CircularProgressIndicator(
       modifier = Modifier.size(Grid.u24),
-      strokeWidth = 2.dp,
+      strokeWidth = Grid.hairline * 2,
       color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     Spacer(Modifier.width(Grid.inset))

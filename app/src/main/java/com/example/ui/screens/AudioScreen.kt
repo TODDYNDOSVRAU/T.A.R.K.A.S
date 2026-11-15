@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import com.example.ui.theme.GridText
 import com.example.ui.components.TarkasAlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -43,7 +44,6 @@ import com.example.ui.screens.audio.EqAdvancedPage
 import com.example.ui.screens.audio.EqConsolePage
 import com.example.ui.screens.audio.PresetActions
 import com.example.ui.screens.audio.PresetPanel
-import com.example.ui.theme.AppText
 import com.example.ui.theme.rememberReducedMotion
 import com.example.ui.theme.subPageTransition
 import com.example.ui.viewmodel.DeviceSearchState
@@ -287,8 +287,8 @@ fun AudioScreen(
   if (showDelete && activePreset != null) {
     TarkasAlertDialog(
       onDismissRequest = { showDelete = false },
-      title = { Text(stringResource(R.string.audio_preset_delete_title, activePreset.name), style = AppText.Title3) },
-      text = { Text(stringResource(R.string.audio_preset_delete_body), style = AppText.Body) },
+      title = { Text(stringResource(R.string.audio_preset_delete_title, activePreset.name), style = GridText.Title) },
+      text = { Text(stringResource(R.string.audio_preset_delete_body), style = GridText.Body) },
       confirmButton = {
         TextButton(onClick = { onDeletePreset(activePreset.id); showDelete = false }) {
           Text(stringResource(R.string.audio_action_delete), color = MaterialTheme.colorScheme.error)
@@ -313,7 +313,7 @@ private fun PresetNameDialog(
   var name by rememberSaveable { mutableStateOf(initialName) }
   TarkasAlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text(title, style = AppText.Title3) },
+    title = { Text(title, style = GridText.Title) },
     text = {
       OutlinedTextField(
         value = name,

@@ -33,8 +33,11 @@ enum class WidthClass {
   }
 }
 
-/** The widest a column of text or rows reads well; wider windows centre it instead of stretching it. */
-const val ReadingColumnMaxDp = 640
+/**
+ * The widest a column of text or rows reads well, on the 2x chain (384, 768, 1536). A phone, even on its side,
+ * stays under it and fills the width, so every tab shares one left edge; a large tablet centres the column.
+ */
+const val ReadingColumnMaxDp = 1536
 
 /** The width class of the current window. */
 @Composable

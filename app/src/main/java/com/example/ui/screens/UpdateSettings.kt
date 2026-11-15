@@ -27,7 +27,6 @@ import com.example.ui.components.ListRow
 import com.example.ui.components.SwitchRow
 import com.example.ui.components.UpdateNotes
 import com.example.data.update.ReleaseNotes
-import androidx.compose.ui.unit.dp
 import com.example.ui.legal.LegalTexts
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText

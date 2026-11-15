@@ -49,10 +49,7 @@ import com.example.ui.screens.library.PlayShuffleRow
 import com.example.ui.screens.library.TrackDivider
 import com.example.ui.screens.library.itemMotion
 import com.example.ui.screens.library.trackSubtitle
-import com.example.ui.theme.AppText
 import com.example.ui.theme.LocalBarInset
-import com.example.ui.theme.Size
-import com.example.ui.theme.Space
 import com.example.ui.theme.opensPlayer
 import com.example.ui.theme.rememberReducedMotion
 
@@ -190,7 +187,7 @@ internal fun SongOrderRow(
 }
 
 /** Width of the A–Z strip: a touch target close to the 48 dp minimum; sliding makes the height forgiving. */
-internal val LetterStripWidth = 48.dp
+internal val LetterStripWidth = Grid.u48
 
 /**
  * A–Z strip on the list's right edge: touching or sliding along it jumps to the first track of the
@@ -271,7 +268,7 @@ internal fun LetterStrip(letters: List<String>, onLetter: (String) -> Unit, modi
           l,
           style = GridText.Label,
           color = if (l == active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.padding(horizontal = Grid.u6, vertical = Size.hairline)
+          modifier = Modifier.padding(horizontal = Grid.u6, vertical = Grid.hairline)
         )
       }
     }

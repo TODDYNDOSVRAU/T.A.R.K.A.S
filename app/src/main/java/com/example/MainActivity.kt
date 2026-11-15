@@ -37,11 +37,10 @@ import dev.chrisbanes.haze.hazeSource
 import com.kyant.backdrop.backdrops.layerBackdrop
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.example.ui.theme.Grid
-import com.example.ui.theme.Space
+import com.example.ui.theme.GridText
 import com.example.ui.theme.LocalBarInset
 import com.example.ui.theme.LocalHazeState
 import com.example.ui.theme.LocalSurfaceStyle
-import com.example.ui.theme.Radius
 import com.example.ui.theme.glassPill
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -93,7 +92,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.components.MiniPlayerBar
@@ -898,7 +896,7 @@ fun TarkasAppContent(
           modifier = Modifier
             .align(Alignment.BottomCenter)
             .fillMaxWidth()
-            .height(barInset + 36.dp)
+            .height(barInset + Grid.u48)
             .graphicsLayer { alpha = scrimAlpha }
             .background(
               Brush.verticalGradient(
@@ -935,17 +933,17 @@ fun TarkasAppContent(
           Box(
             modifier = Modifier
               .fillMaxWidth()
-              .glassPill(cornerRadius = Radius.xl)
+              .glassPill(cornerRadius = Grid.u24)
           ) {
             Row(
               modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = Space.m, end = Space.s, top = Space.s, bottom = Space.s),
+                .padding(start = Grid.u12, end = Grid.u6, top = Grid.u6, bottom = Grid.u6),
               verticalAlignment = Alignment.CenterVertically
             ) {
               Box(
                 modifier = Modifier
-                  .size(36.dp)
+                  .size(Grid.u48)
                   .clip(CircleShape)
                   .background(MaterialTheme.colorScheme.primary),
                 contentAlignment = Alignment.Center
@@ -954,11 +952,11 @@ fun TarkasAppContent(
                   imageVector = Icons.Default.GraphicEq,
                   contentDescription = null,
                   tint = MaterialTheme.colorScheme.onPrimary,
-                  modifier = Modifier.size(20.dp)
+                  modifier = Modifier.size(Grid.icon)
                 )
               }
 
-              Spacer(modifier = Modifier.width(10.dp))
+              Spacer(modifier = Modifier.width(Grid.u12))
 
               Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -966,19 +964,19 @@ fun TarkasAppContent(
                     if (curiositySpeechStage == "intro") R.string.nav_curiosity_intro else R.string.nav_curiosity_track
                   ),
                   fontWeight = FontWeight.Bold,
-                  fontSize = 13.sp,
+                  style = GridText.Small,
                   color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                   text = currentCuriositySpeechText ?: "",
-                  fontSize = 13.sp,
+                  style = GridText.Small,
                   color = MaterialTheme.colorScheme.onSurfaceVariant,
                   maxLines = 1,
                   overflow = TextOverflow.Ellipsis
                 )
               }
 
-              Spacer(modifier = Modifier.width(Space.s))
+              Spacer(modifier = Modifier.width(Grid.u6))
 
               com.example.ui.components.GlassChip(
                 label = androidx.compose.ui.res.stringResource(R.string.nav_curiosity_skip),
@@ -1039,22 +1037,21 @@ fun TarkasAppContent(
           Row(
             modifier = Modifier
               .fillMaxWidth()
-              .glassPill(cornerRadius = Radius.xl)
-              .padding(start = Space.l, end = Space.s, top = Space.s, bottom = Space.s)
-              .heightIn(min = 40.dp)
+              .glassPill(cornerRadius = Grid.u24)
+              .padding(start = Grid.u12, end = Grid.u6, top = Grid.u6, bottom = Grid.u6)
+              .heightIn(min = Grid.u48)
               .semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite }
               .testTag("app_notice"),
             verticalAlignment = Alignment.CenterVertically
           ) {
             Text(
               text = n?.text ?: "",
-              fontSize = 14.sp,
-              lineHeight = 19.sp,
+              style = GridText.Body,
               color = MaterialTheme.colorScheme.onSurface,
               modifier = Modifier.weight(1f)
             )
             if (n?.actionLabel != null) {
-              Spacer(modifier = Modifier.width(Space.s))
+              Spacer(modifier = Modifier.width(Grid.u6))
               com.example.ui.components.GlassChip(
                 label = n.actionLabel,
                 selected = true,
@@ -1140,9 +1137,9 @@ fun TarkasAppContent(
         }
         if (compactBars) {
           Row(
-            horizontalArrangement = Arrangement.spacedBy(Space.s),
+            horizontalArrangement = Arrangement.spacedBy(Grid.u6),
             verticalAlignment = Alignment.Bottom
-          ) { bars(Modifier.weight(1f), Modifier.width(360.dp)) }
+          ) { bars(Modifier.weight(1f), Modifier.width(Grid.u384)) }
         } else {
           bars(Modifier, Modifier)
         }

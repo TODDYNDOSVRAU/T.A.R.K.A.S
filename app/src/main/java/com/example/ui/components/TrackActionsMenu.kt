@@ -55,11 +55,8 @@ import com.example.R
 import com.example.data.model.Playlist
 import com.example.data.model.Track
 import androidx.compose.foundation.shape.RoundedCornerShape
-import com.example.ui.theme.AppText
-import com.example.ui.theme.Radius
-import com.example.ui.theme.Shapes
-import com.example.ui.theme.Size
-import com.example.ui.theme.Space
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
 import kotlinx.coroutines.launch
 
 /**
@@ -109,7 +106,7 @@ fun TrackActionsMenu(
   IconButton(
     onClick = { showPlaylists = false; expanded = true },
     modifier = modifier
-      .size(Size.touch)
+      .size(Grid.u48)
       .testTag("track_menu_${track.id}")
   ) {
     Icon(
@@ -134,17 +131,17 @@ fun TrackActionsMenu(
       onDismissRequest = { expanded = false; showPlaylists = false },
       sheetState = sheetState,
       containerColor = MaterialTheme.colorScheme.surfaceContainer,
-      shape = RoundedCornerShape(topStart = Radius.l, topEnd = Radius.l),
+      shape = RoundedCornerShape(topStart = Grid.u24, topEnd = Grid.u24),
       dragHandle = { SheetHandle() }
     ) {
       Column(
         modifier = Modifier
           .fillMaxWidth()
           .verticalScroll(rememberScrollState())
-          .padding(bottom = Space.l)
+          .padding(bottom = Grid.u12)
       ) {
         SheetHeader(track)
-        Hairline(Modifier.padding(vertical = Space.s))
+        Hairline(Modifier.padding(vertical = Grid.u6))
         if (!showPlaylists) {
           ListRow(
             title = stringResource(if (isFavorite) R.string.player_menu_unfavorite else R.string.player_menu_favorite),
@@ -207,7 +204,7 @@ fun TrackActionsMenu(
             )
           }
         } else {
-          GroupHeader(stringResource(R.string.player_menu_add_playlist), Modifier.padding(top = Space.s))
+          GroupHeader(stringResource(R.string.player_menu_add_playlist), Modifier.padding(top = Grid.u6))
           ListRow(
             title = stringResource(R.string.player_menu_new_playlist_item),
             icon = Icons.Rounded.Add,
@@ -261,7 +258,7 @@ fun QueueItemMenu(
   IconButton(
     onClick = { expanded = true },
     modifier = modifier
-      .size(Size.touch)
+      .size(Grid.u48)
       .testTag("queue_menu_${track.id}")
   ) {
     Icon(
@@ -282,17 +279,17 @@ fun QueueItemMenu(
       onDismissRequest = { expanded = false },
       sheetState = sheetState,
       containerColor = MaterialTheme.colorScheme.surfaceContainer,
-      shape = RoundedCornerShape(topStart = Radius.l, topEnd = Radius.l),
+      shape = RoundedCornerShape(topStart = Grid.u24, topEnd = Grid.u24),
       dragHandle = { SheetHandle() }
     ) {
       Column(
         modifier = Modifier
           .fillMaxWidth()
           .verticalScroll(rememberScrollState())
-          .padding(bottom = Space.l)
+          .padding(bottom = Grid.u12)
       ) {
         SheetHeader(track)
-        Hairline(Modifier.padding(vertical = Space.s))
+        Hairline(Modifier.padding(vertical = Grid.u6))
         ListRow(
           title = stringResource(R.string.queue_move_up),
           icon = Icons.Rounded.ArrowUpward,
@@ -327,22 +324,22 @@ private fun SheetHeader(track: Track) {
   Row(
     modifier = Modifier
       .fillMaxWidth()
-      .padding(horizontal = Space.page, vertical = Space.s),
+      .padding(horizontal = Grid.margin, vertical = Grid.u6),
     verticalAlignment = Alignment.CenterVertically
   ) {
-    TrackArtwork(track = track, shape = Shapes.xs, iconSize = Size.iconSmall, modifier = Modifier.size(Size.rowArtwork))
-    Spacer(Modifier.width(Space.m))
+    TrackArtwork(track = track, shape = Grid.r6, iconSize = Grid.icon, modifier = Modifier.size(Grid.u48))
+    Spacer(Modifier.width(Grid.u12))
     Column(modifier = Modifier.weight(1f)) {
       Text(
         track.title,
-        style = AppText.Headline,
+        style = GridText.BodyStrong,
         color = MaterialTheme.colorScheme.onSurface,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis
       )
       Text(
         track.artist,
-        style = AppText.Subhead,
+        style = GridText.Small,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis
@@ -363,15 +360,15 @@ fun NamePlaylistDialog(
   var name by rememberSaveable(initialName) { mutableStateOf(initialName) }
   TarkasAlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text(title, style = AppText.Title3) },
+    title = { Text(title, style = GridText.BodyStrong) },
     text = {
       OutlinedTextField(
         value = name,
         onValueChange = { name = it },
-        placeholder = { Text(stringResource(R.string.player_menu_playlist_name), style = AppText.Body) },
-        textStyle = AppText.Body,
+        placeholder = { Text(stringResource(R.string.player_menu_playlist_name), style = GridText.Body) },
+        textStyle = GridText.Body,
         singleLine = true,
-        shape = Shapes.s,
+        shape = Grid.r12,
         modifier = Modifier.testTag("playlist_name_input")
       )
     },

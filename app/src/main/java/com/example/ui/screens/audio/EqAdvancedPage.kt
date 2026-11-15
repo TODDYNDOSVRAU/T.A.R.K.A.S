@@ -1,5 +1,6 @@
 package com.example.ui.screens.audio
 
+import com.example.ui.theme.Grid
 import com.example.ui.theme.EqSize
 import androidx.compose.ui.res.pluralStringResource
 import com.example.R
@@ -60,11 +61,8 @@ import com.example.ui.components.ListRow
 import com.example.ui.components.RadioRow
 import com.example.ui.components.SubPageHeader
 import com.example.ui.components.SwitchRow
-import com.example.ui.theme.AppText
 import com.example.ui.theme.LocalBarInset
 import com.example.ui.theme.Motion
-import com.example.ui.theme.Shapes
-import com.example.ui.theme.Space
 import com.example.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.delay
 import kotlin.math.abs
@@ -129,7 +127,7 @@ internal fun EqAdvancedPage(
   val colors = MaterialTheme.colorScheme
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
+    contentPadding = PaddingValues(bottom = LocalBarInset.current + Grid.u24)
   ) {
     item {
       SubPageHeader(
@@ -348,18 +346,18 @@ internal fun EqAdvancedPage(
             )
             Box(
               modifier = Modifier
-                .padding(horizontal = Space.l)
-                .padding(bottom = Space.m)
+                .padding(horizontal = Grid.inset)
+                .padding(bottom = Grid.inset)
                 .fillMaxWidth()
                 .height(EqSize.meterBar)
-                .clip(Shapes.pill)
+                .clip(Grid.r6)
                 .background(colors.surfaceContainerHigh)
             ) {
               Box(
                 modifier = Modifier
                   .fillMaxWidth(level)
                   .height(EqSize.meterBar)
-                  .clip(Shapes.pill)
+                  .clip(Grid.r6)
                   .background(colors.primary)
               )
             }
@@ -376,9 +374,9 @@ internal fun EqAdvancedPage(
         systemAudioStatus.errorMessage?.let { msg ->
           Text(
             msg,
-            style = AppText.Footnote,
+            style = EqType.Label,
             color = colors.error,
-            modifier = Modifier.padding(start = Space.page + Space.l, end = Space.page + Space.l, top = Space.s)
+            modifier = Modifier.padding(start = Grid.margin + Grid.inset, end = Grid.margin + Grid.inset, top = Grid.u12)
           )
         }
         GroupFooter(
@@ -395,7 +393,7 @@ internal fun EqAdvancedPage(
         } else {
           stringResource(R.string.audio_adv_limits_other)
         },
-        modifier = Modifier.padding(top = Space.xl)
+        modifier = Modifier.padding(top = Grid.u24)
       )
     }
   }
@@ -472,16 +470,16 @@ private fun loudnessReadout(l: LoudnessUi): String {
 private fun GroupLabel(text: String) {
   Text(
     text,
-    style = AppText.Title3,
+    style = EqType.BodyStrong,
     color = MaterialTheme.colorScheme.onSurface,
-    modifier = Modifier.padding(start = Space.page, end = Space.page, top = Space.l, bottom = Space.xs).semantics { heading() }
+    modifier = Modifier.padding(start = Grid.margin, end = Grid.margin, top = Grid.u24, bottom = Grid.u12).semantics { heading() }
   )
 }
 
 /** A titled block of the page: the group header, then its content, with the gap to the next one. */
 @Composable
 internal fun Section(title: String?, content: @Composable () -> Unit) {
-  Column(modifier = Modifier.fillMaxWidth().padding(top = Space.xl)) {
+  Column(modifier = Modifier.fillMaxWidth().padding(top = Grid.u24)) {
     if (title != null) GroupHeader(title)
     content()
   }
@@ -549,13 +547,13 @@ private fun ReachSection(reach: EqReach, status: GlobalEqStatus, rootPresent: Bo
     (line?.plus(conflict))?.let {
       Text(
         it,
-        style = AppText.Footnote,
+        style = EqType.Label,
         color = colors.primary,
-        modifier = Modifier.padding(start = Space.page + Space.l, end = Space.page + Space.l, top = Space.s)
+        modifier = Modifier.padding(start = Grid.margin + Grid.inset, end = Grid.margin + Grid.inset, top = Grid.u12)
       )
     }
     if (reach == EqReach.ADB && status.needsDump) {
-      Spacer(Modifier.height(Space.l))
+      Spacer(Modifier.height(Grid.u12))
       GroupHeader(stringResource(R.string.audio_adv_dump_missing))
       InsetGroup { CommandRow(DUMP_COMMAND) }
       GroupFooter(
@@ -580,18 +578,18 @@ private fun ActiveAppsGroup(state: ActiveAppsState) {
 
       is ActiveAppsState.Failed -> Text(
         state.message,
-        style = AppText.Footnote,
+        style = EqType.Label,
         color = colors.error,
-        modifier = Modifier.padding(horizontal = Space.page + Space.l)
+        modifier = Modifier.padding(horizontal = Grid.margin + Grid.inset)
       )
 
       is ActiveAppsState.Ready -> {
         if (state.apps.isEmpty()) {
           Text(
             stringResource(R.string.audio_adv_no_other_apps),
-            style = AppText.Footnote,
+            style = EqType.Label,
             color = colors.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = Space.page + Space.l)
+            modifier = Modifier.padding(horizontal = Grid.margin + Grid.inset)
           )
         } else {
           InsetGroup {

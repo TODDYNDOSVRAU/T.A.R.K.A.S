@@ -2,7 +2,6 @@ package com.example.ui.components
 
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,13 +31,10 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.model.Track
-import com.example.ui.theme.AppText
-import com.example.ui.theme.Radius
-import com.example.ui.theme.Shapes
-import com.example.ui.theme.Space
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
 import com.example.ui.viewmodel.TrackDetailsState
 
 /**
@@ -61,42 +57,42 @@ fun TrackDetailsSheet(
     onDismissRequest = onDismiss,
     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     containerColor = MaterialTheme.colorScheme.surfaceContainer,
-    shape = RoundedCornerShape(topStart = Radius.l, topEnd = Radius.l),
+    shape = RoundedCornerShape(topStart = Grid.u24, topEnd = Grid.u24),
     dragHandle = { SheetHandle() }
   ) {
     Column(
       modifier = Modifier
         .fillMaxWidth()
         .verticalScroll(rememberScrollState())
-        .padding(bottom = Space.l)
+        .padding(bottom = Grid.u12)
         .testTag("track_details_sheet")
     ) {
       Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = Space.page, vertical = Space.s),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Grid.margin, vertical = Grid.u6),
         verticalAlignment = Alignment.CenterVertically
       ) {
         TrackArtwork(
           // The track's own cover first; the release's from the Cover Art Archive when it has none.
           track = if (track.artworkUrl == null && info?.coverUrl != null) track.copy(artworkUrl = info.coverUrl) else track,
-          shape = Shapes.s,
-          iconSize = 32.dp,
-          modifier = Modifier.size(88.dp)
+          shape = Grid.r12,
+          iconSize = Grid.u24,
+          modifier = Modifier.size(Grid.u96)
         )
-        Spacer(Modifier.width(Space.m))
+        Spacer(Modifier.width(Grid.u12))
         Column(modifier = Modifier.weight(1f)) {
-          Text(track.title, style = AppText.Title3, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
-          Text(track.artist, style = AppText.Subhead, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          Text(track.title, style = GridText.BodyStrong, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+          Text(track.artist, style = GridText.Small, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
       }
-      Hairline(Modifier.padding(vertical = Space.s))
+      Hairline(Modifier.padding(vertical = Grid.u6))
       // The rows of this sheet run the full width, so the header aligns with them (GroupHeader is indented
       // for rows inside a card).
       Text(
         stringResource(R.string.player_details_header),
-        style = AppText.Footnote,
+        style = GridText.Small,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier
-          .padding(start = Space.page, end = Space.page, top = Space.s, bottom = Space.s)
+          .padding(start = Grid.margin, end = Grid.margin, top = Grid.u6, bottom = Grid.u6)
           .semantics { heading() }
       )
 
@@ -104,11 +100,11 @@ fun TrackDetailsSheet(
         state.loading -> Box(
           modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = Space.xl)
+            .padding(vertical = Grid.u24)
             .semantics { stateDescription = loadingDescription },
           contentAlignment = Alignment.Center
         ) {
-          CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+          CircularProgressIndicator(modifier = Modifier.size(Grid.icon), strokeWidth = Grid.hairline * 2)
         }
         state.offline -> EmptyState(
           icon = Icons.Rounded.CloudOff,
@@ -116,15 +112,15 @@ fun TrackDetailsSheet(
           message = stringResource(R.string.player_details_offline_message),
           actionLabel = stringResource(R.string.player_details_retry),
           onAction = onRetry,
-          modifier = Modifier.padding(horizontal = Space.page).testTag("track_details_offline")
+          modifier = Modifier.padding(horizontal = Grid.margin).testTag("track_details_offline")
         )
         info == null -> Text(
           stringResource(R.string.player_details_not_found),
-          style = AppText.Subhead,
+          style = GridText.Small,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.padding(horizontal = Space.page, vertical = Space.s).testTag("track_details_not_found")
+          modifier = Modifier.padding(horizontal = Grid.margin, vertical = Grid.u6).testTag("track_details_not_found")
         )
-        else -> Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+        else -> Column {
           info.release?.let { release ->
             InfoRow(stringResource(R.string.player_details_album), listOfNotNull(release, info.releaseType?.let { releaseTypeLabel(it) }).joinToString(" · "))
             GroupDivider()
@@ -154,9 +150,9 @@ fun TrackDetailsSheet(
       }
       Text(
         stringResource(R.string.player_details_attribution),
-        style = AppText.Footnote,
+        style = GridText.Small,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = Space.page, vertical = Space.m)
+        modifier = Modifier.padding(horizontal = Grid.margin, vertical = Grid.u12)
       )
     }
   }

@@ -1,6 +1,7 @@
 package com.example.ui.screens.player
 
 import android.content.Context
+import com.example.ui.theme.Grid
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
@@ -82,10 +83,8 @@ import com.example.ui.theme.CoverCarousel
 import com.example.ui.theme.Motion
 import com.example.ui.theme.PlayerOrigin
 import com.example.ui.theme.PlayerTravel
-import com.example.ui.theme.Radius
 import com.example.ui.theme.Shapes
 import com.example.ui.theme.Size
-import com.example.ui.theme.Space
 import com.example.ui.theme.TalBlack
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -247,16 +246,16 @@ internal fun Artwork(
   }
 
   val carouselContext = LocalContext.current
-  BoxWithConstraints(modifier = modifier.bleedHorizontally(Space.xl).carouselEdgeFade(edgeFade), contentAlignment = Alignment.Center) {
+  BoxWithConstraints(modifier = modifier.bleedHorizontally(Grid.margin).carouselEdgeFade(edgeFade), contentAlignment = Alignment.Center) {
     // The middle cover keeps the size the single cover had, inside the page's margins
     // (CoverCarousel.centreSide); the side covers show in the margins and run off the screen.
     val density = LocalDensity.current
-    val side: Dp = with(density) { CoverCarousel.centreSide(maxWidth.toPx(), maxHeight.toPx(), Space.xl.toPx()).toDp() }
+    val side: Dp = with(density) { CoverCarousel.centreSide(maxWidth.toPx(), maxHeight.toPx(), Grid.margin.toPx()).toDp() }
     val sidePx by rememberUpdatedState(with(density) { side.toPx() })
     val coverPx = with(density) { side.roundToPx() }
     SideEffect { CarouselCovers.sizePx = coverPx }
     val stepPx by rememberUpdatedState(CoverCarousel.stepPx(sidePx))
-    val minTouch = with(LocalDensity.current) { Size.touch.toPx() }
+    val minTouch = with(LocalDensity.current) { Grid.u48.toPx() }
     Box(
       Modifier
         .size(side)
@@ -411,7 +410,7 @@ fun PrefetchCarouselCovers(neighbors: kotlinx.coroutines.flow.StateFlow<CoverNei
   // The real pixel width (screenWidthDp is rounded down to whole dp, which would ask for a cover one
   // pixel off the one the player lays out, and miss the cache).
   val screenPx = LocalConfiguration.current.let { context.resources.displayMetrics.widthPixels.toFloat() }
-  val marginPx = with(LocalDensity.current) { Space.xl.toPx() }
+  val marginPx = with(LocalDensity.current) { Grid.margin.toPx() }
   LaunchedEffect(n) {
     val px = CarouselCovers.sizePx.takeIf { it > 0 } ?: CarouselCovers.estimatePx(screenPx, marginPx)
     if (px <= 0) return@LaunchedEffect
@@ -542,11 +541,11 @@ internal fun CarouselCover(
         // The shadow is softer and wider at full size, tighter when it steps back, absent while it is
         // still the small cover of the mini player, and only under the middle cover.
         shadowElevation = if (near >= 1f) 0f else
-          (Space.s + Space.l * ((s - PlayerTravel.PausedScale) / (1f - PlayerTravel.PausedScale)).coerceIn(0f, 1f)).toPx() * p * (1f - near)
+          (Grid.u6 + Grid.u12 * ((s - PlayerTravel.PausedScale) / (1f - PlayerTravel.PausedScale)).coerceIn(0f, 1f)).toPx() * p * (1f - near)
         shape = if (t != null) {
-          RoundedCornerShape(PlayerTravel.cornerAt(Radius.s.toPx(), Radius.m.toPx(), t.progress, t.scale * s))
+          RoundedCornerShape(PlayerTravel.cornerAt(Grid.u12.toPx(), Grid.u24.toPx(), t.progress, t.scale * s))
         } else {
-          Shapes.m
+          Grid.r24
         }
         clip = true
       }
@@ -583,8 +582,8 @@ internal fun CarouselCover(
         .graphicsLayer { alpha = abs(index - carousel.camera.floatValue).coerceAtMost(1f) }
         .drawBehind {
           drawRect(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.06f), Color.Transparent), endY = size.height * 0.5f))
-          val w = Size.hairline.toPx()
-          val r = Radius.m.toPx()
+          val w = Grid.hairline.toPx()
+          val r = Grid.u24.toPx()
           drawRoundRect(
             color = Color.White.copy(alpha = 0.12f),
             topLeft = Offset(w / 2f, w / 2f),
@@ -610,7 +609,7 @@ internal fun Modifier.carouselEdgeFade(width: Dp): Modifier {
   // The offscreen layer cuts at its bounds, and the middle cover's shadow reaches well past the carousel
   // above and below: the layer is made taller than the carousel (room on both sides), while the
   // carousel itself keeps its size in the page's layout.
-  val room = Size.control
+  val room = Grid.u96
   return this
     .layout { measurable, c ->
       val extra = room.roundToPx() * 2

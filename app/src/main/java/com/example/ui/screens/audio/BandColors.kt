@@ -5,6 +5,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
+import com.example.ui.theme.TalBlack
+import com.example.ui.theme.TalWhite
+import com.example.ui.theme.TarkasIce
+import com.example.ui.theme.TarkasTealDeep
 
 /**
  * One tone per parametric band, from the identity's accent only: Ice on dark, Deep Teal on light, with the
@@ -14,16 +18,15 @@ import androidx.compose.ui.graphics.luminance
  * background (non-text contrast, WCAG AA), which is why the weakest tone is lower on dark than on light.
  */
 internal object BandColors {
-  private val ICE = Color(0xFF7EE3EA)
-  private val DEEP_TEAL = Color(0xFF0D6C74)
-  private val BLACK = Color(0xFF080808)
-  private val WHITE = Color(0xFFF2F2F0)
+  val ALPHA_ON_DARK = floatArrayOf(1.00f, 0.55f, 0.85f, 0.62f, 0.93f, 0.58f, 0.76f, 0.68f)
+  val ALPHA_ON_LIGHT = floatArrayOf(1.00f, 0.76f, 0.92f, 0.80f, 0.96f, 0.78f, 0.88f, 0.84f)
 
-  private val ALPHA_ON_DARK = floatArrayOf(1.00f, 0.55f, 0.85f, 0.62f, 0.93f, 0.58f, 0.76f, 0.68f)
-  private val ALPHA_ON_LIGHT = floatArrayOf(1.00f, 0.76f, 0.92f, 0.80f, 0.96f, 0.78f, 0.88f, 0.84f)
+  val ON_DARK: List<Color> = tones(TarkasIce, TalBlack, onDark = true)
+  val ON_LIGHT: List<Color> = tones(TarkasTealDeep, TalWhite, onDark = false)
 
-  val ON_DARK: List<Color> = ALPHA_ON_DARK.map { ICE.copy(alpha = it).compositeOver(BLACK) }
-  val ON_LIGHT: List<Color> = ALPHA_ON_LIGHT.map { DEEP_TEAL.copy(alpha = it).compositeOver(WHITE) }
+  /** The band tones made from any [accent] over its [background]: the phone's colours when the user chose them. */
+  fun tones(accent: Color, background: Color, onDark: Boolean): List<Color> =
+    (if (onDark) ALPHA_ON_DARK else ALPHA_ON_LIGHT).map { accent.copy(alpha = it).compositeOver(background) }
 
   fun of(index: Int, onDark: Boolean): Color {
     val set = if (onDark) ON_DARK else ON_LIGHT
@@ -33,5 +36,9 @@ internal object BandColors {
 
 /** The colour of band [index] for the current theme. */
 @Composable
-internal fun bandColor(index: Int): Color =
-  BandColors.of(index, onDark = MaterialTheme.colorScheme.background.luminance() < 0.5f)
+internal fun bandColor(index: Int): Color {
+  val colors = MaterialTheme.colorScheme
+  val onDark = colors.background.luminance() < 0.5f
+  val alphas = if (onDark) BandColors.ALPHA_ON_DARK else BandColors.ALPHA_ON_LIGHT
+  return colors.primary.copy(alpha = alphas[Math.floorMod(index, alphas.size)]).compositeOver(colors.background)
+}

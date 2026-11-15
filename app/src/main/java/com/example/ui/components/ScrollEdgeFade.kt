@@ -9,14 +9,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
+import com.example.ui.theme.Grid
 
 /**
  * Fades the top [height] of a scrolling list to transparent while it is scrolled away from its start, so
  * rows leave under the header softly instead of being cut in a straight line. At the very top nothing
  * is faded, so the first row keeps its full strength.
  */
-fun Modifier.topScrollFade(state: LazyListState, height: Dp = 20.dp): Modifier = this
+fun Modifier.topScrollFade(state: LazyListState, height: Dp = Grid.u24): Modifier = this
   .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
   .drawWithContent {
     drawContent()

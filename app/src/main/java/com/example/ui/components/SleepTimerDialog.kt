@@ -22,9 +22,8 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import com.example.R
 import com.example.data.playback.SleepTimer
-import com.example.ui.theme.AppText
-import com.example.ui.theme.Size
-import com.example.ui.theme.Space
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
 import kotlinx.coroutines.delay
 
 private val MINUTES = listOf(5, 10, 15, 30, 45, 60, 90)
@@ -62,7 +61,7 @@ fun SleepTimerDialog(
   val label = sleepTimerLabel(timer)
   TarkasAlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text(stringResource(R.string.player_sleep_title), style = AppText.Title3) },
+    title = { Text(stringResource(R.string.player_sleep_title), style = GridText.BodyStrong) },
     text = {
       // The list is capped at half the window height, so in landscape the dialog keeps clear of the
       // screen edges and its title and buttons stay in view while only the options scroll.
@@ -75,9 +74,9 @@ fun SleepTimerDialog(
         if (label != null) {
           Text(
             stringResource(R.string.player_sleep_pauses_in, label),
-            style = AppText.Subhead,
+            style = GridText.Small,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = Space.s)
+            modifier = Modifier.padding(bottom = Grid.u6)
           )
         }
         MINUTES.forEach { m ->
@@ -101,13 +100,13 @@ fun SleepTimerDialog(
 private fun Option(text: String, tag: String, onClick: () -> Unit) {
   Text(
     text,
-    style = AppText.Body,
+    style = GridText.Body,
     color = MaterialTheme.colorScheme.onSurface,
     modifier = Modifier
       .fillMaxWidth()
-      .heightIn(min = Size.touch)
+      .heightIn(min = Grid.u48)
       .highlightClickable(onClick = onClick)
-      .padding(vertical = Space.m)
+      .padding(vertical = Grid.u12)
       .testTag(tag)
   )
 }

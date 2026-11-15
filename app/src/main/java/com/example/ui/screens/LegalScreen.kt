@@ -17,15 +17,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import com.example.ui.components.SubPageHeader
 import com.example.ui.legal.LegalDoc
-import com.example.ui.theme.AppText
+import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
 import com.example.ui.theme.LocalBarInset
-import com.example.ui.theme.Space
 
 /** About 70 characters of Body per line: past that, long legal text gets hard to follow. */
-private val ReadingWidth = 600.dp
+private val ReadingWidth = Grid.u384 + Grid.u192
 
 /**
  * A long text to read: the Terms, the Privacy Policy, the licences, what's new. [backLabel] names the
@@ -42,7 +41,7 @@ fun LegalScreen(
   val colors = MaterialTheme.colorScheme
   LazyColumn(
     modifier = modifier.fillMaxSize().testTag("legal_screen"),
-    contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l),
+    contentPadding = PaddingValues(bottom = LocalBarInset.current + Grid.u24),
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
     item {
@@ -51,20 +50,20 @@ fun LegalScreen(
     item {
       Text(
         doc.subtitle,
-        style = AppText.Subhead,
+        style = GridText.Small,
         color = colors.onSurfaceVariant,
-        modifier = Modifier.readingColumn().padding(bottom = Space.s)
+        modifier = Modifier.readingColumn().padding(bottom = Grid.u6)
       )
     }
     items(doc.sections) { (heading, body) ->
-      Column(Modifier.readingColumn().padding(top = Space.xl)) {
+      Column(Modifier.readingColumn().padding(top = Grid.u24)) {
         Text(
           heading,
-          style = AppText.Title3,
+          style = GridText.BodyStrong,
           color = colors.onSurface,
           modifier = Modifier.semantics { heading() }
         )
-        Text(body, style = AppText.Body, color = colors.onSurface, modifier = Modifier.padding(top = Space.s))
+        Text(body, style = GridText.Body, color = colors.onSurface, modifier = Modifier.padding(top = Grid.u6))
       }
     }
   }
@@ -73,4 +72,4 @@ fun LegalScreen(
 private fun Modifier.readingColumn(): Modifier = this
   .widthIn(max = ReadingWidth)
   .fillMaxWidth()
-  .padding(horizontal = Space.page)
+  .padding(horizontal = Grid.margin)

@@ -25,10 +25,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.Alignment
+import com.example.ui.theme.Grid
 import com.example.ui.components.highlightClickable
 import androidx.compose.ui.unit.Dp
-import com.example.ui.theme.AppText
-import com.example.ui.theme.Space
 import kotlinx.coroutines.launch
 import kotlin.math.log10
 import kotlin.math.pow
@@ -54,14 +54,14 @@ internal fun SliderRow(
   onChangeFinished: ((Float) -> Unit)? = null,
   enabled: Boolean = true,
   testTag: String? = null,
-  side: Dp = Space.l
+  side: Dp = Grid.inset
 ) {
   val colors = MaterialTheme.colorScheme
   val latest by rememberUpdatedState(value)
-  Column(modifier = modifier.fillMaxWidth().padding(start = side, end = side, top = Space.m, bottom = Space.xs)) {
-    Row(modifier = Modifier.fillMaxWidth()) {
-      Text(label, style = AppText.Body, color = colors.onSurface, modifier = Modifier.weight(1f))
-      Text(valueText, style = AppText.Body.copy(fontFeatureSettings = "tnum"), color = colors.onSurfaceVariant)
+  Column(modifier = modifier.fillMaxWidth().padding(start = side, end = side, top = Grid.inset)) {
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+      Text(label, style = EqType.Body, color = colors.onSurface, modifier = Modifier.weight(1f))
+      Text(valueText, style = EqType.Mono, color = colors.onSurface)
     }
     Slider(
       value = value.coerceIn(range.start, range.endInclusive),
@@ -119,14 +119,13 @@ internal fun CommandRow(command: String) {
         scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText("Comando", command))) }
         copied = true
       }
-      .padding(horizontal = Space.l, vertical = Space.m)
+      .padding(Grid.inset)
   ) {
-    Text(command, style = AppText.Footnote.copy(fontFamily = com.example.ui.theme.JetBrainsMono), color = colors.onSurface)
+    Text(command, style = EqType.Mono, color = colors.onSurface)
     Text(
       if (copied) stringResource(R.string.audio_copied) else stringResource(R.string.audio_tap_to_copy),
-      style = AppText.Footnote,
-      color = colors.primary,
-      modifier = Modifier.padding(top = Space.xs)
+      style = EqType.Label,
+      color = colors.primary
     )
   }
 }

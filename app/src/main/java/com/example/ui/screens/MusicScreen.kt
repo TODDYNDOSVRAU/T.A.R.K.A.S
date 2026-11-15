@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.content.res.Configuration
+import com.example.ui.theme.Grid
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
@@ -66,8 +67,6 @@ import com.example.ui.screens.player.revealWithPlayer
 import com.example.ui.theme.LocalBarInset
 import com.example.ui.theme.Motion
 import com.example.ui.theme.PlayerTravel
-import com.example.ui.theme.Radius
-import com.example.ui.theme.Space
 import com.example.ui.theme.TarkasDarkOverride
 import com.example.ui.theme.rememberReducedMotion
 import com.example.ui.viewmodel.TrackDetailsState
@@ -208,7 +207,7 @@ fun MusicScreen(
   }
   val titlePart: @Composable () -> Unit = {
     Column {
-    PlaybackProblemBanner(state.problem, actions.onRetry, Modifier.padding(bottom = Space.m))
+    PlaybackProblemBanner(state.problem, actions.onRetry, Modifier.padding(bottom = Grid.u12))
     TitleRow(
       track = currentTrack,
       isFavorite = currentTrack != null && currentTrack.id in favoriteIds,
@@ -265,7 +264,7 @@ fun MusicScreen(
         val s = 1f - 0.06f * p.coerceAtMost(1f)
         scaleX = s
         scaleY = s
-        shape = RoundedCornerShape((Radius.xl.toPx() * (p * 5f).coerceAtMost(1f)))
+        shape = RoundedCornerShape((Grid.u24.toPx() * (p * 5f).coerceAtMost(1f)))
         clip = p > 0f
       }
       .draggable(
@@ -280,7 +279,7 @@ fun MusicScreen(
       // No tab bar under the player: the controls clear the system bar, plus any banner that floats
       // over the page (LocalBarInset).
       .navigationBarsPadding()
-      .padding(horizontal = Space.xl)
+      .padding(horizontal = Grid.margin)
       .padding(bottom = LocalBarInset.current)
       .testTag("music_full_player_card")
 
@@ -297,17 +296,17 @@ fun MusicScreen(
             Modifier
               .weight(1f)
               .fillMaxWidth()
-              .padding(vertical = Space.m),
+              .padding(vertical = Grid.u12),
             // The half ends at its edge: the side covers fade out well before it.
-            Space.xl * 2.5f
+            Grid.u48
           )
           Column(modifier = Modifier.fillMaxWidth()) {
             titlePart()
             progressPart()
           }
-          Spacer(Modifier.height(Space.m))
+          Spacer(Modifier.height(Grid.u12))
         }
-        Spacer(Modifier.width(Space.xl))
+        Spacer(Modifier.width(Grid.margin))
         Column(
           modifier = Modifier.weight(1f).fillMaxHeight(),
           horizontalAlignment = Alignment.CenterHorizontally
@@ -315,9 +314,9 @@ fun MusicScreen(
           CloseHandle(onClose = onClose, modifier = Modifier.revealWithPlayer())
           Spacer(Modifier.weight(1f))
           transportPart()
-          Spacer(Modifier.height(Space.m))
+          Spacer(Modifier.height(Grid.u12))
           volumePart()
-          Spacer(Modifier.height(Space.m))
+          Spacer(Modifier.height(Grid.u12))
           actionsPart()
           Spacer(Modifier.weight(1f))
         }
@@ -330,9 +329,9 @@ fun MusicScreen(
           Modifier
             .weight(1f)
             .fillMaxWidth()
-            .padding(vertical = Space.m),
+            .padding(vertical = Grid.u12),
           // The side covers run off the screen: they fade out over the margin instead of being cut.
-          Space.xl
+          Grid.margin
         )
 
         // Everything under the cover rides the sheet's top edge up as the player opens and fades in on
@@ -340,15 +339,15 @@ fun MusicScreen(
         // nothing.
         Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
           titlePart()
-          Spacer(Modifier.height(Space.m))
+          Spacer(Modifier.height(Grid.u12))
           progressPart()
-          Spacer(Modifier.height(Space.m))
+          Spacer(Modifier.height(Grid.u12))
           transportPart()
-          Spacer(Modifier.height(Space.m))
+          Spacer(Modifier.height(Grid.u12))
           volumePart()
-          Spacer(Modifier.height(Space.m))
+          Spacer(Modifier.height(Grid.u12))
           actionsPart()
-          Spacer(Modifier.height(Space.m))
+          Spacer(Modifier.height(Grid.u12))
         }
       }
     }

@@ -1,6 +1,6 @@
 package com.example.ui.components
 
-import com.example.ui.theme.Size as ThemeSize
+import com.example.ui.theme.Grid
 import com.example.ui.theme.Space
 import com.example.ui.theme.EqSize
 import androidx.compose.foundation.Canvas
@@ -173,11 +173,11 @@ fun EqFader(
     val bottom = size.height - handleH / 2f
     val mid = (top + bottom) / 2f
     val y = bottom - (value.coerceIn(-1f, 1f) + 1f) / 2f * (bottom - top)
-    val trackW = Space.xxs.toPx()
+    val trackW = EqSize.lineFine.toPx()
 
     // Dotted marks at +max, 0 dB and -max on both sides of the track, like the rule of a desk.
-    val dot = ThemeSize.hairline.toPx()
-    val gap = EqSize.faderDotGap.toPx()
+    val dot = Grid.hairline.toPx()
+    val gap = Grid.u6.toPx()
     if (marks) for (markY in floatArrayOf(top, mid, bottom)) {
       drawCircle(tick, dot, Offset(cx - gap, markY))
       drawCircle(tick, dot, Offset(cx + gap, markY))
@@ -195,16 +195,16 @@ fun EqFader(
       cornerRadius = CornerRadius(handleW / 2f)
     )
     val dashW = handleW * 0.46f
-    drawLine(dash, Offset(cx - dashW / 2f, y), Offset(cx + dashW / 2f, y), strokeWidth = Space.xxs.toPx(), cap = StrokeCap.Round)
+    drawLine(dash, Offset(cx - dashW / 2f, y), Offset(cx + dashW / 2f, y), strokeWidth = EqSize.lineFine.toPx(), cap = StrokeCap.Round)
   }
 }
 
 /** How far above or below the handle's centre a finger still grabs it: a 48 dp touch target. */
-private val FADER_GRAB = ThemeSize.icon
+private val FADER_GRAB = Grid.u24
 
 /** The handle's size; its travel stops half a handle from each end. */
-private val FADER_HANDLE_H = EqSize.faderHandleHeight
-private val FADER_HANDLE_W = ThemeSize.icon
+private val FADER_HANDLE_H = Grid.u48
+private val FADER_HANDLE_W = Grid.u24
 
 /**
  * A rotary knob: a quiet disc with an indicator, and an arc showing the value. [value] runs 0..1;
@@ -220,7 +220,7 @@ fun EqKnob(
   label: String,
   stateText: String,
   modifier: Modifier = Modifier,
-  size: Dp = EqSize.knob,
+  size: Dp = Grid.u48,
   bipolar: Boolean = false,
   defaultValue: Float = if (bipolar) 0.5f else 0f,
   enabled: Boolean = true,
@@ -268,7 +268,7 @@ fun EqKnob(
       }
   ) {
     Canvas(modifier = Modifier.fillMaxSize()) {
-      val stroke = Space.xs.toPx()
+      val stroke = EqSize.lineBold.toPx()
       val inset = stroke / 2f
       val arcTopLeft = Offset(inset, inset)
       val arcSize = Size(this.size.width - stroke, this.size.height - stroke)
@@ -292,7 +292,7 @@ fun EqKnob(
           tick,
           Offset(center.x, from),
           Offset(center.x, from + discR * 0.3f),
-          strokeWidth = EqSize.lineStrong.toPx(),
+          strokeWidth = EqSize.lineBold.toPx(),
           cap = StrokeCap.Round
         )
       }
@@ -303,7 +303,7 @@ fun EqKnob(
 /** The shape of a filter, drawn as a small line icon (bell, shelves, passes). */
 @Composable
 fun FilterShapeIcon(type: FilterType, modifier: Modifier = Modifier, color: Color = MaterialTheme.colorScheme.onSurface) {
-  Canvas(modifier = modifier.size(width = EqSize.filterGlyphWidth, height = EqSize.filterGlyphHeight)) { drawFilterShape(type, color) }
+  Canvas(modifier = modifier.size(width = Grid.u24, height = Grid.u12)) { drawFilterShape(type, color) }
 }
 
 private fun DrawScope.drawFilterShape(type: FilterType, color: Color) {
@@ -343,5 +343,5 @@ private fun DrawScope.drawFilterShape(type: FilterType, color: Color) {
       p.cubicTo(w * 0.6f, top, w * 0.7f, top, w * 0.88f, h)
     }
   }
-  drawPath(p, color, style = Stroke(width = Space.xxs.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+  drawPath(p, color, style = Stroke(width = EqSize.lineFine.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
 }

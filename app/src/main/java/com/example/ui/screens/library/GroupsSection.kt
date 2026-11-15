@@ -49,10 +49,7 @@ import com.example.ui.components.SubPageHeader
 import com.example.ui.components.highlightClickable
 import com.example.ui.screens.library.TrackDivider
 import com.example.ui.screens.library.itemMotion
-import com.example.ui.theme.AppText
 import com.example.ui.theme.LocalBarInset
-import com.example.ui.theme.Size
-import com.example.ui.theme.Space
 
 /** Separates the keys of the group pages kept in one saved string. */
 internal const val GroupKeySeparator = '\u001F'
