@@ -86,11 +86,15 @@ fun EqFader(
   onHeldChange: (Boolean) -> Unit = {},
   /** The colour of the filled part; the theme accent when null. A band passes its own. */
   tint: androidx.compose.ui.graphics.Color? = null,
-  /** The thumb's size. The graphic bands use a thin 12 dp thumb so 15 faders fit under their frequencies. */
+  /** The thumb's size. The graphic bands use a thin 12 dp thumb so 10 faders fit under their frequencies. */
   handleWidth: Dp = FADER_HANDLE_W,
   handleHeight: Dp = FADER_HANDLE_H,
   /** The dotted marks beside the track; the graphic bands leave them out (a dashed zero line replaces them). */
-  marks: Boolean = true
+  marks: Boolean = true,
+  /** The track's width: a fine line by default, a bold one under the graphic bands' thin thumb. */
+  trackWidth: Dp = EqSize.lineFine,
+  /** A solid thumb in this colour, with no dash across it; null draws the default raised thumb. */
+  handleColor: androidx.compose.ui.graphics.Color? = null
 ) {
   val colors = MaterialTheme.colorScheme
   val current by rememberUpdatedState(value)
@@ -173,7 +177,7 @@ fun EqFader(
     val bottom = size.height - handleH / 2f
     val mid = (top + bottom) / 2f
     val y = bottom - (value.coerceIn(-1f, 1f) + 1f) / 2f * (bottom - top)
-    val trackW = EqSize.lineFine.toPx()
+    val trackW = trackWidth.toPx()
 
     // Dotted marks at +max, 0 dB and -max on both sides of the track, like the rule of a desk.
     val dot = Grid.hairline.toPx()
@@ -187,15 +191,15 @@ fun EqFader(
     if (abs(y - mid) > 0.5f) {
       drawLine(accent, Offset(cx, mid), Offset(cx, y), strokeWidth = EqSize.lineBold.toPx(), cap = StrokeCap.Round)
     }
-    // The thumb: a tall pill with a light dash across it.
+    // The thumb: a tall pill, solid in the caller's colour or raised with a light dash across it.
     drawRoundRect(
-      color = handle,
+      color = handleColor ?: handle,
       topLeft = Offset(cx - handleW / 2f, y - handleH / 2f),
       size = Size(handleW, handleH),
       cornerRadius = CornerRadius(handleW / 2f)
     )
     val dashW = handleW * 0.46f
-    drawLine(dash, Offset(cx - dashW / 2f, y), Offset(cx + dashW / 2f, y), strokeWidth = EqSize.lineFine.toPx(), cap = StrokeCap.Round)
+    if (handleColor == null) drawLine(dash, Offset(cx - dashW / 2f, y), Offset(cx + dashW / 2f, y), strokeWidth = EqSize.lineFine.toPx(), cap = StrokeCap.Round)
   }
 }
 

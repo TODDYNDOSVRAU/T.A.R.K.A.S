@@ -207,7 +207,7 @@
     <string name="settings_audio">Audio</string>
     <string name="settings_audio_footer">To equalize Spotify, YouTube and other apps, open the Audio tab, tap Advanced settings and choose ADB or Root.</string>
     <string name="settings_audio_eq">Equalizer and sound</string>
-    <string name="settings_audio_eq_subtitle">15 bands or parametric, with correction for your headphones</string>
+    <string name="settings_audio_eq_subtitle">10 bands or parametric, with correction for your headphones</string>
     <string name="settings_audio_output">Current output</string>
     <string name="settings_audio_output_value">%1$s · %2$s kHz</string>
     <string name="settings_audio_playing">Playing track</string>
@@ -354,7 +354,7 @@
     <string name="onboarding_feature_music">Your music, from several places</string>
     <string name="onboarding_feature_music_body">From the device, Audius and Jamendo, in a single library.</string>
     <string name="onboarding_feature_sound">Sound tuned to your headphones</string>
-    <string name="onboarding_feature_sound_body">15-band or parametric equalizer, with correction for over 8,000 headphones.</string>
+    <string name="onboarding_feature_sound_body">10-band or parametric equalizer, with correction for over 8,000 headphones.</string>
     <string name="onboarding_feature_assistant">Curiosities and assistant</string>
     <string name="onboarding_feature_assistant_body">Verified facts about the track and voice commands.</string>
     <string name="onboarding_terms_changed_title">The terms changed</string>

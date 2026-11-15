@@ -59,10 +59,10 @@ private fun EqSettings.responseKey(): EqSettings = copy(
 
 /**
  * The real frequency response of the whole chain (bands, tone shelves and preamp), computed from the
- * same filter maths the audio uses, over 20 Hz to 20 kHz on a log scale. The live spectrum sits behind
+ * same filter maths the audio uses, over 31 Hz to 16 kHz on a log scale. The live spectrum sits behind
  * it; each band shows as a dot, for reading only. The plot is inset 12 dp on each side, so the x of a
  * frequency here is the x of the same frequency in the band area under the card (graphic faders sit
- * exactly under their dots). A 24 dp axis row under the plot prints 20 / 200 / 2k / 20k.
+ * exactly under their dots). A 24 dp axis row under the plot prints 31 / 250 / 2k / 16k.
  */
 @Composable
 internal fun EqGraph(
@@ -125,7 +125,7 @@ internal fun EqGraph(
   val grid = colors.onSurface.copy(alpha = 0.08f)
   val zero = colors.onSurface.copy(alpha = 0.24f)
   val label = colors.onSurfaceVariant
-  val nodeFill = colors.surfaceContainer
+  val line = colors.onSurface
   val dim = if (settings.enabled) 1f else 0.38f
 
   // What the curve does, in words: its highest boost and deepest cut, so a screen reader gets the shape.
@@ -144,7 +144,7 @@ internal fun EqGraph(
     }
   }
   val curveDescription = stringResource(R.string.audio_curve_card_description, summary)
-  val shape = Grid.r24
+  val shape = Grid.r12
   Column(
     modifier = modifier
       .height(Grid.u192)
@@ -161,10 +161,10 @@ internal fun EqGraph(
           val w = size.width
           val h = size.height
 
-          // Grid: 0 dB, ±6 and ±12 dB; the 200 Hz and 2 kHz marks of the axis row
+          // Grid: 0 dB, ±6 and ±12 dB; the 250 Hz and 2 kHz marks of the axis row
           listOf(-12f, -6f, 6f, 12f).forEach { db -> drawLine(grid, Offset(0f, dbToY(db, h)), Offset(w, dbToY(db, h)), 1f) }
           drawLine(zero, Offset(0f, dbToY(0f, h)), Offset(w, dbToY(0f, h)), Grid.hairline.toPx())
-          listOf(200f, 2000f).forEach { f ->
+          listOf(250f, 2000f).forEach { f ->
             val x = freqToX(f) * w
             drawLine(grid, Offset(x, 0f), Offset(x, h), 1f)
           }
@@ -224,20 +224,18 @@ internal fun EqGraph(
             lineTo(0f, dbToY(0f, h))
             close()
           }
-          drawPath(fill, accent.copy(alpha = 0.10f * dim))
-          drawPath(path, accent.copy(alpha = dim), style = Stroke(width = Grid.u6.toPx() / 3f, cap = StrokeCap.Round))
+          // The curve is drawn in the text colour; the accent is kept for the band that is selected.
+          drawPath(fill, line.copy(alpha = 0.06f * dim))
+          drawPath(path, line.copy(alpha = dim), style = Stroke(width = Grid.u6.toPx() / 3f, cap = StrokeCap.Round))
 
-          // Band nodes: the selected one filled with the accent
+          // Band nodes: small neutral dots, the selected one larger and in the accent
           settings.bands.forEachIndexed { i, band ->
             val pos = nodePosition(curveKey, i, w, h)
             val isSel = i == selectedBand
-            val r = if (isSel) EqSize.nodeSelected.toPx() else Grid.u6.toPx()
-            val c = (if (band.enabled) bandTints.getOrElse(i) { accent } else label).copy(alpha = dim)
             if (isSel) {
-              drawCircle(c, radius = r, center = pos)
+              drawCircle((if (band.enabled) accent else label).copy(alpha = dim), radius = EqSize.nodeSelected.toPx(), center = pos)
             } else {
-              drawCircle(nodeFill, radius = r, center = pos)
-              drawCircle(c, radius = r, center = pos, style = Stroke(width = EqSize.lineFine.toPx()))
+              drawCircle((if (band.enabled) line else label).copy(alpha = 0.55f * dim), radius = EqSize.knobInset.toPx(), center = pos)
             }
           }
         }
@@ -255,11 +253,11 @@ internal fun EqGraph(
         modifier = Modifier.align(Alignment.CenterStart).offset(x = Grid.inset, y = -Grid.u12)
       )
     }
-    // The axis row: 20 / 200 / 2k / 20k, each centred on its x in the plot, except the two ends: the
+    // The axis row: 31 / 250 / 2k / 16k, each centred on its x in the plot, except the two ends: the
     // first starts at the 12 dp inset and the last ends at the right inset, so neither leaves the card.
     BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(Grid.u24)) {
       val plot = maxWidth - Grid.inset * 2
-      val ticks = listOf("20" to 20f, "200" to 200f, "2k" to 2000f, "20k" to 20000f)
+      val ticks = listOf("31" to 31f, "250" to 250f, "2k" to 2000f, "16k" to 16000f)
       ticks.forEachIndexed { position, (text, f) ->
         val first = position == 0
         val last = position == ticks.size - 1

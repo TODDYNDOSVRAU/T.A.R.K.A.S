@@ -107,7 +107,7 @@ class EqTextFormatTest {
     val s = EqTextFormat.apply(EqSettings(), p)
     assertTrue(s.parametric)
     assertEquals(3, s.bands.size)
-    val g = EqTextFormat.apply(EqSettings(parametric = true), EqTextFormat.Result.Graphic(List(15) { 1f }, 5))
+    val g = EqTextFormat.apply(EqSettings(parametric = true), EqTextFormat.Result.Graphic(List(10) { 1f }, 5))
     assertEquals(false, g.parametric)
     assertEquals(1f, g.bands[0].gainDb, 0f)
   }

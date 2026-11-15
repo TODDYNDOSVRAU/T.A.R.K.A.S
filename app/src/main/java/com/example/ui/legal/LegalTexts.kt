@@ -135,6 +135,9 @@ object LegalTexts {
     title = "Novidades",
     subtitle = "O que mudou em cada versão",
     sections = listOf(
+      "2.1" to
+        "• Equalizador de 10 bandas (31 Hz a 16 kHz, uma oitava cada), com a primeira e a última sobre as bordas do gráfico. Curvas salvas com as 15 bandas antigas são convertidas automaticamente.\n" +
+        "• Predefinições e o gráfico usam a nova escala de frequência.",
       "2.0" to
         "• Nova grade T.A.L. em todas as telas: margens, tamanhos e alinhamento iguais em Início, Biblioteca, Áudio, Assistente, Ajustes, folhas e diálogos.\n" +
         "• Novo equalizador: curva, faders na mesma escala de frequência, paramétrico em peças com balão de edição e predefinições em lista. Toque duplo redefine.\n" +

@@ -8,6 +8,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -27,20 +28,21 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,6 +72,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.data.audio.dsp.EqActivity
 import com.example.data.audio.dsp.EqDsp
 import com.example.data.audio.dsp.EqTextFormat
 import com.example.data.audio.spatial.SpatialPreset
@@ -78,6 +81,7 @@ import com.example.data.model.EqBand
 import com.example.data.model.EqPreset
 import com.example.data.model.EqSettings
 import com.example.ui.screens.SpatialUi
+import com.example.ui.theme.EqSize
 import com.example.ui.theme.Grid
 import kotlin.math.roundToInt
 
@@ -190,9 +194,9 @@ internal fun EqPowerConsole(
 
 // Side by side needs the 384 dp control column and as much again for the curve.
 private val SIDE_MIN_WIDTH = Grid.u384 * 2
-// Two rows of 48 dp tiles with their 24 dp gap. The band area is the block that flexes, so on a phone the
-// last row keeps its 12 dp above the floating bar without scrolling.
-private val BANDS_MIN = Grid.u96 + Grid.u24
+// Two value lines, a fader with 120 dp of travel under its 48 dp thumb, and two frequency lines. The band
+// area is the block that flexes; where the window is shorter than that, the page scrolls.
+private val BANDS_MIN = Grid.u192 + Grid.u48
 private val BANDS_MAX = Grid.u192 + Grid.u96
 // Four 48 dp rows, the 192 dp curve, five gaps of 12 and 12 below the last row (room above the floating bar).
 private val FIXED_HEIGHT = Grid.u48 * 4 + Grid.u192 + Grid.u12 * 6
@@ -203,7 +207,13 @@ private fun TopRow(capabilities: AudioCapabilities, settings: EqSettings, compar
   val colors = MaterialTheme.colorScheme
   Row(modifier = Modifier.fillMaxWidth().heightIn(min = Grid.u48), verticalAlignment = Alignment.CenterVertically) {
     Column(modifier = Modifier.weight(1f)) {
-      Text(stringResource(R.string.audio_switch_equalizer), style = EqType.Title, color = colors.onSurface, maxLines = 1)
+      Text(
+        stringResource(R.string.audio_switch_equalizer),
+        style = EqType.Title,
+        color = colors.onSurface,
+        maxLines = 1,
+        modifier = Modifier.padding(start = Grid.inset)
+      )
       if (compare.comparing) {
         Text(
           stringResource(R.string.audio_compare_banner),
@@ -211,7 +221,7 @@ private fun TopRow(capabilities: AudioCapabilities, settings: EqSettings, compar
           color = colors.primary,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
-          modifier = Modifier.testTag("eq_compare_banner")
+          modifier = Modifier.padding(start = Grid.inset).testTag("eq_compare_banner")
         )
       } else {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -294,14 +304,31 @@ private fun PowerPill(on: Boolean, compare: CompareState, onSetEnabled: (Boolean
       .testTag("audio_dsp_switch"),
     contentAlignment = Alignment.Center
   ) {
-    Box(modifier = Modifier.size(width = Grid.u48, height = Grid.u24).clip(Grid.r12).background(track)) {
-      Box(
-        modifier = Modifier
-          .offset { IntOffset(thumb.roundToPx(), 0) }
-          .size(Grid.u24)
-          .clip(CircleShape)
-          .background(if (on) colors.onPrimary else colors.onSurfaceVariant)
+    Row(
+      modifier = Modifier.fillMaxSize().padding(horizontal = Grid.u12),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Text(
+        stringResource(R.string.audio_eq_short),
+        style = EqType.LabelStrong,
+        color = if (on) colors.onSurface else colors.onSurfaceVariant,
+        maxLines = 1,
+        modifier = Modifier.clearAndSetSemantics {}
       )
+      // 48 x 24 track; the 18 dp thumb sits 3 dp inside it and travels 24.
+      Box(
+        modifier = Modifier.size(width = Grid.u48, height = Grid.u24).clip(Grid.r12).background(track),
+        contentAlignment = Alignment.CenterStart
+      ) {
+        Box(
+          modifier = Modifier
+            .offset { IntOffset((EqSize.knobInset + thumb).roundToPx(), 0) }
+            .size(Grid.u24 - Grid.u6)
+            .clip(CircleShape)
+            .background(if (on) colors.onPrimary else colors.onSurfaceVariant)
+        )
+      }
     }
   }
 }
@@ -326,7 +353,9 @@ private fun PresetRow(
     verticalAlignment = Alignment.CenterVertically
   ) {
     Pill(
-      text = presetName + if (modified) " •" else "",
+      text = presetName,
+      sub = stringResource(if (modified) R.string.audio_preset_sub_modified else R.string.audio_preset_sub),
+      chevron = true,
       description = presetDescription,
       modifier = Modifier.weight(1f),
       onClickLabel = stringResource(R.string.audio_choose_preset),
@@ -335,6 +364,8 @@ private fun PresetRow(
     )
     Pill(
       text = stringResource(R.string.audio_correction),
+      sub = settings.device?.name ?: stringResource(R.string.audio_correction_off),
+      active = settings.device != null,
       description = stringResource(R.string.audio_correction_desc),
       modifier = Modifier.width(Grid.u96),
       onClickLabel = stringResource(R.string.audio_correction),
@@ -345,32 +376,49 @@ private fun PresetRow(
   }
 }
 
-/** A 48 dp tall pill (taller when the text is larger). [description] is what a screen reader says instead of the visible text. */
+/**
+ * A 48 dp tall pill (taller when the text is larger) with two centred lines: what it is and its state.
+ * [chevron] marks a pill that opens a list; [active] lights it. [description] is what a screen reader
+ * says instead of the visible text.
+ */
 @Composable
-private fun Pill(text: String, description: String, modifier: Modifier, onClickLabel: String, onClick: () -> Unit, tag: String) {
+private fun Pill(
+  text: String,
+  sub: String,
+  description: String,
+  modifier: Modifier,
+  onClickLabel: String,
+  onClick: () -> Unit,
+  tag: String,
+  chevron: Boolean = false,
+  active: Boolean = false
+) {
   val colors = MaterialTheme.colorScheme
   val source = remember { MutableInteractionSource() }
-  Box(
+  Row(
     modifier = modifier
       .fillMaxHeight()
       .heightIn(min = Grid.u48)
       .pressScale(source)
       .clip(Grid.r24)
-      .background(colors.surfaceContainer)
+      .background(if (active) colors.primary.copy(alpha = 0.14f) else colors.surfaceContainer)
       .clickable(interactionSource = source, indication = null, role = Role.Button, onClickLabel = onClickLabel, onClick = onClick)
       .semantics { contentDescription = description }
       .padding(horizontal = Grid.u12)
       .testTag(tag),
-    contentAlignment = Alignment.Center
+    horizontalArrangement = Arrangement.Center,
+    verticalAlignment = Alignment.CenterVertically
   ) {
-    Text(
-      text,
-      style = EqType.LabelStrong,
-      color = colors.onSurface,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-      modifier = Modifier.clearAndSetSemantics {}
-    )
+    Column(
+      modifier = Modifier.weight(1f, fill = false).clearAndSetSemantics {},
+      horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+      Text(text, style = EqType.LabelStrong, color = if (active) colors.primary else colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      Text(sub, style = EqType.Label, color = if (active) colors.primary else colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+    if (chevron) {
+      Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(Grid.icon))
+    }
   }
 }
 
@@ -493,31 +541,60 @@ private fun ModeSegments(parametric: Boolean, width: androidx.compose.ui.unit.Dp
 }
 
 /**
- * Headroom and what the output stage is doing (limiter, clip, matched volume, the loudspeaker warning),
- * then the compare button, right-aligned. Only actions that exist have a button.
+ * The headroom bar: an outlined 48 dp pill with the level the equalizer takes off ("Headroom -6 dB"), a
+ * bar that fills with it and lights when the limiter works or the output clips, and the compare button
+ * at the right end. What the output stage is doing (limiter, clip, matched volume, the loudspeaker
+ * warning) is written under the bar, the last thing on the page, so a note never moves a control.
  */
 @Composable
 private fun PathBar(settings: EqSettings, capabilities: AudioCapabilities, compare: CompareState) {
   val colors = MaterialTheme.colorScheme
   val headroom = EqDsp.totalPreampDb(settings, rememberSpatialStage())
+  val lowered = settings.enabled && headroom < -0.05f
   val onSpeaker = capabilities.activeRouteType == AudioCapabilities.ROUTE_BUILTIN_SPEAKER
-  // The button sits in a fixed 48 dp box at the top: the notes may grow, the button never moves.
-  Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-    Column(modifier = Modifier.weight(1f).heightIn(min = Grid.u48), verticalArrangement = Arrangement.Center) {
-      Text(
-        text = if (headroom < -0.05f) stringResource(R.string.audio_headroom_lowered, formatDb(-headroom).removePrefix("+")) else stringResource(R.string.audio_headroom_none),
-        style = EqType.Mono,
-        // The level is being lowered: say so in the accent, not in the neutral grey of "nothing happening".
-        color = if (headroom < -0.05f) colors.primary else colors.onSurfaceVariant
-      )
-      OutputStageNotes(settings, compare.comparing)
-      if (settings.device != null && onSpeaker) {
-        Text(text = stringResource(R.string.audio_speaker_warning), style = EqType.Label, color = colors.primary)
+  val activity by EqActivity.state.collectAsState()
+  val hot = settings.enabled && (activity.limiting || activity.clipped)
+  val fill by animateFloatAsState(if (lowered) (-headroom / EqBand.MAX_GAIN).coerceIn(0f, 1f) else 0f, tween(200), label = "headroomFill")
+  val fillColor by animateColorAsState(if (hot) colors.primary else colors.onSurface.copy(alpha = 0.75f), tween(200), label = "headroomColor")
+  val spoken = if (lowered) stringResource(R.string.audio_headroom_lowered, formatDb(-headroom).removePrefix("+")) else stringResource(R.string.audio_headroom_none)
+  Column(modifier = Modifier.fillMaxWidth()) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(Grid.u48)
+        .border(Grid.hairline, colors.onSurface.copy(alpha = 0.24f), Grid.r24)
+        .padding(start = Grid.u12),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Row(
+        modifier = Modifier.clearAndSetSemantics { contentDescription = spoken }.testTag("eq_headroom"),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text(stringResource(R.string.audio_headroom_label), style = EqType.Label, color = colors.onSurfaceVariant, maxLines = 1)
+        Spacer(Modifier.width(Grid.u6))
+        Text(
+          (if (lowered) formatDb(headroom) else "0") + " dB",
+          style = EqType.MonoStrong,
+          color = colors.onSurface,
+          maxLines = 1
+        )
       }
-    }
-    Spacer(Modifier.width(Grid.u12))
-    Box(modifier = Modifier.height(Grid.u48), contentAlignment = Alignment.Center) {
+      Spacer(Modifier.width(Grid.u12))
+      Box(
+        modifier = Modifier
+          .weight(1f)
+          .height(EqSize.meterBar)
+          .clip(Grid.r6)
+          .background(colors.onSurface.copy(alpha = 0.12f))
+      ) {
+        Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(fill).clip(Grid.r6).background(fillColor))
+      }
+      Spacer(Modifier.width(Grid.u12))
       CompareButton(settings.enabled, compare)
+    }
+    OutputStageNotes(settings, compare.comparing)
+    if (settings.device != null && onSpeaker) {
+      Text(text = stringResource(R.string.audio_speaker_warning), style = EqType.Label, color = colors.primary)
     }
   }
 }
@@ -533,8 +610,7 @@ private fun CompareButton(enabled: Boolean, compare: CompareState) {
   val state = stringResource(if (comparing) R.string.audio_compare_state_off else R.string.audio_compare_state_on)
   Box(
     modifier = Modifier
-      .heightIn(min = Grid.u48)
-      .widthIn(min = Grid.u48)
+      .size(width = Grid.u96, height = Grid.u48)
       .graphicsLayer { scaleX = scale; scaleY = scale }
       .clip(Grid.r24)
       .background(if (comparing) colors.primary else colors.surfaceContainer)
@@ -568,14 +644,15 @@ private fun CompareButton(enabled: Boolean, compare: CompareState) {
     contentAlignment = Alignment.Center
   ) {
     Text(
-      if (comparing) stringResource(if (compare.latched) R.string.audio_compare_latched else R.string.audio_compare_no_eq) else stringResource(R.string.audio_compare_button),
+      stringResource(R.string.audio_compare_no_eq),
       style = EqType.LabelStrong,
       color = when {
         !enabled -> colors.onSurface.copy(alpha = 0.38f)
         comparing -> colors.onPrimary
         else -> colors.onSurface
       },
-      maxLines = 1
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis
     )
   }
 }
@@ -606,12 +683,13 @@ private fun OverflowMenu(
         .size(Grid.u48)
         .pressScale(source)
         .clip(CircleShape)
+        .background(MaterialTheme.colorScheme.surfaceContainer)
         .clickable(interactionSource = source, indication = null, role = Role.Button, onClickLabel = stringResource(R.string.audio_more_options)) { open = true }
         .testTag("eq_more"),
       contentAlignment = Alignment.Center
     ) {
       Icon(
-        Icons.Rounded.MoreVert,
+        Icons.Rounded.MoreHoriz,
         contentDescription = stringResource(R.string.audio_more_options),
         tint = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier.size(Grid.icon)

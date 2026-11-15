@@ -207,7 +207,7 @@
     <string name="settings_audio">Áudio</string>
     <string name="settings_audio_footer">Para equalizar o Spotify, o YouTube e os outros apps, abra a aba Áudio, toque em Ajustes avançados e escolha ADB ou Root.</string>
     <string name="settings_audio_eq">Equalizador e som</string>
-    <string name="settings_audio_eq_subtitle">15 bandas ou paramétrico, com correção para o seu fone</string>
+    <string name="settings_audio_eq_subtitle">10 bandas ou paramétrico, com correção para o seu fone</string>
     <string name="settings_audio_output">Saída atual</string>
     <string name="settings_audio_output_value">%1$s · %2$s kHz</string>
     <string name="settings_audio_playing">Faixa tocando</string>
@@ -354,7 +354,7 @@
     <string name="onboarding_feature_music">Sua música, de vários lugares</string>
     <string name="onboarding_feature_music_body">Do aparelho, do Audius e do Jamendo, numa biblioteca só.</string>
     <string name="onboarding_feature_sound">Som ajustado ao seu fone</string>
-    <string name="onboarding_feature_sound_body">Equalizador de 15 bandas ou paramétrico, com correção para mais de 8 mil fones.</string>
+    <string name="onboarding_feature_sound_body">Equalizador de 10 bandas ou paramétrico, com correção para mais de 8 mil fones.</string>
     <string name="onboarding_feature_assistant">Curiosidades e assistente</string>
     <string name="onboarding_feature_assistant_body">Fatos verificados sobre a faixa e comandos por voz.</string>
     <string name="onboarding_terms_changed_title">Os termos mudaram</string>

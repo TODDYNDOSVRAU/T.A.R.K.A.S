@@ -103,9 +103,7 @@
   <string name="audio_band_title">Banda %1$d</string>
   <string name="audio_band_undo">Desfazer: banda %1$d excluída</string>
   <string name="audio_choose_preset">Escolher predefinição</string>
-  <string name="audio_compare_button">Comparar sem EQ</string>
   <string name="audio_compare_desc">Comparar sem equalizador</string>
-  <string name="audio_compare_latched">Sem EQ · tocar volta</string>
   <string name="audio_compare_listening_desc">Ouvindo sem equalizador</string>
   <string name="audio_compare_no_eq">Sem EQ</string>
   <string name="audio_compare_state_off">Sem equalizador</string>
@@ -332,4 +330,9 @@
   <string name="audio_preset_modified_desc">%1$s, modificada</string>
   <string name="audio_correction_desc">Predefinições de correção</string>
   <string name="audio_band_off">Desligada</string>
+  <string name="audio_eq_short">EQ</string>
+  <string name="audio_preset_sub">predefinição</string>
+  <string name="audio_preset_sub_modified">modificada</string>
+  <string name="audio_correction_off">Desligada</string>
+  <string name="audio_headroom_label">Folga</string>
 </resources>

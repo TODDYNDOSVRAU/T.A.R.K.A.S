@@ -85,6 +85,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
@@ -100,6 +101,7 @@ import com.example.data.model.FilterType
 import com.example.ui.components.EqFader
 import com.example.ui.components.IconAction
 import com.example.ui.components.TonalButton
+import com.example.ui.theme.EqSize
 import com.example.ui.theme.Grid
 import com.example.ui.theme.rememberReducedMotion
 import kotlin.math.pow
@@ -324,9 +326,10 @@ private fun BandBubble(state: MutableTransitionState<Boolean>, area: IntRect, on
 
 /**
  * The graphic mode: each fader stands exactly under its frequency, on the same log scale and inset as
- * the curve above, so a fader and its point on the curve share an x. The 15 bands sit about 19 dp apart,
- * so a 48 dp wide target cannot fit: the thumb is 12 x 48, the column 18 wide, the frequency labels
- * alternate between two rows, and the value of the band being moved shows above its thumb.
+ * the curve above, so a fader and its point on the curve share an x. The 10 bands sit about 38 dp apart (an octave each),
+ * so a 48 dp wide target cannot fit: the thumb is 12 x 48 and the column 18 wide. Every band shows its
+ * value above the fader and its frequency under it; both alternate between two rows, so neighbours
+ * never overlap. The band being moved takes the accent.
  */
 @Composable
 private fun GraphicBands(settings: EqSettings, onBandGain: (Int, Float) -> Unit) {
@@ -335,10 +338,10 @@ private fun GraphicBands(settings: EqSettings, onBandGain: (Int, Float) -> Unit)
   var entry by remember { mutableIntStateOf(-1) }
   BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
     val plot = maxWidth - Grid.inset * 2
-    val faderHeight = maxHeight - LINE - LINE * 2
+    val faderHeight = maxHeight - LINE * 4
     val zeroLine = colors.onSurface.copy(alpha = 0.24f)
     Canvas(modifier = Modifier.fillMaxSize()) {
-      val y = LINE.toPx() + faderHeight.toPx() / 2f
+      val y = LINE.toPx() * 2 + faderHeight.toPx() / 2f
       drawLine(
         color = zeroLine,
         start = Offset(Grid.inset.toPx(), y),
@@ -358,11 +361,24 @@ private fun GraphicBands(settings: EqSettings, onBandGain: (Int, Float) -> Unit)
           .stagger(i),
         horizontalAlignment = Alignment.CenterHorizontally
       ) {
+        // Even bands keep the row next to the fader, above and below; odd ones the outer row.
+        Spacer(Modifier.height(if (i % 2 == 0) LINE else 0.dp))
         Box(modifier = Modifier.height(LINE).wrapContentWidth(unbounded = true), contentAlignment = Alignment.Center) {
-          if (held == i && usesGain) {
-            Text(formatDb(band.gainDb), style = EqType.MonoStrong, color = colors.primary, maxLines = 1)
+          if (usesGain) {
+            Text(
+              formatDb(band.gainDb),
+              style = if (held == i) EqType.MonoStrong else EqType.Mono,
+              color = when {
+                !settings.enabled -> colors.onSurfaceVariant
+                held == i -> colors.primary
+                else -> colors.onSurface
+              },
+              maxLines = 1,
+              modifier = Modifier.clearAndSetSemantics {}
+            )
           }
         }
+        Spacer(Modifier.height(if (i % 2 == 0) 0.dp else LINE))
         EqFader(
           value = band.gainDb / EqBand.MAX_GAIN,
           onChange = { v -> onBandGain(i, snap(v * EqBand.MAX_GAIN)) },
@@ -375,9 +391,14 @@ private fun GraphicBands(settings: EqSettings, onBandGain: (Int, Float) -> Unit)
           handleWidth = Grid.u12,
           handleHeight = Grid.u48,
           marks = false,
+          trackWidth = EqSize.lineBold,
+          handleColor = when {
+            !(settings.enabled && usesGain) -> colors.onSurface.copy(alpha = 0.38f)
+            held == i -> colors.primary
+            else -> colors.onSurface
+          },
           modifier = Modifier.weight(1f).fillMaxWidth().testTag("vertical_fader_band_$i")
         )
-        // Even bands label on the first row, odd ones on the second, so neighbours never overlap.
         Spacer(Modifier.height(if (i % 2 == 0) 0.dp else LINE))
         Text(
           formatHz(band.freqHz),

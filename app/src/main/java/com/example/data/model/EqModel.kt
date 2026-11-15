@@ -76,7 +76,7 @@ data class EqSettings(
   val virtualizerStrength: Int = 0,
   /** Correction for the fone in use, applied before everything else. Null = none chosen. */
   val device: DeviceCorrection? = null,
-  /** True when the bands are parametric (any number, with Q and type), false for the 15 graphic faders. */
+  /** True when the bands are parametric (any number, with Q and type), false for the 10 graphic faders. */
   val parametric: Boolean = false,
   /**
    * What the other layout had when it was left, so switching back finds it. Not part of the sound
@@ -112,17 +112,47 @@ data class EqSettings(
 
     fun defaultBands(parametric: Boolean): List<EqBand> = if (parametric) DEFAULT_PARAM_BANDS else DEFAULT_BANDS
 
-    val DEFAULT_FREQUENCIES = listOf(
+    /** The old 15-band hardware centres: saved curves and the built-in presets are written on these. */
+    val LEGACY_FREQUENCIES = listOf(
       25f, 40f, 63f, 100f, 160f, 250f, 400f, 630f,
       1000f, 1600f, 2500f, 4000f, 6300f, 10000f, 16000f
     )
+
+    /** The 10 graphic faders, one octave apart from 31 Hz to 16 kHz; the first and last sit on the graph edges. */
+    val DEFAULT_FREQUENCIES = listOf(31f, 62f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f)
     val DEFAULT_BANDS: List<EqBand> = DEFAULT_FREQUENCIES.map { EqBand(freqHz = it) }
 
     const val PREAMP_RANGE_DB = 15f
     const val TONE_RANGE_DB = 12f
 
-    fun withGains(gainsDb: List<Float>): EqSettings =
-      EqSettings(bands = DEFAULT_FREQUENCIES.mapIndexed { i, f -> EqBand(freqHz = f, gainDb = gainsDb.getOrElse(i) { 0f }) })
+    /** Gains on the 15 legacy centres, resampled onto the 10 faders. */
+    fun withGains(legacyGainsDb: List<Float>): EqSettings {
+      val gains = resampleGains(LEGACY_FREQUENCIES, List(LEGACY_FREQUENCIES.size) { legacyGainsDb.getOrElse(it) { 0f } }, DEFAULT_FREQUENCIES)
+      return EqSettings(bands = DEFAULT_FREQUENCIES.mapIndexed { i, f -> EqBand(freqHz = f, gainDb = gains[i]) })
+    }
+
+    /**
+     * [fromGains], given at [fromFreqs], interpolated on a log-frequency axis at each of [toFreqs] and rounded
+     * to 0.1 dB. Outside the source range the nearest end is held.
+     */
+    fun resampleGains(fromFreqs: List<Float>, fromGains: List<Float>, toFreqs: List<Float>): List<Float> =
+      toFreqs.map { f ->
+        val g = when {
+          f <= fromFreqs.first() -> fromGains.first()
+          f >= fromFreqs.last() -> fromGains.last()
+          else -> {
+            val i = fromFreqs.indexOfLast { it <= f }
+            val lo = Math.log(fromFreqs[i].toDouble())
+            val t = ((Math.log(f.toDouble()) - lo) / (Math.log(fromFreqs[i + 1].toDouble()) - lo)).toFloat()
+            fromGains[i] + (fromGains[i + 1] - fromGains[i]) * t
+          }
+        }
+        Math.round(g * 10f) / 10f
+      }
+
+    /** A saved graphic curve on the old 15 centres is converted to the 10 faders; any other curve is kept as saved. */
+    fun graphicFromSaved(saved: List<EqBand>): List<EqBand> =
+      if (saved.size == LEGACY_FREQUENCIES.size) withGains(saved.map { it.gainDb }).bands else saved
   }
 }
 
@@ -257,9 +287,9 @@ object EqPresets {
   fun settingsFromJson(o: JSONObject): EqSettings {
     val d = EqSettings()
     val bandsJson = o.optJSONArray("bands")
-    val bands = if (bandsJson != null && bandsJson.length() > 0) {
+    val bands = EqSettings.graphicFromSaved(if (bandsJson != null && bandsJson.length() > 0) {
       (0 until bandsJson.length()).map { bandFromJson(bandsJson.getJSONObject(it)) }
-    } else d.bands
+    } else d.bands)
     val paramJson = o.optJSONArray("paramBands")
     val paramBands = if (paramJson != null && paramJson.length() > 0) {
       (0 until paramJson.length()).map { bandFromJson(paramJson.getJSONObject(it)) }

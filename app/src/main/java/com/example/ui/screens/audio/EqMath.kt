@@ -30,8 +30,8 @@ private fun decimalMark(): String = java.text.DecimalFormatSymbols.getInstance(n
 /** [v] with [decimals] places, in the interface language. */
 internal fun formatNumber(v: Float, decimals: Int): String = String.format(numberLocale(), "%.${decimals}f", v)
 
-internal const val MIN_F = 20f
-internal const val MAX_F = 20000f
+internal const val MIN_F = 31f
+internal const val MAX_F = 16000f
 
 /** The graph's vertical range: ±15 dB fits every band at full gain. */
 internal const val GRAPH_DB_RANGE = 15f
@@ -39,7 +39,7 @@ internal const val GRAPH_DB_RANGE = 15f
 /** Room above and below the curve so a band at full gain is not cut by the graph's edge. */
 private const val GRAPH_PAD_PX = 14f
 
-/** Position 0..1 of [f] on the 20 Hz – 20 kHz log axis. */
+/** Position 0..1 of [f] on the 31 Hz – 16 kHz log axis: the first and last bands sit on its edges. */
 internal fun freqToX(f: Float): Float = (log10(f / MIN_F) / log10(MAX_F / MIN_F)).coerceIn(0f, 1f)
 
 /** Frequency at position [x] (0..1) of the log axis. */

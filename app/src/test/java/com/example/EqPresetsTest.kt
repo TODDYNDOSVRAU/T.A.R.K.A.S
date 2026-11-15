@@ -113,10 +113,12 @@ class EqPresetsTest {
   @Test
   fun oldFifteenBandProfilesConvertToDecibelGains() {
     val p = EqPresets.fromLegacy(AudioProfile.PROG_ROCK)
-    assertEquals(15, p.settings.bands.size)
-    assertEquals(2.0f, p.settings.bands[0].gainDb, 0.001f) // 200 mB
-    assertEquals(4.5f, p.settings.bands[2].gainDb, 0.001f) // 450 mB
-    assertEquals(63f, p.settings.bands[2].freqHz, 0f)
+    assertEquals(10, p.settings.bands.size)
+    // The 15 legacy centres are log-resampled onto the 10 faders: 31 Hz sits between 25 Hz (200 mB) and 40 Hz (350 mB).
+    assertEquals(2.7f, p.settings.bands[0].gainDb, 0.001f)
+    // 250 Hz is a legacy centre (100 mB), so it keeps its value.
+    assertEquals(1.0f, p.settings.bands[3].gainDb, 0.001f)
+    assertEquals(250f, p.settings.bands[3].freqHz, 0f)
     assertEquals(220, p.settings.virtualizerStrength)
   }
 

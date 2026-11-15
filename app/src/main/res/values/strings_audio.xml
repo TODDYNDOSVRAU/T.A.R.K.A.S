@@ -103,9 +103,7 @@
   <string name="audio_band_title">Band %1$d</string>
   <string name="audio_band_undo">Undo: band %1$d deleted</string>
   <string name="audio_choose_preset">Choose preset</string>
-  <string name="audio_compare_button">Compare without EQ</string>
   <string name="audio_compare_desc">Compare without equalizer</string>
-  <string name="audio_compare_latched">No EQ · tap to return</string>
   <string name="audio_compare_listening_desc">Listening without equalizer</string>
   <string name="audio_compare_no_eq">No EQ</string>
   <string name="audio_compare_state_off">Without equalizer</string>
@@ -332,4 +330,9 @@
   <string name="audio_preset_modified_desc">%1$s, modified</string>
   <string name="audio_correction_desc">Correction presets</string>
   <string name="audio_band_off">Off</string>
+  <string name="audio_eq_short">EQ</string>
+  <string name="audio_preset_sub">preset</string>
+  <string name="audio_preset_sub_modified">modified</string>
+  <string name="audio_correction_off">Off</string>
+  <string name="audio_headroom_label">Headroom</string>
 </resources>

@@ -105,6 +105,9 @@ internal object LegalTextsEn {
     title = "What's new",
     subtitle = "What changed in each version",
     sections = listOf(
+      "2.1" to
+        "• 10-band equalizer (31 Hz to 16 kHz, one octave each), with the first and last bands on the edges of the graph. Curves saved with the old 15 bands are converted automatically.\n" +
+        "• Presets and the graph use the new frequency scale.",
       "2.0" to
         "• New T.A.L. grid on every screen: the same margins, sizes and alignment in Home, Library, Audio, Assistant, Settings, sheets and dialogs.\n" +
         "• New equalizer: curve, faders on the same frequency scale, parametric tiles with an edit bubble, and a preset list. Double tap resets.\n" +

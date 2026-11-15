@@ -122,7 +122,7 @@ class EqLayoutPinTest {
   fun aBandOfEachLayoutHasItsOwnDefaultWhenNothingWasSaved() {
     val s = settings(json(true))
     assertEquals(1, roundTrip(s).let { EqPresets.settingsToJson(it).getJSONArray("paramBands").length() })
-    assertEquals(15, roundTrip(s).let { EqPresets.settingsToJson(it).getJSONArray("bands").length() })
+    assertEquals(10, roundTrip(s).let { EqPresets.settingsToJson(it).getJSONArray("bands").length() })
     assertEquals(EqBand(freqHz = 1000f, q = 1.4f), EqSettings.DEFAULT_PARAM_BANDS.single())
   }
 }
