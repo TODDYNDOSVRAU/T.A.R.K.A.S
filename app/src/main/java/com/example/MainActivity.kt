@@ -703,7 +703,9 @@ fun TarkasAppContent(
               preset = viewModel.spatialPreset.collectAsStateWithLifecycle().value,
               intensity = viewModel.spatialIntensity.collectAsStateWithLifecycle().value,
               status = viewModel.spatialStatus.collectAsStateWithLifecycle().value,
-              tuning = viewModel.spatialTuning.collectAsStateWithLifecycle().value
+              tuning = viewModel.spatialTuning.collectAsStateWithLifecycle().value,
+              headTracking = viewModel.headTracking.collectAsStateWithLifecycle().value,
+              headStatus = viewModel.headStatus.collectAsStateWithLifecycle().value
             ),
             onCompare = { viewModel.compareWithoutEq(it) },
             loudness = viewModel.loudness.collectAsStateWithLifecycle().value,
@@ -714,7 +716,9 @@ fun TarkasAppContent(
                 onPreset = { viewModel.setSpatialPreset(it) },
                 onIntensity = { viewModel.setSpatialIntensity(it) },
                 onKnob = { preset, knob, value -> viewModel.setSpatialKnob(preset, knob, value) },
-                onResetTuning = { viewModel.resetSpatialTuning(it) }
+                onResetTuning = { viewModel.resetSpatialTuning(it) },
+                onHeadTracking = { viewModel.setHeadTracking(it) },
+                onRecenterHead = { viewModel.recenterHead() }
               )
             }
           )
@@ -826,7 +830,8 @@ fun TarkasAppContent(
                 playlists = playlists,
                 sleepTimer = viewModel.sleepTimer.collectAsStateWithLifecycle().value,
                 trackDetails = viewModel.trackDetails.collectAsStateWithLifecycle().value,
-                lyrics = viewModel.lyrics.collectAsStateWithLifecycle().value
+                lyrics = viewModel.lyrics.collectAsStateWithLifecycle().value,
+                problem = viewModel.playbackProblem.collectAsStateWithLifecycle().value
               ),
               actions = PlayerActions(
                 onTogglePlayPause = { viewModel.togglePlayPause() },
@@ -847,7 +852,8 @@ fun TarkasAppContent(
                 onSleepAtEndOfTrack = { viewModel.setSleepAtEndOfTrack() },
                 onCancelSleepTimer = { viewModel.cancelSleepTimer() },
                 onLoadTrackDetails = { track -> viewModel.loadTrackDetails(track) },
-                onLoadLyrics = { track -> viewModel.loadLyrics(track) }
+                onLoadLyrics = { track -> viewModel.loadLyrics(track) },
+                onRetry = { viewModel.retryPlayback() }
               )
             )
           }

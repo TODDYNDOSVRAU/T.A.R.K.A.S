@@ -219,6 +219,12 @@
   <string name="audio_spatial_copy_values">Copy values</string>
   <string name="audio_spatial_footer">Works on any output, best on headphones. Stereo and 5.1 tracks are processed; mono and other layouts play as they are.</string>
   <string name="audio_spatial_intensity">Intensity</string>
+  <string name="audio_spatial_head_title">Head tracking</string>
+  <string name="audio_spatial_head_off">The scene stays in front of you.</string>
+  <string name="audio_spatial_head_no_sensor">No head sensor: it needs Android 13 or later and headphones with head tracking.</string>
+  <string name="audio_spatial_head_waiting">Waiting for the headphones\' sensor. If nothing arrives, turn on head tracking for these headphones in the system sound settings.</string>
+  <string name="audio_spatial_head_tracking">The scene follows your head. Works with stereo tracks, while this screen is open.</string>
+  <string name="audio_spatial_head_recenter">Face forward now</string>
   <string name="audio_spatial_others_active">Also active in other apps (%1$d)</string>
   <string name="audio_spatial_others_app">Other apps (Spotify, YouTube): turn on ADB or root mode in Advanced</string>
   <string name="audio_spatial_others_unsupported">This device does not allow Tarkas Spatial in other apps</string>

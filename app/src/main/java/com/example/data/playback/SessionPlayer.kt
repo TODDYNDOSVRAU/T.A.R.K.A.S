@@ -29,8 +29,9 @@ import kotlinx.coroutines.withContext
  * player that mirrors [PlaybackController], whatever plays underneath (the app's player or a curiosity
  * narration). Commands go back to the controller.
  *
- * The playlist it shows is [previous, current, next], with placeholders around the current track,
- * so Previous and Next are offered whenever they can do something.
+ * The playlist it shows is the real queue around the current track (see [SessionQueue]): the tracks
+ * Previous goes back to, the current one, and the tracks Next goes to. A placeholder stands in only
+ * where Previous or Next can do something but the track is not known (a random draw).
  */
 @OptIn(UnstableApi::class)
 class SessionPlayer(
@@ -52,7 +53,8 @@ class SessionPlayer(
     scope.launch {
       merge(
         controller.currentTrack, controller.wantsToPlay, controller.durationMs,
-        controller.activeCuriosity, controller.queue, controller.shuffle, controller.repeatMode
+        controller.activeCuriosity, controller.queue, controller.shuffle, controller.repeatMode,
+        controller.coverNeighbors
       ).collect { invalidateState() }
     }
     // A jump in position (seek, new track) is not something the session can work out on its own.
@@ -72,7 +74,8 @@ class SessionPlayer(
         COMMAND_SEEK_TO_NEXT, COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
         COMMAND_SEEK_TO_PREVIOUS, COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM, COMMAND_SEEK_TO_MEDIA_ITEM,
         COMMAND_GET_CURRENT_MEDIA_ITEM, COMMAND_GET_TIMELINE, COMMAND_GET_METADATA,
-        COMMAND_SET_SHUFFLE_MODE, COMMAND_SET_REPEAT_MODE, COMMAND_PREPARE
+        COMMAND_SET_SHUFFLE_MODE, COMMAND_SET_REPEAT_MODE, COMMAND_PREPARE,
+        COMMAND_SET_MEDIA_ITEM, COMMAND_CHANGE_MEDIA_ITEMS
       )
       .build()
     val builder = State.Builder()
@@ -93,11 +96,16 @@ class SessionPlayer(
     // A narration, and the moment between two tracks, count as playing: the notification stays and the
     // service stays in the foreground, so the next track is never refused its audio focus.
     val playing = controller.wantsToPlay.value
-    val playlist = mutableListOf<MediaItemData>()
-    if (controller.hasPrevious) playlist += placeholder(PREVIOUS_UID)
-    val currentIndex = playlist.size
-    playlist += currentItem(track)
-    if (controller.hasNext) playlist += placeholder(NEXT_UID)
+    val plan = plan(track)
+    val playlist = plan.items.map { item ->
+      val t = item.track
+      when {
+        t == null -> placeholder(item.uid)
+        t.id == track.id && item.uid == track.id -> currentItem(track)
+        else -> neighborItem(item.uid, t)
+      }
+    }
+    val currentIndex = plan.currentIndex
 
     return builder
       .setPlaylist(playlist)
@@ -133,6 +141,23 @@ class SessionPlayer(
       .build()
   }
 
+  private fun plan(track: Track) =
+    SessionQueue.plan(track, controller.coverNeighbors.value, controller.hasPrevious, controller.hasNext)
+
+  /** A track beside the current one: title, artist and cover link only, nothing that needs reading a file. */
+  private fun neighborItem(uid: String, track: Track): MediaItemData {
+    val metadata = MediaMetadata.Builder()
+      .setTitle(track.title)
+      .setArtist(track.artist)
+      .setAlbumTitle(track.album)
+      .apply { track.artworkUrl?.let { setArtworkUri(Uri.parse(it)) } }
+      .build()
+    return MediaItemData.Builder(uid)
+      .setMediaItem(MediaItem.Builder().setMediaId(track.id).setMediaMetadata(metadata).build())
+      .setMediaMetadata(metadata)
+      .build()
+  }
+
   private fun placeholder(uid: String): MediaItemData =
     MediaItemData.Builder(uid).setMediaItem(MediaItem.Builder().setMediaId(uid).build()).build()
 
@@ -165,6 +190,13 @@ class SessionPlayer(
     return Futures.immediateVoidFuture()
   }
 
+  /**
+   * A browser (a car, a watch) picked something: the service has already started it on the controller
+   * ([PlaybackService]), and the list this player shows follows the controller, so nothing is set here.
+   */
+  override fun handleSetMediaItems(mediaItems: MutableList<MediaItem>, startIndex: Int, startPositionMs: Long): ListenableFuture<*> =
+    Futures.immediateVoidFuture()
+
   override fun handlePrepare(): ListenableFuture<*> = Futures.immediateVoidFuture()
 
   override fun handleStop(): ListenableFuture<*> {
@@ -173,11 +205,16 @@ class SessionPlayer(
   }
 
   override fun handleSeek(mediaItemIndex: Int, positionMs: Long, seekCommand: Int): ListenableFuture<*> {
-    val currentIndex = if (controller.hasPrevious) 1 else 0
-    when {
-      mediaItemIndex > currentIndex -> controller.playNextTrack()
-      mediaItemIndex in 0 until currentIndex -> controller.playPreviousTrack(force = true)
-      else -> controller.seekTo(if (positionMs == C.TIME_UNSET) 0L else positionMs)
+    val track = controller.currentTrack.value
+    val currentIndex = if (track == null) 0 else plan(track).currentIndex
+    when (val move = SessionQueue.move(currentIndex, mediaItemIndex)) {
+      is SessionQueue.Move.Forward -> {
+        // Several steps (a car's list, a watch): the queue first when it is exactly what comes next.
+        val inQueue = SessionQueue.queueIndexFor(move.steps, controller.coverNeighbors.value.after, controller.queue.value)
+        if (inQueue != null) controller.playFromQueue(inQueue) else repeat(move.steps) { controller.playNextTrack() }
+      }
+      is SessionQueue.Move.Back -> repeat(move.steps) { controller.playPreviousTrack(force = true) }
+      SessionQueue.Move.Stay -> controller.seekTo(if (positionMs == C.TIME_UNSET) 0L else positionMs)
     }
     return Futures.immediateVoidFuture()
   }
@@ -204,8 +241,6 @@ class SessionPlayer(
   }
 
   private companion object {
-    const val PREVIOUS_UID = "tarkas:previous"
-    const val NEXT_UID = "tarkas:next"
     const val RESTART_THRESHOLD_MS = 3000L
     const val POSITION_JUMP_MS = 2500L
     const val ART_CACHE_SIZE = 6

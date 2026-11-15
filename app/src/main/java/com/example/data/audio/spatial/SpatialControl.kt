@@ -118,6 +118,15 @@ object SpatialControl {
     update()
   }
 
+  /** Where the head points, degrees, positive to the left; 0 without head tracking. Stereo scenes only. */
+  @Volatile var headYaw = 0.0; private set
+
+  /** Head tracking turns the scene: cheap, called at the sensor's rate from any thread. */
+  fun setHeadYaw(degrees: Double) {
+    headYaw = degrees
+    engines.values.forEach { it.liveYaw = degrees }
+  }
+
   /** True only for the call that moved the effect to the failed state: the caller records that one. */
   @Synchronized
   internal fun reportFailure(): Boolean {
@@ -221,6 +230,7 @@ object SpatialControl {
         val hrtf = synchronized(hrtfs) { hrtfs.getOrPut(sampleRate) { SphericalHeadHrtf(sampleRate) } }
         val engine = SpatialEngine(sampleRate, hrtf, targetParams())
         engine.targetIntensity = targetIntensity()
+        engine.liveYaw = headYaw
         engines[sampleRate] = engine
         // The measured head when there is a file for this rate (44.1, 48 and 96 kHz), otherwise the spherical one;
         // the virtual room (level 0.35) is always on.

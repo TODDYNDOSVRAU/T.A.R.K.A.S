@@ -1,5 +1,7 @@
 package com.example.ui.screens.library
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import com.example.ui.layout.readingColumn
 import androidx.compose.runtime.setValue
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
@@ -53,7 +55,7 @@ internal fun AutoList.nameRes(): Int = when (this) {
 @Composable
 internal fun AutoListsOverview(lists: Map<AutoList, List<Track>>, byId: Map<String, Track>, onOpen: (AutoList) -> Unit) {
   LazyColumn(
-    modifier = Modifier.fillMaxSize(),
+    modifier = Modifier.readingColumn().fillMaxHeight(),
     contentPadding = PaddingValues(top = Space.s, bottom = LocalBarInset.current + Space.l)
   ) {
     itemsIndexed(AutoList.entries.toList(), key = { _, l -> l.name }) { index, list ->

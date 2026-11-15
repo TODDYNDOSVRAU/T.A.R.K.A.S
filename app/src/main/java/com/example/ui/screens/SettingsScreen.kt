@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -52,6 +53,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import com.example.ui.layout.readingColumn
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -252,6 +255,7 @@ private fun MainSettings(
 ) {
   val colors = MaterialTheme.colorScheme
   val context = LocalContext.current
+  val resources = LocalResources.current
   var confirmErase by rememberSaveable { mutableStateOf(false) }
   var cacheSize by remember { mutableStateOf<Long?>(null) }
   var cacheRefresh by remember { mutableIntStateOf(0) }
@@ -281,24 +285,83 @@ private fun MainSettings(
     onPauseOrDispose {}
   }
 
+  // Row titles the search looks in, read here (not inside the list builder) so they follow the language.
+  val rows1 = listOf(stringResource(R.string.settings_reduce_transparency), stringResource(R.string.settings_reduce_motion))
+  val rows2 = listOf(stringResource(R.string.settings_shuffle))
+  val rows3 = listOf(stringResource(R.string.settings_repeat_off), stringResource(R.string.settings_repeat_all), stringResource(R.string.settings_repeat_one))
+  val rows4 = listOf(stringResource(R.string.settings_audio_eq), stringResource(R.string.settings_audio_output))
+  val rows5 = listOf(stringResource(R.string.settings_curiosity_title), stringResource(R.string.settings_gemini))
+  val rows6 = listOf(stringResource(R.string.settings_clear_cache))
+  val rows7 = listOf(stringResource(R.string.settings_permissions), stringResource(R.string.settings_export), stringResource(R.string.settings_restore), stringResource(R.string.settings_privacy_policy), stringResource(R.string.settings_terms))
+  val rows8 = listOf(stringResource(R.string.settings_home_music_first))
+  val rows9 = listOf(stringResource(R.string.settings_waveform))
+  val rows10 = listOf(stringResource(R.string.settings_diagnostics_export))
+  val rows11 = listOf(stringResource(R.string.settings_erase))
+  val rows12 = listOf(stringResource(R.string.settings_about_row))
+
+  var layerKey by rememberSaveable { mutableStateOf(SettingsLayer.ESSENTIAL.key) }
+  var query by rememberSaveable { mutableStateOf("") }
+  val layer = SettingsLayer.fromKey(layerKey)
+  val searching = query.isNotBlank()
+
   LazyColumn(
     state = listState,
-    modifier = Modifier.fillMaxSize(),
+    modifier = Modifier.readingColumn().fillMaxHeight(),
     contentPadding = PaddingValues(bottom = LocalBarInset.current + Space.l)
   ) {
+    item {
+      Column(Modifier.padding(top = Space.s)) {
+        com.example.ui.components.SearchField(
+          value = query,
+          onValueChange = { query = it },
+          placeholder = stringResource(R.string.settings_search_hint),
+          modifier = Modifier.testTag("settings_search")
+        )
+        // A search looks in every layer, so the layer chips only apply while the box is empty.
+        Row(
+          modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = Space.s).selectableGroup(),
+          horizontalArrangement = Arrangement.spacedBy(Space.xs)
+        ) {
+          SettingsLayer.entries.forEach { l ->
+            com.example.ui.components.FilterChip(
+              label = stringResource(layerLabel(l)),
+              selected = !searching && layer == l,
+              onClick = { query = ""; layerKey = l.key },
+              modifier = Modifier.testTag("settings_layer_${l.key}")
+            )
+          }
+        }
+      }
+    }
+    var shownGroups = 0
+    fun group(
+      groupLayer: SettingsLayer,
+      header: String?,
+      rows: List<String> = emptyList(),
+      footer: String? = null,
+      tag: String? = null,
+      content: @Composable () -> Unit
+    ) {
+      if (!settingsGroupVisible(query, layer, groupLayer, listOfNotNull(header) + rows)) return
+      shownGroups++
+      settingsGroup(header, footer, tag, content)
+    }
+
     // Aparência
-    settingsGroup(context.getString(R.string.settings_theme), tag = "settings_theme_card") {
+    group(SettingsLayer.ESSENTIAL, resources.getString(R.string.settings_theme), tag = "settings_theme_card") {
       ThemeOptionRows(themeMode, onThemeModeChange, tagPrefix = "theme_chip_")
     }
-    settingsGroup(
-      context.getString(R.string.settings_floating_bars),
-      footer = context.getString(R.string.settings_floating_bars_footer)
+    group(
+      SettingsLayer.ADVANCED,
+      resources.getString(R.string.settings_floating_bars),
+      footer = resources.getString(R.string.settings_floating_bars_footer)
     ) {
       SurfaceOptionRows(surfaceStyle, onSurfaceStyleChange, tagPrefix = "surface_style_")
     }
-    settingsGroup(
-      context.getString(R.string.settings_list_animation),
-      footer = context.getString(R.string.settings_list_animation_footer)
+    group(
+      SettingsLayer.ADVANCED,
+      resources.getString(R.string.settings_list_animation),
+      footer = resources.getString(R.string.settings_list_animation_footer)
     ) {
       Row(
         modifier = Modifier
@@ -317,7 +380,7 @@ private fun MainSettings(
         }
       }
     }
-    settingsGroup(context.getString(R.string.settings_accessibility)) {
+    group(SettingsLayer.ESSENTIAL, resources.getString(R.string.settings_accessibility), rows = rows1) {
       SwitchRow(
         title = stringResource(R.string.settings_reduce_transparency),
         subtitle = if (AppMotion.systemBlurOff) stringResource(R.string.settings_on_in_android) else stringResource(R.string.settings_reduce_transparency_hint),
@@ -339,11 +402,11 @@ private fun MainSettings(
 
     // Idioma: Android keeps a per-app language only from version 13; below it the app follows the system.
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      settingsGroup(languageHeader, footer = languageFooter, tag = "settings_language_card") { LanguageOptionRows() }
+      group(SettingsLayer.ESSENTIAL, languageHeader, footer = languageFooter, tag = "settings_language_card") { LanguageOptionRows() }
     }
 
     // Reprodução
-    settingsGroup(context.getString(R.string.settings_playback)) {
+    group(SettingsLayer.ESSENTIAL, resources.getString(R.string.settings_playback), rows = rows2) {
       SwitchRow(
         title = stringResource(R.string.settings_shuffle),
         checked = isShuffle,
@@ -351,9 +414,11 @@ private fun MainSettings(
         modifier = Modifier.testTag("settings_shuffle")
       )
     }
-    settingsGroup(
-      context.getString(R.string.settings_repeat),
-      footer = context.getString(R.string.settings_repeat_footer),
+    group(
+      SettingsLayer.ESSENTIAL,
+      resources.getString(R.string.settings_repeat),
+      rows = rows3,
+      footer = resources.getString(R.string.settings_repeat_footer),
       tag = "settings_repeat"
     ) {
       Column(Modifier.selectableGroup()) {
@@ -370,9 +435,11 @@ private fun MainSettings(
     }
 
     // Áudio
-    settingsGroup(
-      context.getString(R.string.settings_audio),
-      footer = context.getString(R.string.settings_audio_footer)
+    group(
+      SettingsLayer.ESSENTIAL,
+      resources.getString(R.string.settings_audio),
+      rows = rows4,
+      footer = resources.getString(R.string.settings_audio_footer)
     ) {
       ListRow(
         title = stringResource(R.string.settings_audio_eq),
@@ -396,9 +463,11 @@ private fun MainSettings(
     }
 
     // Catálogos online
-    settingsGroup(
-      context.getString(R.string.settings_catalogs),
-      footer = context.getString(R.string.settings_catalogs_footer)
+    group(
+      SettingsLayer.ADVANCED,
+      resources.getString(R.string.settings_catalogs),
+      rows = listOf("Audius", "Jamendo", "MusicBrainz"),
+      footer = resources.getString(R.string.settings_catalogs_footer)
     ) {
       InfoRow(title = "Audius", value = stringResource(R.string.settings_catalog_active))
       GroupDivider()
@@ -412,10 +481,12 @@ private fun MainSettings(
     }
 
     // Curiosidades e assistente
-    settingsGroup(
-      context.getString(R.string.settings_assistant),
-      footer = if (hasGeminiKey) context.getString(R.string.settings_assistant_footer_gemini)
-      else context.getString(R.string.settings_assistant_footer_local)
+    group(
+      SettingsLayer.ADVANCED,
+      resources.getString(R.string.settings_assistant),
+      rows = rows5,
+      footer = if (hasGeminiKey) resources.getString(R.string.settings_assistant_footer_gemini)
+      else resources.getString(R.string.settings_assistant_footer_local)
     ) {
       val enabled = curiosityConfig?.enabled != false
       val timing = curiosityConfig?.timing
@@ -434,10 +505,11 @@ private fun MainSettings(
     }
 
     // Notificações
-    settingsGroup(
-      context.getString(R.string.settings_notifications),
-      footer = if (notificationsOn) context.getString(R.string.settings_notifications_footer_on)
-      else context.getString(R.string.settings_notifications_footer_off)
+    group(
+      SettingsLayer.ESSENTIAL,
+      resources.getString(R.string.settings_notifications),
+      footer = if (notificationsOn) resources.getString(R.string.settings_notifications_footer_on)
+      else resources.getString(R.string.settings_notifications_footer_off)
     ) {
       ListRow(
         title = stringResource(R.string.settings_notifications),
@@ -449,10 +521,14 @@ private fun MainSettings(
       )
     }
 
-    updateSettingsGroup(context.getString(R.string.settings_update_header))
+    val updateHeader = resources.getString(R.string.settings_update_header)
+    if (settingsGroupVisible(query, layer, SettingsLayer.ESSENTIAL, listOf(updateHeader))) {
+      shownGroups++
+      updateSettingsGroup(updateHeader)
+    }
 
     // Armazenamento
-    settingsGroup(context.getString(R.string.settings_storage), footer = context.getString(R.string.settings_storage_footer)) {
+    group(SettingsLayer.ADVANCED, resources.getString(R.string.settings_storage), rows = rows6, footer = resources.getString(R.string.settings_storage_footer)) {
       ListRow(
         title = stringResource(R.string.settings_clear_cache),
         value = cacheSize?.let { formatBytes(it) } ?: stringResource(R.string.settings_calculating),
@@ -463,9 +539,11 @@ private fun MainSettings(
     }
 
     // Privacidade
-    settingsGroup(
-      context.getString(R.string.settings_privacy),
-      footer = context.getString(R.string.settings_privacy_footer)
+    group(
+      SettingsLayer.ADVANCED,
+      resources.getString(R.string.settings_privacy),
+      rows = rows7,
+      footer = resources.getString(R.string.settings_privacy_footer)
     ) {
       ListRow(
         title = stringResource(R.string.settings_permissions),
@@ -487,9 +565,11 @@ private fun MainSettings(
       GroupDivider()
       ListRow(title = stringResource(R.string.settings_terms), onClick = onOpenTerms, modifier = Modifier.testTag("settings_terms"))
     }
-    settingsGroup(
-      context.getString(R.string.settings_home_header),
-      footer = context.getString(R.string.settings_home_footer)
+    group(
+      SettingsLayer.ESSENTIAL,
+      resources.getString(R.string.settings_home_header),
+      rows = rows8,
+      footer = resources.getString(R.string.settings_home_footer)
     ) {
       SwitchRow(
         title = stringResource(R.string.settings_home_music_first),
@@ -498,9 +578,11 @@ private fun MainSettings(
         modifier = Modifier.testTag("settings_home_music_first")
       )
     }
-    settingsGroup(
-      context.getString(R.string.settings_advanced),
-      footer = context.getString(R.string.settings_waveform_footer)
+    group(
+      SettingsLayer.ADVANCED,
+      null,
+      rows = rows9,
+      footer = resources.getString(R.string.settings_waveform_footer)
     ) {
       SwitchRow(
         title = stringResource(R.string.settings_waveform),
@@ -510,8 +592,10 @@ private fun MainSettings(
       )
     }
     // Diagnóstico
-    settingsGroup(
+    group(
+      SettingsLayer.ENGINEERING,
       diagnosticsHeader,
+      rows = rows10,
       footer = diagnosticsFooter
     ) {
       ListRow(
@@ -521,7 +605,7 @@ private fun MainSettings(
         modifier = Modifier.testTag("settings_diagnostics_export")
       )
     }
-    settingsGroup(header = null, footer = context.getString(R.string.settings_erase_footer)) {
+    group(SettingsLayer.ADVANCED, header = null, rows = rows11, footer = resources.getString(R.string.settings_erase_footer)) {
       ListRow(
         title = stringResource(R.string.settings_erase),
         onClick = { confirmErase = true },
@@ -532,13 +616,23 @@ private fun MainSettings(
     }
 
     // Sobre
-    settingsGroup(context.getString(R.string.settings_about)) {
+    group(SettingsLayer.ESSENTIAL, resources.getString(R.string.settings_about), rows = rows12) {
       ListRow(
         title = stringResource(R.string.settings_about_row),
         value = BuildConfig.VERSION_NAME,
         onClick = onOpenAbout,
         modifier = Modifier.testTag("settings_about")
       )
+    }
+    if (searching && shownGroups == 0) {
+      item {
+        Text(
+          stringResource(R.string.settings_search_empty, query.trim()),
+          style = AppText.Body,
+          color = colors.onSurfaceVariant,
+          modifier = Modifier.padding(top = Space.xl).testTag("settings_search_empty")
+        )
+      }
     }
   }
 
@@ -558,6 +652,12 @@ private fun MainSettings(
   }
 }
 
+private fun layerLabel(layer: SettingsLayer): Int = when (layer) {
+  SettingsLayer.ESSENTIAL -> R.string.settings_layer_essential
+  SettingsLayer.ADVANCED -> R.string.settings_layer_advanced
+  SettingsLayer.ENGINEERING -> R.string.settings_layer_engineering
+}
+
 private val RepeatChoices = listOf(
   RepeatMode.OFF to R.string.settings_repeat_off,
   RepeatMode.ALL to R.string.settings_repeat_all,
@@ -573,6 +673,7 @@ private fun AboutPage(
 ) {
   val colors = MaterialTheme.colorScheme
   val context = LocalContext.current
+  val resources = LocalResources.current
   val credits = currentLegalTexts().credits
   val contactHeader = stringResource(R.string.settings_about_contact)
   val restartFooter = stringResource(R.string.settings_about_restart_footer)
@@ -625,7 +726,7 @@ private fun AboutPage(
         chevron = false,
         onClick = {
           val cm = context.getSystemService(android.content.ClipboardManager::class.java)
-          cm?.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.settings_about_clip_label), "T.A.R.K.A.S. ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}), Android ${android.os.Build.VERSION.RELEASE}, ${android.os.Build.MODEL}"))
+          cm?.setPrimaryClip(ClipData.newPlainText(resources.getString(R.string.settings_about_clip_label), "T.A.R.K.A.S. ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}), Android ${android.os.Build.VERSION.RELEASE}, ${android.os.Build.MODEL}"))
           copied = true
         },
         modifier = Modifier.testTag("about_version")
@@ -639,7 +740,7 @@ private fun AboutPage(
         onClick = { open(LegalTexts.RELEASES_URL) }
       )
     }
-    settingsGroup(context.getString(R.string.settings_about_legal)) {
+    settingsGroup(resources.getString(R.string.settings_about_legal)) {
       ListRow(title = stringResource(R.string.settings_terms), onClick = { onOpen(SettingsPage.TERMS) }, modifier = Modifier.testTag("about_terms"))
       GroupDivider()
       ListRow(
@@ -656,7 +757,7 @@ private fun AboutPage(
       GroupDivider()
       ListRow(title = stringResource(R.string.settings_about_licenses), onClick = { onOpen(SettingsPage.LICENSES) }, modifier = Modifier.testTag("about_licenses"))
     }
-    settingsGroup(context.getString(R.string.settings_about_credits)) {
+    settingsGroup(resources.getString(R.string.settings_about_credits)) {
       credits.forEachIndexed { i, (title, body) ->
         if (i > 0) GroupDivider()
         Column(

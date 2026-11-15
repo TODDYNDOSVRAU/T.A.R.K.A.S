@@ -183,6 +183,13 @@ class PreferencesRepository(context: Context) {
     prefs.edit().putString("output_bindings_v2", json).remove("output_bindings").apply()
   }
 
+  /** The whole profile of each output (curve, spatial, correction; JSON, see OutputProfiles); null before the first run. */
+  fun getOutputProfiles(): String? = prefs.getString("output_profiles_v1", null)
+
+  fun saveOutputProfiles(json: String) {
+    prefs.edit().putString("output_profiles_v1", json).apply()
+  }
+
   /** "Trocar a correção com o fone": on by default. */
   fun getAutoOutputCorrection(): Boolean = prefs.getBoolean("auto_output_correction", true)
 
@@ -198,6 +205,9 @@ class PreferencesRepository(context: Context) {
   }
 
   // ---- Tarkas Spatial (off until the user turns it on) ----
+
+  fun getHeadTracking(): Boolean = prefs.getBoolean("spatial_head_tracking", false)
+  fun saveHeadTracking(on: Boolean) = prefs.edit().putBoolean("spatial_head_tracking", on).apply()
 
   fun getSpatialEnabled(): Boolean = prefs.getBoolean("spatial_enabled", false)
   fun getSpatialPreset(): String? = prefs.getString("spatial_preset", null)

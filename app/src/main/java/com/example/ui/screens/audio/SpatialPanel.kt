@@ -27,6 +27,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
+import com.example.data.audio.spatial.HeadTrackStatus
 import com.example.data.audio.spatial.SpatialControl
 import com.example.data.audio.spatial.SpatialKnob
 import com.example.ui.components.IconAction
@@ -58,6 +59,16 @@ private fun spatialStatusText(status: SpatialStatus): String = when (status) {
   SpatialStatus.NOT_STEREO -> stringResource(R.string.audio_spatial_status_not_stereo)
   SpatialStatus.FAILED -> stringResource(R.string.audio_spatial_status_failed)
 }
+
+@Composable
+private fun headStatusText(wanted: Boolean, status: HeadTrackStatus): String = stringResource(
+  when {
+    !wanted -> R.string.audio_spatial_head_off
+    status == HeadTrackStatus.NO_SENSOR -> R.string.audio_spatial_head_no_sensor
+    status == HeadTrackStatus.TRACKING -> R.string.audio_spatial_head_tracking
+    else -> R.string.audio_spatial_head_waiting
+  }
+)
 
 /**
  * Tarkas Spatial, stereo turned into a binaural scene for headphones: a switch, then (when on) the
@@ -128,6 +139,18 @@ internal fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modi
             onChangeFinished = actions.onIntensityFinished,
             testTag = "spatial_intensity"
           )
+          GroupDivider()
+          SwitchRow(
+            title = stringResource(R.string.audio_spatial_head_title),
+            subtitle = headStatusText(ui.headTracking, ui.headStatus),
+            checked = ui.headTracking,
+            onCheckedChange = actions.onHeadTracking,
+            modifier = Modifier.testTag("switch_spatial_head")
+          )
+          if (ui.headStatus == HeadTrackStatus.TRACKING) {
+            GroupDivider()
+            TextAction(stringResource(R.string.audio_spatial_head_recenter), onClick = actions.onRecenterHead)
+          }
         }
       }
     }

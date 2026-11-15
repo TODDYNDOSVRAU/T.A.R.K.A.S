@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import com.example.ui.layout.readingColumn
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -250,7 +251,7 @@ fun AssistantScreen(
     )
     LazyColumn(
       state = listState,
-      modifier = Modifier.weight(1f).fillMaxWidth(),
+      modifier = Modifier.weight(1f).readingColumn(),
       contentPadding = PaddingValues(start = Space.page, end = Space.page, top = Space.xs, bottom = Space.m),
       verticalArrangement = Arrangement.spacedBy(Space.s)
     ) {

@@ -133,6 +133,17 @@ class PlaybackController(
   /** Tracks that failed one after another; stops the skipping when nothing in the list plays. */
   private var failuresInARow = 0
 
+  private val _problem = MutableStateFlow<PlaybackProblem?>(null)
+  /** Why the current track does not play (shown on the player until it plays again); null when nothing is wrong. */
+  val problem: StateFlow<PlaybackProblem?> = _problem.asStateFlow()
+  private var retryProblem: (() -> Unit)? = null
+
+  /** Tries again the track that failed; does nothing when nothing failed. */
+  fun retryFailed() {
+    val retry = retryProblem ?: return
+    retry()
+  }
+
   /**
    * True from the moment a track is asked to start until it plays (or fails, or is paused). Between two
    * tracks neither the engine nor the narration is playing; without this the media session would report
@@ -174,6 +185,7 @@ class PlaybackController(
       isPlaying.drop(1).collect { playing ->
         if (playing) {
           failuresInARow = 0
+          _problem.value = null
           _starting.value = false
         } else {
           savePosition()
@@ -279,6 +291,8 @@ class PlaybackController(
   private fun startTrackAudio(track: Track, startPositionMs: Long = 0L) {
     val path = track.filePath
     _starting.value = true
+    _problem.value = null
+    retryProblem = null
     // Repeat-one restarts the same track: its last round ended by itself.
     if (unrecorded?.id == track.id && startPositionMs == 0L) recordEnd(EndReason.NATURAL)
     unrecorded = track
@@ -309,30 +323,29 @@ class PlaybackController(
     failuresInARow++
     _starting.value = false
     val canAdvance = contextList().size > 1 || _queue.value.isNotEmpty()
-    when {
-      PlaybackOrder.skipAfterFailure(network, failuresInARow, canAdvance) -> {
+    when (val outcome = PlaybackFailure.decide(track.id, network, failuresInARow, canAdvance)) {
+      PlaybackFailure.Outcome.Skip -> {
         _notices.tryEmit(PlaybackNotice(R.string.player_notice_skipped, listOf(track.title)))
         advance(auto = false)
       }
-      network -> {
-        val at = audioEngine.lastErrorPositionMs
+      is PlaybackFailure.Outcome.Stop -> {
+        // A lost connection goes on from where it stopped; a bad file starts over.
+        val at = if (network) audioEngine.lastErrorPositionMs else 0L
+        val retry = {
+          failuresInARow = 0
+          if (network) startTrackAudio(track, startPositionMs = at) else playInternal(track, recordHistory = false)
+        }
+        retryProblem = retry
+        _problem.value = outcome.problem
         _notices.tryEmit(
           PlaybackNotice(
-            R.string.player_notice_offline,
+            if (network) R.string.player_notice_offline else R.string.player_notice_failed,
             listOf(track.title),
             actionLabelRes = R.string.player_notice_retry,
-            action = { failuresInARow = 0; startTrackAudio(track, startPositionMs = at) }
+            action = retry
           )
         )
       }
-      else -> _notices.tryEmit(
-        PlaybackNotice(
-          R.string.player_notice_failed,
-          listOf(track.title),
-          actionLabelRes = R.string.player_notice_retry,
-          action = { failuresInARow = 0; playInternal(track, recordHistory = false) }
-        )
-      )
     }
   }
 
@@ -466,6 +479,7 @@ class PlaybackController(
     recordEnd(EndReason.NATURAL)
     unrecorded = track
     failuresInARow = 0
+    _problem.value = null
     _queue.value = next.remainingQueue
     next.shuffleOrder?.let { shuffleOrder = it }
     if (!next.loopSameTrack) {
@@ -665,11 +679,11 @@ class PlaybackController(
   /** Pauses (with a short fade) after [minutes]. */
   fun setSleepTimer(minutes: Int) {
     sleepJob?.cancel()
-    val endsAt = System.currentTimeMillis() + minutes * 60_000L
+    val endsAt = SleepTimerPlan.endsAt(System.currentTimeMillis(), minutes)
     _sleepTimer.value = SleepTimer(endsAtMs = endsAt)
     refreshUpNext()
     sleepJob = scope.launch {
-      delay(endsAt - System.currentTimeMillis())
+      delay(SleepTimerPlan.remainingMs(endsAt, System.currentTimeMillis()))
       speech.stopSpeech()
       audioEngine.fadeOutAndPause(SLEEP_FADE_MS)
       _sleepTimer.value = null

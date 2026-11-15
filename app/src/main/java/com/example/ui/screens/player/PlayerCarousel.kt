@@ -553,6 +553,7 @@ internal fun CarouselCover(
       .background(Color.White.copy(alpha = 0.08f)),
     contentAlignment = Alignment.Center
   ) {
+    // Decorative (contentDescription = null on purpose): placeholder; the cover as a whole is described by the title row
     Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = OnPage.copy(alpha = 0.5f), modifier = Modifier.size(side * 0.25f))
     // Before the player is laid out the cover has no size (0 px), and Coil refuses a request of that size.
     track?.artworkUrl?.takeIf { coverPx > 0 }?.let { url ->
@@ -562,6 +563,7 @@ internal fun CarouselCover(
       val request = remember(url, coverPx) { CarouselCovers.request(context, url, coverPx) }
       AsyncImage(
         model = request,
+        // Decorative (contentDescription = null on purpose): the cover; the track title and artist are read from the title row
         contentDescription = null,
         contentScale = ContentScale.Crop,
         modifier = Modifier.matchParentSize()

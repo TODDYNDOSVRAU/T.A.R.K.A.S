@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import com.example.ui.layout.readingColumn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
@@ -207,7 +209,7 @@ fun HomeScreen(
   val listState = androidx.compose.foundation.lazy.rememberLazyListState()
   LazyColumn(
     state = listState,
-    modifier = modifier.fillMaxSize().topScrollFade(listState),
+    modifier = modifier.readingColumn().fillMaxHeight().topScrollFade(listState),
     contentPadding = PaddingValues(top = Space.xs, bottom = LocalBarInset.current + Space.l)
   ) {
     item(key = "search") {

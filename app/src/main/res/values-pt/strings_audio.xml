@@ -219,6 +219,12 @@
   <string name="audio_spatial_copy_values">Copiar valores</string>
   <string name="audio_spatial_footer">Funciona em qualquer saída, melhor nos fones. Músicas estéreo e 5.1 são processadas; mono e outros formatos tocam como estão.</string>
   <string name="audio_spatial_intensity">Intensidade</string>
+  <string name="audio_spatial_head_title">Rastreio de cabeça</string>
+  <string name="audio_spatial_head_off">A cena fica à sua frente.</string>
+  <string name="audio_spatial_head_no_sensor">Sem sensor de cabeça: precisa do Android 13 ou mais novo e de fones com rastreio de cabeça.</string>
+  <string name="audio_spatial_head_waiting">Aguardando o sensor dos fones. Se nada chegar, ligue o rastreio de cabeça destes fones nos ajustes de som do sistema.</string>
+  <string name="audio_spatial_head_tracking">A cena acompanha a sua cabeça. Vale para músicas estéreo, com esta tela aberta.</string>
+  <string name="audio_spatial_head_recenter">Olhar para a frente agora</string>
   <string name="audio_spatial_others_active">Também ativo em outros apps (%1$d)</string>
   <string name="audio_spatial_others_app">Outros apps (Spotify, YouTube): ligue o modo ADB ou root em Avançado</string>
   <string name="audio_spatial_others_unsupported">Este aparelho não deixa aplicar o Tarkas Spatial em outros apps</string>

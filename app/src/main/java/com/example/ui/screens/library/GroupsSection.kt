@@ -1,5 +1,7 @@
 package com.example.ui.screens.library
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import com.example.ui.layout.readingColumn
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.annotation.StringRes
@@ -92,7 +94,7 @@ internal fun GroupsList(
   var query by rememberSaveable(kind) { mutableStateOf("") }
   val shown = remember(groups, query) { groups.filter { com.example.data.TextMatch.contains(it.name, query) } }
   LazyColumn(
-    modifier = Modifier.fillMaxSize(),
+    modifier = Modifier.readingColumn().fillMaxHeight(),
     contentPadding = PaddingValues(top = Space.s, bottom = LocalBarInset.current + Space.l)
   ) {
     if (groups.isNotEmpty()) item(key = "search") {

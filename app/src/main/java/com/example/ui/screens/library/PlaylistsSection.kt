@@ -1,5 +1,7 @@
 package com.example.ui.screens.library
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import com.example.ui.layout.readingColumn
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.background
@@ -72,7 +74,7 @@ internal fun PlaylistsList(
   var query by rememberSaveable { mutableStateOf("") }
   val shown = playlists.filter { com.example.data.TextMatch.contains(it.name, query) }
   LazyColumn(
-    modifier = Modifier.fillMaxSize(),
+    modifier = Modifier.readingColumn().fillMaxHeight(),
     contentPadding = PaddingValues(top = Space.s, bottom = LocalBarInset.current + Space.l)
   ) {
     item(key = "search") {

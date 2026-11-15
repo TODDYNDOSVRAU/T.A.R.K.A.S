@@ -162,6 +162,8 @@ class TarkasViewModel(
   val repeatMode: StateFlow<RepeatMode> = playback.repeatMode
   val curiosityConfig: StateFlow<com.example.data.model.CuriosityConfig> = playback.curiosityConfig
   val sleepTimer: StateFlow<com.example.data.playback.SleepTimer?> = playback.sleepTimer
+  val playbackProblem: StateFlow<com.example.data.playback.PlaybackProblem?> = playback.problem
+  fun retryPlayback() = playback.retryFailed()
 
   val isAiSpeakingCuriosity: StateFlow<Boolean> = curiositySpeechManager.isSpeaking
   val currentCuriositySpeechText: StateFlow<String?> = curiositySpeechManager.currentSpokenText
@@ -1117,7 +1119,7 @@ class TarkasViewModel(
       try {
         val correction = autoEq.correction(entry) ?: throw IllegalStateException("curva vazia")
         updateEq { it.copy(device = correction) }
-        bindToCurrentOutput(correction)
+        _outputSuggestion.value = null
         _deviceSearch.value = _deviceSearch.value.copy(applyingPath = null)
         onDone()
       } catch (e: Exception) {
@@ -1128,75 +1130,7 @@ class TarkasViewModel(
 
   fun clearDevice() {
     updateEq { it.copy(device = null) }
-    bindToCurrentOutput(null)
-  }
-
-  // ---- Correction per output: a fone's correction comes back with the fone ----
-
-  /** The output the music goes to now. */
-  val output: StateFlow<com.example.data.audio.OutputDevice> get() = audioEngineManager.output
-
-  private var outputBindings: Map<String, com.example.data.model.DeviceCorrection?> = emptyMap()
-
-  private val _autoOutputCorrection = MutableStateFlow(preferencesRepository.getAutoOutputCorrection())
-  /** "Trocar a correção com o fone": each output gets the correction chosen on it. */
-  val autoOutputCorrection: StateFlow<Boolean> = _autoOutputCorrection.asStateFlow()
-
-  fun setAutoOutputCorrection(on: Boolean) {
-    _autoOutputCorrection.value = on
-    preferencesRepository.saveAutoOutputCorrection(on)
-    if (on) applyOutput(audioEngineManager.output.value, announce = false)
-  }
-
-  // Declared before the init below: that block can run at once and writes to it.
-  private val _outputSuggestion = MutableStateFlow<com.example.data.audio.OutputRouting.Suggestion?>(null)
-  /** What AutoEq has for the fone playing now, while it has no correction; null otherwise. */
-  val outputSuggestion: StateFlow<com.example.data.audio.OutputRouting.Suggestion?> = _outputSuggestion.asStateFlow()
-
-  init {
-    viewModelScope.launch { startOutputRouting(eqLoaded.await()) }
-  }
-
-  /** Started once the saved curve is loaded: the first decision needs the correction in use. */
-  private fun startOutputRouting(loaded: EqSettings) {
-    outputBindings = com.example.data.audio.OutputRouting.fromJson(preferencesRepository.getOutputBindings())
-      ?: com.example.data.audio.OutputRouting.firstRun(loaded.device).also { saveOutputBindings(it) }
-    viewModelScope.launch {
-      var first = true
-      audioEngineManager.output.collect { out ->
-        // At launch the correction changes quietly; later, a notice says what changed.
-        applyOutput(out, announce = !first)
-        first = false
-      }
-    }
-  }
-
-  private fun saveOutputBindings(bindings: Map<String, com.example.data.model.DeviceCorrection?>) {
-    preferencesRepository.saveOutputBindings(com.example.data.audio.OutputRouting.toJson(bindings))
-  }
-
-  /** What the user just chose (a correction, or none) belongs to the output playing now. */
-  private fun bindToCurrentOutput(correction: com.example.data.model.DeviceCorrection?) {
-    outputBindings = outputBindings + (audioEngineManager.output.value.key to correction)
-    saveOutputBindings(outputBindings)
     _outputSuggestion.value = null
-  }
-
-  private fun applyOutput(out: com.example.data.audio.OutputDevice, announce: Boolean) {
-    _outputSuggestion.value = null
-    if (!_autoOutputCorrection.value) return
-    val decision = com.example.data.audio.OutputRouting.decide(out, outputBindings)
-    if (decision.bindings != outputBindings) {
-      outputBindings = decision.bindings
-      saveOutputBindings(outputBindings)
-    }
-    if (decision.correction != audioEngineManager.eqSettings.value.device) {
-      updateEq { it.copy(device = decision.correction) }
-      if (announce) {
-        showNotice(Notice(decision.correction?.let { context.getString(com.example.R.string.audio_notice_correction_on, it.name) } ?: context.getString(com.example.R.string.audio_notice_correction_off, out.name)))
-      }
-    }
-    if (out.isExternal && out.key !in outputBindings) suggestCorrection(out)
   }
 
   /**
@@ -1214,7 +1148,7 @@ class TarkasViewModel(
       android.util.Log.i("TarkasViewModel", "Suggestion for an output: ${found?.let { "${it.entries.size} model(s) for \"${it.query}\", exact=${it.exact}" } ?: "none"}")
       if (found == null) return@launch
       // Still on that fone, and still without a choice?
-      if (audioEngineManager.output.value.key != out.key || out.key in outputBindings) return@launch
+      if (audioEngineManager.output.value.key != out.key || profiles.hasChosen(out.key)) return@launch
       // The fone list keeps it for as long as this fone has no correction; the notice comes once.
       _outputSuggestion.value = found
       val offered = preferencesRepository.getSuggestedOutputs()
@@ -1529,10 +1463,100 @@ class TarkasViewModel(
   private fun applySpatial() {
     com.example.data.audio.spatial.SpatialControl.configure(_spatialEnabled.value, _spatialPreset.value, _spatialIntensity.value.toDouble())
     saveSpatial()
+    syncHeadTracking()
   }
+
+  // ---- Head tracking: the scene follows the head of headphones that have a sensor ----
+
+  private val headTracker = com.example.data.audio.spatial.HeadTracker(application)
+  private val _headTracking = MutableStateFlow(preferencesRepository.getHeadTracking())
+  val headTracking: StateFlow<Boolean> = _headTracking.asStateFlow()
+  val headStatus: StateFlow<com.example.data.audio.spatial.HeadTrackStatus> = headTracker.status
+
+  fun setHeadTracking(on: Boolean) {
+    _headTracking.value = on
+    preferencesRepository.saveHeadTracking(on)
+    syncHeadTracking()
+  }
+
+  /** The direction the listener faces now becomes the front of the scene. */
+  fun recenterHead() = headTracker.recenter()
+
+  /** It runs only while the spatial stage is on: without it there is no scene to turn. */
+  private fun syncHeadTracking() = headTracker.setEnabled(_headTracking.value && _spatialEnabled.value)
+
+  init { syncHeadTracking() }
 
   private fun saveSpatial() {
     preferencesRepository.saveSpatial(_spatialEnabled.value, _spatialPreset.value.key, _spatialIntensity.value)
+  }
+
+  // ---- Profile per output: what was set on an output comes back with it (the rules live in OutputProfileManager) ----
+
+  /** The output the music goes to now. */
+  val output: StateFlow<com.example.data.audio.OutputDevice> get() = audioEngineManager.output
+
+  // Declared before the manager starts: its first decision can run at once and writes to it.
+  private val _outputSuggestion = MutableStateFlow<com.example.data.audio.OutputRouting.Suggestion?>(null)
+  /** What AutoEq has for the fone playing now, while it has no correction; null otherwise. */
+  val outputSuggestion: StateFlow<com.example.data.audio.OutputRouting.Suggestion?> = _outputSuggestion.asStateFlow()
+
+  private val profileHost = object : com.example.data.audio.OutputProfileHost {
+    override val output get() = audioEngineManager.output
+    override val changes: kotlinx.coroutines.flow.Flow<Unit>
+      get() = kotlinx.coroutines.flow.merge(
+        audioEngineManager.eqSettings.map { }, _activePresetId.map { },
+        _spatialEnabled.map { }, _spatialPreset.map { }, _spatialIntensity.map { }
+      )
+
+    override fun current() = com.example.data.audio.OutputProfile(
+      eq = audioEngineManager.eqSettings.value,
+      spatial = com.example.data.audio.SpatialProfile(_spatialEnabled.value, _spatialPreset.value.key, _spatialIntensity.value),
+      presetId = _activePresetId.value
+    )
+
+    override fun apply(profile: com.example.data.audio.OutputProfile) {
+      profile.presetId?.takeIf { id -> _eqPresets.value.any { it.id == id } }?.let {
+        _activePresetId.value = it
+        preferencesRepository.saveActiveProfileId(it)
+      }
+      updateEq { profile.eq }
+      val preset = com.example.data.audio.spatial.SpatialPreset.entries.firstOrNull { it.key == profile.spatial.presetKey }
+      _spatialEnabled.value = profile.spatial.enabled
+      if (preset != null) _spatialPreset.value = preset
+      _spatialIntensity.value = profile.spatial.intensity
+      applySpatial()
+    }
+  }
+
+  private val profileStore = object : com.example.data.audio.OutputProfileStore {
+    override fun profilesJson() = preferencesRepository.getOutputProfiles()
+    override fun saveProfilesJson(json: String) = preferencesRepository.saveOutputProfiles(json)
+    override fun legacyBindingsJson() = preferencesRepository.getOutputBindings()
+    override fun auto() = preferencesRepository.getAutoOutputCorrection()
+    override fun saveAuto(on: Boolean) = preferencesRepository.saveAutoOutputCorrection(on)
+  }
+
+  private val profiles: com.example.data.audio.OutputProfileManager = com.example.data.audio.OutputProfileManager(viewModelScope, profileHost, profileStore) { out, correctionChanged, announce ->
+    _outputSuggestion.value = null
+    // At launch the correction changes quietly; later, a notice says what changed.
+    if (announce && correctionChanged) {
+      val device = audioEngineManager.eqSettings.value.device
+      showNotice(Notice(device?.let { context.getString(com.example.R.string.audio_notice_correction_on, it.name) } ?: context.getString(com.example.R.string.audio_notice_correction_off, out.name)))
+    }
+    if (out.isExternal && !profiles.hasChosen(out.key) && profiles.correctionOf(out.key) == null) suggestCorrection(out)
+  }
+
+  /** "Trocar com o fone": each output gets the curve, spatial and correction last set on it. */
+  val autoOutputCorrection: StateFlow<Boolean> = profiles.auto
+
+  fun setAutoOutputCorrection(on: Boolean) = profiles.setAuto(on)
+
+  init {
+    viewModelScope.launch {
+      eqLoaded.await()
+      profiles.start()
+    }
   }
 
   // ---- the music on the device ----
@@ -1656,6 +1680,7 @@ class TarkasViewModel(
 
   override fun onCleared() {
     super.onCleared()
+    headTracker.setEnabled(false)
     GlobalEq.appListening = false
     assistantSpeaker.shutdown()
     timerTickerJob?.cancel()

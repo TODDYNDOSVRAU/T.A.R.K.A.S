@@ -11,6 +11,7 @@ import com.example.data.model.Playlist
 import com.example.data.model.RepeatMode
 import com.example.data.model.Track
 import com.example.data.playback.CoverNeighbors
+import com.example.data.playback.PlaybackProblem
 import com.example.data.playback.SleepTimer
 import com.example.ui.viewmodel.TrackDetailsState
 
@@ -37,7 +38,9 @@ data class PlayerState(
   val trackDetails: TrackDetailsState = TrackDetailsState(),
   val lyrics: LyricsState = LyricsState(),
   /** The tracks beside the cover: what Previous and Next go to. */
-  val coverNeighbors: CoverNeighbors.Result = CoverNeighbors.Result()
+  val coverNeighbors: CoverNeighbors.Result = CoverNeighbors.Result(),
+  /** Why the current track does not play; null when nothing is wrong. Shown on the screen until it plays. */
+  val problem: PlaybackProblem? = null
 ) {
   // A ByteArray is compared by content, not by reference, so the data class's equals stays meaningful.
   override fun equals(other: Any?): Boolean {
@@ -49,7 +52,7 @@ data class PlayerState(
       waveform.contentEquals(other.waveform) && isShuffle == other.isShuffle &&
       repeatMode == other.repeatMode && favoriteIds == other.favoriteIds && playlists == other.playlists &&
       sleepTimer == other.sleepTimer && trackDetails == other.trackDetails && lyrics == other.lyrics &&
-      coverNeighbors == other.coverNeighbors
+      coverNeighbors == other.coverNeighbors && problem == other.problem
   }
 
   override fun hashCode(): Int {
@@ -68,6 +71,7 @@ data class PlayerState(
     h = 31 * h + trackDetails.hashCode()
     h = 31 * h + lyrics.hashCode()
     h = 31 * h + coverNeighbors.hashCode()
+    h = 31 * h + problem.hashCode()
     return h
   }
 }
@@ -94,5 +98,7 @@ data class PlayerActions(
   val onSleepAtEndOfTrack: () -> Unit = {},
   val onCancelSleepTimer: () -> Unit = {},
   val onLoadTrackDetails: (Track) -> Unit = {},
-  val onLoadLyrics: (Track) -> Unit = {}
+  val onLoadLyrics: (Track) -> Unit = {},
+  /** Tries again the track that failed. */
+  val onRetry: () -> Unit = {}
 )

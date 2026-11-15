@@ -196,7 +196,6 @@
     <string name="settings_reduce_motion">Reduce animations</string>
     <string name="settings_reduce_motion_hint">Screens change without motion</string>
     <string name="settings_playback">Playback</string>
-    <string name="settings_advanced">Advanced</string>
     <string name="settings_waveform">Waveform progress bar</string>
     <string name="settings_waveform_footer">Draws the track\'s waveform as the progress bar in the player. The waveform is calculated in the background the first time a song on this device plays; until then, and for streamed songs, the thin bar stays.</string>
     <string name="settings_shuffle">Shuffle</string>
@@ -409,4 +408,21 @@
     <string name="lyrics_plain_note">These lyrics have no timing, so they do not follow the song.</string>
     <string name="lyrics_seek_here">Go to this line</string>
     <string name="lyrics_now">Playing now</string>
+    <string name="session_favorite_add">Add to favorites</string>
+    <string name="session_favorite_remove">Remove from favorites</string>
+    <string name="session_repeat_off">Repeat: off</string>
+    <string name="session_repeat_all">Repeat: all</string>
+    <string name="session_repeat_one">Repeat: this track</string>
+    <string name="auto_favorites">Favorites</string>
+    <string name="auto_playlists">Playlists</string>
+    <string name="auto_library">Library</string>
+    <string name="widget_description">Track, artist and playback buttons</string>
+    <string name="widget_empty_title">T.A.R.K.A.S.</string>
+    <string name="widget_empty_hint">Nothing playing. Tap to open.</string>
+    <string name="widget_cd_play">Play</string>
+    <string name="widget_cd_pause">Pause</string>
+    <string name="widget_cd_previous">Previous</string>
+    <string name="widget_cd_next">Next</string>
+    <string name="player_problem_failed">This track does not play. Try again or pick another.</string>
+    <string name="player_problem_offline">No connection. Check the internet and try again.</string>
 </resources>

@@ -196,7 +196,6 @@
     <string name="settings_reduce_motion">Reduzir animações</string>
     <string name="settings_reduce_motion_hint">Troca de tela sem movimento</string>
     <string name="settings_playback">Reprodução</string>
-    <string name="settings_advanced">Avançado</string>
     <string name="settings_waveform">Barra de progresso em onda</string>
     <string name="settings_waveform_footer">Desenha a forma de onda da faixa como barra de progresso no player. A onda é calculada em segundo plano na primeira vez que uma música deste aparelho toca; até lá, e nas músicas por streaming, a barra fina continua.</string>
     <string name="settings_shuffle">Aleatório</string>
@@ -409,4 +408,21 @@
     <string name="lyrics_plain_note">Esta letra não tem marcação de tempo, então não acompanha a música.</string>
     <string name="lyrics_seek_here">Ir para esta linha</string>
     <string name="lyrics_now">Tocando agora</string>
+    <string name="session_favorite_add">Adicionar aos favoritos</string>
+    <string name="session_favorite_remove">Remover dos favoritos</string>
+    <string name="session_repeat_off">Repetir: desligado</string>
+    <string name="session_repeat_all">Repetir: tudo</string>
+    <string name="session_repeat_one">Repetir: esta faixa</string>
+    <string name="auto_favorites">Favoritas</string>
+    <string name="auto_playlists">Playlists</string>
+    <string name="auto_library">Biblioteca</string>
+    <string name="widget_description">Faixa, artista e botões de reprodução</string>
+    <string name="widget_empty_title">T.A.R.K.A.S.</string>
+    <string name="widget_empty_hint">Nada tocando. Toque para abrir.</string>
+    <string name="widget_cd_play">Tocar</string>
+    <string name="widget_cd_pause">Pausar</string>
+    <string name="widget_cd_previous">Anterior</string>
+    <string name="widget_cd_next">Próxima</string>
+    <string name="player_problem_failed">Esta faixa não toca. Tente de novo ou escolha outra.</string>
+    <string name="player_problem_offline">Sem conexão. Confira a internet e tente de novo.</string>
 </resources>

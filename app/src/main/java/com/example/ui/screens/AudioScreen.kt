@@ -66,7 +66,10 @@ data class SpatialUi(
   /** What happens to other apps, shown under the panel; null when nothing needs saying. */
   val othersNote: String? = null,
   /** What the listener set by hand on each preset (only the values that differ from the preset). */
-  val tuning: Map<SpatialPreset, Map<SpatialKnob, Double>> = emptyMap()
+  val tuning: Map<SpatialPreset, Map<SpatialKnob, Double>> = emptyMap(),
+  /** Head tracking: whether the user wants it, and what Android says about it. */
+  val headTracking: Boolean = false,
+  val headStatus: com.example.data.audio.spatial.HeadTrackStatus = com.example.data.audio.spatial.HeadTrackStatus.OFF
 )
 
 /**
@@ -80,7 +83,9 @@ class SpatialActions(
   val onIntensity: (Float) -> Unit,
   val onIntensityFinished: (Float) -> Unit = {},
   val onKnob: (SpatialPreset, SpatialKnob, Double) -> Unit = { _, _, _ -> },
-  val onResetTuning: (SpatialPreset) -> Unit = {}
+  val onResetTuning: (SpatialPreset) -> Unit = {},
+  val onHeadTracking: (Boolean) -> Unit = {},
+  val onRecenterHead: () -> Unit = {}
 )
 
 /** Says honestly what Tarkas Spatial does to apps other than this one. */

@@ -40,8 +40,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
+import com.example.ui.layout.rememberWidthClass
+import com.example.ui.layout.twoPane
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.example.ui.components.CuriosityDetailDialog
 import com.example.ui.components.LyricsSheet
 import com.example.ui.components.SleepTimerDialog
@@ -49,6 +52,7 @@ import com.example.ui.components.TrackDetailsSheet
 import com.example.ui.screens.player.ActionsRow
 import com.example.ui.screens.player.Artwork
 import com.example.ui.screens.player.CloseHandle
+import com.example.ui.screens.player.PlaybackProblemBanner
 import com.example.ui.screens.player.PlayerActions
 import com.example.ui.screens.player.PlayerState
 import com.example.ui.screens.player.ProgressRow
@@ -183,7 +187,9 @@ fun MusicScreen(
   var scrubbing by remember { mutableStateOf(false) }
 
   // ---- the page's parts, shared by the portrait and the landscape layouts ----
-  val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+  // Two halves when the window is on its side or wide enough (a tablet upright), one column otherwise.
+  val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE ||
+    rememberWidthClass().twoPane
 
   val artworkPart: @Composable (Modifier, Dp) -> Unit = { m, fade ->
     Artwork(
@@ -201,6 +207,8 @@ fun MusicScreen(
     )
   }
   val titlePart: @Composable () -> Unit = {
+    Column {
+    PlaybackProblemBanner(state.problem, actions.onRetry, Modifier.padding(bottom = 8.dp))
     TitleRow(
       track = currentTrack,
       isFavorite = currentTrack != null && currentTrack.id in favoriteIds,
@@ -215,6 +223,7 @@ fun MusicScreen(
       onAbout = { track -> onLoadTrackDetails(track); showDetails = true },
       onLyrics = { track -> onLoadLyrics(track); showLyrics = true }
     )
+    }
   }
   val progressPart: @Composable () -> Unit = {
     ProgressRow(

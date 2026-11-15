@@ -215,6 +215,7 @@ internal fun QueueList(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = if (dismiss.dismissDirection == SwipeToDismissBoxValue.StartToEnd) Arrangement.Start else Arrangement.End
           ) {
+            // Decorative (contentDescription = null on purpose): the swipe background; the row has a delete custom action
             Icon(Icons.Rounded.Delete, contentDescription = null, tint = colors.onSurfaceVariant)
           }
         },
@@ -285,6 +286,7 @@ internal fun QueueList(
                   },
                 contentAlignment = Alignment.Center
               ) {
+                // Decorative (contentDescription = null on purpose): the drag handle; the row has move custom actions
                 Icon(Icons.Rounded.DragHandle, contentDescription = null, tint = colors.onSurfaceVariant)
               }
               }

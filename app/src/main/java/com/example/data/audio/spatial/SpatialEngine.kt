@@ -178,6 +178,12 @@ class SpatialEngine(
 
   val params: SpatialParams get() = config.p
 
+  /**
+   * Where the listener's head points now, degrees, positive to the left (head tracking). Read once per
+   * frame; set from any thread, it turns the scene without rebuilding anything.
+   */
+  @Volatile var liveYaw: Double = 0.0
+
   // ---- state ----
   private val pll = DoubleArray(BINS)
   private val prr = DoubleArray(BINS)
@@ -348,12 +354,13 @@ class SpatialEngine(
 
     var sumDry = 0.0
     var sumWet = 0.0
+    val yaw = p.headYaw + liveYaw
     for (k in 0 until BINS) {
       val theta = thetaArr[k]
       val az = (w * theta).coerceIn(-110.0, 110.0)
       var el = c.elev[k] * (1 - 0.7 * tr)
       if (p.anchor && voiceBand[k] && abs(theta) < 3.0) el = 0.0
-      val azWorld = az - p.headYaw
+      val azWorld = az - yaw
 
       val d = dArr[k]
       val e = eArr[k]

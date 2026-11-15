@@ -323,6 +323,7 @@ internal fun GlyphButton(
   ) {
     Icon(
       icon,
+      // Decorative (contentDescription = null on purpose): the button around this icon carries the label
       contentDescription = null,
       tint = color,
       modifier = Modifier
@@ -649,6 +650,7 @@ internal fun TransportRow(isPlaying: Boolean, onPrevious: () -> Unit, onTogglePl
 @Composable
 internal fun VolumeRow(volume: StreamVolume, reduced: Boolean) {
   Row(modifier = Modifier.fillMaxWidth().revealWithPlayer(), verticalAlignment = Alignment.CenterVertically) {
+    // Decorative (contentDescription = null on purpose): the volume slider beside it carries the label
     Icon(Icons.AutoMirrored.Rounded.VolumeDown, contentDescription = null, tint = OnPageMuted, modifier = Modifier.size(Size.iconSmall))
     ScrubBar(
       fraction = volume.fraction,
@@ -663,6 +665,7 @@ internal fun VolumeRow(volume: StreamVolume, reduced: Boolean) {
         .padding(horizontal = Space.m)
         .testTag("music_volume_slider")
     )
+    // Decorative (contentDescription = null on purpose): the volume slider beside it carries the label
     Icon(Icons.AutoMirrored.Rounded.VolumeUp, contentDescription = null, tint = OnPageMuted, modifier = Modifier.size(Size.iconSmall))
   }
 }
