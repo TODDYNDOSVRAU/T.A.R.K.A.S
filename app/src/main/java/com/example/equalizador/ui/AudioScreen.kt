@@ -253,10 +253,13 @@ fun AudioScreen(
   }
 
   if (showPresets) {
+    // Drag gestures off: a drag from the fixed header moved the whole sheet and snapped it back.
+    // Closing stays with the scrim tap and Back (onDismissRequest).
     ModalBottomSheet(
       sheetMaxWidth = Grid.u384 * 2,
       onDismissRequest = closePresets,
       sheetState = sheetState,
+      sheetGesturesEnabled = false,
       containerColor = MaterialTheme.colorScheme.surface
     ) {
       PresetPanel(

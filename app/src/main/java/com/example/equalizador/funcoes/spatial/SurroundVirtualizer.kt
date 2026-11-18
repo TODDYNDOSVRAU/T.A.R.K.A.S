@@ -26,26 +26,38 @@ import kotlin.math.sqrt
  * Also exposes [roomRe]/[roomIm] so [UpmixVirtualizer] and [SurroundVirtualizer] can rotate the
  * direct speaker paths dynamically under live head tracking while keeping the diffuse room anchored.
  */
-class SurroundFilters(val sampleRate: Int, hrtf: HrtfSource, val room: RoomParams = RoomParams.OFF) {
+class SurroundFilters(
+  val sampleRate: Int, hrtf: HrtfSource, val room: RoomParams = RoomParams.OFF,
+  /** 6 (5.1: surrounds at 110°) or 8 (7.1: sides at 90°, backs at 150°). */
+  val channels: Int = 6
+) {
+  init { require(channels == 6 || channels == 8) { "channels $channels" } }
+
+  /** Azimuth of each channel in degrees (NaN = the LFE, which has no direction). */
+  val azimuths: DoubleArray = if (channels == 8) {
+    doubleArrayOf(FRONT_AZ, -FRONT_AZ, 0.0, Double.NaN, SIDE_AZ, -SIDE_AZ, BACK_AZ, -BACK_AZ)
+  } else {
+    doubleArrayOf(FRONT_AZ, -FRONT_AZ, 0.0, Double.NaN, SURROUND_AZ, -SURROUND_AZ)
+  }
+
   /** Combined direct + room filter, index `channel * 2 + ear` (ear 0 = left), real and imaginary parts per bin. */
-  val re = Array(12) { DoubleArray(BINS) }
-  val im = Array(12) { DoubleArray(BINS) }
+  val re = Array(channels * 2) { DoubleArray(BINS) }
+  val im = Array(channels * 2) { DoubleArray(BINS) }
 
   /** Normalized room-reflection-only component (for additive composition with head-tracked direct HRTFs). */
-  internal val roomRe = Array(12) { DoubleArray(BINS) }
-  internal val roomIm = Array(12) { DoubleArray(BINS) }
-  internal val speakerScale = DoubleArray(6) { 1.0 }
+  internal val roomRe = Array(channels * 2) { DoubleArray(BINS) }
+  internal val roomIm = Array(channels * 2) { DoubleArray(BINS) }
+  internal val speakerScale = DoubleArray(channels) { 1.0 }
 
   init {
-    val azimuths = doubleArrayOf(FRONT_AZ, -FRONT_AZ, 0.0, Double.NaN, SURROUND_AZ, -SURROUND_AZ)
     val fft = Fft(NFFT)
     val first = Math.ceil(100.0 * NFFT / sampleRate).toInt()
     val last = Math.floor(10000.0 * NFFT / sampleRate).toInt().coerceAtMost(BINS - 1)
 
-    val rawDirect = Array(12) { DoubleArray(BINS * 2) }
-    val rawRefl = Array(12) { DoubleArray(BINS * 2) }
+    val rawDirect = Array(channels * 2) { DoubleArray(BINS * 2) }
+    val rawRefl = Array(channels * 2) { DoubleArray(BINS * 2) }
 
-    for (ch in 0 until 6) {
+    for (ch in 0 until channels) {
       if (azimuths[ch].isNaN()) {
         // LFE: both ears, common delay only.
         for (ear in 0..1) for (k in 0 until BINS) {
@@ -76,12 +88,16 @@ class SurroundFilters(val sampleRate: Int, hrtf: HrtfSource, val room: RoomParam
       symmetrizeSymmetricSpeakers(rawRefl, CH_L, CH_R)
       symmetrizeSymmetricSpeakers(rawDirect, CH_LS, CH_RS)
       symmetrizeSymmetricSpeakers(rawRefl, CH_LS, CH_RS)
+      if (channels == 8) {
+        symmetrizeSymmetricSpeakers(rawDirect, CH_SBL, CH_SBR)
+        symmetrizeSymmetricSpeakers(rawRefl, CH_SBL, CH_SBR)
+      }
 
       // 2. Grathwohl multi-speaker notch stack protection & Gunnarsson HF phase smoothness across (L, C, R):
       applyMultiSpeakerSpectralAndPhaseProtection(sampleRate, rawDirect, fft)
     }
 
-    for (ch in 0 until 6) {
+    for (ch in 0 until channels) {
       if (azimuths[ch].isNaN()) continue
       val hl = DoubleArray(BINS * 2) { rawDirect[ch * 2][it] + rawRefl[ch * 2][it] }
       val hr = DoubleArray(BINS * 2) { rawDirect[ch * 2 + 1][it] + rawRefl[ch * 2 + 1][it] }
@@ -167,7 +183,9 @@ class SurroundFilters(val sampleRate: Int, hrtf: HrtfSource, val room: RoomParam
     val mag = DoubleArray(BINS)
     val cRe = DoubleArray(NFFT); val cIm = DoubleArray(NFFT)
     val mpRe = DoubleArray(BINS); val mpIm = DoubleArray(BINS)
-    for (ch in intArrayOf(CH_L, CH_R, CH_C, CH_LS, CH_RS)) {
+    val directional = if (channels == 8) intArrayOf(CH_L, CH_R, CH_C, CH_LS, CH_RS, CH_SBL, CH_SBR)
+    else intArrayOf(CH_L, CH_R, CH_C, CH_LS, CH_RS)
+    for (ch in directional) {
       for (ear in 0..1) {
         val h = rawDirect[ch * 2 + ear]
         for (k in 0 until BINS) {
@@ -180,7 +198,7 @@ class SurroundFilters(val sampleRate: Int, hrtf: HrtfSource, val room: RoomParam
         // all-pass reflections cleanly toward minimum-phase + aligned pure arrival while keeping < 1.8 kHz phase exact.
         AcousticPhysics.minimumPhaseFromMagnitude(mag, fft, cRe, cIm, mpRe, mpIm)
         // Estimate pure excess phase group delay relative to HRTF_DELAY from 200-1200 Hz correlation.
-        val azSpeaker = when (ch) { CH_L -> FRONT_AZ; CH_R -> -FRONT_AZ; CH_C -> 0.0; CH_LS -> SURROUND_AZ; else -> -SURROUND_AZ }
+        val azSpeaker = azimuths[ch]
         val dot = AcousticPhysics.sourceEarCos(azSpeaker, 0.0, ear == 0, AcousticPhysics.HeadGeometry.DEFAULT)
         val pureDelay = AcousticPhysics.extendedWoodworthDelaySec(dot, AcousticPhysics.HeadGeometry.DEFAULT) +
           HRTF_DELAY.toDouble() / sampleRate
@@ -225,19 +243,25 @@ class SurroundFilters(val sampleRate: Int, hrtf: HrtfSource, val room: RoomParam
      */
     fun studio(
       sampleRate: Int, accurateSpherical: HrtfSource, open: ((String) -> java.io.InputStream?)?,
-      onProblem: (String) -> Unit = {}
+      onProblem: (String) -> Unit = {},
+      channels: Int = 6
     ): SurroundFilters {
       val measured = if (open == null) null else MeasuredHrtf.load(sampleRate, open, onProblem)
-      return SurroundFilters(sampleRate, measured ?: accurateSpherical, RoomParams.STUDIO)
+      return SurroundFilters(sampleRate, measured ?: accurateSpherical, RoomParams.STUDIO, channels)
     }
 
     const val FRONT_AZ = 30.0
     const val SURROUND_AZ = 110.0
+    /** 7.1 layout (ITU): side pair at 90°, back pair at 150°. */
+    const val SIDE_AZ = 90.0
+    const val BACK_AZ = 150.0
     private const val CH_L = 0
     private const val CH_R = 1
     private const val CH_C = 2
     private const val CH_LS = 4
     private const val CH_RS = 5
+    private const val CH_SBL = 6
+    private const val CH_SBR = 7
     private val INV_SQRT2 = 1 / sqrt(2.0)
   }
 }
@@ -273,10 +297,38 @@ class SurroundVirtualizer(
       }
     }
 
+    /** The same fold-down for a 7.1 frame (L R C LFE Ls Rs SBL SBR): the back pair joins the sides. */
+    fun downmix8(input: FloatArray, offset: Int, frames: Int, out: FloatArray, outOffset: Int = 0) {
+      for (i in 0 until frames) {
+        val p = offset + 8 * i
+        val l = finite(input[p]); val r = finite(input[p + 1]); val c = finite(input[p + 2])
+        val ls = finite(input[p + 4]) + finite(input[p + 6]); val rs = finite(input[p + 5]) + finite(input[p + 7])
+        out[outOffset + 2 * i] = DOWNMIX_GAIN * (l + DOWNMIX_GAIN * c + DOWNMIX_GAIN * ls)
+        out[outOffset + 2 * i + 1] = DOWNMIX_GAIN * (r + DOWNMIX_GAIN * c + DOWNMIX_GAIN * rs)
+      }
+    }
+
+    /**
+     * Puts [frames] frames of a 5.1 file (L R C LFE Ls Rs) on the 7.1 stage the app draws: the surrounds are
+     * shared between the side pair (90°) and the back pair (150°), half each, so they sit between the two,
+     * where a 5.1 mix puts them, and the fold-down back to stereo is unchanged.
+     */
+    fun expand51To71(input: FloatArray, frames: Int, out: FloatArray) {
+      for (i in 0 until frames) {
+        val a = 6 * i; val b = 8 * i
+        out[b] = input[a]; out[b + 1] = input[a + 1]; out[b + 2] = input[a + 2]; out[b + 3] = input[a + 3]
+        out[b + 4] = 0.5f * input[a + 4]; out[b + 5] = 0.5f * input[a + 5]
+        out[b + 6] = 0.5f * input[a + 4]; out[b + 7] = 0.5f * input[a + 5]
+      }
+    }
+
     private fun finite(v: Float) = if (v.isFinite()) v else 0f
   }
 
   override val latency: Int get() = LATENCY
+
+  /** Interleaved channels per input frame: 6, or 8 for a 7.1 filter set. */
+  private val n = filters.channels
 
   @Volatile override var targetIntensity: Double = 1.0
   private var intensity = 1.0
@@ -285,8 +337,8 @@ class SurroundVirtualizer(
 
   private val fft = Fft(NFFT)
   private val win = DoubleArray(WIN) { 0.5 - 0.5 * cos(2 * PI * it / WIN) }
-  private val hist = Array(6) { DoubleArray(WIN) }
-  private val pend = Array(6) { DoubleArray(HOP) }
+  private val hist = Array(n) { DoubleArray(WIN) }
+  private val pend = Array(n) { DoubleArray(HOP) }
   private var pending = 0
   private val accL = DoubleArray(NFFT)
   private val accR = DoubleArray(NFFT)
@@ -303,13 +355,22 @@ class SurroundVirtualizer(
 
   // Dynamic per-speaker direct HRTFs for head tracking (preallocated; computed only when liveYaw != cachedYaw).
   private var cachedYaw = 0.0
-  private val dynLRe = Array(6) { DoubleArray(BINS) }
-  private val dynLIm = Array(6) { DoubleArray(BINS) }
-  private val dynRRe = Array(6) { DoubleArray(BINS) }
-  private val dynRIm = Array(6) { DoubleArray(BINS) }
+  private val dynLRe = Array(n) { DoubleArray(BINS) }
+  private val dynLIm = Array(n) { DoubleArray(BINS) }
+  private val dynRRe = Array(n) { DoubleArray(BINS) }
+  private val dynRIm = Array(n) { DoubleArray(BINS) }
 
   init {
     reset()
+  }
+
+  /** Same fold-down as [downmix] for one frame; a 7.1 frame also folds the back pair into the sides. */
+  private fun dryFold(input: FloatArray, p: Int) {
+    if (n == 6) { downmix(input, p, 1, dmTmp); return }
+    val l = finite(input[p]); val r = finite(input[p + 1]); val c = finite(input[p + 2])
+    val ls = finite(input[p + 4]) + finite(input[p + 6]); val rs = finite(input[p + 5]) + finite(input[p + 7])
+    dmTmp[0] = DOWNMIX_GAIN * (l + DOWNMIX_GAIN * c + DOWNMIX_GAIN * ls)
+    dmTmp[1] = DOWNMIX_GAIN * (r + DOWNMIX_GAIN * c + DOWNMIX_GAIN * rs)
   }
 
   override fun reset(startIntensity: Double) {
@@ -326,19 +387,19 @@ class SurroundVirtualizer(
   override fun process(input: FloatArray, offset: Int, frames: Int, output: FloatArray): Int {
     var written = 0
     for (i in 0 until frames) {
-      val p = offset + 6 * i
-      for (c in 0 until 6) {
+      val p = offset + n * i
+      for (c in 0 until n) {
         val v = input[p + c]
         pend[c][pending] = if (v.isFinite()) v.toDouble() else 0.0
       }
-      downmix(input, p, 1, dmTmp)
+      dryFold(input, p)
       val q = 2 * (inputFrames % DRY_RING).toInt()
       dry[q] = dmTmp[0]; dry[q + 1] = dmTmp[1]
       inputFrames++
       pending++
       if (pending == HOP) {
         pending = 0
-        for (c in 0 until 6) {
+        for (c in 0 until n) {
           System.arraycopy(hist[c], HOP, hist[c], 0, WIN - HOP)
           System.arraycopy(pend[c], 0, hist[c], WIN - HOP, HOP)
         }
@@ -358,7 +419,7 @@ class SurroundVirtualizer(
     }
 
     yLRe.fill(0.0); yLIm.fill(0.0); yRRe.fill(0.0); yRIm.fill(0.0)
-    for (pair in 0 until 3) {
+    for (pair in 0 until n / 2) {
       val a = hist[2 * pair]; val b = hist[2 * pair + 1]
       for (n in 0 until WIN) { fRe[n] = a[n] * win[n]; fIm[n] = b[n] * win[n] }
       for (n in WIN until NFFT) { fRe[n] = 0.0; fIm[n] = 0.0 }
@@ -433,8 +494,8 @@ internal fun updateRotatedSpeakerFilters(
   dynLRe: Array<DoubleArray>, dynLIm: Array<DoubleArray>,
   dynRRe: Array<DoubleArray>, dynRIm: Array<DoubleArray>
 ) {
-  for (ch in 0 until 6) {
-    val az = SurroundVirtualizer.SPEAKER_AZ[ch]
+  for (ch in 0 until filters.channels) {
+    val az = filters.azimuths[ch]
     if (az.isNaN()) continue
     headHrtf.evaluateContinuous(az - yawDeg, 0.0, dynLRe[ch], dynLIm[ch], dynRRe[ch], dynRIm[ch])
     val scale = filters.speakerScale[ch]

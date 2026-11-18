@@ -18,6 +18,8 @@ O código-fonte (213 arquivos) e os testes unitários (108 arquivos) estão divi
 
 O trabalho está dividido em sessões por tópico: **Player**, **Biblioteca**, **Equalizador**, **Assistente** (mais **Geral**). Elas editam este mesmo checkout (`references/sessions.md`). Antes de editar ou compilar, leia `.claude/sessoes/QUADRO.md`: ele diz de quem é cada arquivo, como reservar arquivos compartilhados (`CLAIM` / `DONE`) e como compilar (`bash .claude/sessoes/gradle.sh <sessao> <tasks>`, com trava `build.lock`, código 75). Nunca use `git checkout/restore/stash/reset/clean` nem commite sem o usuário pedir; para prever conflito entre branches sem tocar na árvore, use `git merge-tree --write-tree`.
 
+**Roteamento por sessão (dono, reativado em 2026-11-18):** uma mudança de tópico é feita na sessão dona dele, nunca na que recebeu o pedido. As sessões são achadas com `ListAgents` pelo título, que é o endereço do `SendMessage`: "T.A.R.K.A.S: Player" (player cheio e mini, capa, controles, fila), "T.A.R.K.A.S: Biblioteca" (aba Biblioteca, playlists, ordenação, pastas), "T.A.R.K.A.S: Equalizador" (aba Áudio, EQ, espacial, DSP, saída), "T.A.R.K.A.S: Assistente" (chat, voz, curiosidades), "T.A.R.K.A.S: Geral" (build, release, compartilhados). Os ids `local_…` mudam entre execuções; não os grave. Se a sessão que recebeu o pedido não é a dona, encaminhe com `SendMessage` e avise o usuário em uma linha; se o pedido toca dois tópicos, divida. Build, release e arquivos compartilhados (`TarkasViewModel.kt`, `PreferencesRepository.kt`) ficam na sessão Geral. Isso vale mesmo para correções pequenas.
+
 ## Metas de Precisão Oficiais (definidas pelo dono em 2026-11-16, 48 kHz)
 
 | Métrica | Meta Oficial | Verificação Obrigatória |
@@ -41,5 +43,5 @@ O estilo aprovado é o do exemplo `.claude/sessoes/eq-proposta/exemplo-equalizad
 - **Cor da banda:** neutra em 0 e mais forte quanto maior o ajuste, igual para corte e reforço.
 - **Paramétrico:** as bandas são peças 96x48 em grade, com uma peça "+" para adicionar. Tocar numa peça abre o editor como balão sobre a grade (0,75x dela, peças atrás levemente desfocadas); o lixeiro fica no balão e remover tem desfazer.
 - **Predefinições:** o botão abre a lista com todas; ao lado dele fica o botão de correção dos fones.
-- **Tarkas Spatial:** ocupa no dock o lugar do antigo "segurar: sem EQ". A folha tem o palco 3D com a cabeça de costas: desligado mostra o fone; Sutil e Padrão, o fone vira falantes que se afastam um pouco; Amplo, dois falantes à distância das caixas; Cinema 5.1, eles viram as seis caixas.
+- **Tarkas Spatial:** ocupa no dock o lugar do antigo "segurar: sem EQ". A folha tem o palco 3D com a cabeça de costas: desligado mostra o fone; Sutil e Padrão, o fone vira falantes que se afastam um pouco; Amplo, dois falantes à distância das caixas; Cinema 7.1 (decisão do dono, 2026-11-18), eles viram as oito caixas.
 - **O que saiu da tela principal** (pré-amplificação, graves, agudos, limitador, espectro) mora na folha Ajustes; nenhuma função foi removida.

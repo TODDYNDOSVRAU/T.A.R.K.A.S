@@ -32,8 +32,8 @@ class SpatialStageModelTest {
 
   @Test fun meshesHaveFacesAndFiniteVertices() {
     val scene = StageScene()
-    assertEquals(1 + 2 + 1 + 18 + 2 + 6, scene.objs.size)
-    assertEquals(6, scene.speakers.size)
+    assertEquals(1 + 2 + 1 + 18 + 2 + 8, scene.objs.size)
+    assertEquals(8, scene.speakers.size)
     for (o in scene.objs) {
       assertTrue(o.faceCount > 0)
       assertTrue(o.v.all { it.isFinite() })
@@ -89,6 +89,47 @@ class SpatialStageModelTest {
     assertTrue(!a.isSettled(0f, 0f, 0f))
     a.held = false
     assertTrue(!a.isSettled(0.5f, 0f, 1f))
+  }
+
+  @Test fun everyDrawnSpeakerAnswersTheTapAtItsCentre() {
+    val scene = StageScene()
+    val a = StageAnim(stageTargetU(true, SpatialPreset.CINEMA), stageTargetM(true, SpatialPreset.CINEMA), 1f)
+    a.m = 1f; a.u = 1f
+    scene.frame(a, 1f, STAGE_W_UNITS)
+    for (n in scene.speakers.indices) {
+      val o = scene.speakers[n].obj
+      val cx = (o.sx.min() + o.sx.max()) / 2f; val cy = (o.sy.min() + o.sy.max()) / 2f
+      // The centre may fall inside a neighbour's grown box; the nearest centre must still be this speaker.
+      assertEquals("speaker $n at its centre", n, scene.hitTest(cx, cy, 24f))
+    }
+    assertEquals(-1, scene.hitTest(-500f, -500f, 24f))
+  }
+
+  @Test fun speakersDoNotAnswerBeforeTheyAreBoxes() {
+    val scene = StageScene()
+    val a = StageAnim(stageTargetU(true, SpatialPreset.WIDE), stageTargetM(true, SpatialPreset.WIDE), 1f)
+    scene.frame(a, 1f, STAGE_W_UNITS)
+    assertEquals(-1, scene.hitTest(STAGE_W_UNITS / 2, 96f, 200f))
+  }
+
+  @Test fun drawnSpeakersMapToTheAudioChannelsTheyPlay() {
+    // Drawn order L R C Ls Rs SBL SBR LFE; audio order L R C LFE Ls Rs SBL SBR.
+    assertEquals(listOf(0, 1, 2, 4, 5, 6, 7, 3), com.example.ui.screens.audio.STAGE_TO_AUDIO_CHANNEL.toList())
+  }
+
+  @Test fun channelNamesDoNotOverlapInCinema() {
+    val scene = StageScene()
+    val a = StageAnim(stageTargetU(true, SpatialPreset.CINEMA), stageTargetM(true, SpatialPreset.CINEMA), 1f)
+    a.m = 1f; a.u = 1f
+    for (yaw in listOf(0f, 0.3f, -0.3f)) {
+      scene.frame(a, 1f, STAGE_W_UNITS, yaw)
+      val sb = (0..7).joinToString { "${scene.labelX[it].toInt()},${scene.labelY[it].toInt()}" }
+      for (i in 0 until 8) for (j in i + 1 until 8) {
+        // Names are about 28 units wide (3 letters of mono) and 12 high.
+        val dx = kotlin.math.abs(scene.labelX[i] - scene.labelX[j]); val dy = kotlin.math.abs(scene.labelY[i] - scene.labelY[j])
+        assertTrue("names $i and $j overlap at yaw $yaw: $sb", dx >= 28f || dy >= 12f)
+      }
+    }
   }
 
   private companion object { const val STAGE_W_UNITS = 312f }

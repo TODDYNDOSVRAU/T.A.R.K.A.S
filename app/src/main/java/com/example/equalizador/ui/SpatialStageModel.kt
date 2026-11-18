@@ -317,8 +317,10 @@ internal class StageScene {
     class Def(val id: String, val deg: Float, val from: Int, val dl: Float, val w: Float, val h: Float, val d: Float, val y: Float)
     for (dfn in listOf(
       Def("L", -30f, 0, 0f, .5f, .72f, .42f, 0f), Def("R", 30f, 1, 0f, .5f, .72f, .42f, 0f),
-      Def("C", 0f, 0, .03f, .84f, .4f, .4f, 0f), Def("Ls", -110f, 0, .06f, .5f, .72f, .42f, 0f),
-      Def("Rs", 110f, 1, .06f, .5f, .72f, .42f, 0f), Def("LFE", 62f, 1, .09f, .7f, .7f, .7f, floorY + .35f)
+      Def("C", 0f, 0, .03f, .84f, .4f, .4f, 0f), Def("Ls", -90f, 0, .06f, .5f, .72f, .42f, 0f),
+      Def("Rs", 90f, 1, .06f, .5f, .72f, .42f, 0f),
+      Def("SBL", -150f, 0, .08f, .5f, .72f, .42f, 0f), Def("SBR", 150f, 1, .08f, .5f, .72f, .42f, 0f),
+      Def("LFE", 62f, 1, .09f, .7f, .7f, .7f, floorY + .35f)
     )) {
       val t = dfn.deg * PI.toFloat() / 180f
       val b = MeshBuilder()
@@ -351,9 +353,9 @@ internal class StageScene {
   val floorY2 = FloatArray(65)
   var floorAlpha = 0f
     private set
-  val labelX = FloatArray(6)
-  val labelY = FloatArray(6)
-  val labelAlpha = FloatArray(6)
+  val labelX = FloatArray(8)
+  val labelY = FloatArray(8)
+  val labelAlpha = FloatArray(8)
   var lit = 1f
     private set
 
@@ -512,9 +514,36 @@ internal class StageScene {
       view(s.obj.px, s.obj.py + s.h / 2f + 0.12f, s.obj.pz, tmp, 0)
       labelX[n] = max(16f, min(widthUnits - 16f, projX(tmp[0], tmp[2])))
       labelY[n] = max(14f, projY(tmp[1], tmp[2]))
+      // The LFE sits on the floor right behind the back pair: its name goes under the box, not over it.
+      if (n == 7) labelY[n] += 44f
     }
     Arrays.sort(keys, 0, itemCount)
     return itemCount
+  }
+
+  /**
+   * The speaker under the point ([xu], [yu]) in mock units, or -1. Each speaker answers inside its drawn
+   * outline grown to at least [minHalfU] on every side (the 48 dp touch target is 24 units); where two
+   * answers overlap, the one whose centre is nearest wins. Only the 5.1 boxes (fully morphed in) answer.
+   */
+  fun hitTest(xu: Float, yu: Float, minHalfU: Float): Int {
+    var best = -1
+    var bestD = Float.MAX_VALUE
+    for (n in speakers.indices) {
+      val s = speakers[n]
+      if (s.p < 0.6f) continue
+      val o = s.obj
+      var x0 = Float.MAX_VALUE; var x1 = -Float.MAX_VALUE; var y0 = Float.MAX_VALUE; var y1 = -Float.MAX_VALUE
+      for (i in o.sx.indices) {
+        x0 = min(x0, o.sx[i]); x1 = max(x1, o.sx[i]); y0 = min(y0, o.sy[i]); y1 = max(y1, o.sy[i])
+      }
+      val cx = (x0 + x1) / 2f; val cy = (y0 + y1) / 2f
+      val hx = max((x1 - x0) / 2f, minHalfU); val hy = max((y1 - y0) / 2f, minHalfU)
+      if (abs(xu - cx) > hx || abs(yu - cy) > hy) continue
+      val d = (xu - cx) * (xu - cx) + (yu - cy) * (yu - cy)
+      if (d < bestD) { bestD = d; best = n }
+    }
+    return best
   }
 
   /** Index of the item to draw at position [pos] (0 = farthest). */
@@ -576,3 +605,9 @@ internal class StageScene {
     }
   }
 }
+
+/**
+ * The speaker list order of [StageScene] is L R C Ls Rs SBL SBR LFE; the audio stage orders its channels
+ * L R C LFE Ls Rs SBL SBR. The speaker test plays the audio channel that the drawn speaker stands for.
+ */
+internal val STAGE_TO_AUDIO_CHANNEL = intArrayOf(0, 1, 2, 4, 5, 6, 7, 3)

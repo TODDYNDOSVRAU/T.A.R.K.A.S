@@ -215,6 +215,80 @@ class SpatialAudioProcessorTest {
     for (i in outs.size / 2 - 4 * block until outs.size / 2) assertEquals(dms[2 * (i - DELAY)], outs[2 * i], 1e-6f)
   }
 
+  // ---- 7.1 files (8 channels) ----
+
+  private val format71 = AudioProcessor.AudioFormat(fs, 8, C.ENCODING_PCM_FLOAT)
+
+  private fun signal71(frames: Int, start: Int = 0) = FloatArray(frames * 8) {
+    val n = start + it / 8
+    val ch = it % 8
+    (0.1 * sin(2 * PI * (200.0 + 130 * ch) * n / fs)).toFloat()
+  }
+
+  private fun ready71(): SpatialAudioProcessor {
+    val p = SpatialAudioProcessor()
+    assertEquals(AudioProcessor.AudioFormat(fs, 2, C.ENCODING_PCM_FLOAT), p.configure(format71))
+    p.flush()
+    return p
+  }
+
+  @Test
+  fun sevenPointOneOffIsTheDownmixDelayedExactly() {
+    SpatialControl.configure(false, SpatialPreset.STANDARD, 1.0)
+    val p = ready71()
+    val input = signal71(8192)
+    val dm = FloatArray(8192 * 2)
+    com.example.data.audio.spatial.SurroundVirtualizer.downmix8(input, 0, 8192, dm)
+    val out = run(p, input)
+    assertEquals(8192 * 2, out.size)
+    for (i in 0 until DELAY * 2) assertEquals(0f, out[i], 0f)
+    for (i in DELAY * 2 until out.size) assertEquals(dm[i - DELAY * 2], out[i], 0f)
+  }
+
+  @Test
+  fun sevenPointOneOnRendersBinauralAndKeepsTheLatencyBudget() {
+    // 608 + 512 frames = 23.33 ms at 48 kHz, the same as every other path.
+    assertEquals(1120, DELAY)
+    SpatialControl.configure(true, SpatialPreset.STANDARD, 1.0)
+    val p = ready71()
+    val deadline = System.currentTimeMillis() + 20_000
+    var pos = 0
+    val block = 2048
+    val outs = ArrayList<Float>()
+    val dms = ArrayList<Float>()
+    fun chunk() {
+      val input = signal71(block, pos)
+      val dm = FloatArray(block * 2)
+      com.example.data.audio.spatial.SurroundVirtualizer.downmix8(input, 0, block, dm)
+      dm.forEach { dms += it }
+      run(p, input).forEach { outs += it }
+      pos += block
+    }
+    while (System.currentTimeMillis() < deadline && SpatialControl.surroundFor(fs) == null) { chunk(); Thread.sleep(5) }
+    assertTrue("virtualizer not ready", SpatialControl.surroundFor(fs) != null)
+    repeat(40) { chunk() }
+    var diff = 0.0
+    val from = (outs.size / 2) - 10 * block
+    for (i in from until outs.size / 2) diff += abs(outs[2 * i] - dms[2 * (i - DELAY)])
+    assertTrue("never rendered (diff $diff)", diff / (10 * block) > 0.005)
+    assertTrue(outs.all { it.isFinite() })
+  }
+
+  @Test
+  fun fivePointOneIsPlacedBetweenTheSidesAndTheBacksWithTheSameFoldDown() {
+    val input = signal51(512)
+    val out8 = FloatArray(512 * 8)
+    com.example.data.audio.spatial.SurroundVirtualizer.expand51To71(input, 512, out8)
+    val dm6 = FloatArray(512 * 2); val dm8 = FloatArray(512 * 2)
+    com.example.data.audio.spatial.SurroundVirtualizer.downmix(input, 0, 512, dm6)
+    com.example.data.audio.spatial.SurroundVirtualizer.downmix8(out8, 0, 512, dm8)
+    for (i in dm6.indices) assertEquals(dm6[i], dm8[i], 1e-6f)
+    for (i in 0 until 512) {
+      assertEquals(out8[8 * i + 4], out8[8 * i + 6], 0f)
+      assertEquals(out8[8 * i + 5], out8[8 * i + 7], 0f)
+    }
+  }
+
   // ---- Cinema preset: stereo spread over five virtual speakers ----
 
   @Test

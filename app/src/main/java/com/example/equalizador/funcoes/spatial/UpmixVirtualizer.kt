@@ -39,6 +39,8 @@ class UpmixVirtualizer(
   @Volatile override var liveYaw: Double = 0.0
 
   private val spectra = UpmixSpectra(params, UpmixTables(sampleRate, params))
+
+  init { require(filters.channels >= spectra.channels) { "filters have ${filters.channels} channels, the upmix makes ${spectra.channels}" } }
   private val fft = Fft(NFFT)
   private val histL = DoubleArray(WIN)
   private val histR = DoubleArray(WIN)
@@ -57,10 +59,10 @@ class UpmixVirtualizer(
 
   // Head-tracking per-speaker dynamic filter cache (reused without allocations).
   private var cachedYaw = Double.NaN
-  private val dynLRe = Array(6) { DoubleArray(BINS) }
-  private val dynLIm = Array(6) { DoubleArray(BINS) }
-  private val dynRRe = Array(6) { DoubleArray(BINS) }
-  private val dynRIm = Array(6) { DoubleArray(BINS) }
+  private val dynLRe = Array(filters.channels) { DoubleArray(BINS) }
+  private val dynLIm = Array(filters.channels) { DoubleArray(BINS) }
+  private val dynRRe = Array(filters.channels) { DoubleArray(BINS) }
+  private val dynRIm = Array(filters.channels) { DoubleArray(BINS) }
 
   // Late diffuse room tail + voice-band isolation (keeps Center dialogue crisp & dry in front).
   private val tailFdn = if (studioRoomTail > 0.0) {
@@ -128,7 +130,7 @@ class UpmixVirtualizer(
     }
 
     yLRe.fill(0.0); yLIm.fill(0.0); yRRe.fill(0.0); yRIm.fill(0.0)
-    for (ch in 0 until 6) {
+    for (ch in 0 until spectra.channels) {
       val xRe = spectra.specRe[ch]; val xIm = spectra.specIm[ch]
       val lRe: DoubleArray; val lIm: DoubleArray; val rRe: DoubleArray; val rIm: DoubleArray
       if (dynamic && ch != 3) {

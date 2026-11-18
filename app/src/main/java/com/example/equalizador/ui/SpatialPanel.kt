@@ -34,6 +34,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import com.example.data.audio.spatial.SpeakerTestPlayer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -185,8 +189,28 @@ internal fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modi
       )
       StageCaption(caption)
     }
+    val testContext = androidx.compose.ui.platform.LocalContext.current
+    val testing by SpeakerTestPlayer.active.collectAsState()
+    // Leaving the screen ends a running test.
+    DisposableEffect(Unit) { onDispose { SpeakerTestPlayer.stop() } }
+    // The sound of a speaker test is the Cinema room's: the stage answers taps only while that preset is on.
+    LaunchedEffect(ui.enabled, ui.preset) { if (!ui.enabled || !ui.preset.virtual51) SpeakerTestPlayer.stop() }
     Box(modifier = Modifier.padding(top = Grid.u12)) {
-      SpatialStage(enabled = ui.enabled, preset = ui.preset, intensity = ui.intensity)
+      SpatialStage(
+        enabled = ui.enabled, preset = ui.preset, intensity = ui.intensity,
+        activeChannel = testing,
+        onSpeakerTap = { ch -> if (testing == ch) SpeakerTestPlayer.stop() else SpeakerTestPlayer.play(testContext, ch) }
+      )
+    }
+    if (ui.enabled && ui.preset.virtual51) {
+      Text(
+        stringResource(R.string.audio_spatial_test_hint), modifier = Modifier.padding(top = Grid.u6),
+        style = GridText.Small, color = colors.onSurfaceVariant
+      )
+      Text(
+        stringResource(R.string.audio_spatial_nostems), modifier = Modifier.padding(top = Grid.u6),
+        style = GridText.Small, color = colors.onSurfaceVariant
+      )
     }
     Box(modifier = Modifier.padding(top = Grid.u12)) { PresetSegments(ui, actions) }
     Row(

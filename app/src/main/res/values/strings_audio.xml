@@ -211,13 +211,13 @@
   <string name="audio_section_mine">Mine</string>
   <string name="audio_spatial_copy_header">Mode %1$s (intensity %2$s)\n</string>
   <string name="audio_spatial_copy_values">Copy values</string>
-  <string name="audio_spatial_footer">Works on any output, best on headphones. Stereo and 5.1 tracks are processed; mono and other layouts play as they are.</string>
+  <string name="audio_spatial_footer">Works on any output, best on headphones. Stereo, 5.1 and 7.1 tracks are processed; mono and other layouts play as they are.</string>
   <string name="audio_spatial_intensity">Intensity</string>
   <string name="audio_spatial_head_title">Head tracking</string>
   <string name="audio_spatial_head_off">The scene stays in front of you.</string>
   <string name="audio_spatial_head_no_sensor">No head sensor: it needs Android 13 or later and headphones with head tracking.</string>
   <string name="audio_spatial_head_waiting">Waiting for the headphones\' sensor. If nothing arrives, turn on head tracking for these headphones in the system sound settings.</string>
-  <string name="audio_spatial_head_tracking">The scene follows your head across stereo, Cinema 5.1 and 5.1.</string>
+  <string name="audio_spatial_head_tracking">The scene follows your head across stereo, 5.1 and Cinema 7.1.</string>
   <string name="audio_spatial_head_recenter">Face forward now</string>
   <string name="audio_spatial_others_active">Also active in other apps (%1$d)</string>
   <string name="audio_spatial_others_app">Other apps (Spotify, YouTube): turn on ADB or root mode in Advanced</string>
@@ -226,11 +226,11 @@
   <string name="audio_spatial_reset_mode">Restore mode values</string>
   <string name="audio_spatial_status_active">Active</string>
   <string name="audio_spatial_status_failed">The effect failed and the music plays without it. Switch it off and on, or play the next track, to try again.</string>
-  <string name="audio_spatial_status_not_stereo">This track is not stereo or 5.1</string>
+  <string name="audio_spatial_status_not_stereo">This track is not stereo, 5.1 or 7.1</string>
   <string name="audio_spatial_status_off">Opens the music around your head</string>
   <string name="audio_spatial_status_preparing">Preparing…</string>
   <string name="audio_spatial_title">Tarkas Spatial</string>
-  <string name="audio_spatial_cinema_hint">Five fixed virtual speakers anchored around you in a treated listening room.</string>
+  <string name="audio_spatial_cinema_hint">Eight fixed virtual speakers anchored around you in a treated listening room.</string>
   <string name="audio_speaker_warning">The headphone correction is on, but the sound plays through the speaker.</string>
   <string name="audio_spectrum_permission">The live spectrum needs the microphone permission. The app records nothing.</string>
   <string name="audio_spectrum_show">Show spectrum</string>
@@ -268,7 +268,7 @@
   <string name="audio_spatial_preset_sutil">Subtle</string>
   <string name="audio_spatial_preset_padrao">Standard</string>
   <string name="audio_spatial_preset_amplo">Wide</string>
-  <string name="audio_spatial_preset_cinema">Cinema 5.1</string>
+  <string name="audio_spatial_preset_cinema">Cinema 7.1</string>
   <string name="audio_spatial_knob_room">Room, overall level</string>
   <string name="audio_spatial_knob_early">Early reflections</string>
   <string name="audio_spatial_knob_tail">Reverb tail</string>
@@ -314,7 +314,7 @@
   <string name="audio_spatial_stage_subtle">Speakers · subtle</string>
   <string name="audio_spatial_stage_standard">Speakers · standard</string>
   <string name="audio_spatial_stage_wide">Speakers · wide</string>
-  <string name="audio_spatial_stage_cinema">5.1 · 6 speakers</string>
+  <string name="audio_spatial_stage_cinema">7.1 · 8 speakers</string>
   <string name="audio_spatial_stage_desc">Spatial stage, %1$s</string>
   <string name="audio_spatial_on">On</string>
   <string name="audio_spatial_mode">Mode</string>
@@ -335,4 +335,7 @@
   <string name="audio_preset_sub_modified">modified</string>
   <string name="audio_correction_off">Off</string>
   <string name="audio_headroom_label">Headroom</string>
+  <string name="audio_spatial_test_hint">Tap a speaker to hear it play alone, where it stands in the room.</string>
+  <string name="audio_spatial_nostems">Cinema spreads a stereo track over the speakers by frequency and phase; it does not separate voices or instruments, so a sound can leak to a neighbouring speaker.</string>
+  <string name="audio_spatial_test_speaker">Test speaker</string>
 </resources>

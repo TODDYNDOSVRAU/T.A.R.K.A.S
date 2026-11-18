@@ -245,16 +245,19 @@ object SpatialControl {
         engines[sampleRate] = engine
         // Studio filters: KU100 measured HRTF (with L/R symmetry, Gunnarsson phase regularization & Grathwohl notch
         // protection) + ISO 9613-1 air absorption room, with accurateDiffraction fallback for unsupported sample rates.
-        val filters = SurroundFilters.studio(sampleRate, hrtf, assetOpener) { Log.w(TAG, it) }
-        val surround = SurroundVirtualizer(filters, headHrtf = hrtf)
+        // 5.1/7.1 files and the Cinema upmix play on the same 7.1 room (sides 90°, backs 150°, as the stage draws them).
+        val cinemaFilters = SurroundFilters.studio(sampleRate, hrtf, assetOpener, { Log.w(TAG, it) }, channels = 8)
+        val surround = SurroundVirtualizer(cinemaFilters, headHrtf = hrtf)
         surround.targetIntensity = if (active) 1.0 else 0.0
         surround.liveYaw = headYaw
         surrounds[sampleRate] = surround
+        // The Cinema upmix makes a 7.1 set (back pair included), so it gets its own 8-channel room.
         val cinema = UpmixVirtualizer(
           sampleRate = sampleRate,
-          filters = filters,
+          filters = cinemaFilters,
           headHrtf = hrtf,
-          studioRoomTail = RoomParams.APPROVED_LEVEL
+          studioRoomTail = RoomParams.APPROVED_LEVEL,
+          params = UpmixParams.CINEMA
         )
         cinema.targetIntensity = cinemaTarget()
         cinema.liveYaw = headYaw
@@ -274,6 +277,21 @@ object SpatialControl {
         update()
       }
     }
+  }
+
+  /**
+   * The eight speaker tests (see [SpeakerTest]) rendered through the same studio filters as the Cinema stage, at
+   * [SpeakerTest.SAMPLE_RATE], whether or not the effect is on. Blocks for about a second, so call it off the
+   * main thread; the tables are built for the render and dropped. Null when it fails.
+   */
+  internal fun renderSpeakerTests(): Map<Int, FloatArray>? = try {
+    val rate = SpeakerTest.SAMPLE_RATE
+    val hrtf = SphericalHeadHrtf(rate, accurateDiffraction = true)
+    val filters = SurroundFilters.studio(rate, hrtf, assetOpener, { Log.w(TAG, it) }, channels = 8)
+    (0..7).associateWith { SpeakerTest.render(it, filters, hrtf) }
+  } catch (e: Throwable) {
+    Log.w(TAG, "Could not render the speaker tests", e)
+    null
   }
 
   private const val RELEASE_AFTER_MS = 1500L

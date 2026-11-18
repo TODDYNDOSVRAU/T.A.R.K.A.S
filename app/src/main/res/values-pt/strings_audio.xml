@@ -211,13 +211,13 @@
   <string name="audio_section_mine">Minhas</string>
   <string name="audio_spatial_copy_header">Modo %1$s (intensidade %2$s)\n</string>
   <string name="audio_spatial_copy_values">Copiar valores</string>
-  <string name="audio_spatial_footer">Funciona em qualquer saída, melhor nos fones. Músicas estéreo e 5.1 são processadas; mono e outros formatos tocam como estão.</string>
+  <string name="audio_spatial_footer">Funciona em qualquer saída, melhor nos fones. Músicas estéreo, 5.1 e 7.1 são processadas; mono e outros formatos tocam como estão.</string>
   <string name="audio_spatial_intensity">Intensidade</string>
   <string name="audio_spatial_head_title">Rastreio de cabeça</string>
   <string name="audio_spatial_head_off">A cena fica à sua frente.</string>
   <string name="audio_spatial_head_no_sensor">Sem sensor de cabeça: precisa do Android 13 ou mais novo e de fones com rastreio de cabeça.</string>
   <string name="audio_spatial_head_waiting">Aguardando o sensor dos fones. Se nada chegar, ligue o rastreio de cabeça destes fones nos ajustes de som do sistema.</string>
-  <string name="audio_spatial_head_tracking">A cena acompanha a sua cabeça em músicas estéreo, Cinema 5.1 e 5.1.</string>
+  <string name="audio_spatial_head_tracking">A cena acompanha a sua cabeça em músicas estéreo, Cinema 7.1 e 5.1.</string>
   <string name="audio_spatial_head_recenter">Olhar para a frente agora</string>
   <string name="audio_spatial_others_active">Também ativo em outros apps (%1$d)</string>
   <string name="audio_spatial_others_app">Outros apps (Spotify, YouTube): ligue o modo ADB ou root em Avançado</string>
@@ -226,11 +226,11 @@
   <string name="audio_spatial_reset_mode">Restaurar valores do modo</string>
   <string name="audio_spatial_status_active">Ativo</string>
   <string name="audio_spatial_status_failed">O efeito falhou e a música toca sem ele. Desligue e ligue de novo, ou passe para a próxima faixa, para tentar outra vez.</string>
-  <string name="audio_spatial_status_not_stereo">Esta faixa não é estéreo nem 5.1</string>
+  <string name="audio_spatial_status_not_stereo">Esta faixa não é estéreo, 5.1 nem 7.1</string>
   <string name="audio_spatial_status_off">Abre a música ao redor da cabeça</string>
   <string name="audio_spatial_status_preparing">Preparando…</string>
   <string name="audio_spatial_title">Tarkas Spatial</string>
-  <string name="audio_spatial_cinema_hint">Cinco caixas virtuais fixas ao seu redor em uma sala tratada acusticamente.</string>
+  <string name="audio_spatial_cinema_hint">Oito caixas virtuais fixas ao seu redor em uma sala tratada acusticamente.</string>
   <string name="audio_speaker_warning">A correção do fone está ligada, mas o som sai pelo alto-falante.</string>
   <string name="audio_spectrum_permission">O espectro ao vivo pede a permissão do microfone. O app não grava nada.</string>
   <string name="audio_spectrum_show">Ver espectro</string>
@@ -268,7 +268,7 @@
   <string name="audio_spatial_preset_sutil">Sutil</string>
   <string name="audio_spatial_preset_padrao">Padrão</string>
   <string name="audio_spatial_preset_amplo">Amplo</string>
-  <string name="audio_spatial_preset_cinema">Cinema 5.1</string>
+  <string name="audio_spatial_preset_cinema">Cinema 7.1</string>
   <string name="audio_spatial_knob_room">Sala, nível geral</string>
   <string name="audio_spatial_knob_early">Reflexões iniciais</string>
   <string name="audio_spatial_knob_tail">Cauda de reverb</string>
@@ -314,7 +314,7 @@
   <string name="audio_spatial_stage_subtle">Falantes · sutil</string>
   <string name="audio_spatial_stage_standard">Falantes · padrão</string>
   <string name="audio_spatial_stage_wide">Falantes · amplo</string>
-  <string name="audio_spatial_stage_cinema">5.1 · 6 caixas</string>
+  <string name="audio_spatial_stage_cinema">7.1 · 8 caixas</string>
   <string name="audio_spatial_stage_desc">Quadro espacial, %1$s</string>
   <string name="audio_spatial_on">Ligado</string>
   <string name="audio_spatial_mode">Modo</string>
@@ -335,4 +335,7 @@
   <string name="audio_preset_sub_modified">modificada</string>
   <string name="audio_correction_off">Desligada</string>
   <string name="audio_headroom_label">Folga</string>
+  <string name="audio_spatial_test_hint">Toque numa caixa para ouvi-la tocar sozinha, onde ela está na sala.</string>
+  <string name="audio_spatial_nostems">O Cinema espalha uma música estéreo pelas caixas por frequência e fase; ele não separa vozes nem instrumentos, então um som pode vazar para a caixa vizinha.</string>
+  <string name="audio_spatial_test_speaker">Testar caixa</string>
 </resources>

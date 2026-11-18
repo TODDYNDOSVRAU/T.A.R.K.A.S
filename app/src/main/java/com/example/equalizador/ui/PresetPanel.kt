@@ -115,7 +115,9 @@ internal fun PresetPanel(
   Column(modifier = modifier.fillMaxWidth().testTag("eq_preset_panel")) {
     TabSwitch(selected = tab, onSelect = { tab = it })
     // Without the stretch: pulling a list past its end must not make the sheet look like it bounces.
+    // The sheet's own drag gestures are off (AudioScreen), so no pull reaches it: that is the one mechanism.
     CompositionLocalProvider(LocalOverscrollFactory provides null) {
+      Box {
       when (tab) {
         PresetTab.EQ -> EqTab(presets, activePresetId, onPickPreset)
         PresetTab.CORRECTION -> CorrectionTab(
@@ -128,6 +130,7 @@ internal fun PresetPanel(
           onPickDevice = onPickDevice,
           onClearDevice = onClearDevice
         )
+      }
       }
     }
   }
@@ -518,3 +521,4 @@ private fun formLabel(form: String): String = stringResource(
     else -> R.string.audio_form_over_ear
   }
 )
+

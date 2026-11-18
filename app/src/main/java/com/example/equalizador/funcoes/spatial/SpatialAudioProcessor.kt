@@ -59,6 +59,8 @@ class SpatialAudioProcessor(
   /** Channels of the audio coming in: 2, or 6 (5.1, which this processor turns into stereo). */
   private var inChannels = 2
   private var input6 = FloatArray(0)
+  /** The 7.1 frames the virtualizer takes (a 5.1 file is placed on them, see expand51To71). */
+  private var input8 = FloatArray(0)
   private var running = false
   /** Engine output frames to drop after a start (they come from before it saw any input). */
   private var skipEngine = 0
@@ -72,7 +74,7 @@ class SpatialAudioProcessor(
    * audio is still coming through (a gapless change drains it first), in the previous format.
    */
   override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-    val supported = (inputAudioFormat.channelCount == 2 || inputAudioFormat.channelCount == 6) &&
+    val supported = (inputAudioFormat.channelCount == 2 || inputAudioFormat.channelCount == 6 || inputAudioFormat.channelCount == 8) &&
       (inputAudioFormat.encoding == C.ENCODING_PCM_16BIT || inputAudioFormat.encoding == C.ENCODING_PCM_FLOAT)
     if (!supported) return AudioProcessor.AudioFormat.NOT_SET // inactive: passed through untouched
     // 5.1 comes out as stereo (binaural when on, the plain downmix when off); stereo keeps its format.
@@ -113,6 +115,14 @@ class SpatialAudioProcessor(
       }
       // The dry sound (the delay line, and what plays when the effect is off) is the downmix.
       SurroundVirtualizer.downmix(input6, 0, frames, input)
+      SurroundVirtualizer.expand51To71(input6, frames, input8)
+    } else if (inChannels == 8) {
+      if (encoding == C.ENCODING_PCM_16BIT) {
+        for (i in 0 until frames * 8) input8[i] = inputBuffer.getShort() / 32768f
+      } else {
+        for (i in 0 until frames * 8) input8[i] = inputBuffer.getFloat()
+      }
+      SurroundVirtualizer.downmix8(input8, 0, frames, input)
     } else if (encoding == C.ENCODING_PCM_16BIT) {
       for (i in 0 until frames * 2) input[i] = inputBuffer.getShort() / 32768f
     } else {
@@ -133,7 +143,7 @@ class SpatialAudioProcessor(
     try {
       // Always ask the control: it drops its engines a moment after the effect is switched off and builds
       // new ones on demand, so an engine kept from before would never hear a later switch-on again.
-      val surround = inChannels == 6
+      val surround = inChannels > 2
       // After a failure no stage is asked for: the dry sound plays (through the same delay line, so there is
       // no jump in time) until the failure is cleared by a flush or by switching the effect off.
       val current: SpatialStage? = if (SpatialControl.failed) null else stageFor(surround, sampleRate)
@@ -175,7 +185,7 @@ class SpatialAudioProcessor(
       }
 
       if (running && e != null) {
-        val w = e.process(if (surround) input6 else input, 0, frames, engineOut)
+        val w = e.process(if (surround) input8 else input, 0, frames, engineOut)
         var from = 0
         if (skipEngine > 0) {
           from = minOf(skipEngine, w)
@@ -243,6 +253,7 @@ class SpatialAudioProcessor(
       engineOut = FloatArray((frames + HOP) * 2)
     }
     if (inChannels == 6 && input6.size < frames * 6) input6 = FloatArray(frames * 6)
+    if (inChannels > 2 && input8.size < frames * 8) input8 = FloatArray(frames * 8)
     val needRing = DELAY + frames
     if (ringFrames() < needRing) {
       // Keep the frames already in the ring, in order, at the start of the bigger one.
@@ -274,6 +285,7 @@ class SpatialAudioProcessor(
     ensureCapacity(frames)
     input.fill(0f, 0, frames * 2)
     if (inChannels == 6) input6.fill(0f, 0, frames * 6)
+    if (inChannels > 2) input8.fill(0f, 0, frames * 8)
     render(frames)
     val bytesPerFrame = if (encoding == C.ENCODING_PCM_16BIT) 4 else 8
     val out = replaceOutputBuffer(frames * bytesPerFrame)
@@ -302,7 +314,7 @@ class SpatialAudioProcessor(
     onFlush()
     engine = null
     encoding = C.ENCODING_INVALID
-    inChannels = 2; input6 = FloatArray(0)
+    inChannels = 2; input6 = FloatArray(0); input8 = FloatArray(0)
     ring = FloatArray(0); input = FloatArray(0); output = FloatArray(0); engineOut = FloatArray(0); fifo = FloatArray(0)
   }
 }
