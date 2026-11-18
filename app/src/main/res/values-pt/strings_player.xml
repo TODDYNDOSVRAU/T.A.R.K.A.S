@@ -53,6 +53,7 @@
 <string name="player_screen_curiosity">Curiosidade da faixa</string>
 <string name="player_screen_curiosity_none">Sem curiosidade verificada para esta faixa</string>
 <string name="player_screen_sleep_timer">Timer de sono</string>
+<string name="player_screen_mixer">Mixer</string>
 <string name="player_screen_on_with">Ligado, %1$s</string>
 <string name="player_screen_on">Ligado</string>
 <string name="player_screen_off">Desligado</string>
@@ -181,6 +182,7 @@
 <string name="player_sleep_end_of_track">No fim desta faixa</string>
 <string name="player_sleep_turn_off">Desligar timer</string>
 <string name="player_sleep_close">Fechar</string>
+<string name="player_sleep_start">Iniciar</string>
 
 <!-- SettingsScreen.kt -->
     <string name="settings_back_settings">Ajustes</string>

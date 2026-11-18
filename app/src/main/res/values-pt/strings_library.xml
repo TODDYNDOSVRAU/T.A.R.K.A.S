@@ -107,6 +107,7 @@
     <string name="library_folders_all_out_message">Todas as pastas com música estão desmarcadas, então não há músicas para mostrar. Abra Pastas para recolocar alguma.</string>
     <string name="library_notice_play_next">“%1$s” toca em seguida.</string>
     <string name="library_notice_added_to_queue">“%1$s” adicionada à fila.</string>
+    <string name="library_notice_added_to_playlist">Adicionada a %1$s.</string>
     <string name="library_notice_already_in_playlist">“%1$s” já está em %2$s.</string>
     <string name="library_local_library">Biblioteca Local</string>
     <string name="track_untitled">Sem título</string>

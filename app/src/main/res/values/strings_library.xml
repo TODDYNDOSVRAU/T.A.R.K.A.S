@@ -107,6 +107,7 @@
     <string name="library_folders_all_out_message">Every folder with music is unticked, so there are no songs to show. Open Folders to put some back.</string>
     <string name="library_notice_play_next">“%1$s” plays next.</string>
     <string name="library_notice_added_to_queue">“%1$s” added to the queue.</string>
+    <string name="library_notice_added_to_playlist">Added to %1$s.</string>
     <string name="library_notice_already_in_playlist">“%1$s” is already in %2$s.</string>
     <string name="library_local_library">Local library</string>
     <string name="track_untitled">Untitled</string>

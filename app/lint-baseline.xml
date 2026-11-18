@@ -7,7 +7,7 @@
         errorLine1="      val record = AudioRecord.Builder()"
         errorLine2="                   ^">
         <location
-            file="src/main/java/com/example/data/systemaudio/SystemAudioCaptureManager.kt"
+            file="src/main/java/com/example/equalizador/funcoes/systemaudio/SystemAudioCaptureManager.kt"
             line="77"
             column="20"/>
     </issue>
@@ -18,7 +18,7 @@
         errorLine1="    runCatching { NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, n) }"
         errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/update/UpdateInstallReceiver.kt"
+            file="src/main/java/com/example/geral/funcoes/update/UpdateInstallReceiver.kt"
             line="46"
             column="19"/>
     </issue>
@@ -29,7 +29,7 @@
         errorLine1="    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) params.setRequestUpdateOwnership(true)"
         errorLine2="                                                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/update/UpdateManager.kt"
+            file="src/main/java/com/example/geral/funcoes/update/UpdateManager.kt"
             line="332"
             column="72"/>
     </issue>
@@ -40,7 +40,7 @@
         errorLine1="      edit.putBoolean(KEY_EQ_CEILING_MIGRATED, true).commit()"
         errorLine2="                                                     ~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="334"
             column="54"/>
     </issue>
@@ -51,7 +51,7 @@
         errorLine1="    return String.format(&quot;%02d:%02d&quot;, mins, secs)"
         errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/model/LocalTimer.kt"
+            file="src/main/java/com/example/player/funcoes/LocalTimer.kt"
             line="14"
             column="12"/>
     </issue>
@@ -62,7 +62,7 @@
         errorLine1="          String.format(&quot;%.1f&quot;, capabilities.sampleRateHz / 1000f)"
         errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="371"
             column="11"/>
     </issue>
@@ -73,7 +73,7 @@
         errorLine1="  bytes >= 1024L * 1024L -> String.format(&quot;%.1f MB&quot;, bytes / (1024f * 1024f))"
         errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="680"
             column="29"/>
     </issue>
@@ -84,7 +84,7 @@
         errorLine1="  bytes >= 1024L -> String.format(&quot;%.0f KB&quot;, bytes / 1024f)"
         errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="681"
             column="21"/>
     </issue>
@@ -95,7 +95,7 @@
         errorLine1="    return String.format(&quot;%02d:%02d&quot;, minutes, seconds)"
         errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/model/Track.kt"
+            file="src/main/java/com/example/biblioteca/funcoes/model/Track.kt"
             line="39"
             column="12"/>
     </issue>
@@ -106,7 +106,7 @@
         errorLine1="            .setUsage(android.media.AudioAttributes.USAGE_ASSISTANT)"
         errorLine2="                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/assistant/CuriositySpeechManager.kt"
+            file="src/main/java/com/example/assistente/funcoes/CuriositySpeechManager.kt"
             line="96"
             column="23"/>
     </issue>
@@ -117,7 +117,7 @@
         errorLine1="          openSystem(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))"
         errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="428"
             column="29"/>
     </issue>
@@ -128,7 +128,7 @@
         errorLine1="          openSystem(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))"
         errorLine2="                                                                                ~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="428"
             column="81"/>
     </issue>
@@ -139,7 +139,7 @@
         errorLine1="            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse(&quot;package:${context.packageName}&quot;))"
         errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/components/UpdatePrompts.kt"
+            file="src/main/java/com/example/geral/ui/UpdatePrompts.kt"
             line="62"
             column="33"/>
     </issue>
@@ -150,7 +150,7 @@
         errorLine1="            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse(&quot;package:${context.packageName}&quot;))"
         errorLine2="                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/UpdateSettings.kt"
+            file="src/main/java/com/example/geral/ui/UpdateSettings.kt"
             line="101"
             column="33"/>
     </issue>
@@ -161,7 +161,7 @@
         errorLine1="      if (!requireSuccess || process.waitFor(1, TimeUnit.SECONDS) &amp;&amp; process.exitValue() == 0) text else null"
         errorLine2="                                     ~~~~~~~">
         <location
-            file="src/main/java/com/example/data/systemaudio/ShellCommand.kt"
+            file="src/main/java/com/example/equalizador/funcoes/systemaudio/ShellCommand.kt"
             line="29"
             column="38"/>
     </issue>
@@ -524,7 +524,7 @@
         errorLine1="@OptIn(UnstableApi::class)"
         errorLine2="       ~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/audio/dsp/OwnAudioProcessorChain.kt"
+            file="src/main/java/com/example/equalizador/funcoes/dsp/OwnAudioProcessorChain.kt"
             line="14"
             column="8"/>
     </issue>
@@ -535,7 +535,7 @@
         errorLine1="class OwnAudioProcessorChain(private val processors: Array&lt;AudioProcessor>) : DefaultAudioSink.AudioProcessorChain {"
         errorLine2="                                                           ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/audio/dsp/OwnAudioProcessorChain.kt"
+            file="src/main/java/com/example/equalizador/funcoes/dsp/OwnAudioProcessorChain.kt"
             line="15"
             column="60"/>
     </issue>
@@ -546,7 +546,7 @@
         errorLine1="class OwnAudioProcessorChain(private val processors: Array&lt;AudioProcessor>) : DefaultAudioSink.AudioProcessorChain {"
         errorLine2="                                                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/audio/dsp/OwnAudioProcessorChain.kt"
+            file="src/main/java/com/example/equalizador/funcoes/dsp/OwnAudioProcessorChain.kt"
             line="15"
             column="79"/>
     </issue>
@@ -557,7 +557,7 @@
         errorLine1="  override fun getAudioProcessors(): Array&lt;AudioProcessor> = processors"
         errorLine2="               ~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/audio/dsp/OwnAudioProcessorChain.kt"
+            file="src/main/java/com/example/equalizador/funcoes/dsp/OwnAudioProcessorChain.kt"
             line="16"
             column="16"/>
     </issue>
@@ -568,7 +568,7 @@
         errorLine1="  override fun getAudioProcessors(): Array&lt;AudioProcessor> = processors"
         errorLine2="                                           ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/audio/dsp/OwnAudioProcessorChain.kt"
+            file="src/main/java/com/example/equalizador/funcoes/dsp/OwnAudioProcessorChain.kt"
             line="16"
             column="44"/>
     </issue>
@@ -579,7 +579,7 @@
         errorLine1="  override fun applyPlaybackParameters(playbackParameters: PlaybackParameters): PlaybackParameters = PlaybackParameters.DEFAULT"
         errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/audio/dsp/OwnAudioProcessorChain.kt"
+            file="src/main/java/com/example/equalizador/funcoes/dsp/OwnAudioProcessorChain.kt"
             line="17"
             column="16"/>
     </issue>
@@ -590,7 +590,7 @@
         errorLine1="  override fun applySkipSilenceEnabled(skipSilenceEnabled: Boolean): Boolean = false"
         errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/audio/dsp/OwnAudioProcessorChain.kt"
+            file="src/main/java/com/example/equalizador/funcoes/dsp/OwnAudioProcessorChain.kt"
             line="18"
             column="16"/>
     </issue>
@@ -601,7 +601,7 @@
         errorLine1="  override fun getMediaDuration(playoutDuration: Long): Long = playoutDuration"
         errorLine2="               ~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/audio/dsp/OwnAudioProcessorChain.kt"
+            file="src/main/java/com/example/equalizador/funcoes/dsp/OwnAudioProcessorChain.kt"
             line="19"
             column="16"/>
     </issue>
@@ -612,7 +612,7 @@
         errorLine1="  override fun getSkippedOutputFrameCount(): Long = 0L"
         errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/audio/dsp/OwnAudioProcessorChain.kt"
+            file="src/main/java/com/example/equalizador/funcoes/dsp/OwnAudioProcessorChain.kt"
             line="20"
             column="16"/>
     </issue>
@@ -623,7 +623,7 @@
         errorLine1="  val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp &lt; 480"
         errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/LibraryScreen.kt"
+            file="src/main/java/com/example/biblioteca/ui/LibraryScreen.kt"
             line="204"
             column="17"/>
     </issue>
@@ -634,7 +634,7 @@
         errorLine1="  val compact = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp &lt; 480"
         errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/LibraryScreen.kt"
+            file="src/main/java/com/example/biblioteca/ui/LibraryScreen.kt"
             line="719"
             column="17"/>
     </issue>
@@ -645,7 +645,7 @@
         errorLine1="        val compactBars = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp &lt; 480"
         errorLine2="                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/MainActivity.kt"
+            file="src/main/java/com/example/geral/ui/MainActivity.kt"
             line="1011"
             column="27"/>
     </issue>
@@ -656,7 +656,7 @@
         errorLine1="      val maxListHeight = (androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp * 0.5f).dp"
         errorLine2="                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/components/SleepTimerDialog.kt"
+            file="src/main/java/com/example/player/ui/SleepTimerDialog.kt"
             line="69"
             column="28"/>
     </issue>
@@ -667,7 +667,7 @@
         errorLine1="        toast(context.getString(R.string.audio_toast_curve_copied))"
         errorLine2="              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/audio/EqPowerConsole.kt"
+            file="src/main/java/com/example/equalizador/ui/EqPowerConsole.kt"
             line="443"
             column="15"/>
     </issue>
@@ -678,7 +678,7 @@
         errorLine1="          null -> toast(context.getString(R.string.audio_toast_import_failed))"
         errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/audio/EqPowerConsole.kt"
+            file="src/main/java/com/example/equalizador/ui/EqPowerConsole.kt"
             line="448"
             column="25"/>
     </issue>
@@ -689,7 +689,7 @@
         errorLine1="          contentDescription = track?.let { carouselContext.getString(R.string.player_screen_cover_of, it.title, it.artist) }"
         errorLine2="                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/player/PlayerCarousel.kt"
+            file="src/main/java/com/example/player/ui/PlayerCarousel.kt"
             line="793"
             column="45"/>
     </issue>
@@ -700,7 +700,7 @@
         errorLine1="            ?: carouselContext.getString(R.string.player_screen_no_track)"
         errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/player/PlayerCarousel.kt"
+            file="src/main/java/com/example/player/ui/PlayerCarousel.kt"
             line="794"
             column="16"/>
     </issue>
@@ -711,7 +711,7 @@
         errorLine1="            shown.previous?.let { p -> CustomAccessibilityAction(carouselContext.getString(R.string.player_screen_previous_named, p.title)) { go(-1); true } },"
         errorLine2="                                                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/player/PlayerCarousel.kt"
+            file="src/main/java/com/example/player/ui/PlayerCarousel.kt"
             line="796"
             column="66"/>
     </issue>
@@ -722,7 +722,7 @@
         errorLine1="            shown.next?.let { n -> CustomAccessibilityAction(carouselContext.getString(R.string.player_screen_next_named, n.title)) { go(1); true } }"
         errorLine2="                                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/player/PlayerCarousel.kt"
+            file="src/main/java/com/example/player/ui/PlayerCarousel.kt"
             line="797"
             column="62"/>
     </issue>
@@ -733,7 +733,7 @@
         errorLine1="              ?: if (shown.nextUnknown) CustomAccessibilityAction(carouselContext.getString(R.string.player_screen_next)) { go(1); true } else null"
         errorLine2="                                                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/player/PlayerCarousel.kt"
+            file="src/main/java/com/example/player/ui/PlayerCarousel.kt"
             line="798"
             column="67"/>
     </issue>
@@ -744,7 +744,7 @@
         errorLine1="        title = context.getString(R.string.settings_curiosity_title),"
         errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicalCuriositySettingsScreen.kt"
+            file="src/main/java/com/example/assistente/ui/MusicalCuriositySettingsScreen.kt"
             line="154"
             column="17"/>
     </issue>
@@ -755,7 +755,7 @@
         errorLine1="      footer = context.getString(R.string.settings_curiosity_master_footer),"
         errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicalCuriositySettingsScreen.kt"
+            file="src/main/java/com/example/assistente/ui/MusicalCuriositySettingsScreen.kt"
             line="163"
             column="16"/>
     </issue>
@@ -766,7 +766,7 @@
         errorLine1="    settingsGroup(context.getString(R.string.settings_curiosity_when)) {"
         errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicalCuriositySettingsScreen.kt"
+            file="src/main/java/com/example/assistente/ui/MusicalCuriositySettingsScreen.kt"
             line="174"
             column="19"/>
     </issue>
@@ -777,7 +777,7 @@
         errorLine1="    settingsGroup(context.getString(R.string.settings_curiosity_how)) {"
         errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicalCuriositySettingsScreen.kt"
+            file="src/main/java/com/example/assistente/ui/MusicalCuriositySettingsScreen.kt"
             line="178"
             column="19"/>
     </issue>
@@ -788,7 +788,7 @@
         errorLine1="      context.getString(R.string.settings_curiosity_voice_style),"
         errorLine2="      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicalCuriositySettingsScreen.kt"
+            file="src/main/java/com/example/assistente/ui/MusicalCuriositySettingsScreen.kt"
             line="194"
             column="7"/>
     </issue>
@@ -799,7 +799,7 @@
         errorLine1="      footer = context.getString(R.string.settings_curiosity_voice_style_footer)"
         errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicalCuriositySettingsScreen.kt"
+            file="src/main/java/com/example/assistente/ui/MusicalCuriositySettingsScreen.kt"
             line="195"
             column="16"/>
     </issue>
@@ -810,7 +810,7 @@
         errorLine1="      context.getString(R.string.settings_curiosity_voice),"
         errorLine2="      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicalCuriositySettingsScreen.kt"
+            file="src/main/java/com/example/assistente/ui/MusicalCuriositySettingsScreen.kt"
             line="211"
             column="7"/>
     </issue>
@@ -821,7 +821,7 @@
         errorLine1="      footer = context.getString(R.string.settings_curiosity_voice_footer)"
         errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicalCuriositySettingsScreen.kt"
+            file="src/main/java/com/example/assistente/ui/MusicalCuriositySettingsScreen.kt"
             line="212"
             column="16"/>
     </issue>
@@ -832,7 +832,7 @@
         errorLine1="        text = if (isSpeaking) context.getString(R.string.settings_curiosity_stop_demo) else context.getString(R.string.settings_curiosity_play_demo),"
         errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicalCuriositySettingsScreen.kt"
+            file="src/main/java/com/example/assistente/ui/MusicalCuriositySettingsScreen.kt"
             line="257"
             column="32"/>
     </issue>
@@ -843,7 +843,7 @@
         errorLine1="        text = if (isSpeaking) context.getString(R.string.settings_curiosity_stop_demo) else context.getString(R.string.settings_curiosity_play_demo),"
         errorLine2="                                                                                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicalCuriositySettingsScreen.kt"
+            file="src/main/java/com/example/assistente/ui/MusicalCuriositySettingsScreen.kt"
             line="257"
             column="94"/>
     </issue>
@@ -854,7 +854,7 @@
         errorLine1="    settingsGroup(context.getString(R.string.settings_theme), tag = &quot;settings_theme_card&quot;) {"
         errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="277"
             column="19"/>
     </issue>
@@ -865,7 +865,7 @@
         errorLine1="      context.getString(R.string.settings_floating_bars),"
         errorLine2="      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="281"
             column="7"/>
     </issue>
@@ -876,7 +876,7 @@
         errorLine1="      footer = context.getString(R.string.settings_floating_bars_footer)"
         errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="282"
             column="16"/>
     </issue>
@@ -887,7 +887,7 @@
         errorLine1="      context.getString(R.string.settings_list_animation),"
         errorLine2="      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="287"
             column="7"/>
     </issue>
@@ -898,7 +898,7 @@
         errorLine1="      footer = context.getString(R.string.settings_list_animation_footer)"
         errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="288"
             column="16"/>
     </issue>
@@ -909,7 +909,7 @@
         errorLine1="    settingsGroup(context.getString(R.string.settings_accessibility)) {"
         errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="307"
             column="19"/>
     </issue>
@@ -920,7 +920,7 @@
         errorLine1="    settingsGroup(context.getString(R.string.settings_playback)) {"
         errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="328"
             column="19"/>
     </issue>
@@ -931,7 +931,7 @@
         errorLine1="      context.getString(R.string.settings_repeat),"
         errorLine2="      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="337"
             column="7"/>
     </issue>
@@ -942,7 +942,7 @@
         errorLine1="      footer = context.getString(R.string.settings_repeat_footer),"
         errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="338"
             column="16"/>
     </issue>
@@ -953,7 +953,7 @@
         errorLine1="      context.getString(R.string.settings_audio),"
         errorLine2="      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="356"
             column="7"/>
     </issue>
@@ -964,7 +964,7 @@
         errorLine1="      footer = context.getString(R.string.settings_audio_footer)"
         errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="357"
             column="16"/>
     </issue>
@@ -975,7 +975,7 @@
         errorLine1="      context.getString(R.string.settings_catalogs),"
         errorLine2="      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="382"
             column="7"/>
     </issue>
@@ -986,7 +986,7 @@
         errorLine1="      footer = context.getString(R.string.settings_catalogs_footer)"
         errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="383"
             column="16"/>
     </issue>
@@ -997,7 +997,7 @@
         errorLine1="      context.getString(R.string.settings_assistant),"
         errorLine2="      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="398"
             column="7"/>
     </issue>
@@ -1008,7 +1008,7 @@
         errorLine1="      footer = if (hasGeminiKey) context.getString(R.string.settings_assistant_footer_gemini)"
         errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="399"
             column="34"/>
     </issue>
@@ -1019,7 +1019,7 @@
         errorLine1="      else context.getString(R.string.settings_assistant_footer_local)"
         errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="400"
             column="12"/>
     </issue>
@@ -1030,7 +1030,7 @@
         errorLine1="      context.getString(R.string.settings_notifications),"
         errorLine2="      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="420"
             column="7"/>
     </issue>
@@ -1041,7 +1041,7 @@
         errorLine1="      footer = if (notificationsOn) context.getString(R.string.settings_notifications_footer_on)"
         errorLine2="                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="421"
             column="37"/>
     </issue>
@@ -1052,7 +1052,7 @@
         errorLine1="      else context.getString(R.string.settings_notifications_footer_off)"
         errorLine2="           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="422"
             column="12"/>
     </issue>
@@ -1063,7 +1063,7 @@
         errorLine1="    updateSettingsGroup(context.getString(R.string.settings_update_header))"
         errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="434"
             column="25"/>
     </issue>
@@ -1074,7 +1074,7 @@
         errorLine1="    settingsGroup(context.getString(R.string.settings_storage), footer = context.getString(R.string.settings_storage_footer)) {"
         errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="437"
             column="19"/>
     </issue>
@@ -1085,7 +1085,7 @@
         errorLine1="    settingsGroup(context.getString(R.string.settings_storage), footer = context.getString(R.string.settings_storage_footer)) {"
         errorLine2="                                                                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="437"
             column="74"/>
     </issue>
@@ -1096,7 +1096,7 @@
         errorLine1="      context.getString(R.string.settings_privacy),"
         errorLine2="      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="449"
             column="7"/>
     </issue>
@@ -1107,7 +1107,7 @@
         errorLine1="      footer = context.getString(R.string.settings_privacy_footer)"
         errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="450"
             column="16"/>
     </issue>
@@ -1118,7 +1118,7 @@
         errorLine1="      context.getString(R.string.settings_advanced),"
         errorLine2="      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="466"
             column="7"/>
     </issue>
@@ -1129,7 +1129,7 @@
         errorLine1="      footer = context.getString(R.string.settings_waveform_footer)"
         errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="467"
             column="16"/>
     </issue>
@@ -1140,7 +1140,7 @@
         errorLine1="    settingsGroup(header = null, footer = context.getString(R.string.settings_erase_footer)) {"
         errorLine2="                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="488"
             column="43"/>
     </issue>
@@ -1151,7 +1151,7 @@
         errorLine1="    settingsGroup(context.getString(R.string.settings_about)) {"
         errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="499"
             column="19"/>
     </issue>
@@ -1162,7 +1162,7 @@
         errorLine1="          cm?.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.settings_about_clip_label), &quot;T.A.R.K.A.S. ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}), Android ${android.os.Build.VERSION.RELEASE}, ${android.os.Build.MODEL}&quot;))"
         errorLine2="                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="589"
             column="52"/>
     </issue>
@@ -1173,7 +1173,7 @@
         errorLine1="    settingsGroup(context.getString(R.string.settings_about_legal)) {"
         errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="603"
             column="19"/>
     </issue>
@@ -1184,7 +1184,7 @@
         errorLine1="    settingsGroup(context.getString(R.string.settings_about_credits)) {"
         errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="620"
             column="19"/>
     </issue>
@@ -1195,7 +1195,7 @@
         errorLine1="    settingsGroup(context.getString(R.string.settings_about_contact)) {"
         errorLine2="                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="635"
             column="19"/>
     </issue>
@@ -1206,7 +1206,7 @@
         errorLine1="    settingsGroup(header = null, footer = context.getString(R.string.settings_about_restart_footer)) {"
         errorLine2="                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="649"
             column="43"/>
     </issue>
@@ -1217,7 +1217,7 @@
         errorLine1="              context.resources.openRawResourceFd(R.raw.boot).use { fd ->"
         errorLine2="              ~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/components/BootScreen.kt"
+            file="src/main/java/com/example/geral/ui/BootScreen.kt"
             line="107"
             column="15"/>
     </issue>
@@ -1228,7 +1228,7 @@
         errorLine1="              context.resources.openRawResourceFd(R.raw.boot).use { fd ->"
         errorLine2="              ~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/components/BootScreen.kt"
+            file="src/main/java/com/example/geral/ui/BootScreen.kt"
             line="107"
             column="15"/>
     </issue>
@@ -1239,7 +1239,7 @@
         errorLine1="  val res = LocalContext.current.resources"
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/audio/EqGraph.kt"
+            file="src/main/java/com/example/equalizador/ui/EqGraph.kt"
             line="162"
             column="13"/>
     </issue>
@@ -1250,7 +1250,7 @@
         errorLine1="            toast(context.resources.getQuantityString(R.plurals.audio_toast_imported_filters, result.bands.size, result.bands.size))"
         errorLine2="                  ~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/audio/EqPowerConsole.kt"
+            file="src/main/java/com/example/equalizador/ui/EqPowerConsole.kt"
             line="451"
             column="19"/>
     </issue>
@@ -1261,7 +1261,7 @@
         errorLine1="            toast(context.resources.getQuantityString(R.plurals.audio_toast_imported_points, result.points, result.points, result.gainsDb.size))"
         errorLine2="                  ~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/audio/EqPowerConsole.kt"
+            file="src/main/java/com/example/equalizador/ui/EqPowerConsole.kt"
             line="455"
             column="19"/>
     </issue>
@@ -1272,7 +1272,7 @@
         errorLine1="  val screenPx = LocalConfiguration.current.let { context.resources.displayMetrics.widthPixels.toFloat() }"
         errorLine2="                                                  ~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicScreen.kt"
+            file="src/main/java/com/example/player/ui/MusicScreen.kt"
             line="917"
             column="51"/>
     </issue>
@@ -1283,7 +1283,7 @@
         errorLine1="internal fun LazyItemScope.itemMotion(index: Int, stagger: Boolean = true): Modifier {"
         errorLine2="                           ~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/library/LibraryParts.kt"
+            file="src/main/java/com/example/biblioteca/ui/LibraryParts.kt"
             line="59"
             column="28"/>
     </issue>
@@ -1294,7 +1294,7 @@
         errorLine1="  modifier: Modifier = Modifier"
         errorLine2="  ~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/AssistantScreen.kt"
+            file="src/main/java/com/example/assistente/ui/AssistantScreen.kt"
             line="130"
             column="3"/>
     </issue>
@@ -1305,7 +1305,7 @@
         errorLine1="  modifier: Modifier = Modifier"
         errorLine2="  ~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/AudioScreen.kt"
+            file="src/main/java/com/example/equalizador/ui/AudioScreen.kt"
             line="150"
             column="3"/>
     </issue>
@@ -1316,7 +1316,7 @@
         errorLine1="  modifier: Modifier = Modifier"
         errorLine2="  ~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/HomeScreen.kt"
+            file="src/main/java/com/example/biblioteca/ui/HomeScreen.kt"
             line="114"
             column="3"/>
     </issue>
@@ -1327,7 +1327,7 @@
         errorLine1="  modifier: Modifier = Modifier"
         errorLine2="  ~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/LibraryScreen.kt"
+            file="src/main/java/com/example/biblioteca/ui/LibraryScreen.kt"
             line="193"
             column="3"/>
     </issue>
@@ -1338,7 +1338,7 @@
         errorLine1="  modifier: Modifier = Modifier"
         errorLine2="  ~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicScreen.kt"
+            file="src/main/java/com/example/player/ui/MusicScreen.kt"
             line="240"
             column="3"/>
     </issue>
@@ -1349,7 +1349,7 @@
         errorLine1="  modifier: Modifier = Modifier,"
         errorLine2="  ~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicalCuriositySettingsScreen.kt"
+            file="src/main/java/com/example/assistente/ui/MusicalCuriositySettingsScreen.kt"
             line="141"
             column="3"/>
     </issue>
@@ -1360,7 +1360,7 @@
         errorLine1="  modifier: Modifier = Modifier,"
         errorLine2="  ~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="138"
             column="3"/>
     </issue>
@@ -1646,7 +1646,7 @@
         errorLine1="    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {"
         errorLine2="        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/audio/AudioEngineManager.kt"
+            file="src/main/java/com/example/equalizador/funcoes/AudioEngineManager.kt"
             line="1107"
             column="9"/>
     </issue>
@@ -1657,7 +1657,7 @@
         errorLine1="  val mediaProjectionManager: MediaProjectionManager? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {"
         errorLine2="                                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/systemaudio/SystemAudioCaptureManager.kt"
+            file="src/main/java/com/example/equalizador/funcoes/systemaudio/SystemAudioCaptureManager.kt"
             line="47"
             column="61"/>
     </issue>
@@ -1668,7 +1668,7 @@
         errorLine1="  lateinit var musicRepository: MusicRepository private set"
         errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/AppGraph.kt"
+            file="src/main/java/com/example/geral/funcoes/AppGraph.kt"
             line="19"
             column="3"/>
     </issue>
@@ -1679,7 +1679,7 @@
         errorLine1="  lateinit var audioEngineManager: AudioEngineManager private set"
         errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/AppGraph.kt"
+            file="src/main/java/com/example/geral/funcoes/AppGraph.kt"
             line="21"
             column="3"/>
     </issue>
@@ -1690,7 +1690,7 @@
         errorLine1="  lateinit var curiositySpeechManager: CuriositySpeechManager private set"
         errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/AppGraph.kt"
+            file="src/main/java/com/example/geral/funcoes/AppGraph.kt"
             line="23"
             column="3"/>
     </issue>
@@ -1701,7 +1701,7 @@
         errorLine1="  lateinit var playback: PlaybackController private set"
         errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/AppGraph.kt"
+            file="src/main/java/com/example/geral/funcoes/AppGraph.kt"
             line="25"
             column="3"/>
     </issue>
@@ -1712,7 +1712,7 @@
         errorLine1="  /** The shape of every local track, measured in the background and saved in the app folder. */"
         errorLine2="  ^">
         <location
-            file="src/main/java/com/example/AppGraph.kt"
+            file="src/main/java/com/example/geral/funcoes/AppGraph.kt"
             line="30"
             column="3"/>
     </issue>
@@ -1723,7 +1723,7 @@
         errorLine1="  private val context = application.applicationContext"
         errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/viewmodel/TarkasViewModel.kt"
+            file="src/main/java/com/example/geral/funcoes/viewmodel/TarkasViewModel.kt"
             line="138"
             column="3"/>
     </issue>
@@ -1734,7 +1734,7 @@
         errorLine1="/**"
         errorLine2="^">
         <location
-            file="src/main/java/com/example/data/update/UpdateManager.kt"
+            file="src/main/java/com/example/geral/funcoes/update/UpdateManager.kt"
             line="30"
             column="1"/>
     </issue>
@@ -1745,7 +1745,7 @@
         errorLine1="  private lateinit var app: Context"
         errorLine2="  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/update/UpdateManager.kt"
+            file="src/main/java/com/example/geral/funcoes/update/UpdateManager.kt"
             line="43"
             column="3"/>
     </issue>
@@ -1756,7 +1756,7 @@
         errorLine1="  var height by remember { mutableStateOf(1) }"
         errorLine2="                           ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/LibraryScreen.kt"
+            file="src/main/java/com/example/biblioteca/ui/LibraryScreen.kt"
             line="827"
             column="28"/>
     </issue>
@@ -1767,7 +1767,7 @@
         errorLine1="  var widthPx by remember { mutableStateOf(0) }"
         errorLine2="                            ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicScreen.kt"
+            file="src/main/java/com/example/player/ui/MusicScreen.kt"
             line="1493"
             column="29"/>
     </issue>
@@ -1778,7 +1778,7 @@
         errorLine1="  var dragFrom by remember { mutableStateOf(-1) }"
         errorLine2="                             ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/QueueList.kt"
+            file="src/main/java/com/example/player/ui/QueueList.kt"
             line="99"
             column="30"/>
     </issue>
@@ -1866,7 +1866,7 @@
         errorLine1="    if (release.apkSize > 0 &amp;&amp; dir.usableSpace &lt; release.apkSize * 2) return UpdateProblem.DISK"
         errorLine2="                                   ~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/update/UpdateManager.kt"
+            file="src/main/java/com/example/geral/funcoes/update/UpdateManager.kt"
             line="206"
             column="36"/>
     </issue>
@@ -1877,7 +1877,7 @@
         errorLine1="    return if (isRemoteOrContent) Uri.parse(filePathOrUri) else Uri.fromFile(File(filePathOrUri))"
         errorLine2="                                  ~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/audio/AudioEngineManager.kt"
+            file="src/main/java/com/example/equalizador/funcoes/AudioEngineManager.kt"
             line="468"
             column="35"/>
     </issue>
@@ -1888,7 +1888,7 @@
         errorLine1="    prefs.edit().putString(KEY_FAVORITES, array.toString()).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/LibraryRepository.kt"
+            file="src/main/java/com/example/biblioteca/funcoes/LibraryRepository.kt"
             line="96"
             column="5"/>
     </issue>
@@ -1899,7 +1899,7 @@
         errorLine1="    prefs.edit().putString(KEY_PLAYLISTS, array.toString()).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/LibraryRepository.kt"
+            file="src/main/java/com/example/biblioteca/funcoes/LibraryRepository.kt"
             line="106"
             column="5"/>
     </issue>
@@ -1910,7 +1910,7 @@
         errorLine1="    prefs.edit().putString(KEY_TRACKS, array.toString()).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/LibraryRepository.kt"
+            file="src/main/java/com/example/biblioteca/funcoes/LibraryRepository.kt"
             line="113"
             column="5"/>
     </issue>
@@ -1921,7 +1921,7 @@
         errorLine1="    set(value) = prefs.edit().putString(KEY_MODE, value.name).apply()"
         errorLine2="                 ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/audio/loudness/LoudnessStore.kt"
+            file="src/main/java/com/example/equalizador/funcoes/loudness/LoudnessStore.kt"
             line="22"
             column="18"/>
     </issue>
@@ -1932,7 +1932,7 @@
         errorLine1="    prefs.edit().putString(MEASURED_PREFIX + trackId, &quot;%.2f&quot;.format(java.util.Locale.ROOT, lufs)).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/audio/loudness/LoudnessStore.kt"
+            file="src/main/java/com/example/equalizador/funcoes/loudness/LoudnessStore.kt"
             line="28"
             column="5"/>
     </issue>
@@ -1943,7 +1943,7 @@
         errorLine1="    prefs.edit().putString(&quot;picked&quot;, TrackJson.listToJson(pickedTracks).toString()).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/MusicRepository.kt"
+            file="src/main/java/com/example/biblioteca/funcoes/MusicRepository.kt"
             line="251"
             column="5"/>
     </issue>
@@ -1954,7 +1954,7 @@
         errorLine1="    val ALBUM_ART: Uri = Uri.parse(&quot;content://media/external/audio/albumart&quot;)"
         errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/MusicRepository.kt"
+            file="src/main/java/com/example/biblioteca/funcoes/MusicRepository.kt"
             line="262"
             column="26"/>
     </issue>
@@ -1965,7 +1965,7 @@
         errorLine1="        val p = bitmap.getPixel(x, y)"
         errorLine2="                ~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/MusicScreen.kt"
+            file="src/main/java/com/example/player/ui/MusicScreen.kt"
             line="1790"
             column="17"/>
     </issue>
@@ -1976,7 +1976,7 @@
         errorLine1="    if (after != before) prefs.edit().putString(trackId, PlayRules.encode(after)).apply()"
         errorLine2="                         ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/playback/PlayStats.kt"
+            file="src/main/java/com/example/player/funcoes/PlayStats.kt"
             line="87"
             column="26"/>
     </issue>
@@ -1987,7 +1987,7 @@
         errorLine1="      store.edit().clear().apply()"
         errorLine2="      ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/playback/PlaybackController.kt"
+            file="src/main/java/com/example/player/funcoes/PlaybackController.kt"
             line="675"
             column="7"/>
     </issue>
@@ -1998,7 +1998,7 @@
         errorLine1="    store.edit()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/playback/PlaybackController.kt"
+            file="src/main/java/com/example/player/funcoes/PlaybackController.kt"
             line="682"
             column="5"/>
     </issue>
@@ -2009,7 +2009,7 @@
         errorLine1="    store.edit().putLong(KEY_POSITION, positionMs.value).putString(KEY_POSITION_TRACK, current.id).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/playback/PlaybackController.kt"
+            file="src/main/java/com/example/player/funcoes/PlaybackController.kt"
             line="692"
             column="5"/>
     </issue>
@@ -2020,7 +2020,7 @@
         errorLine1="        store.edit().clear().apply()"
         errorLine2="        ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/playback/PlaybackController.kt"
+            file="src/main/java/com/example/player/funcoes/PlaybackController.kt"
             line="705"
             column="9"/>
     </issue>
@@ -2031,7 +2031,7 @@
         errorLine1="    prefs.edit().putBoolean(KEY_SHUFFLE, enabled).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="39"
             column="5"/>
     </issue>
@@ -2042,7 +2042,7 @@
         errorLine1="    prefs.edit().putString(KEY_REPEAT, mode.name).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="52"
             column="5"/>
     </issue>
@@ -2053,7 +2053,7 @@
         errorLine1="    prefs.edit().putString(KEY_ACTIVE_PROFILE_ID, profileId).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="60"
             column="5"/>
     </issue>
@@ -2064,7 +2064,7 @@
         errorLine1="    prefs.edit().putString(KEY_THEME_MODE, mode).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="68"
             column="5"/>
     </issue>
@@ -2075,7 +2075,7 @@
         errorLine1="    prefs.edit().putString(&quot;surface_style&quot;, key).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="77"
             column="5"/>
     </issue>
@@ -2086,7 +2086,7 @@
         errorLine1="    prefs.edit().putBoolean(&quot;reduce_motion&quot;, reduce).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="84"
             column="5"/>
     </issue>
@@ -2097,7 +2097,7 @@
         errorLine1="    prefs.edit().putString(&quot;list_animation&quot;, key).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="91"
             column="5"/>
     </issue>
@@ -2108,7 +2108,7 @@
         errorLine1="    prefs.edit().putBoolean(&quot;reduce_transparency&quot;, reduce).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="98"
             column="5"/>
     </issue>
@@ -2119,7 +2119,7 @@
         errorLine1="    if (prefs.contains(&quot;accent&quot;)) prefs.edit().remove(&quot;accent&quot;).apply()"
         errorLine2="                                  ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="104"
             column="35"/>
     </issue>
@@ -2130,7 +2130,7 @@
         errorLine1="    prefs.edit().putBoolean(&quot;onboarding_done&quot;, done).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="111"
             column="5"/>
     </issue>
@@ -2141,7 +2141,7 @@
         errorLine1="    prefs.edit().putInt(&quot;terms_version_accepted&quot;, version).putLong(&quot;terms_accepted_at&quot;, atMillis).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="119"
             column="5"/>
     </issue>
@@ -2152,7 +2152,7 @@
         errorLine1="    prefs.edit().clear().apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="127"
             column="5"/>
     </issue>
@@ -2163,7 +2163,7 @@
         errorLine1="    prefs.edit().putString(&quot;eq_reach&quot;, key).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="134"
             column="5"/>
     </issue>
@@ -2174,7 +2174,7 @@
         errorLine1="    prefs.edit().putInt(&quot;crossfade_seconds&quot;, seconds).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="141"
             column="5"/>
     </issue>
@@ -2185,7 +2185,7 @@
         errorLine1="    prefs.edit().putBoolean(&quot;waveform_bar&quot;, on).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="148"
             column="5"/>
     </issue>
@@ -2196,7 +2196,7 @@
         errorLine1="    prefs.edit().putStringSet(&quot;folder_rules&quot;, rules).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="155"
             column="5"/>
     </issue>
@@ -2207,7 +2207,7 @@
         errorLine1="    prefs.edit().putString(&quot;song_order&quot;, key).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="162"
             column="5"/>
     </issue>
@@ -2218,7 +2218,7 @@
         errorLine1="    prefs.edit().putString(&quot;output_bindings_v2&quot;, json).remove(&quot;output_bindings&quot;).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="174"
             column="5"/>
     </issue>
@@ -2229,7 +2229,7 @@
         errorLine1="    prefs.edit().putBoolean(&quot;auto_output_correction&quot;, on).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="181"
             column="5"/>
     </issue>
@@ -2240,7 +2240,7 @@
         errorLine1="    prefs.edit().putStringSet(&quot;suggested_outputs&quot;, keys).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="188"
             column="5"/>
     </issue>
@@ -2251,7 +2251,7 @@
         errorLine1="    prefs.edit()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="198"
             column="5"/>
     </issue>
@@ -2262,7 +2262,7 @@
         errorLine1="    prefs.edit().apply { if (text.isEmpty()) remove(&quot;spatial_tuning_$preset&quot;) else putString(&quot;spatial_tuning_$preset&quot;, text) }.apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="216"
             column="5"/>
     </issue>
@@ -2273,7 +2273,7 @@
         errorLine1="    prefs.edit()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="256"
             column="5"/>
     </issue>
@@ -2284,7 +2284,7 @@
         errorLine1="    prefs.edit().putBoolean(&quot;notifications_asked&quot;, true).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="273"
             column="5"/>
     </issue>
@@ -2295,7 +2295,7 @@
         errorLine1="    prefs.edit().putString(KEY_EQ_SETTINGS, EqPresets.settingsToJson(settings).toString()).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="291"
             column="5"/>
     </issue>
@@ -2306,7 +2306,7 @@
         errorLine1="    prefs.edit().putString(KEY_EQ_USER_PRESETS, EqPresets.presetsToJson(presets)).apply()"
         errorLine2="    ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="306"
             column="5"/>
     </issue>
@@ -2317,7 +2317,7 @@
         errorLine1="      val edit = prefs.edit()"
         errorLine2="                 ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/repository/PreferencesRepository.kt"
+            file="src/main/java/com/example/geral/funcoes/PreferencesRepository.kt"
             line="320"
             column="18"/>
     </issue>
@@ -2328,7 +2328,7 @@
         errorLine1="          art != null -> setArtworkUri(Uri.parse(art))"
         errorLine2="                                       ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/playback/SessionPlayer.kt"
+            file="src/main/java/com/example/player/funcoes/SessionPlayer.kt"
             line="122"
             column="40"/>
     </issue>
@@ -2339,7 +2339,7 @@
         errorLine1="            retriever.setDataSource(context, Uri.parse(path))"
         errorLine2="                                             ~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/playback/SessionPlayer.kt"
+            file="src/main/java/com/example/player/funcoes/SessionPlayer.kt"
             line="148"
             column="46"/>
     </issue>
@@ -2350,7 +2350,7 @@
         errorLine1="    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }"
         errorLine2="                                                                   ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="542"
             column="68"/>
     </issue>
@@ -2361,7 +2361,7 @@
         errorLine1="          val intent = Intent(Intent.ACTION_SENDTO, Uri.parse(&quot;mailto:${LegalTexts.CONTACT_EMAIL}&quot;))"
         errorLine2="                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/SettingsScreen.kt"
+            file="src/main/java/com/example/geral/ui/SettingsScreen.kt"
             line="640"
             column="53"/>
     </issue>
@@ -2372,7 +2372,7 @@
         errorLine1="      prefs.edit().putBoolean(KEY_LEGACY_CLEANED, true).apply()"
         errorLine2="      ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/viewmodel/TarkasViewModel.kt"
+            file="src/main/java/com/example/geral/funcoes/viewmodel/TarkasViewModel.kt"
             line="554"
             column="7"/>
     </issue>
@@ -2383,7 +2383,7 @@
         errorLine1="      prefs.edit().putBoolean(KEY_WEB_CLEANED, true).apply()"
         errorLine2="      ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/viewmodel/TarkasViewModel.kt"
+            file="src/main/java/com/example/geral/funcoes/viewmodel/TarkasViewModel.kt"
             line="563"
             column="7"/>
     </issue>
@@ -2394,7 +2394,7 @@
         errorLine1="                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.pageUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))"
         errorLine2="                                                                 ~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/components/TrackDetailsSheet.kt"
+            file="src/main/java/com/example/player/ui/TrackDetailsSheet.kt"
             line="148"
             column="66"/>
     </issue>
@@ -2405,7 +2405,7 @@
         errorLine1="            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse(&quot;package:${context.packageName}&quot;))"
         errorLine2="                                                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/components/UpdatePrompts.kt"
+            file="src/main/java/com/example/geral/ui/UpdatePrompts.kt"
             line="62"
             column="77"/>
     </issue>
@@ -2416,7 +2416,7 @@
         errorLine1="              runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }"
         errorLine2="                                                                             ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/components/UpdatePrompts.kt"
+            file="src/main/java/com/example/geral/ui/UpdatePrompts.kt"
             line="101"
             column="78"/>
     </issue>
@@ -2427,7 +2427,7 @@
         errorLine1="      runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }"
         errorLine2="                                                                     ~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/UpdateSettings.kt"
+            file="src/main/java/com/example/geral/ui/UpdateSettings.kt"
             line="76"
             column="70"/>
     </issue>
@@ -2438,7 +2438,7 @@
         errorLine1="            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse(&quot;package:${context.packageName}&quot;))"
         errorLine2="                                                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/ui/screens/UpdateSettings.kt"
+            file="src/main/java/com/example/geral/ui/UpdateSettings.kt"
             line="101"
             column="77"/>
     </issue>
@@ -2449,7 +2449,7 @@
         errorLine1="    set(v) = prefs.edit().putBoolean(&quot;auto&quot;, v).apply()"
         errorLine2="             ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/update/UpdateStore.kt"
+            file="src/main/java/com/example/geral/funcoes/update/UpdateStore.kt"
             line="12"
             column="14"/>
     </issue>
@@ -2460,7 +2460,7 @@
         errorLine1="    set(v) = prefs.edit().putBoolean(&quot;wifi_only&quot;, v).apply()"
         errorLine2="             ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/update/UpdateStore.kt"
+            file="src/main/java/com/example/geral/funcoes/update/UpdateStore.kt"
             line="17"
             column="14"/>
     </issue>
@@ -2471,7 +2471,7 @@
         errorLine1="    set(v) = prefs.edit().putLong(&quot;last_checked&quot;, v).apply()"
         errorLine2="             ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/update/UpdateStore.kt"
+            file="src/main/java/com/example/geral/funcoes/update/UpdateStore.kt"
             line="21"
             column="14"/>
     </issue>
@@ -2482,7 +2482,7 @@
         errorLine1="    set(v) = prefs.edit().putString(&quot;release_json&quot;, v).apply()"
         errorLine2="             ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/update/UpdateStore.kt"
+            file="src/main/java/com/example/geral/funcoes/update/UpdateStore.kt"
             line="26"
             column="14"/>
     </issue>
@@ -2493,7 +2493,7 @@
         errorLine1="    set(v) = prefs.edit().putString(&quot;verified_tag&quot;, v).apply()"
         errorLine2="             ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/update/UpdateStore.kt"
+            file="src/main/java/com/example/geral/funcoes/update/UpdateStore.kt"
             line="31"
             column="14"/>
     </issue>
@@ -2504,7 +2504,7 @@
         errorLine1="    set(v) = prefs.edit().putBoolean(&quot;install_prompt_asked&quot;, v).apply()"
         errorLine2="             ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/update/UpdateStore.kt"
+            file="src/main/java/com/example/geral/funcoes/update/UpdateStore.kt"
             line="36"
             column="14"/>
     </issue>
@@ -2515,7 +2515,7 @@
         errorLine1="    set(v) = prefs.edit().putString(&quot;dismissed_tag&quot;, v).apply()"
         errorLine2="             ~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/update/UpdateStore.kt"
+            file="src/main/java/com/example/geral/funcoes/update/UpdateStore.kt"
             line="41"
             column="14"/>
     </issue>
@@ -2526,7 +2526,7 @@
         errorLine1="    val uri = Uri.parse(track.filePath)"
         errorLine2="              ~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/example/data/waveform/WaveformRepository.kt"
+            file="src/main/java/com/example/player/funcoes/waveform/WaveformRepository.kt"
             line="108"
             column="15"/>
     </issue>

@@ -53,6 +53,7 @@
 <string name="player_screen_curiosity">Track trivia</string>
 <string name="player_screen_curiosity_none">No verified trivia for this track</string>
 <string name="player_screen_sleep_timer">Sleep timer</string>
+<string name="player_screen_mixer">Mixer</string>
 <string name="player_screen_on_with">On, %1$s</string>
 <string name="player_screen_on">On</string>
 <string name="player_screen_off">Off</string>
@@ -181,6 +182,7 @@
 <string name="player_sleep_end_of_track">At the end of this track</string>
 <string name="player_sleep_turn_off">Turn off timer</string>
 <string name="player_sleep_close">Close</string>
+<string name="player_sleep_start">Start</string>
 
 <!-- SettingsScreen.kt -->
     <string name="settings_back_settings">Settings</string>

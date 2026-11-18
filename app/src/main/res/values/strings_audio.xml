@@ -74,7 +74,7 @@
   <string name="audio_adv_reach_root_idle">On with root. No other app is playing now.</string>
   <string name="audio_adv_reach_root_idle_global">On with root, including the general output. No other app is playing now.</string>
   <string name="audio_adv_section_apps">Apps playing now</string>
-  <string name="audio_adv_section_correction">Headphone correction</string>
+  <string name="audio_adv_section_correction">Headphones</string>
   <string name="audio_adv_section_loudness">Volume between tracks</string>
   <string name="audio_adv_section_meter">Level meter</string>
   <string name="audio_adv_section_output">Output</string>
@@ -162,7 +162,6 @@
   <string name="audio_filter_all">All</string>
   <string name="audio_filter_all_sources">All measurements</string>
   <string name="audio_filter_builtin">Built-in</string>
-  <string name="audio_filter_fones">Headphones (AutoEq)</string>
   <string name="audio_filter_high_pass">High-pass</string>
   <string name="audio_filter_high_shelf">High shelf</string>
   <string name="audio_filter_low_pass">Low-pass</string>
@@ -204,10 +203,11 @@
   <string name="audio_preset_name_hint">Preset name</string>
   <string name="audio_preset_rename_title">Rename preset</string>
   <string name="audio_preset_save_title">Save preset</string>
-  <string name="audio_presets_search_hint">Search style or headphones</string>
-  <string name="audio_presets_title">Presets</string>
+  <string name="audio_presets_search_hint">Search presets</string>
+  <string name="audio_tab_eq">EQ</string>
+  <string name="audio_tab_correction">Headphones</string>
+  <string name="audio_correction_search_hint">Search headphones</string>
   <string name="audio_section_builtin">Built-in</string>
-  <string name="audio_section_fones">Headphones · AutoEq</string>
   <string name="audio_section_mine">Mine</string>
   <string name="audio_spatial_copy_header">Mode %1$s (intensity %2$s)\n</string>
   <string name="audio_spatial_copy_values">Copy values</string>
@@ -217,7 +217,7 @@
   <string name="audio_spatial_head_off">The scene stays in front of you.</string>
   <string name="audio_spatial_head_no_sensor">No head sensor: it needs Android 13 or later and headphones with head tracking.</string>
   <string name="audio_spatial_head_waiting">Waiting for the headphones\' sensor. If nothing arrives, turn on head tracking for these headphones in the system sound settings.</string>
-  <string name="audio_spatial_head_tracking">The scene follows your head. Works with stereo tracks, while this screen is open.</string>
+  <string name="audio_spatial_head_tracking">The scene follows your head across stereo, Cinema 5.1 and 5.1.</string>
   <string name="audio_spatial_head_recenter">Face forward now</string>
   <string name="audio_spatial_others_active">Also active in other apps (%1$d)</string>
   <string name="audio_spatial_others_app">Other apps (Spotify, YouTube): turn on ADB or root mode in Advanced</string>
@@ -230,7 +230,7 @@
   <string name="audio_spatial_status_off">Opens the music around your head</string>
   <string name="audio_spatial_status_preparing">Preparing…</string>
   <string name="audio_spatial_title">Tarkas Spatial</string>
-  <string name="audio_spatial_cinema_hint">Stereo spread over five virtual speakers. Not tuned by ear yet.</string>
+  <string name="audio_spatial_cinema_hint">Five fixed virtual speakers anchored around you in a treated listening room.</string>
   <string name="audio_speaker_warning">The headphone correction is on, but the sound plays through the speaker.</string>
   <string name="audio_spectrum_permission">The live spectrum needs the microphone permission. The app records nothing.</string>
   <string name="audio_spectrum_show">Show spectrum</string>

@@ -162,7 +162,6 @@
   <string name="audio_filter_all">Todas</string>
   <string name="audio_filter_all_sources">Todas as medições</string>
   <string name="audio_filter_builtin">Embutidas</string>
-  <string name="audio_filter_fones">Fones (AutoEq)</string>
   <string name="audio_filter_high_pass">Passa-alta</string>
   <string name="audio_filter_high_shelf">Prateleira aguda</string>
   <string name="audio_filter_low_pass">Passa-baixa</string>
@@ -204,10 +203,11 @@
   <string name="audio_preset_name_hint">Nome da predefinição</string>
   <string name="audio_preset_rename_title">Renomear predefinição</string>
   <string name="audio_preset_save_title">Salvar predefinição</string>
-  <string name="audio_presets_search_hint">Pesquisar estilo ou fone</string>
-  <string name="audio_presets_title">Predefinições</string>
+  <string name="audio_presets_search_hint">Pesquisar predefinição</string>
+  <string name="audio_tab_eq">EQ</string>
+  <string name="audio_tab_correction">Fones</string>
+  <string name="audio_correction_search_hint">Pesquisar fone</string>
   <string name="audio_section_builtin">Embutidas</string>
-  <string name="audio_section_fones">Fones · AutoEq</string>
   <string name="audio_section_mine">Minhas</string>
   <string name="audio_spatial_copy_header">Modo %1$s (intensidade %2$s)\n</string>
   <string name="audio_spatial_copy_values">Copiar valores</string>
@@ -217,7 +217,7 @@
   <string name="audio_spatial_head_off">A cena fica à sua frente.</string>
   <string name="audio_spatial_head_no_sensor">Sem sensor de cabeça: precisa do Android 13 ou mais novo e de fones com rastreio de cabeça.</string>
   <string name="audio_spatial_head_waiting">Aguardando o sensor dos fones. Se nada chegar, ligue o rastreio de cabeça destes fones nos ajustes de som do sistema.</string>
-  <string name="audio_spatial_head_tracking">A cena acompanha a sua cabeça. Vale para músicas estéreo, com esta tela aberta.</string>
+  <string name="audio_spatial_head_tracking">A cena acompanha a sua cabeça em músicas estéreo, Cinema 5.1 e 5.1.</string>
   <string name="audio_spatial_head_recenter">Olhar para a frente agora</string>
   <string name="audio_spatial_others_active">Também ativo em outros apps (%1$d)</string>
   <string name="audio_spatial_others_app">Outros apps (Spotify, YouTube): ligue o modo ADB ou root em Avançado</string>
@@ -230,7 +230,7 @@
   <string name="audio_spatial_status_off">Abre a música ao redor da cabeça</string>
   <string name="audio_spatial_status_preparing">Preparando…</string>
   <string name="audio_spatial_title">Tarkas Spatial</string>
-  <string name="audio_spatial_cinema_hint">Estéreo distribuído em cinco caixas virtuais. Ainda não ajustado de ouvido.</string>
+  <string name="audio_spatial_cinema_hint">Cinco caixas virtuais fixas ao seu redor em uma sala tratada acusticamente.</string>
   <string name="audio_speaker_warning">A correção do fone está ligada, mas o som sai pelo alto-falante.</string>
   <string name="audio_spectrum_permission">O espectro ao vivo pede a permissão do microfone. O app não grava nada.</string>
   <string name="audio_spectrum_show">Ver espectro</string>

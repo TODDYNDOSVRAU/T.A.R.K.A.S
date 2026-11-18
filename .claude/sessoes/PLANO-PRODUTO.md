@@ -201,7 +201,7 @@ Cada fase fecha com a suíte completa, uma passada no S23 (claro/escuro, PT/EN, 
 3. **Assinatura no CI (G2):** a chave vai para os segredos do GitHub ou a release continua manual.
 4. **Renomear `com.example` (G6):** quando parar as quatro sessões para o commit único.
 5. **Contato e revisão jurídica (S6).**
-6. **Metas numéricas** (latência, falhas por hora, desvio de resposta): continuam pendentes pela identidade e definem o "certo" de E11 e G9.
+6. **Metas numéricas (definidas pelo dono em 2026-11-16):** latência DSP ≤ 5 ms (EQ) e ≤ 24 ms (Spatial); ponta a ponta no S23 (cabo) ≤ 40 ms (EQ) e ≤ 60 ms (Spatial); 0 quedas (dropouts/underruns) por hora em reprodução contínua na build perf no S23; desvio da resposta em frequência ± 0,20 dB na curva combinada (20 Hz–20 kHz), ± 0,05 dB no centro do filtro isolado e 0,00 dB em bypass/plano (< −100 dB residual float).
 7. **Escopo da fase 6:** Android Auto, widget e rastreio de cabeça são os itens mais caros; quais entram.
 
 ## 12. O que este plano não cobre
