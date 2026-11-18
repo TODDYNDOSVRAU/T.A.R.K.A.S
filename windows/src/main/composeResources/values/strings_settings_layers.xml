@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_search_hint">Search settings</string>
+    <string name="settings_layer_essential">Essential</string>
+    <string name="settings_layer_advanced">Advanced</string>
+    <string name="settings_layer_engineering">Engineering</string>
+    <string name="settings_search_empty">No setting matches "%1$s". Check the spelling or clear the search.</string>
+</resources>

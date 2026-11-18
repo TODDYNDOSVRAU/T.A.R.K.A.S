@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_diagnostics">Diagnóstico</string>
+    <string name="settings_diagnostics_export">Exportar diagnóstico</string>
+    <string name="settings_diagnostics_footer">Salva um arquivo de texto com a versão do app, o modelo do aparelho, as últimas 5 falhas e os erros de que o app se recuperou. Fica neste aparelho até você exportar. Não contém músicas, playlists nem chaves.</string>
+    <string name="settings_diagnostics_saved">O arquivo de diagnóstico foi salvo.</string>
+    <plurals name="settings_diagnostics_crashes">
+        <item quantity="one">%d falha salva</item>
+        <item quantity="other">%d falhas salvas</item>
+    </plurals>
+</resources>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_diagnostics">Diagnostics</string>
+    <string name="settings_diagnostics_export">Export diagnostics</string>
+    <string name="settings_diagnostics_footer">Saves a text file with the app version, the device model, the last 5 crashes and the errors the app recovered from. It stays on this device until you export it. It has no music, playlists or keys.</string>
+    <string name="settings_diagnostics_saved">The diagnostics file was saved.</string>
+    <plurals name="settings_diagnostics_crashes">
+        <item quantity="one">%d crash saved</item>
+        <item quantity="other">%d crashes saved</item>
+    </plurals>
+</resources>

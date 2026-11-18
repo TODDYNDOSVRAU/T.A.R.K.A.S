@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Assistant tab. Default language: English. Portuguese is in values-pt/strings_assistant.xml. -->
+
+    <!-- Header status -->
+    <string name="assistant_status_online">Local commands and online AI (Gemini).</string>
+    <string name="assistant_status_local">Local commands. No online AI.</string>
+    <string name="assistant_enable_action">Details</string>
+    <string name="assistant_enable_hide">Hide</string>
+    <string name="assistant_enable_body">Online replies (Gemini) are not available in this version of the app. Local commands, such as changing track or adjusting the sound, work normally.</string>
+
+    <!-- Empty state -->
+    <string name="assistant_empty_title">How can I help?</string>
+    <string name="assistant_empty_body">Ask to change track, adjust the equalizer or set a timer. Tap the microphone to speak.</string>
+
+    <!-- Suggestions (the command sent is fixed; only the label is translated) -->
+    <string name="assistant_suggestion_next">Next track</string>
+    <string name="assistant_suggestion_shuffle">Shuffle</string>
+    <string name="assistant_suggestion_repeat">Repeat</string>
+    <string name="assistant_suggestion_favorite">Favorite</string>
+    <string name="assistant_suggestion_diagnostics">Audio diagnostics</string>
+    <string name="assistant_suggestion_eq_flat">Flat equalizer</string>
+    <string name="assistant_suggestion_timer">15 min timer</string>
+    <string name="assistant_suggestion_help">Help</string>
+    <!-- The text each suggestion sends, in this language. The engine reads English and Portuguese. -->
+    <string name="assistant_suggestion_command_next">next track</string>
+    <string name="assistant_suggestion_command_shuffle">shuffle</string>
+    <string name="assistant_suggestion_command_repeat">repeat</string>
+    <string name="assistant_suggestion_command_favorite">favorite</string>
+    <string name="assistant_suggestion_command_diagnostics">audio diagnostics</string>
+    <string name="assistant_suggestion_command_eq_flat">flat equalizer</string>
+    <string name="assistant_suggestion_command_timer">timer 15 minutes</string>
+    <string name="assistant_suggestion_command_help">help</string>
+
+    <!-- Who spoke, for screen readers -->
+    <string name="assistant_sender_user">You</string>
+    <string name="assistant_sender_assistant">Assistant</string>
+    <string name="assistant_sender_tool">Action</string>
+    <string name="assistant_sender_system">Notice</string>
+    <string name="assistant_message_spoken">%1$s: %2$s</string>
+
+    <!-- States -->
+    <string name="assistant_listening">Listening</string>
+    <string name="assistant_thinking">Thinking</string>
+    <string name="assistant_thinking_visible">Thinking…</string>
+
+    <!-- Voice input -->
+    <string name="assistant_voice_prompt">Ask for an analysis, change track or adjust the sound</string>
+    <string name="assistant_voice_unavailable">This device has no speech recognition. Type the request below.</string>
+    <string name="assistant_voice_failed">Could not open speech recognition. Type the request below.</string>
+
+    <!-- Controls -->
+    <string name="assistant_mic_idle">Speak to the assistant</string>
+    <string name="assistant_send">Send</string>
+    <string name="assistant_composer_description">Message to the assistant</string>
+    <string name="assistant_composer_placeholder">Ask for something or type "help"</string>
+    <string name="assistant_timer_line">%1$s: %2$s</string>
+    <string name="assistant_timer_cancel">Cancel timer %1$s</string>
+
+    <!-- Greeting when the tab opens -->
+    <string name="assistant_greeting">How can I help with your music or audio today?</string>
+
+    <!-- Results of local player commands, shown in the conversation -->
+    <string name="assistant_result_now_playing">Now playing %1$s</string>
+    <string name="assistant_result_playing">Playing %1$s</string>
+    <string name="assistant_result_paused">Paused</string>
+    <string name="assistant_result_already_paused">Already paused</string>
+    <string name="assistant_result_shuffle_on">Shuffle on</string>
+    <string name="assistant_result_shuffle_off">Shuffle off</string>
+    <string name="assistant_result_repeat_off">Repeat off</string>
+    <string name="assistant_result_repeat_all">Repeating the whole list</string>
+    <string name="assistant_result_repeat_one">Repeating one track</string>
+    <string name="assistant_result_favorite_added">%1$s added to favorites</string>
+    <string name="assistant_result_favorite_removed">%1$s removed from favorites</string>
+
+    <!-- Online reply failures: what happened and what to do -->
+    <string name="assistant_error_no_connection">No connection to the online service. Check your internet and try again.</string>
+    <string name="assistant_error_key_refused">The online service refused this app's key, so online replies are off. Local commands still work.</string>
+    <string name="assistant_error_quota">The online service has reached its usage limit for now. Wait a little, then try again.</string>
+    <string name="assistant_error_cut_off">The reply was too long and was cut off, so it was not shown. Ask a shorter question and try again.</string>
+    <string name="assistant_error_no_reply">The online service did not return a reply to this question. Try again.</string>
+    <string name="assistant_error_server">The online service did not answer correctly. Try again in a moment.</string>
+    <string name="assistant_retry">Try again</string>
+    <string name="assistant_undo_done">Undone: the equalizer is back to how it was before the last change.</string>
+    <string name="assistant_undo_none">Nothing to undo. Only the last equalizer change made here can be undone.</string>
+    <string name="assistant_online_label">Online answers</string>
+    <string name="assistant_online_disclosure_on">On: messages that this device cannot handle as a command are sent to Google Gemini for an answer.</string>
+    <string name="assistant_online_disclosure_off">Off: answers come only from this device.</string>
+    <string name="assistant_clear">Clear conversation</string>
+    <string name="assistant_clear_confirm">Remove the whole conversation? This cannot be undone.</string>
+    <string name="assistant_clear_yes">Clear</string>
+    <string name="assistant_clear_no">Cancel</string>
+    <string name="assistant_suggestion_pause">Pause</string>
+    <string name="assistant_suggestion_play">Play</string>
+    <string name="assistant_suggestion_command_pause">pause</string>
+    <string name="assistant_suggestion_command_play">play</string>
+
+    <!-- Curiosity verification labels -->
+    <string name="assistant_curiosity_status_verified">Documented and verified fact</string>
+    <string name="assistant_curiosity_status_historical">Historical and musical analysis</string>
+    <string name="assistant_curiosity_status_technical">Technical acoustic specification</string>
+
+    <!-- Spoken narration (TextToSpeech). Args: title, artist, trivia. -->
+    <string name="assistant_spoken_intro">Curiosity about %1$s, by %2$s: %3$s Enjoy the sound!</string>
+    <string name="assistant_spoken_outro">Did you know about %1$s? %2$s That was %1$s, by %3$s.</string>
+    <string name="assistant_spoken_test">Hello! I am the voice of Tarkas. I will present short curiosities and interesting facts about your favorite music.</string>
+
+    <!-- Assistant engine replies. Commands are recognized in English and Portuguese; the examples are in Portuguese. -->
+    <string name="assistant_help_body">**Commands (examples in Portuguese; English works too):**\n• **"analisar música"**: looks up curiosities and facts about the playing track\n• **"diagnóstico"**: inspects audio routes and hardware\n• **"equalizador flat"** (or rock, pop, jazz, vocal, graves, agudos…): applies a preset\n• **"mais graves"**, **"menos agudos"**…: moves the bass or treble control by 3 dB\n• **"timer de [X] minutos"**: starts a local timer\n• **"que música toca?"**: shows the current track\n• **"próxima"**, **"anterior"**, **"pausar"**, **"tocar"**: control the player\n• **"aleatório"**, **"repetir"**, **"favoritar"**: turn on the mode or save the track</string>
+    <string name="assistant_command_failed">Could not run this now. Choose a track first.</string>
+    <string name="assistant_tool_no_track_available">No track available</string>
+    <string name="assistant_tool_analysis_done">Analysis done: %1$s</string>
+    <string name="assistant_tool_no_curiosity">No verified curiosity</string>
+    <string name="assistant_analysis_done">I analyzed **%1$s** (%2$s). The curiosity stays in the player: tap the mini player above the bar, then the lamp.</string>
+    <string name="assistant_analysis_none">I do not have a verified curiosity about **%1$s** yet.</string>
+    <string name="assistant_no_track_analyze">No track is playing right now to analyze.</string>
+    <string name="assistant_tool_no_track">No track</string>
+    <string name="assistant_now_playing_detail">Playing **%1$s** by **%2$s** (%3$s).</string>
+    <string name="assistant_no_track_playing">No track is playing.</string>
+    <string name="assistant_audio_route">Active route: **%1$s** (%2$s Hz, Stereo 2.0). Effects run in the internal Tarkas session.</string>
+    <string name="assistant_band_bass">Bass</string>
+    <string name="assistant_band_treble">Treble</string>
+    <string name="assistant_tone_at_limit">%1$s at **%2$s dB**. That is the control limit.</string>
+    <string name="assistant_tone_set">%1$s at **%2$s dB**.</string>
+    <string name="assistant_tool_preset_applied">Preset %1$s applied to the equalizer</string>
+    <string name="assistant_eq_set">Equalizer set to **%1$s**.</string>
+    <string name="assistant_timer_label">Timer of %1$dm %2$ds</string>
+    <string name="assistant_timer_set">Timer set to **%1$s**.</string>
+    <string name="assistant_tool_timers_cancelled">Timers cancelled</string>
+    <string name="assistant_timers_cancelled">Timers cancelled.</string>
+    <string name="assistant_hello">Hello! How can I help with your music or audio today?</string>
+    <string name="assistant_not_understood">I did not understand that request. Type **help** to see what I can do.</string>
+    <string name="assistant_library_none">I did not find "%1$s" in the library.</string>
+    <string name="assistant_library_many">More than one match: %1$s. Say the exact name.</string>
+    <string name="assistant_confirm_play">Play **%1$s** (%2$s)? Reply yes or no.</string>
+    <string name="assistant_confirm_queue_next">Play **%1$s** (%2$s) next? Reply yes or no.</string>
+    <string name="assistant_confirm_queue_end">Add **%1$s** (%2$s) to the end of the queue? Reply yes or no.</string>
+    <string name="assistant_confirm_clear_queue">Clear the queue? Reply yes or no.</string>
+    <string name="assistant_confirm_sleep">Pause the music in %1$s? Reply yes or no.</string>
+    <string name="assistant_confirm_sleep_end">Pause the music at the end of this track? Reply yes or no.</string>
+    <string name="assistant_confirm_cancel_sleep">Cancel the sleep timer? Reply yes or no.</string>
+    <string name="assistant_confirm_spatial_on">Turn spatial audio on? Reply yes or no.</string>
+    <string name="assistant_confirm_spatial_off">Turn spatial audio off? Reply yes or no.</string>
+    <string name="assistant_confirm_volume">Set the device volume to %1$d%%? Reply yes or no.</string>
+    <string name="assistant_confirm_cancelled">Cancelled.</string>
+    <string name="assistant_confirm_answer_hint">Reply yes or no.</string>
+    <string name="assistant_done_play">Playing **%1$s**.</string>
+    <string name="assistant_done_queue_next">**%1$s** will play next.</string>
+    <string name="assistant_done_queue_end">**%1$s** added to the end of the queue.</string>
+    <string name="assistant_done_clear_queue">Queue cleared.</string>
+    <string name="assistant_done_sleep">The music will pause in %1$s.</string>
+    <string name="assistant_done_sleep_end">The music will pause at the end of this track.</string>
+    <string name="assistant_done_cancel_sleep">Sleep timer cancelled.</string>
+    <string name="assistant_done_spatial_on">Spatial audio on.</string>
+    <string name="assistant_done_spatial_off">Spatial audio off.</string>
+    <string name="assistant_done_volume">Volume set to %1$d%%.</string>
+    <string name="assistant_action_unavailable">This could not be done in the app right now.</string>
+    <plurals name="assistant_minutes">
+        <item quantity="one">%d minute</item>
+        <item quantity="other">%d minutes</item>
+    </plurals>
+    <plurals name="assistant_tracks_count">
+        <item quantity="one">%d track</item>
+        <item quantity="other">%d tracks</item>
+    </plurals>
+</resources>

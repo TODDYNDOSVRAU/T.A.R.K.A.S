@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_search_hint">Buscar nos ajustes</string>
+    <string name="settings_layer_essential">Essencial</string>
+    <string name="settings_layer_advanced">Avançado</string>
+    <string name="settings_layer_engineering">Engenharia</string>
+    <string name="settings_search_empty">Nenhum ajuste corresponde a "%1$s". Confira a grafia ou limpe a busca.</string>
+</resources>

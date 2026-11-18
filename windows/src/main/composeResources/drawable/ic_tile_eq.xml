@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Quick settings tile: three faders, one colour (the system tints it). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M5,3h2v8.17a3,3 0,0 1,0 5.66V21H5v-4.17a3,3 0,0 1,0 -5.66zM6,13a1,1 0,1 0,0 2a1,1 0,0 0,0 -2zM11,3h2v2.17a3,3 0,0 1,0 5.66V21h-2V10.83a3,3 0,0 1,0 -5.66zM12,7a1,1 0,1 0,0 2a1,1 0,0 0,0 -2zM17,3h2v11.17a3,3 0,0 1,0 5.66V21h-2v-1.17a3,3 0,0 1,0 -5.66zM18,16a1,1 0,1 0,0 2a1,1 0,0 0,0 -2z" />
+</vector>
