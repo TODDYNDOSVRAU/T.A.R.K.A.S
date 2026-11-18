@@ -17,7 +17,7 @@ import java.io.IOException
 import java.nio.file.Files
 
 /** Texts become "<resource key>|args", so a test checks which reply was chosen without depending on the language. */
-private object KeyTexts : AssistantTexts {
+private object TestTexts : AssistantTexts {
   override fun text(res: StringResource, vararg args: Any) = res.key + args.joinToString("") { "|$it" }
   override fun plural(res: PluralStringResource, quantity: Int, vararg args: Any) = res.key + "|$quantity"
 }
@@ -156,7 +156,7 @@ class AssistantHistoryTest {
 
 class AssistantEngineTest {
   private fun engine(host: FakeHost, store: ApiKeyStore = tempKeyStore().first, transport: GeminiTransport = GeminiTransport { _, _ -> throw IOException("offline") }) =
-    AssistantEngine(KeyTexts, host, store, transport)
+    AssistantEngine(TestTexts, host, store, transport)
 
   @Test fun `next runs on the player and reports a tool`() = runBlocking {
     val host = FakeHost()
@@ -357,4 +357,18 @@ class LocalTimerTest {
 private inline fun <reified T : Throwable> assertFailsWith(block: () -> Unit): T {
   try { block() } catch (e: Throwable) { if (e is T) return e else throw e }
   throw AssertionError("expected " + T::class.simpleName)
+}
+
+class ComposerNewLineTest {
+  @Test fun shiftEnterInsertsAtCursor() {
+    val v = androidx.compose.ui.text.input.TextFieldValue("ab", androidx.compose.ui.text.TextRange(1))
+    val r = insertNewLine(v)
+    assertEquals("a\nb", r.text)
+    assertEquals(2, r.selection.start)
+  }
+
+  @Test fun shiftEnterReplacesSelection() {
+    val v = androidx.compose.ui.text.input.TextFieldValue("abcd", androidx.compose.ui.text.TextRange(1, 3))
+    assertEquals("a\nd", insertNewLine(v).text)
+  }
 }

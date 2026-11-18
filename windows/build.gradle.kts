@@ -159,6 +159,8 @@ compose.desktop {
   application {
     mainClass = "com.example.windows.MainKt"
     nativeDistributions {
+      // jlink keeps only listed JDK modules: HttpClient (Gemini, catalogue, update), TLS curves, JDBC for Room.
+      modules("java.instrument", "java.net.http", "jdk.unsupported", "jdk.crypto.ec", "java.sql", "java.naming")
       targetFormats(TargetFormat.Msi, TargetFormat.Exe)
       packageName = "TARKAS"
       packageVersion = "2.1.0"

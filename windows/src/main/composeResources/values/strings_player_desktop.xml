@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="pd_open_files">Open files</string>
+  <string name="pd_open_dialog">Open audio files</string>
+  <string name="pd_play_now">Play now</string>
+  <string name="pd_queue_removed">Removed from the queue: %1$s</string>
+  <string name="pd_lyrics_loading">Reading lyrics</string>
+  <string name="pd_details_title">Title</string>
+  <string name="pd_details_file">File</string>
+  <string name="pd_details_artist">Artist</string>
+  <string name="pd_details_duration">Duration</string>
+  <string name="pd_copy_info">Copy track info</string>
+  <string name="pd_crossfade_seconds">%1$d s</string>
+  <string name="pd_pane_close">Close pane</string>
+  <string name="pd_pane_details">Details</string>
+  <string name="pd_wave_pending">Reading the waveform</string>
+</resources>

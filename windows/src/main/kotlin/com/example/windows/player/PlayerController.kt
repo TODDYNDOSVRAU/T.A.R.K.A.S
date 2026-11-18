@@ -171,6 +171,10 @@ class PlayerController(
   fun playNext(t: Track) { update { it.copy(queue = PlaybackOrder.enqueueNext(it.queue, t)) }; armNext(); save() }
   fun addToQueue(t: Track) { update { it.copy(queue = PlaybackOrder.enqueueLast(it.queue, t)) }; armNext(); save() }
   fun removeFromQueue(index: Int) { update { it.copy(queue = PlaybackOrder.removeAt(it.queue, index)) }; armNext(); save() }
+  /** Puts the queue back to [q] (undo of a remove or a clear). */
+  fun setQueue(q: List<Track>) { update { it.copy(queue = q) }; armNext(); save() }
+  /** Moves a queue item to the front: it plays right after the current track. */
+  fun queueToFront(index: Int) = moveInQueue(index, 0)
   fun clearQueue() { update { it.copy(queue = emptyList()) }; armNext(); save() }
 
   fun moveInQueue(from: Int, to: Int) {

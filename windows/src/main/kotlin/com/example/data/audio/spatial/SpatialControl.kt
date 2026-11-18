@@ -244,16 +244,18 @@ object SpatialControl {
         engines[sampleRate] = engine
         // Studio filters: KU100 measured HRTF (with L/R symmetry, Gunnarsson phase regularization & Grathwohl notch
         // protection) + ISO 9613-1 air absorption room, with accurateDiffraction fallback for unsupported sample rates.
-        val filters = SurroundFilters.studio(sampleRate, hrtf, assetOpener) { System.err.println("$TAG: $it") }
+        val filters = SurroundFilters.studio(sampleRate, hrtf, assetOpener, { System.err.println("$TAG: $it") })
+        val cinemaFilters = SurroundFilters.studio(sampleRate, hrtf, assetOpener, { System.err.println("$TAG: $it") }, channels = 8)
         val surround = SurroundVirtualizer(filters, headHrtf = hrtf)
         surround.targetIntensity = if (active) 1.0 else 0.0
         surround.liveYaw = headYaw
         surrounds[sampleRate] = surround
         val cinema = UpmixVirtualizer(
           sampleRate = sampleRate,
-          filters = filters,
+          filters = cinemaFilters,
           headHrtf = hrtf,
-          studioRoomTail = RoomParams.APPROVED_LEVEL
+          studioRoomTail = RoomParams.APPROVED_LEVEL,
+          params = UpmixParams.CINEMA
         )
         cinema.targetIntensity = cinemaTarget()
         cinema.liveYaw = headYaw

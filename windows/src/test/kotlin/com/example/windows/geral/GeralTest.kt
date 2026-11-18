@@ -90,6 +90,24 @@ class LicensesTest {
   }
 }
 
+class SettingsPagesTest {
+  private val rows = listOf(
+    Triple("theme tema", SettingsLayer.ESSENTIAL, Cat.LOOK),
+    Triple("backup", SettingsLayer.ADVANCED, Cat.DATA),
+    Triple("diagnostics", SettingsLayer.ENGINEERING, Cat.DIAGNOSTICS),
+  )
+
+  @Test fun pageShowsItsCategoryAtLayerAndBelow() {
+    assertEquals(1, visibleRows(rows, { it }, "", SettingsLayer.ESSENTIAL, Cat.LOOK).size)
+    assertEquals(0, visibleRows(rows, { it }, "", SettingsLayer.ESSENTIAL, Cat.DATA).size)
+    assertEquals(1, visibleRows(rows, { it }, "", SettingsLayer.ADVANCED, Cat.DATA).size)
+  }
+
+  @Test fun searchCrossesCategoriesAndLayers() {
+    assertEquals(Cat.DIAGNOSTICS, visibleRows(rows, { it }, " DIAG ", SettingsLayer.ESSENTIAL, Cat.LOOK).single().third)
+  }
+}
+
 class BackupTest {
   @Test fun garbageIsRejectedBeforeAnyChange() = runBlocking {
     val db = AppDatabase.inMemory()

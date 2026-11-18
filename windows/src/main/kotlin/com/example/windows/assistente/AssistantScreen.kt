@@ -1,6 +1,21 @@
 package com.example.windows.assistente
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ContextMenuArea
+import androidx.compose.foundation.ContextMenuItem
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -70,7 +85,6 @@ import com.example.ui.components.highlightClickable
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
 import com.example.ui.theme.Shapes
-import com.example.windows.geral.readingColumn
 import com.example.windows.res.*
 import com.example.windows.state.TarkasState
 import kotlinx.coroutines.delay
@@ -117,12 +131,21 @@ internal object KeyTexts {
   val title get() = if (pt) "Chave da API Gemini" else "Gemini API key"
   val body get() = if (pt) "Cole a sua chave. Ela é cifrada para o seu usuário do Windows e nunca entra no instalador." else "Paste your key. It is encrypted for your Windows user and is never part of the installer."
   val placeholder get() = if (pt) "Chave da API" else "API key"
+  val historyTitle get() = if (pt) "Conversa" else "Conversation"
+  val historyEmpty get() = if (pt) "Nenhuma pergunta ainda." else "No questions yet."
+  val composerHint get() = if (pt) "Enter envia. Shift+Enter quebra a linha." else "Enter sends. Shift+Enter starts a new line."
+  val copyMessage get() = if (pt) "Copiar mensagem" else "Copy message"
+  val copyAll get() = if (pt) "Copiar conversa" else "Copy conversation"
+  val curiosityHide get() = if (pt) "Fechar curiosidades" else "Close curiosities"
   val save get() = if (pt) "Guardar chave" else "Save key"
   val remove get() = if (pt) "Remover chave" else "Remove key"
   val invalid get() = if (pt) "Essa chave não é válida. Confira o texto colado." else "That key is not valid. Check the pasted text."
 }
 
-/** The Assistente tab of the Windows app. */
+/**
+ * The Assistente area of the Windows app, laid out for the desktop: conversation history on the left, the chat at
+ * full width in the middle, and the curiosity settings in a side pane on the right when asked for.
+ */
 @Composable
 fun AssistantPanel(state: AssistenteState, playback: AssistantPlayback, reducedMotion: Boolean) {
   val messages by state.messages.collectAsState()
@@ -132,17 +155,28 @@ fun AssistantPanel(state: AssistenteState, playback: AssistantPlayback, reducedM
   val listening by state.listening.collectAsState()
   val voiceError by state.voiceError.collectAsState()
   val timers by state.timers.collectAsState()
-  AssistantScreen(
-    messages, processing, hasKey, onlineAi, listening, voiceError, timers, playback, reducedMotion,
-    onSend = { state.send(it) },
-    onMic = state::listenAndSend,
-    onCancelTimer = state::cancelTimer,
-    onRetry = state::retry,
-    onSetOnlineAi = state::setOnlineAi,
-    onClear = state::clearConversation,
-    onSaveKey = state::saveKey,
-    onClearKey = state::clearKey
-  )
+  var sidePane by remember { mutableStateOf(false) }
+  Row(Modifier.fillMaxSize()) {
+    AssistantScreen(
+      messages, processing, hasKey, onlineAi, listening, voiceError, timers, playback, reducedMotion,
+      onSend = { state.send(it) },
+      onMic = state::listenAndSend,
+      onCancelTimer = state::cancelTimer,
+      onRetry = state::retry,
+      onSetOnlineAi = state::setOnlineAi,
+      onClear = state::clearConversation,
+      onSaveKey = state::saveKey,
+      onClearKey = state::clearKey,
+      curiosityOpen = sidePane,
+      onToggleCuriosity = { sidePane = !sidePane },
+      modifier = Modifier.weight(1f)
+    )
+    if (sidePane) {
+      Box(Modifier.width(Grid.u384).fillMaxHeight().background(MaterialTheme.colorScheme.surface).testTag("assistant_side_pane")) {
+        CuriositySettingsScreen(state, onBack = { sidePane = false })
+      }
+    }
+  }
 }
 
 @Composable
@@ -164,28 +198,29 @@ fun AssistantScreen(
   onClear: () -> Unit,
   onSaveKey: (String) -> Boolean,
   onClearKey: () -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  curiosityOpen: Boolean = false,
+  onToggleCuriosity: () -> Unit = {}
 ) {
   val colors = MaterialTheme.colorScheme
   val listState = rememberLazyListState()
-  var textInput by remember { mutableStateOf("") }
-  var confirmClear by remember { mutableStateOf(false) }
-  var keyPanelShown by remember { mutableStateOf(false) }
+  var input by remember { mutableStateOf(TextFieldValue("")) }
   val online = hasGeminiKey && onlineAi
 
   fun send() {
-    val text = textInput.trim()
+    val text = input.text.trim()
     if (text.isEmpty()) return
-    textInput = ""
+    input = TextFieldValue("")
     onSend(text)
   }
 
-  val lastIndex = messages.size + (if (isProcessing) 1 else 0)
+  val lastIndex = (messages.size + (if (isProcessing) 1 else 0) - 1).coerceAtLeast(0)
   LaunchedEffect(messages.size, isProcessing) {
     if (messages.isNotEmpty() || isProcessing) {
       if (reduced) listState.scrollToItem(lastIndex) else listState.animateScrollToItem(lastIndex)
     }
   }
+  val jumpScope = rememberCoroutineScope()
 
   val listeningText = stringResource(Res.string.assistant_listening)
   val thinkingText = stringResource(Res.string.assistant_thinking)
@@ -199,78 +234,50 @@ fun AssistantScreen(
     else -> lastReplySpoken.orEmpty()
   }
   val suggestions = remember(playback) { SuggestionCommands.filter { it.offeredWhen(playback) } }
-  val hasUserMessage = messages.any { it.sender == MessageSender.USER }
 
-  Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-    Column(Modifier.fillMaxSize().readingColumn()) {
+  Row(modifier.fillMaxSize()) {
+    HistoryPane(
+      messages = messages, online = online, hasKey = hasGeminiKey, onlineAi = onlineAi, timers = activeTimers,
+      curiosityOpen = curiosityOpen,
+      onJump = { index -> jumpScope.launch { listState.scrollToItem(index) } },
+      onCancelTimer = onCancelTimer, onSetOnlineAi = onSetOnlineAi, onClear = onClear,
+      onSaveKey = onSaveKey, onClearKey = onClearKey, onToggleCuriosity = onToggleCuriosity
+    )
+    Box(Modifier.width(Grid.u6 / 6).fillMaxHeight().background(colors.outlineVariant))
+    Column(Modifier.weight(1f).fillMaxHeight().padding(horizontal = Grid.margin)) {
       Box(
         Modifier.size(Grid.u6).semantics {
           liveRegion = LiveRegionMode.Polite
           contentDescription = announcement
         }
       )
-      LazyColumn(
-        state = listState,
-        modifier = Modifier.weight(1f),
-        contentPadding = PaddingValues(top = Grid.u6, bottom = Grid.u12),
-        verticalArrangement = Arrangement.spacedBy(Grid.u12)
-      ) {
-        item {
-          Column(Modifier.fillMaxWidth()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Text(
-                stringResource(if (online) Res.string.assistant_status_online else Res.string.assistant_status_local),
-                style = GridText.Small, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f)
-              )
-              TextAction(
-                text = if (hasGeminiKey) KeyTexts.remove else stringResource(if (keyPanelShown) Res.string.assistant_enable_hide else Res.string.assistant_enable_action),
-                onClick = { if (hasGeminiKey) onClearKey() else keyPanelShown = !keyPanelShown },
-                modifier = Modifier.testTag("assistant_enable_help")
-              )
-            }
-            if (!hasGeminiKey && keyPanelShown) KeyEntry(onSaveKey)
-            if (hasGeminiKey) {
-              Row(
-                modifier = Modifier
-                  .fillMaxWidth()
-                  .heightIn(min = Grid.u48)
-                  .toggleable(value = onlineAi, role = Role.Switch, onValueChange = onSetOnlineAi)
-                  .testTag("assistant_online_switch"),
-                verticalAlignment = Alignment.CenterVertically
-              ) {
-                Text(stringResource(Res.string.assistant_online_label), style = GridText.Body, color = colors.onSurface, modifier = Modifier.weight(1f))
-                Switch(checked = onlineAi, onCheckedChange = null)
-              }
-              Text(
-                stringResource(if (onlineAi) Res.string.assistant_online_disclosure_on else Res.string.assistant_online_disclosure_off),
-                style = GridText.Small, color = colors.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(bottom = Grid.u6)
-              )
-            }
-            if (isListening) Text(listeningText, style = GridText.Small, color = colors.primary, modifier = Modifier.padding(top = Grid.u6))
-            if (messages.isEmpty()) {
-              Spacer(Modifier.height(Grid.u48))
-              Text(stringResource(Res.string.assistant_empty_title), style = GridText.Title, color = colors.onSurface, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-              Text(stringResource(Res.string.assistant_empty_body), style = GridText.Body, color = colors.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = Grid.u6))
-            }
-            voiceError?.let { Text(it, style = GridText.Small, color = colors.error, modifier = Modifier.padding(top = Grid.u12)) }
-            if (hasUserMessage) {
-              ClearConversation(confirmClear, { confirmClear = true }, { confirmClear = false; onClear() }, { confirmClear = false })
-            }
-            if (activeTimers.isNotEmpty()) {
-              Spacer(Modifier.height(Grid.u12))
-              TimerList(activeTimers, onCancelTimer)
-            }
+      Box(Modifier.weight(1f).fillMaxWidth()) {
+        SelectionContainer {
+          LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = Grid.u12, bottom = Grid.u12),
+            verticalArrangement = Arrangement.spacedBy(Grid.u12)
+          ) {
+            items(messages, key = { it.id }) { message -> MessageBubble(message, onRetry, messages) }
+            if (isProcessing) item { ThinkingLine(stringResource(Res.string.assistant_thinking_visible)) }
           }
         }
-        items(messages, key = { it.id }) { message -> MessageBubble(message, onRetry) }
-        if (isProcessing) item { ThinkingLine(stringResource(Res.string.assistant_thinking_visible)) }
+        if (messages.isEmpty()) {
+          Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(stringResource(Res.string.assistant_empty_title), style = GridText.Title, color = colors.onSurface, textAlign = TextAlign.Center)
+            Text(stringResource(Res.string.assistant_empty_body), style = GridText.Body, color = colors.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(top = Grid.u6))
+          }
+        }
       }
+      if (isListening) Text(listeningText, style = GridText.Small, color = colors.primary, modifier = Modifier.padding(bottom = Grid.u6))
+      voiceError?.let { Text(it, style = GridText.Small, color = colors.error, modifier = Modifier.padding(bottom = Grid.u6)) }
       Suggestions(suggestions, onSend)
       Row(
         modifier = Modifier.fillMaxWidth().padding(top = Grid.u12, bottom = Grid.u12),
         verticalAlignment = Alignment.Bottom
       ) {
-        ComposerField(textInput, { textInput = it }, ::send, Modifier.weight(1f).testTag("siri_text_input"))
+        ComposerField(input, { input = it }, ::send, Modifier.weight(1f))
         IconAction(
           icon = Icons.Rounded.Mic,
           contentDescription = stringResource(if (isListening) Res.string.assistant_listening else Res.string.assistant_mic_idle),
@@ -282,13 +289,96 @@ fun AssistantScreen(
           icon = Icons.Rounded.ArrowUpward,
           contentDescription = stringResource(Res.string.assistant_send),
           onClick = ::send,
-          tint = if (textInput.isBlank()) colors.onSurfaceVariant.copy(alpha = 0.5f) else colors.primary,
+          tint = if (input.text.isBlank()) colors.onSurfaceVariant.copy(alpha = 0.5f) else colors.primary,
           filled = true,
           size = Grid.u48,
           modifier = Modifier.testTag("siri_send_button")
         )
       }
+      Text(KeyTexts.composerHint, style = GridText.Small, color = colors.onSurfaceVariant, modifier = Modifier.padding(bottom = Grid.u6))
     }
+  }
+}
+
+/** Left pane: the questions asked in this conversation (a click scrolls the chat to it) and the controls around it. */
+@Composable
+private fun HistoryPane(
+  messages: List<AssistantMessage>,
+  online: Boolean,
+  hasKey: Boolean,
+  onlineAi: Boolean,
+  timers: List<LocalTimer>,
+  curiosityOpen: Boolean,
+  onJump: (Int) -> Unit,
+  onCancelTimer: (String) -> Unit,
+  onSetOnlineAi: (Boolean) -> Unit,
+  onClear: () -> Unit,
+  onSaveKey: (String) -> Boolean,
+  onClearKey: () -> Unit,
+  onToggleCuriosity: () -> Unit
+) {
+  val colors = MaterialTheme.colorScheme
+  var confirmClear by remember { mutableStateOf(false) }
+  var keyPanelShown by remember { mutableStateOf(false) }
+  val asked = remember(messages) { messages.withIndex().filter { it.value.sender == MessageSender.USER } }
+  Column(Modifier.width(Grid.u192).fillMaxHeight().background(colors.surface).padding(Grid.u12).testTag("assistant_history_pane")) {
+    Text(KeyTexts.historyTitle, style = GridText.BodyStrong, color = colors.onSurface)
+    LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(vertical = Grid.u6)) {
+      if (asked.isEmpty()) {
+        item { Text(KeyTexts.historyEmpty, style = GridText.Small, color = colors.onSurfaceVariant, modifier = Modifier.padding(vertical = Grid.u6)) }
+      }
+      items(asked, key = { it.value.id }) { (index, message) ->
+        val time = remember(message.timestampMs) {
+          if (message.timestampMs > 0L) DateFormat.getTimeInstance(DateFormat.SHORT, Locale.getDefault()).format(Date(message.timestampMs)) else ""
+        }
+        Column(
+          Modifier.fillMaxWidth().clip(Grid.r6).clickable { onJump(index) }.padding(vertical = Grid.u6, horizontal = Grid.u6)
+            .testTag("assistant_history_item")
+        ) {
+          Text(message.text, style = GridText.Body, color = colors.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+          if (time.isNotEmpty()) Text(time, style = GridText.Small, color = colors.onSurfaceVariant)
+        }
+      }
+    }
+    if (timers.isNotEmpty()) {
+      TimerList(timers, onCancelTimer)
+      Spacer(Modifier.height(Grid.u6))
+    }
+    Text(
+      stringResource(if (online) Res.string.assistant_status_online else Res.string.assistant_status_local),
+      style = GridText.Small, color = colors.onSurfaceVariant
+    )
+    TextAction(
+      text = if (hasKey) KeyTexts.remove else stringResource(if (keyPanelShown) Res.string.assistant_enable_hide else Res.string.assistant_enable_action),
+      onClick = { if (hasKey) onClearKey() else keyPanelShown = !keyPanelShown },
+      modifier = Modifier.testTag("assistant_enable_help")
+    )
+    if (!hasKey && keyPanelShown) KeyEntry(onSaveKey)
+    if (hasKey) {
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .heightIn(min = Grid.u48)
+          .toggleable(value = onlineAi, role = Role.Switch, onValueChange = onSetOnlineAi)
+          .testTag("assistant_online_switch"),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text(stringResource(Res.string.assistant_online_label), style = GridText.Body, color = colors.onSurface, modifier = Modifier.weight(1f))
+        Switch(checked = onlineAi, onCheckedChange = null)
+      }
+      Text(
+        stringResource(if (onlineAi) Res.string.assistant_online_disclosure_on else Res.string.assistant_online_disclosure_off),
+        style = GridText.Small, color = colors.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(bottom = Grid.u6)
+      )
+    }
+    if (asked.isNotEmpty()) {
+      ClearConversation(confirmClear, { confirmClear = true }, { confirmClear = false; onClear() }, { confirmClear = false })
+    }
+    TextAction(
+      text = if (curiosityOpen) KeyTexts.curiosityHide else stringResource(Res.string.settings_curiosity_title),
+      onClick = onToggleCuriosity,
+      modifier = Modifier.testTag("assistant_curiosity_toggle")
+    )
   }
 }
 
@@ -372,7 +462,8 @@ private fun ThinkingLine(label: String) {
 }
 
 @Composable
-private fun MessageBubble(message: AssistantMessage, onRetry: (String) -> Unit) {
+private fun MessageBubble(message: AssistantMessage, onRetry: (String) -> Unit, all: List<AssistantMessage>) {
+  val clipboard = LocalClipboardManager.current
   val colors = MaterialTheme.colorScheme
   val isUser = message.sender == MessageSender.USER
   val text = lightMarkdown(message.text)
@@ -385,9 +476,14 @@ private fun MessageBubble(message: AssistantMessage, onRetry: (String) -> Unit) 
     bottomStart = if (isUser) Grid.u24 else Grid.u6, bottomEnd = if (isUser) Grid.u6 else Grid.u24
   )
   BoxWithConstraints(Modifier.fillMaxWidth()) {
-    val bubbleMax = maxWidth * 2f / 3f
+    val bubbleMax = maxWidth * 3f / 4f
     Column(Modifier.fillMaxWidth(), horizontalAlignment = if (isUser) Alignment.End else Alignment.Start) {
-      SelectionContainer {
+      ContextMenuArea(items = {
+        listOf(
+          ContextMenuItem(KeyTexts.copyMessage) { clipboard.setText(AnnotatedString(text.text)) },
+          ContextMenuItem(KeyTexts.copyAll) { clipboard.setText(AnnotatedString(all.joinToString("\n\n") { it.text })) }
+        )
+      }) {
         Text(
           text = text, style = GridText.Body,
           color = if (isUser) colors.onPrimary else colors.onSurface,
@@ -475,7 +571,7 @@ private fun Suggestions(suggestions: List<Suggestion>, onSend: (String) -> Unit)
 }
 
 @Composable
-private fun ComposerField(value: String, onValueChange: (String) -> Unit, onSend: () -> Unit, modifier: Modifier = Modifier) {
+private fun ComposerField(value: TextFieldValue, onValueChange: (TextFieldValue) -> Unit, onSend: () -> Unit, modifier: Modifier = Modifier) {
   val colors = MaterialTheme.colorScheme
   val placeholder = stringResource(Res.string.assistant_composer_placeholder)
   val fieldDescription = stringResource(Res.string.assistant_composer_description)
@@ -483,18 +579,33 @@ private fun ComposerField(value: String, onValueChange: (String) -> Unit, onSend
     modifier = modifier.heightIn(min = Grid.u48).clip(Grid.r12).background(colors.surfaceContainer).padding(horizontal = Grid.u12, vertical = Grid.u12),
     contentAlignment = Alignment.CenterStart
   ) {
-    if (value.isEmpty()) Text(placeholder, style = GridText.Body, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    if (value.text.isEmpty()) Text(placeholder, style = GridText.Body, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
     BasicTextField(
       value = value,
       onValueChange = onValueChange,
-      maxLines = 4,
+      maxLines = 8,
       textStyle = GridText.Body.copy(color = colors.onSurface),
       cursorBrush = SolidColor(colors.primary),
-      keyboardOptions = KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Send),
-      keyboardActions = KeyboardActions(onSend = { onSend() }),
-      modifier = Modifier.fillMaxWidth().semantics { contentDescription = fieldDescription }
+      modifier = Modifier.fillMaxWidth().testTag("siri_text_input")
+        .onPreviewKeyEvent { event ->
+          val enter = event.key == Key.Enter || event.key == Key.NumPadEnter
+          when {
+            !enter -> false
+            event.type != KeyEventType.KeyDown -> true
+            event.isShiftPressed -> { onValueChange(insertNewLine(value)); true }
+            else -> { onSend(); true }
+          }
+        }
+        .semantics { contentDescription = fieldDescription }
     )
   }
+}
+
+/** Shift+Enter: a line break at the cursor, replacing the selection. */
+internal fun insertNewLine(value: TextFieldValue): TextFieldValue {
+  val start = value.selection.min
+  val end = value.selection.max
+  return TextFieldValue(value.text.replaceRange(start, end, "\n"), TextRange(start + 1))
 }
 
 /** Renders **bold** and *italic* markers instead of showing the asterisks. */

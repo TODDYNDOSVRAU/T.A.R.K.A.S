@@ -205,6 +205,8 @@ internal fun BandArea(
   val bubble = remember { MutableTransitionState(false) }
   bubble.targetState = open
   var area by remember { mutableStateOf(IntRect.Zero) }
+  // Where the tile that opened the editor sits: the popover hangs from it.
+  var anchor by remember { mutableStateOf(IntRect.Zero) }
 
   Box(modifier = modifier.onGloballyPositioned { area = it.inWindow() }) {
   Column(modifier = Modifier.fillMaxSize()) {
@@ -223,8 +225,9 @@ internal fun BandArea(
           settings = settings,
           selected = selectedBand,
           dimmed = open,
-          onOpen = { i -> onSelectBand(i); editing = i },
-          onAdd = {
+          onOpen = { i, at -> anchor = at; onSelectBand(i); editing = i },
+          onAdd = { at ->
+            anchor = at
             onUpdateEq { s -> s.copy(bands = s.bands + EqBand(freqHz = 1000f, q = 1.4f)) }
             onSelectBand(settings.bands.size)
             editing = settings.bands.size
@@ -255,7 +258,7 @@ internal fun BandArea(
   val band = settings.bands.getOrNull(shown[0])
   if ((bubble.currentState || bubble.targetState) && band != null && mode == EqMode.PARAMETRIC) {
     val index = shown[0]
-    BandBubble(state = bubble, area = area, onDismiss = { editing = -1 }) {
+    BandBubble(state = bubble, area = area, anchor = anchor, onDismiss = { editing = -1 }) {
       BandEditor(
         index = index,
         band = band,
@@ -277,6 +280,9 @@ private fun LayoutCoordinates.inWindow(): IntRect {
 /** Width of the band bubble as a share of the tile grid it covers. */
 private const val BUBBLE_SHARE = 0.75f
 
+/** On a wide window the popover stays one phone-sheet wide (384 dp, 2x chain), never the width of the grid. */
+private val BUBBLE_MAX_WIDTH = Grid.u384
+
 /** Five 48 dp rows (header, type, Hz, dB, Q) inside a 6 dp inset. */
 private val BUBBLE_HEIGHT = Grid.u48 * 5 + Grid.u12
 
@@ -285,7 +291,7 @@ private val BUBBLE_HEIGHT = Grid.u48 * 5 + Grid.u12
  * top, 0.75x as wide. It grows from 0.25 in 280 ms and leaves in 220 ms. A tap outside or Back closes it.
  */
 @Composable
-private fun BandBubble(state: MutableTransitionState<Boolean>, area: IntRect, onDismiss: () -> Unit, content: @Composable () -> Unit) {
+private fun BandBubble(state: MutableTransitionState<Boolean>, area: IntRect, anchor: IntRect, onDismiss: () -> Unit, content: @Composable () -> Unit) {
   val colors = MaterialTheme.colorScheme
   val reduced = rememberReducedMotion()
   Popup(
@@ -294,7 +300,9 @@ private fun BandBubble(state: MutableTransitionState<Boolean>, area: IntRect, on
   ) {
     var window by remember { mutableStateOf(IntRect.Zero) }
     val density = LocalDensity.current
-    val width = with(density) { (area.width * BUBBLE_SHARE).toDp() }
+    val maxW = with(density) { BUBBLE_MAX_WIDTH.roundToPx() }
+    val bubbleW = minOf((area.width * BUBBLE_SHARE).roundToInt(), maxW)
+    val width = with(density) { bubbleW.toDp() }
     Box(
       modifier = Modifier
         .fillMaxSize()
@@ -304,11 +312,16 @@ private fun BandBubble(state: MutableTransitionState<Boolean>, area: IntRect, on
       Box(
         modifier = Modifier
           .offset {
-            val w = (area.width * BUBBLE_SHARE).roundToInt()
+            val w = bubbleW
             val h = BUBBLE_HEIGHT.roundToPx()
             val edge = Grid.u24.roundToPx()
-            val x = area.left + (area.width - w) / 2 - window.left
-            val y = (area.top - window.top).coerceAtMost(window.height - h - edge).coerceAtLeast(edge)
+            val gap = Grid.u6.roundToPx()
+            // Desktop popover: centred on the tile that opened it, just under it; above it when the window ends first.
+            val x = (anchor.left + (anchor.width - w) / 2 - window.left).coerceIn(edge, (window.width - w - edge).coerceAtLeast(edge))
+            val below = anchor.bottom + gap - window.top
+            val above = anchor.top - gap - h - window.top
+            val y = (if (below + h <= window.height - edge || above < edge) below else above)
+              .coerceAtMost(window.height - h - edge).coerceAtLeast(edge)
             IntOffset(x, y)
           }
           .size(width, BUBBLE_HEIGHT)
@@ -439,8 +452,8 @@ private fun GraphicBands(settings: EqSettings, onBandGain: (Int, Float) -> Unit)
 
 /** The parametric mode: three tiles per row, then a dashed tile that adds a band. */
 @Composable
-private fun ParametricTiles(settings: EqSettings, selected: Int, dimmed: Boolean, onOpen: (Int) -> Unit, onAdd: () -> Unit) {
-  val cells = settings.bands.size + 1
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+private fun ParametricTiles(settings: EqSettings, selected: Int, dimmed: Boolean, onOpen: (Int, IntRect) -> Unit, onAdd: (IntRect) -> Unit) {
   // Behind the open bubble the tiles step back: slightly blurred and at half strength, in 240 ms.
   val dim by animateFloatAsState(if (dimmed) 1f else 0f, tween(240), label = "tilesDim")
   Column(
@@ -449,17 +462,19 @@ private fun ParametricTiles(settings: EqSettings, selected: Int, dimmed: Boolean
       .blur(Grid.u6 / 2 * dim)
       .graphicsLayer { alpha = 1f - 0.5f * dim }
       .verticalScroll(rememberScrollState()),
-    verticalArrangement = Arrangement.spacedBy(Grid.u24)
+    verticalArrangement = Arrangement.spacedBy(Grid.u12)
   ) {
-    for (rowStart in 0 until cells step 3) {
-      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Grid.u12)) {
-        for (c in rowStart until rowStart + 3) {
-          Box(modifier = Modifier.weight(1f)) {
-            when {
-              c < settings.bands.size -> BandTile(c, settings.bands[c], c == selected, settings.enabled, { onOpen(c) }, Modifier.stagger(c))
-              c == settings.bands.size -> AddTile(onAdd, Modifier.stagger(c))
-            }
-          }
+    // 96 x 48 pieces on the grid, as many per row as the width allows (3 on a phone, more on a desktop).
+    androidx.compose.foundation.layout.FlowRow(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(Grid.u12),
+      verticalArrangement = Arrangement.spacedBy(Grid.u12)
+    ) {
+      for (c in 0..settings.bands.size) {
+        var at by remember { mutableStateOf(IntRect.Zero) }
+        Box(modifier = Modifier.width(Grid.u96).onGloballyPositioned { at = it.inWindow() }) {
+          if (c < settings.bands.size) BandTile(c, settings.bands[c], c == selected, settings.enabled, { onOpen(c, at) }, Modifier.stagger(c))
+          else AddTile({ onAdd(at) }, Modifier.stagger(c))
         }
       }
     }

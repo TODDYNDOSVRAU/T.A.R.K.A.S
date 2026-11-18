@@ -125,6 +125,7 @@ fun EqFader(
           disabled()
         }
       }
+      .desktopStep(enabled, value, -1f, 1f, stepSize(-1f, 1f, steps, 0.05f), { change(it) })
       .pointerInput(enabled) {
         if (!enabled) return@pointerInput
         // A single tap changes nothing, so a finger that lands on a fader while scrolling never moves
@@ -259,6 +260,7 @@ fun EqKnob(
           disabled()
         }
       }
+      .desktopStep(enabled, value, 0f, 1f, stepSize(0f, 1f, steps, 0.05f), { change(it) })
       .pointerInput(enabled) {
         if (!enabled) return@pointerInput
         detectTapGestures(onDoubleTap = { change(reset) })

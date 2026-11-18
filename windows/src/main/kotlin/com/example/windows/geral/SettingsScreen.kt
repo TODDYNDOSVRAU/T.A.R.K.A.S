@@ -1,6 +1,14 @@
 package com.example.windows.geral
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -58,33 +66,70 @@ class GeralServices(
   val backup: UserDataBackup
 )
 
-private data class Row(val keywords: String, val layer: SettingsLayer, val content: @Composable () -> Unit)
+/** Settings categories, in the Windows Settings pattern: a list on the left, the category page on the right. */
+internal enum class Cat(val pt: String, val en: String) {
+  LOOK("Aparência", "Appearance"), LANGUAGE("Idioma", "Language"), WINDOWS("Windows", "Windows"),
+  UPDATE("Atualização", "Update"), DATA("Backup e dados", "Backup and data"),
+  LEGAL("Privacidade e legal", "Privacy and legal"), DIAGNOSTICS("Diagnóstico", "Diagnostics")
+}
+
+private data class Row(val keywords: String, val layer: SettingsLayer, val cat: Cat, val content: @Composable () -> Unit)
+
+/** Which rows a page shows. A search looks through every category and layer; otherwise the chosen category at the chosen layer and below. */
+internal fun <T> visibleRows(rows: List<T>, key: (T) -> Triple<String, SettingsLayer, Cat>, query: String, layer: SettingsLayer, cat: Cat): List<T> {
+  val q = query.trim().lowercase()
+  return rows.filter { r ->
+    val (kw, l, c) = key(r)
+    if (q.isNotEmpty()) kw.lowercase().contains(q) else c == cat && l.ordinal <= layer.ordinal
+  }
+}
 
 @Composable
 fun SettingsScreen(state: TarkasState, svc: GeralServices) {
   val geral = svc.geral
+  val c = MaterialTheme.colorScheme
   val layer by geral.layer.collectAsState()
   var query by remember { mutableStateOf("") }
-  val scroll = rememberScrollState()
-  Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+  var cat by remember { mutableStateOf(Cat.LOOK) }
+  val groups = settingsGroups(state, svc)
+  // A category with nothing at the current layer is hidden from the list, so every entry leads somewhere.
+  val cats = Cat.entries.filter { k -> groups.any { it.cat == k && it.layer.ordinal <= layer.ordinal } }
+  if (cat !in cats && cats.isNotEmpty()) cat = cats.first()
+  androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
     Column(
-      Modifier.readingColumn().verticalScroll(scroll).padding(vertical = Grid.margin),
+      Modifier.width(Grid.u192 + Grid.u96).fillMaxHeight().padding(Grid.margin),
+      verticalArrangement = Arrangement.spacedBy(Grid.u6)
+    ) {
+      SearchField(query, { query = it }, tr(Res.string.settings_search_hint))
+      Box(Modifier.height(Grid.u6))
+      cats.forEach { k ->
+        val sel = query.isBlank() && k == cat
+        Box(
+          Modifier.fillMaxWidth().height(Grid.u48).clip(Grid.r12)
+            .background(if (sel) c.surfaceContainerHigh else c.background)
+            .clickable { query = ""; cat = k }
+            .padding(horizontal = Grid.u12),
+          contentAlignment = Alignment.CenterStart
+        ) { Text(w(k.pt, k.en), style = if (sel) GridText.BodyStrong else GridText.Body, color = if (sel) c.onSurface else c.onSurfaceVariant, maxLines = 1) }
+      }
+    }
+    VerticalDivider(color = c.outlineVariant)
+    val scroll = rememberScrollState()
+    Column(
+      // Rows are capped at 768 dp and aligned left, like Windows Settings; the window width goes to the category list and the page, not to margins.
+      Modifier.weight(1f).fillMaxHeight().verticalScroll(scroll).padding(Grid.margin).widthIn(max = Grid.u384 * 2),
       verticalArrangement = Arrangement.spacedBy(Grid.u12)
     ) {
-      Text(w("Configurações", "Settings"), style = GridText.Title, color = MaterialTheme.colorScheme.onSurface)
-      SearchField(query, { query = it }, tr(Res.string.settings_search_hint))
-      SegmentedTabs {
-        Segment(tr(Res.string.settings_layer_essential), layer == SettingsLayer.ESSENTIAL, { geral.setLayer(SettingsLayer.ESSENTIAL) })
-        Segment(tr(Res.string.settings_layer_advanced), layer == SettingsLayer.ADVANCED, { geral.setLayer(SettingsLayer.ADVANCED) })
-        Segment(tr(Res.string.settings_layer_engineering), layer == SettingsLayer.ENGINEERING, { geral.setLayer(SettingsLayer.ENGINEERING) })
+      androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Grid.u12)) {
+        Text(if (query.isBlank()) w(cat.pt, cat.en) else "“${query.trim()}”", style = GridText.Title, color = c.onSurface, modifier = Modifier.weight(1f))
+        SegmentedTabs {
+          Segment(tr(Res.string.settings_layer_essential), layer == SettingsLayer.ESSENTIAL, { geral.setLayer(SettingsLayer.ESSENTIAL) })
+          Segment(tr(Res.string.settings_layer_advanced), layer == SettingsLayer.ADVANCED, { geral.setLayer(SettingsLayer.ADVANCED) })
+          Segment(tr(Res.string.settings_layer_engineering), layer == SettingsLayer.ENGINEERING, { geral.setLayer(SettingsLayer.ENGINEERING) })
+        }
       }
-      val groups = settingsGroups(state, svc)
-      val q = query.trim().lowercase()
-      // A search looks through every layer; with no search a layer shows its own groups and the ones below it.
-      val shown = groups.filter { g ->
-        if (q.isEmpty()) g.layer.ordinal <= layer.ordinal else g.keywords.lowercase().contains(q)
-      }
-      if (shown.isEmpty()) Text(tr(Res.string.settings_search_empty), style = GridText.Body, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      val shown = visibleRows(groups, { Triple(it.keywords, it.layer, it.cat) }, query, layer, cat)
+      if (shown.isEmpty()) Text(tr(Res.string.settings_search_empty), style = GridText.Body, color = c.onSurfaceVariant)
       shown.forEach { it.content() }
     }
   }
@@ -110,7 +155,7 @@ private fun settingsGroups(state: TarkasState, svc: GeralServices): List<Row> {
   fun note(t: String) = state.showNotice(t)
 
   return listOf(
-    Row("theme tema dark light escuro claro amoled", SettingsLayer.ESSENTIAL) {
+    Row("theme tema dark light escuro claro amoled", SettingsLayer.ESSENTIAL, Cat.LOOK) {
       Column {
         GroupHeader(tr(Res.string.settings_theme))
         InsetGroup {
@@ -124,7 +169,7 @@ private fun settingsGroups(state: TarkasState, svc: GeralServices): List<Row> {
         }
       }
     },
-    Row("language idioma", SettingsLayer.ESSENTIAL) {
+    Row("language idioma", SettingsLayer.ESSENTIAL, Cat.LANGUAGE) {
       Column {
         GroupHeader(tr(Res.string.settings_language))
         InsetGroup {
@@ -138,7 +183,7 @@ private fun settingsGroups(state: TarkasState, svc: GeralServices): List<Row> {
         }
       }
     },
-    Row("accessibility acessibilidade motion movimento", SettingsLayer.ESSENTIAL) {
+    Row("accessibility acessibilidade motion movimento", SettingsLayer.ESSENTIAL, Cat.LOOK) {
       Column {
         GroupHeader(w("Acessibilidade", "Accessibility"))
         InsetGroup {
@@ -146,7 +191,7 @@ private fun settingsGroups(state: TarkasState, svc: GeralServices): List<Row> {
         }
       }
     },
-    Row("update atualização installer instalador version versão", SettingsLayer.ESSENTIAL) {
+    Row("update atualização installer instalador version versão", SettingsLayer.ESSENTIAL, Cat.UPDATE) {
       Column {
         GroupHeader(w("Atualização", "Update"))
         InsetGroup {
@@ -197,7 +242,7 @@ private fun settingsGroups(state: TarkasState, svc: GeralServices): List<Row> {
         GroupFooter(w("Instalador MSI ou EXE do GitHub, conferido pelo SHA-256 antes de abrir.", "MSI or EXE installer from GitHub, checked against its SHA-256 before it opens."))
       }
     },
-    Row("windows tray bandeja autostart iniciar", SettingsLayer.ADVANCED) {
+    Row("windows tray bandeja autostart iniciar", SettingsLayer.ADVANCED, Cat.WINDOWS) {
       Column {
         GroupHeader("Windows")
         InsetGroup {
@@ -214,7 +259,7 @@ private fun settingsGroups(state: TarkasState, svc: GeralServices): List<Row> {
         }
       }
     },
-    Row("backup export restore exportar restaurar dados", SettingsLayer.ADVANCED) {
+    Row("backup export restore exportar restaurar dados", SettingsLayer.ADVANCED, Cat.DATA) {
       Column {
         GroupHeader(w("Seus dados", "Your data"))
         InsetGroup {
@@ -242,7 +287,7 @@ private fun settingsGroups(state: TarkasState, svc: GeralServices): List<Row> {
         }
       }
     },
-    Row("privacy privacidade terms termos legal licenses licenças about sobre", SettingsLayer.ESSENTIAL) {
+    Row("privacy privacidade terms termos legal licenses licenças about sobre", SettingsLayer.ESSENTIAL, Cat.LEGAL) {
       Column {
         GroupHeader(w("Privacidade e legal", "Privacy and legal"))
         InsetGroup {
@@ -258,14 +303,14 @@ private fun settingsGroups(state: TarkasState, svc: GeralServices): List<Row> {
         }
       }
     },
-    Row("erase apagar dados reset", SettingsLayer.ADVANCED) {
+    Row("erase apagar dados reset", SettingsLayer.ADVANCED, Cat.DATA) {
       Column {
         GroupHeader(w("Apagar", "Erase"))
         InsetGroup { ListRow(w("Apagar todos os dados", "Erase all data"), destructive = true, chevron = false, onClick = { eraseAsk = true }) }
         GroupFooter(w("Remove biblioteca, listas, favoritos e ajustes deste computador. Seus arquivos de música não são tocados.", "Removes library, playlists, favourites and settings from this computer. Your music files are not touched."))
       }
     },
-    Row("diagnostics diagnóstico crash log engineering engenharia", SettingsLayer.ENGINEERING) {
+    Row("diagnostics diagnóstico crash log engineering engenharia", SettingsLayer.ENGINEERING, Cat.DIAGNOSTICS) {
       Column {
         GroupHeader(w("Diagnóstico", "Diagnostics"))
         InsetGroup {

@@ -14,24 +14,36 @@ import com.example.windows.res.audio_preset_save_title
 import org.jetbrains.compose.resources.stringResource
 import com.example.windows.base.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.fillMaxSize
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
 import com.example.ui.components.TarkasAlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -49,7 +61,6 @@ import com.example.data.model.EqSettings
 import com.example.windows.equalizador.rememberReducedMotion
 import com.example.windows.equalizador.subPageTransition
 import com.example.windows.equalizador.DeviceSearchState
-import kotlinx.coroutines.launch
 
 /** The output playing now, and whether each output keeps its own fone correction. */
 data class OutputCorrectionUi(
@@ -96,11 +107,27 @@ data class OutputsUi(val names: List<String> = emptyList(), val selected: String
 /** The two pages of the tab: the console everyone uses, and the technical controls. */
 private enum class AudioPage { MAIN, ADVANCED }
 
+/** What the inline side pane (384 dp, 2x chain) shows. The desktop has no bottom sheets: these were sheets on Android. */
+private enum class AudioPane { PRESETS, CORRECTION, SETTINGS, SPATIAL }
+
+/** The side pane: a close row (Esc closes it too) over a scrolling body. */
+@Composable
+private fun AudioSidePane(onClose: () -> Unit, content: @Composable () -> Unit) {
+  val colors = MaterialTheme.colorScheme
+  Column(Modifier.width(Grid.u384).fillMaxHeight().background(colors.surface).testTag("audio_side_pane")) {
+    Row(Modifier.fillMaxWidth().height(Grid.u48), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+      IconButton(onClick = onClose, modifier = Modifier.testTag("audio_side_pane_close")) {
+        Icon(Icons.Rounded.Close, contentDescription = stringResource(Res.string.audio_action_cancel), tint = colors.onSurfaceVariant)
+      }
+    }
+    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { content() }
+  }
+}
+
 /**
  * The Áudio tab: hosts the console and the advanced sub-page, the preset sheet and the dialogs that
  * name and delete presets. The pages themselves live in [com.example.ui.screens.audio].
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AudioScreen(
   capabilities: AudioCapabilities,
@@ -143,42 +170,39 @@ fun AudioScreen(
   modifier: Modifier = Modifier
 ) {
   var page by remember { mutableStateOf(AudioPage.MAIN) }
-  var showPresets by remember { mutableStateOf(false) }
-  // The page the sheet opens on: the preset pill opens EQ, the Correction pill opens the fone list.
-  var sheetTab by remember { mutableStateOf(PresetTab.EQ) }
+  var pane by remember { mutableStateOf<AudioPane?>(null) }
   var showSaveAs by remember { mutableStateOf(false) }
   var showRename by remember { mutableStateOf(false) }
   var showDelete by remember { mutableStateOf(false) }
   val activePreset = presets.firstOrNull { it.id == activePresetId }
   val reduced = rememberReducedMotion()
 
-  val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-  val scope = rememberCoroutineScope()
-  // Read when the sheet closes, which can be long after this composition (a fone's curve downloads
+  // Read when the pane closes, which can be long after this composition (a fone's curve downloads
   // first), so it must see the search as it is then, not as it was when the callback was made.
   val latestSearch by rememberUpdatedState(deviceSearch)
   val latestSearchDevices by rememberUpdatedState(onSearchDevices)
-  // Closing the sheet also clears its search, so it opens on the full list next time.
-  val closePresets: () -> Unit = {
-    scope.launch { sheetState.hide() }.invokeOnCompletion {
-      showPresets = false
+  // Closing the pane also clears its search, so it opens on the full list next time.
+  val closePane: () -> Unit = {
+    if (pane == AudioPane.PRESETS || pane == AudioPane.CORRECTION) {
       if (latestSearch.query.isNotEmpty()) latestSearchDevices("", latestSearch.source)
     }
+    pane = null
   }
 
   LaunchedEffect(devicePickerRequest) {
     val query = devicePickerRequest ?: return@LaunchedEffect
-    sheetTab = PresetTab.CORRECTION
-    showPresets = true
+    pane = AudioPane.CORRECTION
     onOpenDevicePicker()
     onSearchDevices(query, null)
     onDevicePickerOpened()
   }
 
-  // Back leaves the sub-page before it leaves the tab. (The sheet handles back itself.)
-  BackHandler(enabled = !showPresets && page != AudioPage.MAIN) { page = AudioPage.MAIN }
+  // Esc closes the pane, then leaves the sub-page, then leaves the tab.
+  BackHandler(enabled = pane != null) { closePane() }
+  BackHandler(enabled = pane == null && page != AudioPage.MAIN) { page = AudioPage.MAIN }
 
-  Box(modifier = modifier.fillMaxSize()) {
+  Row(modifier = modifier.fillMaxSize()) {
+   Box(Modifier.weight(1f).fillMaxHeight()) {
     AnimatedContent(
       targetState = page,
       transitionSpec = { subPageTransition(forward = targetState != AudioPage.MAIN, reduced = reduced) },
@@ -199,8 +223,8 @@ fun AudioScreen(
           onUpdateEq = onUpdateEq,
           onUpdateBand = onUpdateBand,
           presetActions = PresetActions(
-            onOpen = { sheetTab = PresetTab.EQ; showPresets = true; onOpenDevicePicker() },
-            onOpenCorrection = { sheetTab = PresetTab.CORRECTION; showPresets = true; onOpenDevicePicker() },
+            onOpen = { pane = AudioPane.PRESETS; onOpenDevicePicker() },
+            onOpenCorrection = { pane = AudioPane.CORRECTION; onOpenDevicePicker() },
             onSaveAs = { showSaveAs = true },
             onOverwrite = onOverwritePreset,
             onRename = { showRename = true },
@@ -208,6 +232,8 @@ fun AudioScreen(
             onReset = onReset
           ),
           onOpenAdvanced = { page = AudioPage.ADVANCED },
+          onOpenSettings = { pane = AudioPane.SETTINGS },
+          onOpenSpatial = { pane = AudioPane.SPATIAL },
           spatial = spatial,
           spatialActions = spatialActions,
           onCompare = onCompare
@@ -229,32 +255,35 @@ fun AudioScreen(
         )
       }
     }
-  }
-
-  if (showPresets) {
-    // Drag gestures off: a drag from the fixed header moved the whole sheet and snapped it back.
-    // Closing stays with the scrim tap and Back (onDismissRequest).
-    ModalBottomSheet(
-      sheetMaxWidth = Grid.u384 * 2,
-      onDismissRequest = closePresets,
-      sheetState = sheetState,
-      containerColor = MaterialTheme.colorScheme.surface
-    ) {
-      PresetPanel(
-        presets = presets,
-        activePresetId = activePresetId,
-        device = eqSettings.device,
-        deviceOutput = outputCorrection.outputName.takeIf { outputCorrection.auto },
-        suggestion = outputCorrection.suggestionQuery?.let { it to outputCorrection.outputName },
-        deviceSearch = deviceSearch,
-        onSearchDevices = onSearchDevices,
-        onRetryDevices = onOpenDevicePicker,
-        onPickPreset = { onSelectPreset(it); closePresets() },
-        onPickDevice = { entry -> onApplyDevice(entry) { closePresets() } },
-        onClearDevice = onClearDevice,
-        initialTab = sheetTab
-      )
+   }
+   pane?.let { open ->
+    AudioSidePane(onClose = closePane) {
+      when (open) {
+        AudioPane.PRESETS, AudioPane.CORRECTION -> PresetPanel(
+          presets = presets,
+          activePresetId = activePresetId,
+          device = eqSettings.device,
+          deviceOutput = outputCorrection.outputName.takeIf { outputCorrection.auto },
+          suggestion = outputCorrection.suggestionQuery?.let { it to outputCorrection.outputName },
+          deviceSearch = deviceSearch,
+          onSearchDevices = onSearchDevices,
+          onRetryDevices = onOpenDevicePicker,
+          onPickPreset = { onSelectPreset(it); closePane() },
+          onPickDevice = { entry -> onApplyDevice(entry) { closePane() } },
+          onClearDevice = onClearDevice,
+          initialTab = if (open == AudioPane.CORRECTION) PresetTab.CORRECTION else PresetTab.EQ
+        )
+        AudioPane.SETTINGS -> EqSettingsSheet(
+          settings = eqSettings,
+          spectrumAllowed = spectrumAllowed,
+          onAllowSpectrum = onAllowSpectrum,
+          onUpdateEq = onUpdateEq,
+          onOpenAdvanced = { pane = null; page = AudioPage.ADVANCED }
+        )
+        AudioPane.SPATIAL -> if (spatialActions != null) SpatialPanel(spatial, spatialActions)
+      }
     }
+   }
   }
 
   if (showSaveAs) {

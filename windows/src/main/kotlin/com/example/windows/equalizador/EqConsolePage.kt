@@ -23,9 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -121,14 +119,14 @@ internal fun EqConsolePage(
   onUpdateBand: (Int, (EqBand) -> EqBand) -> Unit,
   presetActions: PresetActions,
   onOpenAdvanced: () -> Unit,
+  onOpenSettings: () -> Unit,
+  onOpenSpatial: (() -> Unit)?,
   spatial: SpatialUi,
   spatialActions: SpatialActions?,
   onCompare: (Boolean) -> Unit = {}
 ) {
   val colors = MaterialTheme.colorScheme
   var selectedBand by rememberSaveable { mutableIntStateOf(0) }
-  var showSpatial by rememberSaveable { mutableStateOf(false) }
-  var showSettings by rememberSaveable { mutableStateOf(false) }
   val bandIndex = selectedBand.coerceIn(0, (eqSettings.bands.size - 1).coerceAtLeast(0))
   val latestCompare by rememberUpdatedState(onCompare)
   val compare = remember { CompareState { latestCompare } }
@@ -148,45 +146,14 @@ internal fun EqConsolePage(
     onUpdateBand = onUpdateBand,
     presetActions = presetActions,
     onOpenAdvanced = onOpenAdvanced,
-    onOpenSettings = { showSettings = true },
-    onOpenSpatial = if (spatialActions != null) ({ showSpatial = true }) else null,
+    onOpenSettings = onOpenSettings,
+    onOpenSpatial = if (spatialActions != null) onOpenSpatial else null,
     spatial = spatial,
     compare = compare,
     selectedBand = bandIndex,
     onSelectBand = { selectedBand = it },
     modifier = Modifier.fillMaxSize().padding(top = Grid.u12, bottom = LocalBarInset.current)
   )
-
-  if (showSpatial && spatialActions != null) {
-    ModalBottomSheet(
-      sheetMaxWidth = Grid.u384 * 2,
-      onDismissRequest = { showSpatial = false },
-      sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-      containerColor = colors.surface
-    ) {
-      Column(modifier = Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding()) {
-        SpatialPanel(spatial, spatialActions)
-        Spacer(Modifier.height(Grid.u24))
-      }
-    }
-  }
-
-  if (showSettings) {
-    ModalBottomSheet(
-      sheetMaxWidth = Grid.u384 * 2,
-      onDismissRequest = { showSettings = false },
-      sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-      containerColor = colors.surface
-    ) {
-      EqSettingsSheet(
-        settings = eqSettings,
-        spectrumAllowed = spectrumAllowed,
-        onAllowSpectrum = onAllowSpectrum,
-        onUpdateEq = onUpdateEq,
-        onOpenAdvanced = { showSettings = false; onOpenAdvanced() }
-      )
-    }
-  }
 }
 
 /**

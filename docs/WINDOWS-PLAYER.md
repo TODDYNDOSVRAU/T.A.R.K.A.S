@@ -29,3 +29,17 @@ A second `EqDsp`/`PcmPipeline` renders the incoming file; both follow `setEq`. S
 - Lyrics sheet, track details sheet, track actions menu, mini player in the shell, waveform seek bar and cover carousel: shared rules (`LrcParser`, `Id3Lyrics`, `PeakAccumulator`, `CoverNeighbors`) are compiled but no screen uses them yet.
 - Strings: a few labels ("Open", "Crossfade", "min") are literals, not `Res.string`.
 - Tests: `PlayerControllerTest` (19 cases: queue, seek, sleep, crossfade arming, restore) pass.
+
+## Desktop redo (2026-11-18, owner correction)
+
+- `player/PlayerPanel.kt`: now-playing fills the main area: cover and info left, full-width waveform seek (`WaveformSeek`, from `PeakAccumulator`, cached by `WaveformCache`), synced lyrics beside the cover when the area is at least 960 dp wide. Sleep timer and crossfade are popup menus. Queue, lyrics and details are side-pane kinds (`PlayerHost.SidePane`); until the shell sets `hooks.shellDrawsPane = true` the screen draws the pane itself at 384 dp.
+- Queue pane: drag handle reorder (`DragMath`), Delete removes the selection with undo (Ctrl+Z), right-click menu (play now, play next, remove).
+- `player/PlayerHooks.kt`: `PlayerHooks` for the transport bar and shortcuts: `state` (`TransportState`), `toggle`, `next`, `prev`, `seekFraction`, `seekBy`, `setVolume`, `volumeBy`, `toggleShuffle`, `cycleRepeat`, `togglePane`, `undoQueue`. Also `WaveformReader`, `LyricsLoader` (.lrc sidecar and ID3), `TrackAssets`.
+- Status: code written; new tests in `PlayerHooksTest` (9 cases). **Pending**: compile and test run. Last run (`gradle.sh windows -p windows -q test --tests 'com.example.windows.player.*'`) exit 1 with 10 errors, all in `biblioteca/LibraryTable.kt` (other session); none reported in player files. Layout at 1024x640 to 2560x1440, light/dark, drag and context menu by hand: pending. Cover artwork: placeholder tile (no artwork loading on desktop yet).
+
+## Visual spec (2026-11-18, docs/WINDOWS-VISUAL-REF.md)
+
+- `player/PlayerTransport.kt`: `Panels.transport` on the 96 dp glass bar: cover 48 + title/artist left; prev/play/next over a thin progress line; volume line, queue and lyrics right. Queue and lyrics open in the shell `SidePane`; `Panels.toggleQueue/toggleLyrics` are set.
+- Now playing: no tint gradient; cover 384 r12 (real art); lyrics at Title size, current line `onSurface`, others alpha 0.35, 250 ms ease; waveform seek kept.
+- `player/PlayerArt.kt` (`CoverArt`): embedded ID3v2.3/2.4 APIC, FLAC picture, or `cover|folder|front|album.jpg|png` beside the file; none found gives null (placeholder tile). On each track change `ShellBackdrop.set(art, tint from Track.colorHex)`.
+- Status: `gradle.sh windows -p windows -q test createDistributable` exit 0 (`CoverArtTest`, `PlayerHooksTest` included). **Pending**: seeing it in the running app (layout at four sizes, light/dark), M4A/MP4 and OGG covers, 16-bit-depth art edge cases.
