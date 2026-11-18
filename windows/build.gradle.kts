@@ -58,6 +58,7 @@ val sharedMain = listOf(
   "com/example/biblioteca/funcoes/model/TrackJson.kt",
   "com/example/player/funcoes/CoverNeighbors.kt",
   "com/example/player/funcoes/CrossfadePlanner.kt",
+  "com/example/player/ui/CoverCarousel.kt",
   "com/example/player/funcoes/SessionQueue.kt",
   "com/example/player/funcoes/QueueSnapshot.kt",
   "com/example/player/funcoes/PlaybackProblem.kt",

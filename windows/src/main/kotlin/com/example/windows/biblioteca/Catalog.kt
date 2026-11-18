@@ -116,7 +116,7 @@ object AudiusCatalog {
         filePath = "$node/tracks/$id/stream?app_name=$APP_NAME&api_key=$API_KEY",
         colorHex = COLORS[Math.floorMod(id.hashCode(), COLORS.size)],
         artworkUrl = item.optJSONObject("artwork")?.let { art ->
-          listOf("480x480", "1000x1000", "150x150").firstNotNullOfOrNull { s -> art.optString(s).ifBlank { null } }
+          listOf("1000x1000", "480x480", "150x150").firstNotNullOfOrNull { s -> art.optString(s).ifBlank { null } }
         }
       )
     }
@@ -166,7 +166,7 @@ object JamendoCatalog {
     if (!isConfigured) throw JamendoNotConfigured()
     val query = buildList {
       add("client_id" to clientId); add("format" to "json"); add("limit" to "20"); add("include" to "musicinfo")
-      add("audioformat" to "mp32"); add("imagesize" to "300"); addAll(params)
+      add("audioformat" to "mp32"); add("imagesize" to "600"); addAll(params)
     }.joinToString("&") { (k, v) -> "$k=${CatalogHttp.enc(v)}" }
     val (code, body) = CatalogHttp.get("$BASE/tracks/?$query")
     if (code !in 200..299) throw IOException("Jamendo answered $code")
@@ -314,7 +314,7 @@ object MusicBrainzCatalog {
       release?.optJSONObject("release-group")?.optString("primary-type")?.ifBlank { null },
       r.optString("first-release-date").ifBlank { release?.optString("date") }?.ifBlank { null },
       r.optLong("length", 0L).takeIf { it > 0 }, tags,
-      releaseId?.let { "https://coverartarchive.org/release/$it/front-250" }, "https://musicbrainz.org/recording/$mbid"
+      releaseId?.let { "https://coverartarchive.org/release/$it/front-500" }, "https://musicbrainz.org/recording/$mbid"
     )
   }
 }

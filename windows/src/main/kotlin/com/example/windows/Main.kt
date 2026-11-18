@@ -60,7 +60,7 @@ fun main(args: Array<String>) = application {
       Command.Lyrics -> Panels.toggleLyrics?.invoke() ?: return false
       Command.ToggleEq -> state.setEqEnabled(!state.eqSettings.value.enabled)
       // Esc: the open popup (back stack) first, then the side pane, then the route.
-      Command.Back -> return back.dispatch() || SidePane.close() || state.goBack()
+      Command.Back -> return back.dispatch() || Panels.closeOverlay?.invoke() == true || SidePane.close() || state.goBack()
     }
     return true
   }

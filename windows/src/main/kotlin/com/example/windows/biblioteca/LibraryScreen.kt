@@ -229,6 +229,7 @@ fun LibraryScreen(lib: BibliotecaState, modifier: Modifier = Modifier) {
       )
       Box(Modifier.width(Grid.u6 / 6).fillMaxHeight().background(colors.outlineVariant))
       Column(Modifier.weight(1f).fillMaxHeight()) {
+        (source as? Source.PlaylistOf)?.let { s -> PlaylistHeader(playlists.firstOrNull { it.id == s.id }?.name.orEmpty(), base, lib) }
         if (source == Source.Folders) FoldersPane(lib, Modifier.weight(1f))
         else {
           Row(Modifier.fillMaxWidth().padding(horizontal = Grid.u12), verticalAlignment = Alignment.CenterVertically) {

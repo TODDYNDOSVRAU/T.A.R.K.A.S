@@ -2,6 +2,8 @@ package com.example.windows.player
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import com.example.windows.shell.PanelContent
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +19,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import com.example.windows.res.library_section_favorites
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -74,18 +79,28 @@ fun TransportBar(state: TarkasState) {
     PlayerHost.paneToggler = toggle
     Panels.toggleQueue = { toggle(PlayerPane.QUEUE) }
     Panels.toggleLyrics = { toggle(PlayerPane.LYRICS) }
+    Panels.closeOverlay = ExpandedPlayer::close
+    if (Panels.overlay == null) Panels.overlay = PanelContent { s -> ExpandedPlayerPanel(PlayerHost.hooks(s), PlayerHost.assets(s)) }
   }
   Row(Modifier.fillMaxSize().padding(horizontal = Grid.margin), verticalAlignment = Alignment.CenterVertically) {
     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Grid.u12)) {
       val tint = t.track?.let { Color(it.colorHex or 0xFF000000) } ?: cs.primary
       val a = art
-      if (a != null) Image(a, t.track?.title, Modifier.size(Grid.u48).clip(Grid.r6), contentScale = ContentScale.Crop)
-      else Box(Modifier.size(Grid.u48).clip(Grid.r6).background(tint.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
+      val openPanel = Modifier.size(Grid.u48).clip(Grid.r6).clickable(enabled = t.track != null) { ExpandedPlayer.show() }
+      if (a != null) Image(a, t.track?.title, openPanel, contentScale = ContentScale.Crop, filterQuality = androidx.compose.ui.graphics.FilterQuality.High)
+      else Box(openPanel.background(tint.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
         Icon(Icons.Filled.MusicNote, null, Modifier.size(Grid.icon), tint = cs.onPrimary)
       }
       Column(Modifier.weight(1f)) {
         Text(t.track?.title ?: tr(Res.string.player_screen_nothing_playing), style = GridText.BodyStrong, color = cs.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(t.track?.artist.orEmpty(), style = GridText.Small, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      }
+      val lib = com.example.windows.biblioteca.BibliotecaHost.state(state)
+      val favs by lib.store.favorites.collectAsState()
+      val cur = t.track
+      val isFav = cur != null && cur.id in favs
+      IconButton({ cur?.let(lib.store::toggleFavorite) }, Modifier.size(Grid.u48), enabled = cur != null) {
+        Icon(if (isFav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, tr(Res.string.library_section_favorites), tint = if (isFav) cs.primary else cs.onSurfaceVariant)
       }
     }
     Column(Modifier.width(Grid.u384), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {

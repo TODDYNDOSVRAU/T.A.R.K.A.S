@@ -43,3 +43,9 @@ A second `EqDsp`/`PcmPipeline` renders the incoming file; both follow `setEq`. S
 - Now playing: no tint gradient; cover 384 r12 (real art); lyrics at Title size, current line `onSurface`, others alpha 0.35, 250 ms ease; waveform seek kept.
 - `player/PlayerArt.kt` (`CoverArt`): embedded ID3v2.3/2.4 APIC, FLAC picture, or `cover|folder|front|album.jpg|png` beside the file; none found gives null (placeholder tile). On each track change `ShellBackdrop.set(art, tint from Track.colorHex)`.
 - Status: `gradle.sh windows -p windows -q test createDistributable` exit 0 (`CoverArtTest`, `PlayerHooksTest` included). **Pending**: seeing it in the running app (layout at four sizes, light/dark), M4A/MP4 and OGG covers, 16-bit-depth art edge cases.
+
+## Expanded panel (owner order, WINDOWS-PEDIDO-2 item 3)
+
+Tapping the 48 dp cover of the transport bar opens `ExpandedPlayerPanel` (`player/PlayerExpanded.kt`) over the main area through the new shell slot `Panels.overlay`; Esc closes it first (`Panels.closeOverlay`, wired in `Main.kt` Back), as does the "Back" button. Left: large cover (384 or 192 dp), title/artist, waveform seek, controls, volume. Right: Fila / Letras tabs reusing `QueuePane` and `LyricsView` (highlighted current line, dimmed neighbours, auto-scroll). Motion: `graphicsLayer` alpha and translationY only, 250 ms open / 200 ms close, decelerate curve (0, 0, 0.2, 1); nothing recomposes per frame beyond the animated value read inside the layer block.
+Not ported from mobile: `CoverCarousel`/`PlayerTravel`/`PlayerExpand` depend on `android.os.SystemClock` and the touch-origin container transform; the desktop uses its own slide (`ExpandMath`).
+Verified: `bash .claude/sessoes/gradle.sh windows -p windows -q test createDistributable` exit 0 (`win-player-r7.log`), `ExpandedPlayerTest` 5 tests. **Pending:** frame rate (60-120 fps) not measured; not seen in the running app; no carousel swipe on desktop.

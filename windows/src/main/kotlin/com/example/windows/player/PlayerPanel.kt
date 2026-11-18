@@ -266,9 +266,9 @@ fun PlayerScreen(hooks: PlayerHooks, assets: TrackAssets) {
 }
 
 @Composable
-private fun Cover(track: Track?, tint: Color, art: androidx.compose.ui.graphics.ImageBitmap?, size: androidx.compose.ui.unit.Dp) {
+internal fun Cover(track: Track?, tint: Color, art: androidx.compose.ui.graphics.ImageBitmap?, size: androidx.compose.ui.unit.Dp) {
   if (art != null) {
-    androidx.compose.foundation.Image(art, track?.title, Modifier.size(size).clip(Grid.r12), contentScale = androidx.compose.ui.layout.ContentScale.Crop)
+    androidx.compose.foundation.Image(art, track?.title, Modifier.size(size).clip(Grid.r12), contentScale = androidx.compose.ui.layout.ContentScale.Crop, filterQuality = androidx.compose.ui.graphics.FilterQuality.High)
     return
   }
   Box(Modifier.size(size).clip(Grid.r12).background(Brush.linearGradient(listOf(tint.copy(alpha = 0.9f), tint.copy(alpha = 0.35f)))), contentAlignment = Alignment.Center) {
@@ -277,7 +277,7 @@ private fun Cover(track: Track?, tint: Color, art: androidx.compose.ui.graphics.
 }
 
 @Composable
-private fun TrackInfo(t: TransportState, problem: String?) {
+internal fun TrackInfo(t: TransportState, problem: String?) {
   val cs = MaterialTheme.colorScheme
   val cur = t.track
   Column(verticalArrangement = Arrangement.spacedBy(Grid.u6)) {
@@ -290,7 +290,7 @@ private fun TrackInfo(t: TransportState, problem: String?) {
 }
 
 @Composable
-private fun Controls(hooks: PlayerHooks, t: TransportState) {
+internal fun Controls(hooks: PlayerHooks, t: TransportState) {
   val cs = MaterialTheme.colorScheme
   Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
     IconButton(hooks::toggleShuffle, Modifier.size(Grid.u48)) {
@@ -359,7 +359,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRectLine(c: Col
 // Lyrics -----------------------------------------------------------------------------------------------
 
 @Composable
-private fun LyricsView(lyrics: Lyrics?, t: TransportState, hooks: PlayerHooks, modifier: Modifier) {
+internal fun LyricsView(lyrics: Lyrics?, t: TransportState, hooks: PlayerHooks, modifier: Modifier) {
   val cs = MaterialTheme.colorScheme
   if (lyrics == null) {
     Box(modifier, contentAlignment = Alignment.Center) {
@@ -474,7 +474,7 @@ fun PlayerSidePane(hooks: PlayerHooks, assets: TrackAssets, kind: PlayerPane) {
 }
 
 @Composable
-private fun QueuePane(hooks: PlayerHooks) {
+internal fun QueuePane(hooks: PlayerHooks) {
   val cs = MaterialTheme.colorScheme
   val c = hooks.controller
   val ui by c.ui.collectAsState()

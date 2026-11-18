@@ -100,7 +100,7 @@ fun TrackArtwork(track: Track, size: Dp, modifier: Modifier = Modifier) {
     contentAlignment = Alignment.Center
   ) {
     val bmp = image
-    if (bmp != null) Image(bmp, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+    if (bmp != null) Image(bmp, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop, filterQuality = androidx.compose.ui.graphics.FilterQuality.High)
     else Icon(Icons.Filled.MusicNote, null, Modifier.size(Grid.icon), tint = Color.White.copy(alpha = 0.9f))
   }
 }

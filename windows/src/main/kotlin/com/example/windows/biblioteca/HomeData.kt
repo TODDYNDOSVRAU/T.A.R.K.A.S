@@ -9,7 +9,7 @@ import com.example.data.playback.TrackStats
 
 /** One entry of Speed dial or Daily Mixes: a cover, two lines and what a click plays. [titleKey] is non-null for entries the UI names itself. */
 data class HomeEntry(val id: String, val title: String, val subtitle: String, val cover: Track?, val tracks: List<Track>, val kind: Kind) {
-  enum class Kind { FAVOURITES, PLAYLIST, TRACK, AUTO, GENRE }
+  enum class Kind { FAVOURITES, PLAYLIST, TRACK, AUTO, GENRE, ALBUM }
 }
 
 /** What the Home dashboard shows, computed from real library data only. Pure, so the JVM tests cover it. */
@@ -52,4 +52,22 @@ object HomeData {
   /** What is playing, then the history, newest first, without repeats. */
   fun listening(current: Track?, history: List<Track>, limit: Int = 12): List<Track> =
     (listOfNotNull(current) + history.asReversed()).distinctBy { it.id }.take(limit)
+
+  /** Two lists woven one by one (a, b, a, b, ...), without repeated ids, so neither catalogue crowds the other out. */
+  fun interleave(a: List<Track>, b: List<Track>, limit: Int = 24): List<Track> {
+    val out = ArrayList<Track>()
+    for (i in 0 until maxOf(a.size, b.size)) {
+      a.getOrNull(i)?.let { out += it }
+      b.getOrNull(i)?.let { out += it }
+    }
+    return out.distinctBy { it.id }.take(limit)
+  }
+
+  /** Albums found among [tracks] (a catalogue's songs): the tracks that share an album and artist, in first-seen order. Songs without an album are left out. */
+  fun albums(tracks: List<Track>, limit: Int = 12): List<HomeEntry> =
+    tracks.filter { it.album.isNotBlank() }.groupBy { it.album.trim().lowercase() + "|" + it.artist.trim().lowercase() }.values
+      .take(limit).map { g ->
+        val first = g.first()
+        HomeEntry("al:" + first.album + "|" + first.artist, first.album, first.artist, first, g, HomeEntry.Kind.ALBUM)
+      }
 }

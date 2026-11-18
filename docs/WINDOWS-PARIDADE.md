@@ -122,3 +122,13 @@ Command: `gradle.sh win-biblioteca -p windows -q test --tests 'com.example.windo
 | Empty sections show an honest empty state; `glass()` surfaces; Grid tokens only | built; contrast over a real backdrop **pending** |
 
 `gradle.sh win-biblioteca -p windows -q test --tests 'com.example.windows.biblioteca.*'` exit 0. The Online trending lists left the dashboard; Audius/Jamendo remain in search results.
+
+## Início por PEDIDO-2 (win-biblioteca, 2026-11-18)
+
+| Item | Estado |
+|---|---|
+| Atalhos 4x2 (favoritos, playlists, mais tocadas) | Código + `HomeDataTest`; tela **pendente** |
+| Prateleiras Feito para você, Novos lançamentos, Álbuns, Ouvindo agora, "Mostrar tudo" | Código; tela **pendente** |
+| Audius/Jamendo/MusicBrainz com dados reais, busca e erros (offline, sem chave) | Clientes em `Catalog.kt`; estados tratados no Início; rede real **pendente**. Chave Jamendo só por `JAMENDO_CLIENT_ID` ou ajuste; nada no instalador |
+| Painel direito: faixa atual + sobre o artista (MusicBrainz) | Faixas online buscam sozinhas; arquivo local só após clique (envia título/artista) |
+| Rolagem: roda, setas, arrasto com inércia `CoverCarousel.project`, 300 ms desacelerando | Código; sensação **pendente**. `PlayerTravel`/`PlayerExpand` ficam com win-player |

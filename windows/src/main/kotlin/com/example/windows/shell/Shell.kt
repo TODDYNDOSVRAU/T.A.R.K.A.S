@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.Equalizer
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.PlayCircle
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -82,6 +83,10 @@ object Panels {
   /** Ctrl+Q and Ctrl+L: the player registers what opens its queue and lyrics in the [SidePane]. */
   var toggleQueue: (() -> Unit)? = null
   var toggleLyrics: (() -> Unit)? = null
+  /** Full-area panel drawn over the main area (the player's expanded panel); it draws nothing while closed. */
+  var overlay: PanelContent? = null
+  /** Esc: closes the overlay when open; true if it did. */
+  var closeOverlay: (() -> Boolean)? = null
 }
 
 /** The side pane at the right of the main area (replaces Android bottom sheets). One at a time; [id] lets a button toggle its own. */
@@ -129,6 +134,7 @@ fun TarkasShell(state: TarkasState, back: BackDispatcher, lifecycle: AppLifecycl
               Box(Modifier.fillMaxSize()) {
                 val panel = Panels.slots[tab]
                 if (panel != null) panel.Show(state) else Pending(tab)
+                Panels.overlay?.Show(state)
               }
             }
             AnimatedVisibility(side != null, enter = expandHorizontally(tween(200)), exit = shrinkHorizontally(tween(150))) {
@@ -171,11 +177,32 @@ private fun SideNav(state: TarkasState, current: TarkasNavTab, compact: Boolean)
     }
     NavOrder.forEachIndexed { i, tab ->
       if (tab == TarkasNavTab.SETTINGS) Box(Modifier.weight(1f))
+      if (tab == TarkasNavTab.LIBRARY) {
+        // Search sits before Biblioteca: opens it and focuses its search field, same as Ctrl+F.
+        val go = { SidePane.close(); state.selectTab(TarkasNavTab.LIBRARY); ShellSearch.request() }
+        if (compact) TooltipArea(tooltip = { Tooltip("Ctrl+F") }) { SearchItem(true, go) } else SearchItem(false, go)
+      }
       val label = stringResource(tab.label)
       val item = @Composable {
         NavItem(tab, label, i + 1, tab == current, compact) { SidePane.close(); state.selectTab(tab) }
       }
       if (compact) TooltipArea(tooltip = { Tooltip("$label  Ctrl+${i + 1}") }) { item() } else item()
+    }
+  }
+}
+
+@Composable
+private fun SearchItem(compact: Boolean, onClick: () -> Unit) {
+  val c = MaterialTheme.colorScheme
+  Row(
+    Modifier.fillMaxWidth().height(Grid.u48).clip(Grid.r12).clickable(onClick = onClick).padding(horizontal = Grid.u12),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = if (compact) Arrangement.Center else Arrangement.spacedBy(Grid.u12)
+  ) {
+    Icon(Icons.Outlined.Search, contentDescription = "Ctrl+F", tint = c.onSurfaceVariant, modifier = Modifier.size(Grid.u24))
+    if (!compact) {
+      Box(Modifier.weight(1f))
+      Text("Ctrl+F", style = GridText.Small, color = c.onSurfaceVariant)
     }
   }
 }
