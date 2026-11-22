@@ -3,8 +3,11 @@ package com.example.ui.theme
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -114,34 +117,115 @@ object PlayerOrigin {
 
 /**
  * Marks an element that opens the player: when it is pressed, its bounds become the shape the
- * player expands from. It only observes the press, so clicks and scrolling work as before.
+ * player expands from. Stores only the [androidx.compose.ui.layout.LayoutCoordinates] reference and
+ * computes [boundsInWindow] strictly on touch-down (avoiding 1,800+ `boundsInWindow()` + `Rect`
+ * allocations per second while scrolling a LazyColumn).
  */
 fun Modifier.opensPlayer(): Modifier = composed {
-  val bounds = remember { arrayOfNulls<Rect>(1) }
+  val coordsRef = remember { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
   this
-    .onGloballyPositioned { bounds[0] = it.boundsInWindow() }
+    .onGloballyPositioned { coordsRef[0] = it }
     .pointerInput(Unit) {
       awaitEachGesture {
         awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-        PlayerOrigin.press(bounds[0])
+        val c = coordsRef[0]
+        PlayerOrigin.press(if (c != null && c.isAttached) c.boundsInWindow() else null)
       }
     }
 }
 
 /**
- * A jelly spring (Motion.ExpandDamping): it overshoots about 8%. The sheet is clamped to the screen
- * (below), so the overshoot shows only in the travelling cover, which swings a little past its place.
+ * Interruptible iOS Fluid spring for expanding the full player: starts responsively, inherits
+ * momentum if redirected mid-flight, and settles cleanly with near-zero overshoot.
  */
-private val ExpandSpring = tween<Float>(
-  durationMillis = Motion.ExpandMillis,
-  easing = Motion.PlayerEasing
+private val ExpandSpring = spring<Float>(
+  dampingRatio = Motion.FluidDamping,
+  stiffness = 380f,
+  visibilityThreshold = 0.001f
 )
 
-/** Closing into the mini player: no overshoot, faster than the opening (see Motion.CollapseStiffness). */
-private val CollapseSpring = tween<Float>(
-  durationMillis = Motion.CollapseMillis,
-  easing = Motion.PlayerEasing
+/** Closing into the mini player: critically damped (no overshoot), brisk and continuous. */
+private val CollapseSpring = spring<Float>(
+  dampingRatio = 1f,
+  stiffness = 460f,
+  visibilityThreshold = 0.001f
 )
+
+/**
+ * Container transform for a kept-warm full player driven by a boolean [transition] (`true` = open,
+ * `false` = closed). When settled closed (`!isOpen && progress <= 0.001f`), the player is neither
+ * placed nor drawn and exposes no semantics or touch targets, while keeping its composition and
+ * AGSL shaders warm in memory so re-opening has zero cold-composition CPU spike.
+ */
+@Composable
+fun Modifier.expandFromOrigin(
+  transition: Transition<Boolean>,
+  containerColor: Color,
+  reduced: Boolean
+): Modifier {
+  val isOpen = transition.targetState
+  val origin = remember(isOpen) { if (isOpen) PlayerOrigin.takeOpening() else PlayerOrigin.mini }
+  val progress = transition.animateFloat(
+    transitionSpec = {
+      if (reduced) androidx.compose.animation.core.snap()
+      else if (targetState) ExpandSpring else CollapseSpring
+    },
+    label = "playerExpand"
+  ) { open ->
+    if (open) 1f else 0f
+  }
+  // transition.currentState stays true until CollapseSpring finishes, so reading it avoids
+  // recomposing on every animation frame while progress animates.
+  val active = isOpen || transition.currentState
+  DisposableEffect(progress) {
+    onDispose { if (PlayerOrigin.progress === progress) PlayerOrigin.progress = null }
+  }
+  val closing = !isOpen && active
+  val self = remember { arrayOf(Offset.Zero) }
+  val cornerStart = Grid.u24
+  SideEffect {
+    PlayerOrigin.progress = if (active && !reduced) progress else null
+    PlayerOrigin.closing = closing
+    PlayerOrigin.fromMini = origin == null || origin == PlayerOrigin.mini
+    PlayerOrigin.openingCover = when {
+      origin == null -> null
+      origin == PlayerOrigin.mini && PlayerOrigin.miniCover != null -> PlayerOrigin.miniCover
+      else -> PlayerTravel.coverIn(origin)
+    }
+  }
+
+  if (!active) {
+    return this
+      .clearAndSetSemantics {}
+      .layout { measurable, constraints ->
+        // Keep sub-tree measured once (warm) without placing it on screen: 0 draw, 0 touch, 0 GPU cost.
+        measurable.measure(constraints)
+        layout(0, 0) {}
+      }
+  }
+
+  if (reduced) return this
+
+  return this
+    .onGloballyPositioned {
+      self[0] = it.positionInWindow()
+      PlayerOrigin.pageOrigin = self[0]
+    }
+    .graphicsLayer {
+      val p = progress.value.coerceIn(0f, 1f)
+      val full = Rect(Offset.Zero, size)
+      val from = ((if (closing) PlayerOrigin.mini ?: origin else origin)?.translate(-self[0]))
+        ?: Rect(Offset(size.width * 0.5f, size.height), Offset(size.width * 0.5f, size.height))
+      shape = SheetShape(lerp(from, full, p), (cornerStart.toPx() * (1f - p)).coerceAtLeast(0f))
+      clip = true
+      alpha = if (closing) {
+        val t = (p / 0.18f).coerceIn(0f, 1f)
+        t * t * (3f - 2f * t)
+      } else 1f
+    }
+    .drawBehind { drawRect(PlayerOrigin.tint ?: containerColor) }
+    .onGloballyPositioned { PlayerOrigin.pageCoords = it }
+}
 
 /**
  * Container transform for the full player: the mini player (or the tapped element) expands to fill the

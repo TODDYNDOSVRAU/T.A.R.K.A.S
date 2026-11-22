@@ -24,10 +24,14 @@ class BiquadCoefficients(
   /** Gain of this filter at [freqHz], in dB. Used to draw the real response curve. */
   fun magnitudeDb(freqHz: Double, sampleRate: Double): Double {
     val w = 2.0 * PI * freqHz / sampleRate
-    val cos1 = cos(w)
-    val sin1 = sin(w)
-    val cos2 = cos(2 * w)
-    val sin2 = sin(2 * w)
+    return magnitudeDbAtTrig(cos(w), sin(w), cos(2.0 * w), sin(2.0 * w))
+  }
+
+  /**
+   * Exact 64-bit IEEE 754 gain in dB using precomputed `(cos(w), sin(w), cos(2w), sin(2w))` from a
+   * frequency look-up table — eliminates 4 transcendental calls per point per filter during 120 Hz drag.
+   */
+  fun magnitudeDbAtTrig(cos1: Double, sin1: Double, cos2: Double, sin2: Double): Double {
     val numRe = b0 + b1 * cos1 + b2 * cos2
     val numIm = -(b1 * sin1 + b2 * sin2)
     val denRe = 1.0 + a1 * cos1 + a2 * cos2
@@ -132,6 +136,111 @@ class BiquadCoefficients(
         }
       }
       return BiquadCoefficients(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0)
+    }
+
+    /**
+     * Zero-allocation variant of [design] for the real-time audio thread (Dynamic EQ): writes the 5
+     * normalised coefficients `(b0, b1, b2, a1, a2)` directly into [out] starting at [offset].
+     */
+    fun designInto(
+      out: DoubleArray,
+      offset: Int,
+      type: FilterType,
+      freqHz: Double,
+      gainDb: Double,
+      q: Double,
+      sampleRate: Double
+    ) {
+      val f = freqHz.coerceIn(10.0, sampleRate * 0.49)
+      val safeQ = q.coerceIn(0.05, 30.0)
+      val a = 10.0.pow(gainDb / 40.0)
+      val w0 = 2.0 * PI * f / sampleRate
+      val cosW = cos(w0)
+      val sinW = sin(w0)
+      val alpha = sinW / (2.0 * safeQ)
+
+      val b0: Double
+      val b1: Double
+      val b2: Double
+      val a0: Double
+      val a1: Double
+      val a2: Double
+      when (type) {
+        FilterType.PEAK -> {
+          b0 = 1 + alpha * a
+          b1 = -2 * cosW
+          b2 = 1 - alpha * a
+          a0 = 1 + alpha / a
+          a1 = -2 * cosW
+          a2 = 1 - alpha / a
+        }
+        FilterType.LOW_SHELF -> {
+          val s = 2 * sqrt(a) * alpha
+          b0 = a * ((a + 1) - (a - 1) * cosW + s)
+          b1 = 2 * a * ((a - 1) - (a + 1) * cosW)
+          b2 = a * ((a + 1) - (a - 1) * cosW - s)
+          a0 = (a + 1) + (a - 1) * cosW + s
+          a1 = -2 * ((a - 1) + (a + 1) * cosW)
+          a2 = (a + 1) + (a - 1) * cosW - s
+        }
+        FilterType.HIGH_SHELF -> {
+          val s = 2 * sqrt(a) * alpha
+          b0 = a * ((a + 1) + (a - 1) * cosW + s)
+          b1 = -2 * a * ((a - 1) + (a + 1) * cosW)
+          b2 = a * ((a + 1) + (a - 1) * cosW - s)
+          a0 = (a + 1) - (a - 1) * cosW + s
+          a1 = 2 * ((a - 1) - (a + 1) * cosW)
+          a2 = (a + 1) - (a - 1) * cosW - s
+        }
+        FilterType.LOW_PASS -> {
+          b0 = (1 - cosW) / 2
+          b1 = 1 - cosW
+          b2 = (1 - cosW) / 2
+          a0 = 1 + alpha
+          a1 = -2 * cosW
+          a2 = 1 - alpha
+        }
+        FilterType.HIGH_PASS -> {
+          b0 = (1 + cosW) / 2
+          b1 = -(1 + cosW)
+          b2 = (1 + cosW) / 2
+          a0 = 1 + alpha
+          a1 = -2 * cosW
+          a2 = 1 - alpha
+        }
+        FilterType.NOTCH -> {
+          b0 = 1.0
+          b1 = -2 * cosW
+          b2 = 1.0
+          a0 = 1 + alpha
+          a1 = -2 * cosW
+          a2 = 1 - alpha
+        }
+        FilterType.BAND_PASS -> {
+          b0 = alpha
+          b1 = 0.0
+          b2 = -alpha
+          a0 = 1 + alpha
+          a1 = -2 * cosW
+          a2 = 1 - alpha
+        }
+        FilterType.TILT_SHELF -> {
+          val s = 2 * sqrt(a) * alpha
+          val scale = 1.0 / a
+          b0 = scale * (a * ((a + 1) + (a - 1) * cosW + s))
+          b1 = scale * (-2 * a * ((a - 1) + (a + 1) * cosW))
+          b2 = scale * (a * ((a + 1) + (a - 1) * cosW - s))
+          a0 = (a + 1) - (a - 1) * cosW + s
+          a1 = 2 * ((a - 1) - (a + 1) * cosW)
+          a2 = (a + 1) - (a - 1) * cosW - s
+        }
+      }
+      val invA0 = 1.0 / a0
+      out[offset] = b0 * invA0
+      out[offset + 1] = b1 * invA0
+      out[offset + 2] = b2 * invA0
+      out[offset + 3] = a1 * invA0
+      out[offset + 4] = a2 * invA0
     }
 
     /**

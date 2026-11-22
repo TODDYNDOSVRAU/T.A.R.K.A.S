@@ -8,6 +8,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,9 +26,11 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -64,12 +68,18 @@ import com.example.ui.screens.player.playerBackdrop
 import com.example.ui.screens.player.rememberPlayerBackdrop
 import com.example.ui.screens.player.rememberStreamVolume
 import com.example.ui.screens.player.revealWithPlayer
+import com.example.ui.theme.LocalBackdrop
 import com.example.ui.theme.LocalBarInset
+import com.example.ui.theme.LocalSurfaceStyle
 import com.example.ui.theme.Motion
 import com.example.ui.theme.PlayerTravel
+import com.example.ui.theme.SurfaceStyle
 import com.example.ui.theme.TarkasDarkOverride
+import com.example.ui.theme.liquidGlassSupported
 import com.example.ui.theme.rememberReducedMotion
 import com.example.ui.viewmodel.TrackDetailsState
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -147,14 +157,19 @@ fun MusicScreen(
   var pull by remember { mutableFloatStateOf(0f) }
   var pageHeightPx by remember { mutableFloatStateOf(1f) }
   val settleJob = remember { arrayOfNulls<Job>(1) }
-  fun springBack() {
+  fun springBack(initialVelocityNorm: Float = 0f) {
     settleJob[0]?.cancel()
     if (currentReduced) {
       pull = 0f
       return
     }
     settleJob[0] = scope.launch {
-      animate(pull, 0f, animationSpec = Motion.criticalSpatial()) { v, _ -> pull = v }
+      animate(
+        initialValue = pull,
+        targetValue = 0f,
+        initialVelocity = initialVelocityNorm,
+        animationSpec = Motion.fluid(visibilityThreshold = 0.001f)
+      ) { v, _ -> pull = v.coerceAtLeast(0f) }
     }
   }
   // Closing hands the page back to rest while the container and the cover travel to the mini player,
@@ -165,7 +180,8 @@ fun MusicScreen(
   }
   fun settlePull(velocityPx: Float) {
     // Past 30% it closes; a shorter pull closes only with a real flick downwards.
-    if (pull > 0.3f || (velocityPx > 1800f && pull > 0.06f)) closeFromPull() else springBack()
+    val velNorm = velocityPx / pageHeightPx.coerceAtLeast(1f)
+    if (pull > 0.3f || (velocityPx > 1600f && pull > 0.05f)) closeFromPull() else springBack(velNorm)
   }
   PredictiveBackHandler { events ->
     try {
@@ -205,6 +221,7 @@ fun MusicScreen(
       // Pulled down (or the back gesture previewed): the side covers go back behind the middle one.
       closingByHand = { pull > 0.01f },
       edgeFade = fade,
+      showSideCovers = !landscape,
       modifier = m
     )
   }
@@ -230,19 +247,9 @@ fun MusicScreen(
   }
   val progressPart: @Composable () -> Unit = {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-      ProgressRow(
-        currentTrack = currentTrack,
-        positionMs = currentPositionMs,
-        durationMs = durationMs,
-        isPlaying = isPlaying,
-        reduced = reduced,
-        waveform = waveform,
-        onScrubbing = { scrubbing = it },
-        onSeekTo = onSeekTo
-      )
-      if (currentTrack != null) {
-        val loop = state.abLoop
-        val loopLabel = when {
+      val loop = state.abLoop
+      val loopLabel = if (currentTrack != null) {
+        when {
           loop.isActive -> androidx.compose.ui.res.stringResource(
             com.example.R.string.player_ab_loop_active,
             formatLoopTime(loop.startMs!!),
@@ -254,20 +261,20 @@ fun MusicScreen(
           )
           else -> androidx.compose.ui.res.stringResource(com.example.R.string.player_ab_loop_off)
         }
-        androidx.compose.foundation.layout.Box(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = Grid.u6 / 2),
-          contentAlignment = Alignment.CenterEnd
-        ) {
-          com.example.ui.components.GlassChip(
-            label = loopLabel,
-            selected = loop.isActive || loop.isPendingB,
-            onClick = actions.onToggleAbLoop,
-            modifier = Modifier.testTag("player_ab_loop")
-          )
-        }
-      }
+      } else null
+      ProgressRow(
+        currentTrack = currentTrack,
+        positionMs = currentPositionMs,
+        durationMs = durationMs,
+        isPlaying = isPlaying,
+        reduced = reduced,
+        waveform = waveform,
+        onScrubbing = { scrubbing = it },
+        onSeekTo = onSeekTo,
+        abLoopLabel = loopLabel,
+        abLoopActive = loop.isActive || loop.isPendingB,
+        onToggleAbLoop = if (currentTrack != null) actions.onToggleAbLoop else null
+      )
     }
   }
   val transportPart: @Composable () -> Unit = {
@@ -290,123 +297,154 @@ fun MusicScreen(
   }
 
   TarkasDarkOverride(enabled = true) {
-    val pageModifier = modifier
-      .fillMaxSize()
-      .onSizeChanged { pageHeightPx = it.height.toFloat().coerceAtLeast(1f) }
-      .graphicsLayer {
-        val p = pull
-        translationY = p * size.height
-        val s = 1f - 0.06f * p.coerceAtMost(1f)
-        scaleX = s
-        scaleY = s
-        shape = RoundedCornerShape((Grid.u24.toPx() * (p * 5f).coerceAtMost(1f)))
-        clip = p > 0f
-      }
-      .draggable(
-        orientation = Orientation.Vertical,
-        state = rememberDraggableState { dy -> pull = (pull + dy / pageHeightPx).coerceAtLeast(0f) },
-        onDragStarted = { settleJob[0]?.cancel() },
-        onDragStopped = { velocity -> settlePull(velocity) }
-      )
-      .playerBackdrop(backdrop)
-      .statusBarsPadding()
-      .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
-      // No tab bar under the player: the controls clear the system bar, plus any banner that floats
-      // over the page (LocalBarInset).
-      .navigationBarsPadding()
-      .padding(horizontal = Grid.margin)
-      .padding(bottom = LocalBarInset.current)
-      .testTag("music_full_player_card")
-
-    if (landscape) {
-      // Landscape: two equal halves. Left, the cover carousel with the title and the progress; right, the
-      // controls (transport, volume and the other functions). The side covers are cut at the half's edge
-      // so they never run over the controls.
-      Row(modifier = pageModifier, verticalAlignment = Alignment.CenterVertically) {
-        Column(
-          modifier = Modifier.weight(1f).fillMaxHeight(),
-          horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-          artworkPart(
-            Modifier
-              .weight(1f)
-              .fillMaxWidth()
-              .padding(vertical = Grid.u12),
-            // The half ends at its edge: the side covers fade out well before it.
-            Grid.u48
-          )
-          Column(modifier = Modifier.fillMaxWidth()) {
-            titlePart()
-            Spacer(Modifier.height(Grid.u12))
-            progressPart()
+    val playerBgBackdrop = rememberLayerBackdrop()
+    val liquidOn = LocalSurfaceStyle.current == SurfaceStyle.LIQUID && liquidGlassSupported
+    CompositionLocalProvider(
+      LocalBackdrop provides if (liquidOn) playerBgBackdrop else null
+    ) {
+      Box(
+        modifier = modifier
+          .fillMaxSize()
+          .onSizeChanged { pageHeightPx = it.height.toFloat().coerceAtLeast(1f) }
+          .graphicsLayer {
+            val p = pull
+            translationY = p * size.height
+            val s = 1f - 0.06f * p.coerceAtMost(1f)
+            scaleX = s
+            scaleY = s
+            shape = RoundedCornerShape((Grid.u24.toPx() * (p * 5f).coerceAtMost(1f)))
+            clip = p > 0f
           }
-          Spacer(Modifier.height(Grid.u12))
-        }
-        Spacer(Modifier.width(Grid.margin))
-        Column(
-          modifier = Modifier.weight(1f).fillMaxHeight(),
-          horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-          CloseHandle(onClose = onClose, modifier = Modifier.revealWithPlayer())
-          if (tabletSideLyrics && currentTrack != null) {
-            // Tablet expanded (>= 840 dp): inline side-by-side lyrics panel (Apple Music iPad style).
-            androidx.compose.foundation.layout.Box(
-              modifier = Modifier
+          .draggable(
+            orientation = Orientation.Vertical,
+            state = rememberDraggableState { dy -> pull = (pull + dy / pageHeightPx).coerceAtLeast(0f) },
+            onDragStarted = { settleJob[0]?.cancel() },
+            onDragStopped = { velocity -> settlePull(velocity) }
+          )
+          .testTag("music_full_player_card")
+      ) {
+        // Background layer recorded by playerBgBackdrop so every Liquid Glass pill on the player
+        // refracts the blurred album art instead of solid black.
+        Box(
+          modifier = Modifier
+            .matchParentSize()
+            .then(if (liquidOn) Modifier.layerBackdrop(playerBgBackdrop) else Modifier)
+            .playerBackdrop(backdrop)
+        )
+        val pageModifier = Modifier
+          .fillMaxSize()
+          .statusBarsPadding()
+          .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+          .navigationBarsPadding()
+          .padding(horizontal = if (landscape) Grid.u48 else Grid.margin)
+          .padding(bottom = LocalBarInset.current)
+
+        if (landscape) {
+          // Apple Music iPad / Landscape layout: centred close handle at top; left half holds the large
+          // cover centred vertically; right half holds title, progress, transport, volume & actions cleanly balanced.
+          Column(modifier = pageModifier, horizontalAlignment = Alignment.CenterHorizontally) {
+            CloseHandle(onClose = onClose, modifier = Modifier.revealWithPlayer())
+            Row(
+              modifier = Modifier.weight(1f).fillMaxWidth(),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Column(
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+              ) {
+                artworkPart(
+                  Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(vertical = Grid.u12),
+                  Grid.u48
+                )
+              }
+              Spacer(Modifier.width(Grid.u48))
+              Column(
+                modifier = Modifier
+                  .weight(1f)
+                  .fillMaxHeight(),
+                horizontalAlignment = Alignment.CenterHorizontally
+              ) {
+                Column(
+                  modifier = Modifier
+                    .fillMaxHeight()
+                    .widthIn(max = 440.dp)
+                    .fillMaxWidth(),
+                  horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                  if (tabletSideLyrics && currentTrack != null) {
+                    Box(
+                      modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .clip(Grid.r12)
+                    ) {
+                      com.example.ui.components.LyricsPanelContent(
+                        track = currentTrack,
+                        state = lyrics,
+                        currentPositionMs = currentPositionMs,
+                        onSeek = onSeekTo,
+                        onImportLrc = actions.onImportLyrics,
+                        onCloseInline = { showLyrics = false }
+                      )
+                    }
+                    Spacer(Modifier.height(Grid.u12))
+                    titlePart()
+                    Spacer(Modifier.height(Grid.u6))
+                    progressPart()
+                    Spacer(Modifier.height(Grid.u6))
+                    transportPart()
+                    Spacer(Modifier.height(Grid.u6))
+                    actionsPart()
+                  } else {
+                    Spacer(Modifier.weight(1f))
+                    titlePart()
+                    Spacer(Modifier.height(Grid.u12))
+                    progressPart()
+                    Spacer(Modifier.height(Grid.u12))
+                    transportPart()
+                    Spacer(Modifier.height(Grid.u12))
+                    volumePart()
+                    Spacer(Modifier.height(Grid.u24))
+                    actionsPart()
+                    Spacer(Modifier.weight(1f))
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          Column(modifier = pageModifier, horizontalAlignment = Alignment.CenterHorizontally) {
+            CloseHandle(onClose = onClose, modifier = Modifier.revealWithPlayer())
+
+            artworkPart(
+              Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .clip(Grid.r12)
-            ) {
-              com.example.ui.components.LyricsPanelContent(
-                track = currentTrack,
-                state = lyrics,
-                currentPositionMs = currentPositionMs,
-                onSeek = onSeekTo,
-                onImportLrc = actions.onImportLyrics,
-                onCloseInline = { showLyrics = false }
-              )
+                .padding(vertical = Grid.u12),
+              // The side covers run off the screen: they fade out over the margin instead of being cut.
+              Grid.margin
+            )
+
+            // Everything under the cover rides the sheet's top edge up as the player opens and fades in on
+            // the same progress (revealWithPlayer): no element travels on its own path or appears out of
+            // nothing.
+            Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+              titlePart()
+              Spacer(Modifier.height(Grid.u12))
+              progressPart()
+              Spacer(Modifier.height(Grid.u12))
+              transportPart()
+              Spacer(Modifier.height(Grid.u12))
+              volumePart()
+              Spacer(Modifier.height(Grid.u12))
+              actionsPart()
+              Spacer(Modifier.height(Grid.u12))
             }
-            Spacer(Modifier.height(Grid.u12))
-            transportPart()
-            Spacer(Modifier.height(Grid.u6))
-            actionsPart()
-          } else {
-            Spacer(Modifier.weight(1f))
-            transportPart()
-            Spacer(Modifier.height(Grid.u12))
-            volumePart()
-            Spacer(Modifier.height(Grid.u12))
-            actionsPart()
-            Spacer(Modifier.weight(1f))
           }
-        }
-      }
-    } else {
-      Column(modifier = pageModifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        CloseHandle(onClose = onClose, modifier = Modifier.revealWithPlayer())
-
-        artworkPart(
-          Modifier
-            .weight(1f)
-            .fillMaxWidth()
-            .padding(vertical = Grid.u12),
-          // The side covers run off the screen: they fade out over the margin instead of being cut.
-          Grid.margin
-        )
-
-        // Everything under the cover rides the sheet's top edge up as the player opens and fades in on
-        // the same progress (revealWithPlayer): no element travels on its own path or appears out of
-        // nothing.
-        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-          titlePart()
-          Spacer(Modifier.height(Grid.u12))
-          progressPart()
-          Spacer(Modifier.height(Grid.u12))
-          transportPart()
-          Spacer(Modifier.height(Grid.u12))
-          volumePart()
-          Spacer(Modifier.height(Grid.u12))
-          actionsPart()
-          Spacer(Modifier.height(Grid.u12))
         }
       }
     }

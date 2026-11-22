@@ -135,6 +135,12 @@ object LegalTexts {
     title = "Novidades",
     subtitle = "O que mudou em cada versão",
     sections = listOf(
+      "2.3" to
+        "• Equalizador paramétrico renovado (PEQ Studio) com console em 2 colunas para tablets, filtros Notch, Band-Pass, Tilt Shelf, slopes Butterworth (6–48 dB/oct), Mid/Side, EQ dinâmico, Solo, Slots A/B e analisador RTA de 64 bandas sem permissão de microfone.\n" +
+        "• Novo motor DSP nativo em Rust (tarkas-dsp) com Crossfeed binaural, Limiter com Release e Soft-Clip, Equal-Loudness ISO 226, Compander Multibanda, Calor Valvulado/Fita 2x, Sub-Grave harmônico e Convolver FFT de 16.384 taps (.irs/.wav).\n" +
+        "• Arrasto 3D interativo no palco espacial, letras sincronizadas via lrclib.net + importação .lrc, Loop A-B, aba Pastas, playlists M3U/M3U8, Rádio Web, download offline (Jamendo/Audius), comandos DSP no Assistente e backup JSON de perfis por saída.",
+      "2.2" to
+        "• Refinamento visual Liquid Glass, otimizações térmicas e melhorias de estabilidade no player e no equalizador.",
       "2.1" to
         "• Equalizador de 10 bandas (31 Hz a 16 kHz, uma oitava cada), com a primeira e a última sobre as bordas do gráfico. Curvas salvas com as 15 bandas antigas são convertidas automaticamente.\n" +
         "• Predefinições e o gráfico usam a nova escala de frequência.",

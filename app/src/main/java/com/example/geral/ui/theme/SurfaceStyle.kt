@@ -26,6 +26,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.rememberCanvasBackdrop
 import com.kyant.backdrop.drawBackdrop
@@ -310,7 +311,7 @@ fun Modifier.glassPill(cornerRadius: Dp = Radius.xl, interactive: Boolean = fals
  */
 @Composable
 fun Modifier.liquidLensPill(
-  backdrop: LayerBackdrop,
+  backdrop: Backdrop,
   isDark: Boolean,
   trackAccent: Color? = null
 ): Modifier {
@@ -324,6 +325,10 @@ fun Modifier.liquidLensPill(
     )
   }
   val sheenTop = Color.White.copy(alpha = if (isDark) 0.16f else 0.30f)
+  val sheenColors = remember(isDark) { listOf(sheenTop, Color.Transparent) }
+  val accentBrush = remember(trackAccent) {
+    trackAccent?.let { Brush.horizontalGradient(listOf(it.copy(alpha = 0.45f), Color.Transparent)) }
+  }
   return this.drawBackdrop(
     backdrop = backdrop,
     shape = { RoundedCornerShape(50) },
@@ -335,14 +340,12 @@ fun Modifier.liquidLensPill(
     shadow = null,
     innerShadow = null,
     onDrawSurface = {
-      drawRect(Brush.verticalGradient(listOf(sheenTop, Color.Transparent), endY = size.height * 0.5f))
-      if (trackAccent != null) {
+      drawRect(Brush.verticalGradient(sheenColors, endY = size.height * 0.5f))
+      if (accentBrush != null) {
         val strokePx = 1.dp.toPx()
         val r = androidx.compose.ui.geometry.CornerRadius(size.height / 2f)
         drawRoundRect(
-          brush = Brush.horizontalGradient(
-            listOf(trackAccent.copy(alpha = 0.45f), Color.Transparent)
-          ),
+          brush = accentBrush,
           topLeft = Offset(strokePx / 2f, strokePx / 2f),
           size = androidx.compose.ui.geometry.Size(
             (size.width - strokePx).coerceAtLeast(0f),

@@ -44,4 +44,9 @@
     <string name="update_problem_hash_unavailable">A atualização não foi instalada: não foi possível obter o checksum publicado, então o arquivo não pode ser verificado. Conecte-se à internet e toque em \"Instalar agora\" de novo.</string>
     <string name="settings_update_cancel_download">Cancelar download</string>
     <string name="settings_update_notes_title">Novidades em %1$s</string>
+    <string name="update_popup_downloading">Baixando atualização… %1$d%%</string>
+    <string name="update_popup_installing">Preparando e instalando atualização…</string>
+    <string name="update_popup_awaiting_user">Confirme a instalação na janela do Android.</string>
+    <string name="update_popup_install_now">Instalar agora</string>
+    <string name="update_popup_retry">Tentar novamente</string>
 </resources>

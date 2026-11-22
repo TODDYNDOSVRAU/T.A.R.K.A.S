@@ -5,6 +5,7 @@ import android.provider.Settings
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -14,12 +15,18 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.IntOffset
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.exp
+import kotlin.math.sign
 import kotlin.math.sin
 import kotlin.math.sqrt
 import androidx.compose.foundation.clickable
@@ -107,6 +114,32 @@ object Motion {
   /** What leaves the screen or disappears: same stiffness, critically damped, never comes back inside. */
   fun <T> gelExit() = spring<T>(dampingRatio = 1f, stiffness = GelStiffness)
 
+  // Apple Fluid Interfaces (iOS native) spatial spring tokens: crisp, responsive, almost zero rebound.
+  const val FluidDamping = 0.85f
+  const val FluidStiffness = 480f
+  const val FluidFastDamping = 0.86f
+  const val FluidFastStiffness = 620f
+  const val FluidExitStiffness = 520f
+
+  /** Primary iOS-style spatial spring for screens, sheets, switches and controls. */
+  fun <T> fluid(visibilityThreshold: T? = null) = spring(FluidDamping, FluidStiffness, visibilityThreshold)
+
+  /** Snappier iOS-style spatial spring for popovers, chips, floating bars and micro-interactions. */
+  fun <T> fluidFast(visibilityThreshold: T? = null) = spring(FluidFastDamping, FluidFastStiffness, visibilityThreshold)
+
+  /** Critically damped exit spring: leaves briskly without overshooting back into view. */
+  fun <T> fluidExit() = spring<T>(dampingRatio = 1f, stiffness = FluidExitStiffness)
+
+  /**
+   * Apple UIScrollView asymptotic rubber-band resistance when dragging [overshoot] past a limit:
+   * `f(x) = (x * d * c) / (d + c * x)`. Preserves sign and smoothly saturates toward [limit].
+   */
+  fun rubberBand(overshoot: Float, limit: Float, coefficient: Float = 0.55f): Float {
+    if (overshoot == 0f || limit <= 0f) return 0f
+    val x = abs(overshoot)
+    return sign(overshoot) * (x * limit * coefficient) / (limit + coefficient * x)
+  }
+
   /** How many items of a list enter one after another, and the gap between them. */
   const val StaggerItems = 8
   const val StaggerStepMs = 30L
@@ -176,21 +209,21 @@ fun springAt(seconds: Float, damping: Float = 10f, mass: Float = 1f, stiffness: 
  * it away the other way. The page underneath moves a little and fades, so the two never cross.
  */
 fun subPageTransition(forward: Boolean, reduced: Boolean): ContentTransform {
-  if (reduced) return EnterTransition.None togetherWith ExitTransition.None
+  if (reduced) return fadeIn(tween(120)) togetherWith fadeOut(tween(100))
   val dir = if (forward) 1 else -1
-  return (slideInHorizontally(Motion.gel()) { w -> dir * w / 3 } + fadeIn(tween(200, delayMillis = 30))) togetherWith
-    (slideOutHorizontally(Motion.gelExit()) { w -> -dir * w / 8 } + fadeOut(tween(150)))
+  return (slideInHorizontally(Motion.fluid()) { w -> dir * w / 3 } + fadeIn(Motion.defaultEffects())) togetherWith
+    (slideOutHorizontally(Motion.fluidExit()) { w -> -dir * w / 8 } + fadeOut(Motion.defaultEffects()))
 }
 
 /**
  * Switching between sections of one page (chips like Playlists / Favoritos / Fila): a short slide in
- * the direction of the chip that was picked, with a quick crossfade. Gel in, critical out.
+ * the direction of the chip that was picked, with a quick crossfade. Fluid in, critical out.
  */
 fun sectionTransition(fromIndex: Int, toIndex: Int, reduced: Boolean): ContentTransform {
-  if (reduced) return EnterTransition.None togetherWith ExitTransition.None
+  if (reduced) return fadeIn(tween(120)) togetherWith fadeOut(tween(100))
   val dir = if (toIndex >= fromIndex) 1 else -1
-  return (slideInHorizontally(Motion.gel()) { w -> dir * w / 10 } + fadeIn(tween(180, delayMillis = 40))) togetherWith
-    (slideOutHorizontally(Motion.gelExit()) { w -> -dir * w / 14 } + fadeOut(tween(150)))
+  return (slideInHorizontally(Motion.fluidFast()) { w -> dir * w / 10 } + fadeIn(Motion.defaultEffects())) togetherWith
+    (slideOutHorizontally(Motion.fluidExit()) { w -> -dir * w / 14 } + fadeOut(Motion.defaultEffects()))
 }
 
 /**
@@ -222,17 +255,17 @@ enum class ListAnimation(val key: String, @androidx.annotation.StringRes val lab
 fun Modifier.listEntrance(index: Int): Modifier {
   val style = AppMotion.listAnimation
   if (AppMotion.reduced || style == ListAnimation.NONE) return this
-  // Saved with the row, so a row coming back into view is not delayed again; the animation itself
-  // (below, not saved) plays on every entry.
-  var staggered by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
-  val progress = remember(style) { androidx.compose.animation.core.Animatable(0f) }
-  androidx.compose.runtime.LaunchedEffect(style) {
-    if (!staggered && index < Motion.StaggerItems) kotlinx.coroutines.delay(index * Motion.StaggerStepMs)
-    staggered = true
+  // Plain primitive array avoids SaveableStateRegistry registration and prevents a secondary
+  // MutableState recomposition on every row 1 frame after it scrolls into view.
+  val staggered = remember { booleanArrayOf(false) }
+  val progress = remember(style) { Animatable(0f) }
+  LaunchedEffect(style) {
+    if (!staggered[0] && index < Motion.StaggerItems) kotlinx.coroutines.delay(index * Motion.StaggerStepMs)
+    staggered[0] = true
     progress.animateTo(
       1f,
-      if (style == ListAnimation.BOUNCE) spring(dampingRatio = 0.45f, stiffness = 420f)
-      else Motion.gel(visibilityThreshold = 0.002f)
+      if (style == ListAnimation.BOUNCE) spring(dampingRatio = 0.55f, stiffness = 520f, visibilityThreshold = 0.005f)
+      else Motion.fluidFast(visibilityThreshold = 0.005f)
     )
   }
   return this.graphicsLayer {
@@ -260,31 +293,62 @@ fun Modifier.listEntrance(index: Int): Modifier {
 }
 
 /**
- * Click with a small zoom-out while pressed, like tapping a card in Apple Music. Critically damped:
- * the press is answered at once and released without a wobble. With reduced motion there is no
- * zoom. The scale is read inside graphicsLayer, so the press animation does not recompose anything.
+ * Zero-recomposition GPU press scale driven by [interaction]: compresses immediately on press
+ * (critically damped, stiffness 950) and springs back on release using [Motion.fluidFast].
+ * Reads [Animatable.value] strictly inside [graphicsLayer], so tapping never triggers recomposition.
+ */
+@Composable
+fun Modifier.tactilePressScale(
+  interaction: MutableInteractionSource,
+  pressedScale: Float = 0.96f
+): Modifier {
+  val reduced = AppMotion.reduced
+  val scale = remember { Animatable(1f) }
+  LaunchedEffect(interaction, reduced, pressedScale) {
+    if (reduced) {
+      scale.snapTo(1f)
+      return@LaunchedEffect
+    }
+    var pressCount = 0
+    var animJob: Job? = null
+    interaction.interactions.collect { ev ->
+      when (ev) {
+        is PressInteraction.Press -> {
+          pressCount++
+          animJob?.cancel()
+          animJob = launch { scale.animateTo(pressedScale, Motion.criticalSpatial(stiffness = 950f)) }
+        }
+        is PressInteraction.Release, is PressInteraction.Cancel -> {
+          pressCount = (pressCount - 1).coerceAtLeast(0)
+          if (pressCount == 0) {
+            animJob?.cancel()
+            animJob = launch { scale.animateTo(1f, Motion.fluidFast(visibilityThreshold = 0.001f)) }
+          }
+        }
+      }
+    }
+  }
+  return this.graphicsLayer {
+    val s = scale.value
+    scaleX = s
+    scaleY = s
+  }
+}
+
+/**
+ * Click with a subtle tactile zoom-out while pressed, like tapping a card in Apple Music.
+ * Driven strictly in [graphicsLayer] (0 recompositions per press/release).
  */
 @Composable
 fun Modifier.pressClickable(
-  pressedScale: Float = 0.97f,
+  pressedScale: Float = 0.96f,
   onClickLabel: String? = null,
   role: Role? = Role.Button,
   onClick: () -> Unit
 ): Modifier {
   val interaction = remember { MutableInteractionSource() }
-  val pressed = interaction.collectIsPressedAsState()
-  val reduced = AppMotion.reduced
-  val scale = animateFloatAsState(
-    targetValue = if (pressed.value && !reduced) pressedScale else 1f,
-    // The press is answered at once (critical); the release settles on the gel spring.
-    animationSpec = if (pressed.value) Motion.criticalSpatial(stiffness = 900f) else Motion.gel(visibilityThreshold = 0.001f),
-    label = "pressScale"
-  )
   return this
-    .graphicsLayer {
-      scaleX = scale.value
-      scaleY = scale.value
-    }
+    .tactilePressScale(interaction, pressedScale = pressedScale)
     .clickable(
       interactionSource = interaction,
       indication = null,

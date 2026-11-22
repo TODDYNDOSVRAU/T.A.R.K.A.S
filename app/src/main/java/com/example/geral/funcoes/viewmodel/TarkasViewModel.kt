@@ -180,13 +180,17 @@ class TarkasViewModel(
   /** The page open inside Ajustes (About, Terms, …), or null on Ajustes itself. */
   val settingsPage: StateFlow<SettingsSubPage?> = _settingsPage.asStateFlow()
 
-  /** Favourites as tracks, in the order they were added; worked out here once instead of on every frame. */
+  /** Single reactive index of tracks by id, computed only when subscribed and reused by Favourites and Assistant. */
+  private val tracksById: StateFlow<Map<String, Track>> = musicRepository.tracks
+    .map { list -> list.associateBy { it.id } }
+    .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+  /** Favourites as tracks, in the order they were added; active while subscribed (5 s grace). */
   val favoriteTracks: StateFlow<List<Track>> = kotlinx.coroutines.flow.combine(
-    libraryRepository.favorites, musicRepository.tracks, libraryRepository.savedTracks
-  ) { ids, tracks, saved ->
-    val byId = tracks.associateBy { it.id }
+    libraryRepository.favorites, tracksById, libraryRepository.savedTracks
+  ) { ids, byId, saved ->
     ids.mapNotNull { id -> byId[id] ?: saved[id] }
-  }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyList())
+  }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000), emptyList())
 
   // Equalizer presets: the built-in ones followed by the user's own.
   /** The saved curve, once loaded: what runs on it waits for this. */
@@ -202,7 +206,10 @@ class TarkasViewModel(
   val eqModified: StateFlow<Boolean> = _eqModified.asStateFlow()
 
   val eqSettings: StateFlow<EqSettings> get() = audioEngineManager.eqSettings
-  private var eqSaveJob: Job? = null
+  private val eqSavePending = kotlinx.coroutines.flow.MutableSharedFlow<EqSettings>(
+    extraBufferCapacity = 1,
+    onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST
+  )
 
   val activeCuriosity: StateFlow<Curiosity?> = playback.activeCuriosity
 
@@ -301,7 +308,8 @@ class TarkasViewModel(
   private val assistantActions = object : com.example.data.assistant.AssistantActions {
     override fun library(): com.example.data.assistant.LibrarySnapshot {
       val tracks = musicRepository.tracks.value
-      val byId = tracks.associateBy { it.id } + savedTracks.value
+      val cachedById = tracksById.value.takeIf { it.isNotEmpty() || tracks.isEmpty() } ?: tracks.associateBy { it.id }
+      val byId = cachedById + savedTracks.value
       return com.example.data.assistant.LibrarySnapshot(
         tracks = tracks,
         playlists = libraryRepository.playlists.value.map { p ->
@@ -440,6 +448,12 @@ class TarkasViewModel(
   init {
     loadInitialData()
     startTimerTicker()
+    // Single debounced persistence collector so 120 Hz EQ dragging allocates zero coroutine Jobs per frame.
+    viewModelScope.launch {
+      eqSavePending.debounce(400).collect { next ->
+        preferencesRepository.saveEqSettings(next)
+      }
+    }
     // Playback messages (a track that failed, the sleep timer) appear over the mini player.
     viewModelScope.launch {
       playback.notices.collect { showNotice(Notice(context.getString(it.textRes, *it.textArgs.toTypedArray()), it.actionLabelRes?.let { r -> context.getString(r) }, it.action)) }
@@ -461,9 +475,14 @@ class TarkasViewModel(
       eqLoaded.complete(settings)
     }
 
-    // Initial Siri greeting (concise without listing commands unless user asks for help)
-    // The saved conversation comes back when there is one; otherwise the greeting starts it.
-    _assistantMessages.value = restoreAssistantHistory() ?: assistantGreeting()
+    // Load saved assistant conversation off the main thread so Cold Start never blocks on disk I/O.
+    _assistantMessages.value = assistantGreeting()
+    viewModelScope.launch(Dispatchers.IO) {
+      val restored = restoreAssistantHistory()
+      if (restored != null) {
+        _assistantMessages.value = restored
+      }
+    }
   }
 
   /**
@@ -488,11 +507,16 @@ class TarkasViewModel(
   val canGoBack: Boolean get() = nav.canGoBack
 
   private fun navigate(change: (NavStack) -> Unit) {
+    val prevTab = nav.currentTab
     change(nav)
     _currentTab.value = nav.currentTab
     _isShowingCuriositySettings.value = nav.showingCuriosity
     _settingsPage.value = nav.settingsPage
     savedState[KEY_ROUTES] = nav.encode()
+    // Release the ~8.800-entry AutoEq search index from RAM when leaving the Audio tab.
+    if (prevTab == TarkasNavTab.AUDIO && nav.currentTab != TarkasNavTab.AUDIO) {
+      closeDevicePicker()
+    }
   }
 
   fun playTrack(track: Track) = startList(track, null)
@@ -833,17 +857,15 @@ class TarkasViewModel(
 
   // ---- Equalizer ----
 
-  /** Changes the curve. Saved shortly after the last change, so dragging does not write on every frame. */
+  /** Changes the curve. Saved shortly after the last change via a single debounced flow (0 Job allocations per frame). */
   fun updateEq(transform: (EqSettings) -> EqSettings) {
-    val next = transform(audioEngineManager.eqSettings.value)
+    val prev = audioEngineManager.eqSettings.value
+    val next = transform(prev)
+    if (next == prev) return
     audioEngineManager.applyEqSettings(next)
     val preset = _eqPresets.value.find { it.id == _activePresetId.value }
     _eqModified.value = preset == null || com.example.data.model.EqCompare.edited(next, preset.settings)
-    eqSaveJob?.cancel()
-    eqSaveJob = viewModelScope.launch {
-      kotlinx.coroutines.delay(400)
-      preferencesRepository.saveEqSettings(next)
-    }
+    eqSavePending.tryEmit(next)
   }
 
   fun setEqEnabled(enabled: Boolean) = updateEq { it.copy(enabled = enabled) }
@@ -1137,6 +1159,19 @@ class TarkasViewModel(
       _deviceSearch.update { it.copy(results = results) }
     }
   }
+
+  /** Releases the in-memory AutoEq index and filtered results when the fone picker / Audio tab closes. */
+  fun closeDevicePicker() {
+    deviceSearchJob?.cancel()
+    deviceSearchJob = null
+    if (deviceIndex.isNotEmpty() || _deviceSearch.value.results.isNotEmpty()) {
+      deviceIndex = emptyList()
+      _deviceSearch.update { it.copy(results = emptyList(), loading = false) }
+    }
+  }
+
+  /** Informs the audio engine whether the UI is currently visible in the foreground (`STARTED`). */
+  fun setUiForeground(foreground: Boolean) = audioEngineManager.setUiForeground(foreground)
 
   /** Downloads the fone's curve and applies it as the correction stage. */
   fun applyDevice(entry: com.example.data.autoeq.AutoEqEntry, onDone: () -> Unit) {

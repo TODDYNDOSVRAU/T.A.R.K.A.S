@@ -72,11 +72,11 @@ object UpdateManager {
   }
 
   /**
-   * Only the published (release) build installs updates. A debug build is signed with the developer's
-   * key, not the release key, so Android would refuse the release over it or require erasing its data;
-   * it only tells that a newer version exists.
+   * Direct in-app updates via PackageInstaller. Integrity and signing certificates are always
+   * verified in [verify]; if an installed debug build has a different key than a published release,
+   * [UpdateProblem.SIGNATURE] is reported clearly inside the popup instead of redirecting to GitHub.
    */
-  val installsUpdates: Boolean get() = !BuildConfig.DEBUG
+  val installsUpdates: Boolean get() = true
 
   val autoEnabled: Boolean get() = store.autoEnabled
   val wifiOnly: Boolean get() = store.wifiOnly

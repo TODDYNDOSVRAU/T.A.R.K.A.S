@@ -117,7 +117,9 @@ internal fun Artwork(
   closingByHand: () -> Boolean,
   /** Width over which the carousel fades out at its left and right edges. */
   edgeFade: Dp,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  /** Whether adjacent covers peek out at rest (true in portrait, false in two-pane landscape/tablet). */
+  showSideCovers: Boolean = true
 ) {
   // [isPlaying] here is "playing or a track on its way" (PlaybackController.wantsToPlay), so the
   // moment between two tracks does not read as a pause: the cover stays full size through the change.
@@ -246,7 +248,12 @@ internal fun Artwork(
   }
 
   val carouselContext = LocalContext.current
-  BoxWithConstraints(modifier = modifier.bleedHorizontally(Grid.margin).carouselEdgeFade(edgeFade), contentAlignment = Alignment.Center) {
+  val boxMod = if (showSideCovers) {
+    modifier.bleedHorizontally(Grid.margin).carouselEdgeFade(edgeFade)
+  } else {
+    modifier
+  }
+  BoxWithConstraints(modifier = boxMod, contentAlignment = Alignment.Center) {
     // The middle cover keeps the size the single cover had, inside the page's margins
     // (CoverCarousel.centreSide); the side covers show in the margins and run off the screen.
     val density = LocalDensity.current
@@ -275,6 +282,7 @@ internal fun Artwork(
               playScale = playScale,
               changePop = changePop,
               spread = spread,
+              showSideCovers = showSideCovers,
               resting = { resting },
               reduced = reduced
             )
@@ -490,14 +498,20 @@ internal fun CarouselCover(
   changePop: Animatable<Float, *>,
   spread: Animatable<Float, *>,
   resting: () -> Rect?,
-  reduced: Boolean
+  reduced: Boolean,
+  showSideCovers: Boolean = true
 ) {
   /**
-   * How far the side covers are out: the spread, and nothing from the first frame of closing, so the
-   * middle cover never travels to the mini player with covers beside it (a pull down, which comes
-   * before, slides them back with the spread itself).
+   * How far the side covers are out: in portrait ([showSideCovers] = true) they rest outside once
+   * opened; in landscape/tablet ([showSideCovers] = false) they stay tucked at 0f at rest and only
+   * emerge while actively swiping between tracks.
    */
-  fun spreadNow(): Float = if (PlayerOrigin.closing && PlayerOrigin.progress != null) 0f else spread.value
+  fun spreadNow(): Float {
+    if (PlayerOrigin.closing && PlayerOrigin.progress != null) return 0f
+    if (showSideCovers) return spread.value
+    val swipeDist = abs(carousel.camera.floatValue - carousel.center)
+    return if (carousel.dragging || swipeDist > 0.005f) (swipeDist * 2.2f).coerceIn(0f, 1f) else 0f
+  }
   // A cover that arrives at a side after the player opened fades in rather than popping in.
   val appear = remember { Animatable(if (carousel.fadeNewCards) 0f else 1f) }
   LaunchedEffect(Unit) { if (appear.value < 1f) appear.animateTo(1f, tween(180)) }

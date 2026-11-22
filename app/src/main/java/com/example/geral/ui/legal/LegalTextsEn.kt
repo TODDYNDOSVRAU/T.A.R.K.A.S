@@ -105,6 +105,12 @@ internal object LegalTextsEn {
     title = "What's new",
     subtitle = "What changed in each version",
     sections = listOf(
+      "2.3" to
+        "• Redesigned parametric equalizer (PEQ Studio) with a 2-pane tablet console, Notch, Band-Pass and Tilt Shelf filters, Butterworth slopes (6-48 dB/oct), Mid/Side, Dynamic EQ, Solo, A/B Slots, and a 64-band internal FFT RTA requiring zero microphone permissions.\n" +
+        "• Native Rust DSP engine (tarkas-dsp) with binaural Crossfeed, configurable Limiter Release and Soft-Clip, ISO 226 Equal-Loudness, 3-band Multiband Compander, 2x Tube/Tape warmth, Sub-Bass harmonics, and a 16,384-tap FFT Convolver (.irs/.wav).\n" +
+        "• Interactive 3D spatial stage drag, synced lyrics via lrclib.net + .lrc import, A-B Loop, Folders tab, M3U/M3U8 playlists, Web Radio streams, offline download (Jamendo/Audius), Assistant DSP commands, and JSON backup of output profiles.",
+      "2.2" to
+        "• Liquid Glass visual refinement, thermal optimizations, and playback stability improvements.",
       "2.1" to
         "• 10-band equalizer (31 Hz to 16 kHz, one octave each), with the first and last bands on the edges of the graph. Curves saved with the old 15 bands are converted automatically.\n" +
         "• Presets and the graph use the new frequency scale.",

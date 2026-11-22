@@ -1,12 +1,25 @@
 package com.example.ui.screens
 
+import com.example.ui.layout.WidthClass
 import com.example.ui.layout.readingColumn
+import com.example.ui.layout.rememberWidthClass
+import com.example.ui.theme.SquircleShape
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -40,9 +53,13 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.Icon
@@ -216,16 +233,6 @@ fun AssistantScreen(
     onSendMessage(text)
   }
 
-  // Keep the newest message in view: index 0 is the header, messages follow.
-  // The last item is the "thinking" line while a reply is pending, otherwise the newest message. Scrolling to
-  // the message index alone left that line below the fold after sending (F23).
-  val lastIndex = messages.size + (if (isProcessing) 1 else 0)
-  LaunchedEffect(messages.size, isProcessing) {
-    if (messages.isNotEmpty() || isProcessing) {
-      if (reduced) listState.scrollToItem(lastIndex) else listState.animateScrollToItem(lastIndex)
-    }
-  }
-
   val listeningText = stringResource(R.string.assistant_listening)
   val thinkingText = stringResource(R.string.assistant_thinking)
   val lastReply = messages.lastOrNull()?.takeIf { it.sender != MessageSender.USER }
@@ -239,72 +246,166 @@ fun AssistantScreen(
   }
   val suggestions = remember(playback) { SuggestionCommands.filter { it.offeredWhen(playback) } }
   val hasUserMessage = messages.any { it.sender == MessageSender.USER }
+  var showQuickCommands by rememberSaveable { mutableStateOf(false) }
+  val isCompact = rememberWidthClass() == WidthClass.COMPACT
+  val lastIndex = (messages.size - 1 + (if (isProcessing) 1 else 0)).coerceAtLeast(0)
+  LaunchedEffect(messages.size, isProcessing) {
+    if (hasUserMessage && (messages.isNotEmpty() || isProcessing)) {
+      if (reduced) listState.scrollToItem(lastIndex) else listState.animateScrollToItem(lastIndex)
+    }
+  }
 
-  Column(modifier = modifier.fillMaxSize().readingColumn().padding(bottom = LocalBarInset.current)) {
-    // The live region: one dot-sized node, so it is announced but adds nothing visible.
-    Box(
-      Modifier
-        .size(Grid.u6)
-        .semantics {
-          liveRegion = LiveRegionMode.Polite
-          contentDescription = announcement
-        }
-    )
-    LazyColumn(
-      state = listState,
-      modifier = Modifier.weight(1f),
-      contentPadding = PaddingValues(start = Grid.margin, end = Grid.margin, top = Grid.u6, bottom = Grid.u12),
-      verticalArrangement = Arrangement.spacedBy(Grid.u12)
+  // Minimalist Conversational UI (Claude / ChatGPT style) — unified across Smartphone, Tablet Portrait & Landscape.
+  val pillShape = SquircleShape(26.dp)
+  val cardShape = SquircleShape(16.dp)
+  val hasInput = textInput.isNotBlank()
+
+  Box(
+    modifier = modifier
+      .fillMaxSize()
+      .padding(bottom = LocalBarInset.current + Grid.u12),
+    contentAlignment = Alignment.TopCenter
+  ) {
+    Column(
+      modifier = Modifier
+        .widthIn(max = 760.dp)
+        .fillMaxSize()
+        .padding(horizontal = Grid.margin)
     ) {
-      item {
-        Column(Modifier.fillMaxWidth()) {
-          Row(
+      // Live region for screen readers (1dp invisible node).
+      Box(
+        Modifier
+          .size(1.dp)
+          .semantics {
+            liveRegion = LiveRegionMode.Polite
+            contentDescription = announcement
+          }
+      )
+
+      // 1) Compact single-line Top Bar: subtle status pill (left) + Clear icon/confirm (right).
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .heightIn(min = 40.dp),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Row(
+          modifier = Modifier
+            .clip(Shapes.pill)
+            .background(colors.surfaceContainer)
+            .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), Shapes.pill)
+            .highlightClickable(onClick = { enableHelpShown = !enableHelpShown })
+            .padding(horizontal = Grid.u12, vertical = 6.dp)
+            .testTag("assistant_enable_help"),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+          Box(
             modifier = Modifier
-              .fillMaxWidth()
-              .clip(Grid.r12)
-              .background(colors.surfaceContainer)
-              .padding(start = Grid.inset, end = Grid.u6, top = Grid.u6, bottom = Grid.u6),
-            verticalAlignment = Alignment.CenterVertically
-          ) {
-            Text(
-              stringResource(if (online) R.string.assistant_status_online else R.string.assistant_status_local),
-              style = GridText.Small,
-              color = colors.onSurfaceVariant,
-              modifier = Modifier.weight(1f)
-            )
-            // Without a key the only way to turn the online AI on is at build time; say so on demand.
-            if (!hasGeminiKey) {
-              Box(
-                modifier = Modifier
-                  .heightIn(min = 36.dp)
-                  .clip(Shapes.pill)
-                  .highlightClickable(onClick = { enableHelpShown = !enableHelpShown })
-                  .padding(horizontal = Grid.u12)
-                  .testTag("assistant_enable_help"),
-                contentAlignment = Alignment.Center
-              ) {
+              .size(Grid.u6)
+              .clip(CircleShape)
+              .background(if (online) colors.primary else colors.onSurfaceVariant)
+          )
+          Text(
+            text = stringResource(if (online) R.string.assistant_status_online else R.string.assistant_status_local),
+            style = GridText.Small,
+            color = colors.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+          )
+          Icon(
+            imageVector = if (enableHelpShown) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+            contentDescription = null,
+            tint = colors.onSurfaceVariant,
+            modifier = Modifier.size(16.dp)
+          )
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        if (hasUserMessage) {
+          if (!confirmClear) {
+            Row(
+              modifier = Modifier
+                .clip(Shapes.pill)
+                .highlightClickable(onClick = { confirmClear = true })
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+                .testTag("assistant_clear"),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+              Icon(
+                imageVector = Icons.Rounded.DeleteOutline,
+                contentDescription = stringResource(R.string.assistant_clear),
+                tint = colors.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+              )
+              if (!isCompact) {
                 Text(
-                  stringResource(if (enableHelpShown) R.string.assistant_enable_hide else R.string.assistant_enable_action),
+                  text = stringResource(R.string.assistant_clear),
                   style = GridText.Small,
-                  color = colors.primary
+                  color = colors.onSurfaceVariant
                 )
               }
             }
+          } else {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+              Box(
+                modifier = Modifier
+                  .clip(Shapes.pill)
+                  .highlightClickable(onClick = { confirmClear = false })
+                  .padding(horizontal = 10.dp, vertical = 6.dp)
+              ) {
+                Text(stringResource(R.string.assistant_clear_no), style = GridText.Small, color = colors.onSurfaceVariant)
+              }
+              Box(
+                modifier = Modifier
+                  .clip(Shapes.pill)
+                  .background(colors.error.copy(alpha = 0.14f))
+                  .highlightClickable(onClick = {
+                    confirmClear = false
+                    onClearConversation()
+                  })
+                  .padding(horizontal = 10.dp, vertical = 6.dp)
+                  .testTag("assistant_clear_yes")
+              ) {
+                Text(stringResource(R.string.assistant_clear_yes), style = GridText.Small, color = colors.error)
+              }
+            }
           }
-          if (!hasGeminiKey && enableHelpShown) {
+        }
+      }
+
+      // Expandable status details / Online AI switch (hidden by default so top stays clean).
+      AnimatedVisibility(
+        visible = enableHelpShown,
+        enter = fadeIn() + expandVertically(),
+        exit = fadeOut() + shrinkVertically()
+      ) {
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = Grid.u6)
+            .clip(cardShape)
+            .background(colors.surfaceContainer)
+            .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
+            .padding(Grid.u12),
+          verticalArrangement = Arrangement.spacedBy(Grid.u6)
+        ) {
+          if (!hasGeminiKey) {
             Text(
-              stringResource(R.string.assistant_enable_body),
+              text = stringResource(R.string.assistant_enable_body),
               style = GridText.Small,
-              color = colors.onSurfaceVariant,
-              modifier = Modifier.fillMaxWidth().padding(bottom = Grid.u6)
+              color = colors.onSurfaceVariant
             )
-          }
-          if (hasGeminiKey) {
-            // The whole row is the switch, so the label and the knob both toggle it.
+          } else {
             Row(
               modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = Grid.u48)
+                .heightIn(min = 40.dp)
                 .toggleable(value = onlineAi, role = Role.Switch, onValueChange = onSetOnlineAi)
                 .testTag("assistant_online_switch"),
               verticalAlignment = Alignment.CenterVertically
@@ -320,101 +421,287 @@ fun AssistantScreen(
             Text(
               stringResource(if (onlineAi) R.string.assistant_online_disclosure_on else R.string.assistant_online_disclosure_off),
               style = GridText.Small,
-              color = colors.onSurfaceVariant,
-              modifier = Modifier.fillMaxWidth().padding(bottom = Grid.u6)
+              color = colors.onSurfaceVariant
             )
           }
-          if (isListening) {
-            Text(listeningText, style = GridText.Small, color = colors.primary, modifier = Modifier.padding(top = Grid.u6))
+        }
+      }
+
+      // Active timers (shown only when running).
+      if (activeTimers.isNotEmpty()) {
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = Grid.u6)
+            .clip(cardShape)
+            .background(colors.surfaceContainer)
+            .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
+        ) {
+          activeTimers.forEachIndexed { i, timer ->
+            if (i > 0) GroupDivider()
+            TimerRow(timer, onCancel = { onCancelTimer(timer.id) })
           }
-          if (messages.isEmpty()) {
-            Spacer(Modifier.height(Grid.u48))
-            Text(
-              stringResource(R.string.assistant_empty_title),
-              style = GridText.Title,
-              color = colors.onSurface,
-              textAlign = TextAlign.Center,
-              modifier = Modifier.fillMaxWidth()
-            )
-            Text(
-              stringResource(R.string.assistant_empty_body),
-              style = GridText.Body,
-              color = colors.onSurfaceVariant,
-              textAlign = TextAlign.Center,
-              modifier = Modifier.fillMaxWidth().padding(top = Grid.u6)
-            )
-          }
-          voiceError?.let {
-            Text(it, style = GridText.Small, color = colors.error, modifier = Modifier.padding(top = Grid.u12))
-          }
-          if (hasUserMessage) {
-            ClearConversation(
-              confirming = confirmClear,
-              onAsk = { confirmClear = true },
-              onConfirm = {
-                confirmClear = false
-                onClearConversation()
-              },
-              onCancel = { confirmClear = false }
-            )
-          }
-          if (activeTimers.isNotEmpty()) {
-            Spacer(Modifier.height(Grid.u12))
-            // Drawn like an InsetGroup, without its page margin: the list already applies it.
-            Column(
-              Modifier
-                .fillMaxWidth()
-                .clip(Grid.r12)
-                .background(colors.surface)
-            ) {
-              activeTimers.forEachIndexed { i, timer ->
-                if (i > 0) GroupDivider()
-                TimerRow(timer, onCancel = { onCancelTimer(timer.id) })
+        }
+      }
+
+      if (isListening) {
+        Text(
+          listeningText,
+          style = GridText.Small,
+          color = colors.primary,
+          modifier = Modifier.padding(top = Grid.u6)
+        )
+      }
+      voiceError?.let {
+        Text(
+          it,
+          style = GridText.Small,
+          color = colors.error,
+          modifier = Modifier.padding(top = Grid.u6)
+        )
+      }
+
+      // 2) Main Open Canvas (zero heavy box around the chat).
+      if (!hasUserMessage) {
+        // Welcoming empty state: centered greeting + 4 clean starter cards (2x2).
+        val starterSuggestions = remember(suggestions) { suggestions.take(4) }
+        val greeting = messages.firstOrNull { it.sender == MessageSender.ASSISTANT }?.text
+          ?: stringResource(R.string.assistant_empty_title)
+        Column(
+          modifier = Modifier
+            .weight(1f)
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
+          verticalArrangement = Arrangement.Center,
+          horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+          Text(
+            text = greeting,
+            style = GridText.Title,
+            color = colors.onSurface,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 520.dp)
+          )
+          Text(
+            text = stringResource(R.string.assistant_empty_body),
+            style = GridText.Body,
+            color = colors.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+              .widthIn(max = 460.dp)
+              .padding(top = Grid.u6, bottom = Grid.u24)
+          )
+          Column(
+            modifier = Modifier.widthIn(max = 560.dp).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(Grid.u12)
+          ) {
+            for (i in starterSuggestions.indices step 2) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Grid.u12)
+              ) {
+                for (j in i..minOf(i + 1, starterSuggestions.lastIndex)) {
+                  val suggestion = starterSuggestions[j]
+                  val command = stringResource(suggestion.command)
+                  Box(
+                    modifier = Modifier
+                      .weight(1f)
+                      .heightIn(min = 52.dp)
+                      .clip(cardShape)
+                      .background(colors.surfaceContainer)
+                      .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
+                      .highlightClickable(onClick = { onSendMessage(command) })
+                      .padding(horizontal = Grid.u12, vertical = Grid.u12)
+                      .testTag("assistant_action_${command.take(8)}"),
+                    contentAlignment = Alignment.CenterStart
+                  ) {
+                    Text(
+                      text = stringResource(suggestion.label),
+                      style = GridText.Body,
+                      color = colors.onSurface,
+                      maxLines = 2,
+                      overflow = TextOverflow.Ellipsis
+                    )
+                  }
+                }
+                if (i + 1 > starterSuggestions.lastIndex) {
+                  Spacer(Modifier.weight(1f))
+                }
               }
+            }
+          }
+        }
+      } else {
+        // Active conversation: open, distraction-free message stream.
+        LazyColumn(
+          state = listState,
+          modifier = Modifier.weight(1f).fillMaxWidth(),
+          contentPadding = PaddingValues(top = Grid.u12, bottom = Grid.u12),
+          verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+          items(messages, key = { it.id }) { message -> MessageBubble(message, onRetry) }
+          if (isProcessing) {
+            item {
+              ThinkingIndicator(stringResource(R.string.assistant_thinking_visible), reduced)
             }
           }
         }
       }
 
-      items(messages, key = { it.id }) { message -> MessageBubble(message, onRetry) }
-
-      if (isProcessing) {
-        item {
-          ThinkingIndicator(stringResource(R.string.assistant_thinking_visible), reduced)
+      // 3) On-demand Quick Commands Popover (revealed smoothly when tapping '+' inside the bottom capsule).
+      AnimatedVisibility(
+        visible = showQuickCommands,
+        enter = fadeIn() + expandVertically(expandFrom = Alignment.Bottom),
+        exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom)
+      ) {
+        val cols = if (isCompact) 2 else 3
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = Grid.u6)
+            .clip(cardShape)
+            .background(colors.surfaceContainer)
+            .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
+            .padding(Grid.u12),
+          verticalArrangement = Arrangement.spacedBy(Grid.u6)
+        ) {
+          for (i in suggestions.indices step cols) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.spacedBy(Grid.u6)
+            ) {
+              for (j in i until minOf(i + cols, suggestions.size)) {
+                val suggestion = suggestions[j]
+                val command = stringResource(suggestion.command)
+                Box(
+                  modifier = Modifier
+                    .weight(1f)
+                    .height(38.dp)
+                    .clip(SquircleShape(12.dp))
+                    .background(colors.surface)
+                    .highlightClickable(onClick = {
+                      showQuickCommands = false
+                      onSendMessage(command)
+                    })
+                    .padding(horizontal = Grid.u6)
+                    .testTag("assistant_action_${command.take(8)}"),
+                  contentAlignment = Alignment.Center
+                ) {
+                  Text(
+                    text = stringResource(suggestion.label),
+                    style = GridText.Small,
+                    color = colors.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                  )
+                }
+              }
+              val missing = (i + cols) - minOf(i + cols, suggestions.size)
+              repeat(missing) { Spacer(Modifier.weight(1f)) }
+            }
+          }
         }
       }
-    }
 
-    Suggestions(suggestions, onSendMessage)
+      // 4) Unified Bottom Input Capsule (Claude / ChatGPT style): [ + ] [ Text Field ] [ Mic ] [ Send ].
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(top = Grid.u6)
+          .clip(pillShape)
+          .background(colors.surfaceContainer)
+          .border(Grid.hairline, colors.onSurface.copy(alpha = 0.12f), pillShape)
+          .padding(horizontal = 6.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+      ) {
+        // '+' Quick commands toggle button
+        Box(
+          modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(if (showQuickCommands) colors.primary.copy(alpha = 0.16f) else Color.Transparent)
+            .highlightClickable(onClick = { showQuickCommands = !showQuickCommands })
+            .testTag("assistant_quick_commands_toggle"),
+          contentAlignment = Alignment.Center
+        ) {
+          Icon(
+            imageVector = if (showQuickCommands) Icons.Rounded.Close else Icons.Rounded.Add,
+            contentDescription = stringResource(R.string.assistant_suggestion_help),
+            tint = if (showQuickCommands) colors.primary else colors.onSurfaceVariant,
+            modifier = Modifier.size(22.dp)
+          )
+        }
 
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(start = Grid.margin, end = Grid.margin, top = Grid.u12, bottom = Grid.u12),
-      verticalAlignment = Alignment.Bottom
-    ) {
-      ComposerField(
-        value = textInput,
-        onValueChange = { textInput = it },
-        onSend = ::send,
-        modifier = Modifier.weight(1f).testTag("siri_text_input")
-      )
-      IconAction(
-        icon = Icons.Rounded.Mic,
-        contentDescription = stringResource(if (isListening) R.string.assistant_listening else R.string.assistant_mic_idle),
-        onClick = ::launchVoiceInput,
-        tint = if (isListening) colors.primary else colors.onSurface,
-        modifier = Modifier.testTag("siri_voice_orb")
-      )
-      IconAction(
-        icon = Icons.Rounded.ArrowUpward,
-        contentDescription = stringResource(R.string.assistant_send),
-        onClick = ::send,
-        tint = if (textInput.isBlank()) colors.onSurfaceVariant.copy(alpha = 0.5f) else colors.primary,
-        filled = true,
-        size = Grid.u48,
-        modifier = Modifier.testTag("siri_send_button")
-      )
+        // Borderless integrated text field
+        val fieldDescription = stringResource(R.string.assistant_composer_description)
+        Box(
+          modifier = Modifier
+            .weight(1f)
+            .heightIn(min = 40.dp)
+            .padding(horizontal = 6.dp, vertical = 8.dp),
+          contentAlignment = Alignment.CenterStart
+        ) {
+          if (textInput.isEmpty()) {
+            Text(
+              text = stringResource(R.string.assistant_composer_placeholder),
+              style = GridText.Body,
+              color = colors.onSurfaceVariant.copy(alpha = 0.7f),
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
+            )
+          }
+          BasicTextField(
+            value = textInput,
+            onValueChange = { textInput = it },
+            textStyle = GridText.Body.copy(color = colors.onSurface),
+            cursorBrush = SolidColor(colors.primary),
+            maxLines = 4,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardActions = KeyboardActions(onSend = { send() }),
+            modifier = Modifier
+              .fillMaxWidth()
+              .semantics { contentDescription = fieldDescription }
+              .testTag("siri_text_input")
+          )
+        }
+
+        // Mic button
+        Box(
+          modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(if (isListening) colors.primary.copy(alpha = 0.16f) else Color.Transparent)
+            .highlightClickable(onClick = ::launchVoiceInput)
+            .testTag("siri_voice_orb"),
+          contentAlignment = Alignment.Center
+        ) {
+          Icon(
+            imageVector = Icons.Rounded.Mic,
+            contentDescription = stringResource(if (isListening) R.string.assistant_listening else R.string.assistant_mic_idle),
+            tint = if (isListening) colors.primary else colors.onSurfaceVariant,
+            modifier = Modifier.size(22.dp)
+          )
+        }
+
+        // Integrated Send button
+        Box(
+          modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(if (hasInput) colors.primary else colors.onSurface.copy(alpha = 0.08f))
+            .highlightClickable(onClick = ::send)
+            .testTag("siri_send_button"),
+          contentAlignment = Alignment.Center
+        ) {
+          Icon(
+            imageVector = Icons.Rounded.ArrowUpward,
+            contentDescription = stringResource(R.string.assistant_send),
+            tint = if (hasInput) colors.onPrimary else colors.onSurfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier.size(20.dp)
+          )
+        }
+      }
     }
   }
 }

@@ -32,9 +32,16 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 class LibraryRepository(
   context: Context,
-  private val db: AppDatabase,
+  private val dbLazy: Lazy<AppDatabase>,
   scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 ) {
+  constructor(
+    context: Context,
+    db: AppDatabase,
+    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+  ) : this(context, lazyOf(db), scope)
+
+  private val db: AppDatabase get() = dbLazy.value
   private val appContext = context.applicationContext
   private val worker = SerialWorker(scope) { Diagnostics.record("LibraryRepository", "a library write failed", it) }
 

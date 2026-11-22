@@ -48,6 +48,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -61,6 +62,7 @@ import com.example.ui.theme.rememberReducedMotion
 
 /** Points along the frequency axis. Enough for a smooth curve at phone width, few enough to redo per frame. */
 private const val CURVE_POINTS = 128
+private val CURVE_FREQS = DoubleArray(CURVE_POINTS) { i -> xToFreq(i / (CURVE_POINTS - 1f)).toDouble() }
 private val GRID_DB = floatArrayOf(-12f, -6f, 6f, 12f)
 private val GRID_FREQS = floatArrayOf(250f, 2000f)
 private val DEVICE_DASH = PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
@@ -94,7 +96,7 @@ internal fun EqGraph(
   selectedBand: Int,
   spectrumBars: () -> List<Float>,
   isPlaying: Boolean,
-  modifier: Modifier = Modifier,
+  modifier: Modifier = Modifier.height(Grid.u192),
   rtaFrame: () -> com.example.data.audio.dsp.RtaFrame = { com.example.data.audio.dsp.RtaFrame.FLAT },
   onSelectBand: ((Int) -> Unit)? = null,
   onUpdateBand: ((Int, (EqBand) -> EqBand) -> Unit)? = null,
@@ -102,19 +104,25 @@ internal fun EqGraph(
 ) {
   val colors = MaterialTheme.colorScheme
   val curveKey = settings.responseKey()
-  // Computed only when something that shapes the response changes. EqDsp designs the filters once per
-  // settings value, so each point costs a handful of multiplications.
-  // The shape as set: the level the app lowers on its own (fone headroom, automatic preamp) is left
-  // out, so each band's point sits on the curve under the finger; that reduction is printed below.
+  // Double-buffered 128-point response curve evaluated via precomputed 64-bit trig LUT:
+  // 0 FloatArray allocations and 0 cos()/sin() calls per drag frame.
+  val targetBufs = remember { arrayOf(FloatArray(CURVE_POINTS), FloatArray(CURVE_POINTS)) }
+  val targetSlot = remember { intArrayOf(0) }
   val target = remember(curveKey) {
-    val automatic = EqDsp.totalPreampDb(curveKey) - curveKey.preampDb
-    FloatArray(CURVE_POINTS) { i -> EqDsp.responseDb(curveKey, xToFreq(i / (CURVE_POINTS - 1f)).toDouble()).toFloat() - automatic }
+    val slot = targetSlot[0] xor 1
+    targetSlot[0] = slot
+    val out = targetBufs[slot]
+    EqDsp.responseCurveInto(curveKey, CURVE_FREQS, out, subtractAutomaticPreamp = true)
+    out
   }
   // The fone correction alone, drawn as a dashed guide under the curve.
   val deviceCurve = remember(settings.device) {
     settings.device?.let { d ->
       val alone = EqSettings(bands = emptyList(), device = d, autoPreamp = false)
-      FloatArray(CURVE_POINTS) { i -> EqDsp.responseDb(alone, xToFreq(i / (CURVE_POINTS - 1f)).toDouble()).toFloat() - d.preampDb }
+      val out = FloatArray(CURVE_POINTS)
+      EqDsp.responseCurveInto(alone, CURVE_FREQS, out, subtractAutomaticPreamp = true)
+      for (i in out.indices) out[i] -= d.preampDb
+      out
     }
   }
 
@@ -134,29 +142,49 @@ internal fun EqGraph(
       morph.snapTo(1f)
     } else {
       morph.snapTo(0f)
-      morph.animateTo(1f, spring(dampingRatio = 1f, stiffness = 300f))
+      morph.animateTo(1f, spring(dampingRatio = 1f, stiffness = 360f))
     }
   }
 
   val accent = colors.primary
   // In parametric mode each band has its colour, and its own curve is drawn under the total.
-  val bandTints = settings.bands.indices.map { bandColor(it) }
+  val bg = colors.background
+  val bandTints = remember(settings.bands.size, accent, bg) {
+    val set = BandColors.tones(accent, bg, onDark = bg.luminance() < 0.5f)
+    List(settings.bands.size) { set[Math.floorMod(it, set.size)] }
+  }
+  // Incremental per-band cache: dragging 1 band only recomputes that band's biquad response,
+  // reusing cached curves for all other N-1 bands for rock-solid 120 Hz headroom.
+  val bandCurveCache = remember { HashMap<EqBand, FloatArray>() }
   val bandCurves = remember(curveKey) {
-    if (!curveKey.parametric) emptyList() else curveKey.bands.map { b ->
-      if (!b.enabled || (b.type.usesGain && kotlin.math.abs(b.gainDb) < 0.05f)) null
-      else {
-        val sections = if (b.type.usesSlope && b.slope != com.example.data.model.FilterSlope.DB_12) {
-          com.example.data.audio.dsp.BiquadCoefficients.designSlope(b.type, b.freqHz.toDouble(), b.q.toDouble(), b.slope, 48000.0)
-        } else {
-          listOf(com.example.data.audio.dsp.BiquadCoefficients.design(b.type, b.freqHz.toDouble(), b.gainDb.toDouble(), b.q.toDouble(), 48000.0))
-        }
-        FloatArray(CURVE_POINTS) { i ->
-          val f = xToFreq(i / (CURVE_POINTS - 1f)).toDouble()
-          var db = 0.0
-          for (s in sections) db += s.magnitudeDb(f, 48000.0)
-          db.toFloat()
+    if (!curveKey.parametric) {
+      bandCurveCache.clear()
+      emptyList()
+    } else {
+      val activeKeys = HashSet<EqBand>(curveKey.bands.size * 2)
+      val result = curveKey.bands.map { b ->
+        if (!b.enabled || (b.type.usesGain && kotlin.math.abs(b.gainDb) < 0.05f)) null
+        else {
+          activeKeys.add(b)
+          bandCurveCache.getOrPut(b) {
+            val sections = if (b.type.usesSlope && b.slope != com.example.data.model.FilterSlope.DB_12) {
+              com.example.data.audio.dsp.BiquadCoefficients.designSlope(b.type, b.freqHz.toDouble(), b.q.toDouble(), b.slope, 48000.0)
+            } else {
+              listOf(com.example.data.audio.dsp.BiquadCoefficients.design(b.type, b.freqHz.toDouble(), b.gainDb.toDouble(), b.q.toDouble(), 48000.0))
+            }
+            FloatArray(CURVE_POINTS) { i ->
+              val f = xToFreq(i / (CURVE_POINTS - 1f)).toDouble()
+              var db = 0.0
+              for (s in sections) db += s.magnitudeDb(f, 48000.0)
+              db.toFloat()
+            }
+          }
         }
       }
+      if (bandCurveCache.size > activeKeys.size + 8) {
+        bandCurveCache.keys.retainAll(activeKeys)
+      }
+      result
     }
   }
   val grid = colors.onSurface.copy(alpha = 0.08f)
@@ -165,18 +193,26 @@ internal fun EqGraph(
   val line = colors.onSurface
   val dim = if (settings.enabled) 1f else 0.38f
 
-  // What the curve does, in words: its highest boost and deepest cut, so a screen reader gets the shape.
+  // What the curve does, in words: its highest boost and deepest cut, scanned directly from the
+  // already-evaluated [target] array (0 extra trig/pow calls and 0 list/Pair allocations).
   val res = LocalContext.current.resources
-  val summary = remember(settings, res) {
-    val freqs = (0..40).map { 20.0 * Math.pow(1000.0, it / 40.0) }
-    val points = freqs.map { it to EqDsp.responseDb(settings, it) }
-    val high = points.maxByOrNull { it.second }!!
-    val low = points.minByOrNull { it.second }!!
+  val summary = remember(curveKey, res) {
+    val autoShift = EqDsp.totalPreampDb(curveKey) - curveKey.preampDb
+    var highDb = Float.NEGATIVE_INFINITY
+    var highHz = 1000f
+    var lowDb = Float.POSITIVE_INFINITY
+    var lowHz = 1000f
+    for (i in target.indices) {
+      val db = target[i] + autoShift
+      val hz = CURVE_FREQS[i].toFloat()
+      if (db > highDb) { highDb = db; highHz = hz }
+      if (db < lowDb) { lowDb = db; lowHz = hz }
+    }
     when {
-      high.second < 0.25 && low.second > -0.25 -> res.getString(R.string.audio_curve_flat)
+      highDb < 0.25f && lowDb > -0.25f -> res.getString(R.string.audio_curve_flat)
       else -> buildString {
-        if (high.second >= 0.25) append(res.getString(R.string.audio_curve_peak_gain, formatDb(high.second.toFloat()), spokenHz(high.first.toFloat())))
-        if (low.second <= -0.25) append(res.getString(R.string.audio_curve_peak_cut, formatDb(low.second.toFloat()), spokenHz(low.first.toFloat())))
+        if (highDb >= 0.25f) append(res.getString(R.string.audio_curve_peak_gain, formatDb(highDb), spokenHz(highHz)))
+        if (lowDb <= -0.25f) append(res.getString(R.string.audio_curve_peak_cut, formatDb(lowDb), spokenHz(lowHz)))
       }.trim()
     }
   }
@@ -197,6 +233,7 @@ internal fun EqGraph(
   val curveGradColors = remember(line, dim) {
     listOf(line.copy(alpha = 0.14f * dim), line.copy(alpha = 0.02f * dim), line.copy(alpha = 0.12f * dim))
   }
+  val curveGradBrushCache = remember(curveGradColors) { arrayOfNulls<Pair<Float, Brush>>(1) }
   val latestSettings = rememberUpdatedState(settings)
   val latestCurveKey = rememberUpdatedState(curveKey)
   val latestSelected = rememberUpdatedState(selectedBand)
@@ -205,6 +242,10 @@ internal fun EqGraph(
   val latestAdd = rememberUpdatedState(onAddBand)
   val haptic = LocalHapticFeedback.current
   val textMeasurer = rememberTextMeasurer()
+  val nodeNumberStyle = remember(colors.surface) { EqType.MonoStrong.copy(color = colors.surface) }
+  val nodeNumberLayouts = remember(textMeasurer, nodeNumberStyle) {
+    Array(32) { idx -> textMeasurer.measure((idx + 1).toString(), style = nodeNumberStyle) }
+  }
   val interactiveCurve = settings.parametric && settings.enabled && onUpdateBand != null
   val lastTap = remember { longArrayOf(0L) }
   val lastTapBand = remember { intArrayOf(-2) }
@@ -259,6 +300,8 @@ internal fun EqGraph(
 
       if (isDoubleTap) {
         lastTap[0] = 0L
+        // Reset continuous guard so double-tap smoothly morphs the curve & node to 0 dB.
+        lastChange[0] = 0L
         if (hitIndex >= 0) {
           latestUpdate.value?.invoke(hitIndex) { it.copy(gainDb = 0f, dynamicRangeDb = 0f) }
           haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -333,7 +376,6 @@ internal fun EqGraph(
 
   Column(
     modifier = modifier
-      .height(Grid.u192)
       .clip(shape)
       .background(colors.surfaceContainer)
       // Drawn inside the box: the outline never changes the size.
@@ -451,14 +493,11 @@ internal fun EqGraph(
           fillPath.lineTo(w, dbToY(0f, h))
           fillPath.lineTo(0f, dbToY(0f, h))
           fillPath.close()
-          drawPath(
-            fillPath,
-            Brush.verticalGradient(
-              colors = curveGradColors,
-              startY = 0f,
-              endY = h
-            )
-          )
+          val curveBrush = curveGradBrushCache[0]?.takeIf { it.first == h }?.second
+            ?: Brush.verticalGradient(colors = curveGradColors, startY = 0f, endY = h).also {
+              curveGradBrushCache[0] = h to it
+            }
+          drawPath(fillPath, curveBrush)
           // Subtle soft glow under the main curve line + crisp core stroke.
           drawPath(curvePath, line.copy(alpha = 0.18f * dim), style = glowStroke)
           drawPath(curvePath, line.copy(alpha = dim), style = coreStroke)
@@ -470,8 +509,7 @@ internal fun EqGraph(
             drawLine(accent.copy(alpha = 0.35f), Offset(0f, dragPos.y), Offset(w, dragPos.y), Grid.hairline.toPx())
           }
 
-          // Band nodes: in parametric mode numbered nodes with specular ring & halo; in graphic mode clean dots.
-          val nodeNumberStyle = EqType.MonoStrong.copy(color = colors.surface)
+          // Band nodes: in parametric mode numbered nodes with elastic Q halo & specular ring; in graphic mode clean dots.
           settings.bands.forEachIndexed { i, band ->
             val pos = nodePosition(curveKey, i, w, h)
             val isSel = i == selectedBand
@@ -480,7 +518,18 @@ internal fun EqGraph(
               val nodeColor = (if (band.enabled) (if (isSel) accent else bandTints.getOrElse(i) { line }) else label).copy(alpha = dim)
               val r = if (isSel) Grid.u12.toPx() * 0.85f else Grid.u6.toPx() * 1.15f
               if (isSel || isDrag) {
-                drawCircle(nodeColor.copy(alpha = if (isDrag) 0.36f else 0.20f), radius = r * if (isDrag) 2.1f else 1.65f, center = pos)
+                // Live Q-width elastic halo: wider bell (lower Q) expands the outer ring smoothly.
+                val qFactor = (1.6f / band.q.coerceIn(0.3f, 8f)).coerceIn(0.5f, 2.2f)
+                val haloR = if (isDrag) r * (1.85f + 0.55f * qFactor) else r * 1.65f
+                drawCircle(nodeColor.copy(alpha = if (isDrag) 0.34f else 0.18f), radius = haloR, center = pos)
+                if (isDrag) {
+                  drawCircle(
+                    color = nodeColor.copy(alpha = 0.65f),
+                    radius = haloR,
+                    center = pos,
+                    style = Stroke(width = Grid.hairline.toPx())
+                  )
+                }
               }
               drawCircle(nodeColor, radius = r, center = pos)
               drawCircle(
@@ -490,7 +539,7 @@ internal fun EqGraph(
                 style = Stroke(width = Grid.hairline.toPx())
               )
               if (isSel || settings.bands.size <= 12) {
-                val layout = textMeasurer.measure((i + 1).toString(), style = nodeNumberStyle)
+                val layout = nodeNumberLayouts.getOrNull(i) ?: textMeasurer.measure((i + 1).toString(), style = nodeNumberStyle)
                 drawText(
                   textLayoutResult = layout,
                   topLeft = Offset(pos.x - layout.size.width / 2f, pos.y - layout.size.height / 2f)

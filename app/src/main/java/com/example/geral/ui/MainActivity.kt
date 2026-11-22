@@ -508,13 +508,20 @@ fun TarkasAppContent(
   androidx.compose.runtime.DisposableEffect(lifecycleOwner, spectrumOnScreen) {
     val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
       when (event) {
-        androidx.lifecycle.Lifecycle.Event.ON_START -> viewModel.setSpectrumVisible(spectrumOnScreen)
-        androidx.lifecycle.Lifecycle.Event.ON_STOP -> viewModel.setSpectrumVisible(false)
+        androidx.lifecycle.Lifecycle.Event.ON_START -> {
+          viewModel.setUiForeground(true)
+          viewModel.setSpectrumVisible(spectrumOnScreen)
+        }
+        androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
+          viewModel.setSpectrumVisible(false)
+          viewModel.setUiForeground(false)
+        }
         else -> Unit
       }
     }
     lifecycleOwner.lifecycle.addObserver(observer)
     val started = lifecycleOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
+    viewModel.setUiForeground(started)
     viewModel.setSpectrumVisible(started && spectrumOnScreen)
     onDispose {
       lifecycleOwner.lifecycle.removeObserver(observer)
@@ -658,13 +665,19 @@ fun TarkasAppContent(
           )
       ) {
       // A sub-page of Ajustes (Sobre, the legal texts) draws its own title.
-      // How far the page has been scrolled under its title: the title's soft fade shows only then, so at
-      // rest it does not dim the first control below it.
-      var scrolledUnder by remember(screen, settingsPage) { mutableStateOf(0f) }
-      val scrollWatcher = remember {
+      // How far the page has been scrolled under its title: only a boolean State is exposed to
+      // composition so scrolling does not recompose the entire tab page on every pixel of movement.
+      val scrollOffsetPx = remember(screen, settingsPage) { floatArrayOf(0f) }
+      var isScrolledUnder by remember(screen, settingsPage) { mutableStateOf(false) }
+      val scrollWatcher = remember(screen, settingsPage) {
         object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {
           override fun onPostScroll(consumed: androidx.compose.ui.geometry.Offset, available: androidx.compose.ui.geometry.Offset, source: androidx.compose.ui.input.nestedscroll.NestedScrollSource): androidx.compose.ui.geometry.Offset {
-            if (consumed.y != 0f) scrolledUnder = (scrolledUnder - consumed.y).coerceAtLeast(0f)
+            if (consumed.y != 0f) {
+              val next = (scrollOffsetPx[0] - consumed.y).coerceAtLeast(0f)
+              scrollOffsetPx[0] = next
+              val under = next > 0.5f
+              if (under != isScrolledUnder) isScrolledUnder = under
+            }
             return androidx.compose.ui.geometry.Offset.Zero
           }
         }
@@ -677,7 +690,7 @@ fun TarkasAppContent(
           onOpenSettings = { viewModel.setTab(TarkasNavTab.SETTINGS) },
           showSettings = screen == TarkasNavTab.HOME,
           onBack = if (screen == TarkasNavTab.SETTINGS) ({ viewModel.goBack() }) else null,
-          fadeBelow = scrolledUnder > 0f
+          fadeBelow = isScrolledUnder
         )
       }
       Box(modifier = Modifier.weight(1f).nestedScroll(scrollWatcher)) {
@@ -899,25 +912,27 @@ fun TarkasAppContent(
       // The covers around the current track are loaded ahead whenever it changes, before the player
       // is even opened, so its carousel has them in memory.
       PrefetchCarouselCovers(viewModel.coverNeighbors)
-      // The full player, over the page below it. The shape grows from what was tapped and shrinks into
-      // the mini player (expandFromOrigin); the visibility keeps it composed until the shape has landed.
-      AnimatedVisibility(
-        visible = currentTab == TarkasNavTab.MUSIC,
-        enter = EnterTransition.None,
-        exit = ExitTransition.None,
-        modifier = Modifier.fillMaxSize()
-      ) {
+      // The full player, over the page below it. Kept warm once a track is loaded (not placed or drawn
+      // while settled closed) so opening never pays a cold-composition / AGSL shader compilation spike.
+      val playerOpen = currentTab == TarkasNavTab.MUSIC
+      val playerTransition = androidx.compose.animation.core.updateTransition(
+        targetState = playerOpen,
+        label = "fullPlayer"
+      )
+      val keepPlayerWarm = playerOpen || playerTransition.currentState || currentTrack != null
+      if (keepPlayerWarm) {
+        val playerActive = playerOpen || playerTransition.currentState
         Box(
           modifier = Modifier
             .fillMaxSize()
-            .expandFromOrigin(this, Color.Black, reducedMotion)
+            .expandFromOrigin(playerTransition, Color.Black, reducedMotion)
         ) {
           pageStates.SaveableStateProvider("music") {
             MusicScreen(
               state = PlayerState(
                 currentTrack = currentTrack,
-                isPlaying = isPlaying,
-                coverPlaying = wantsToPlay,
+                isPlaying = isPlaying && playerActive,
+                coverPlaying = wantsToPlay && playerActive,
                 currentPositionMs = { currentPosMs.value },
                 durationMs = { durationMs.value },
                 activeCuriosity = activeCuriosity,
@@ -1143,9 +1158,12 @@ fun TarkasAppContent(
           visible = currentTab != TarkasNavTab.MUSIC &&
             currentTab != TarkasNavTab.ASSISTANT &&
             currentTrack != null && !imeVisible && !barsHidden,
-          enter = if (miniFromPlayer || com.example.ui.theme.rememberReducedMotion()) androidx.compose.animation.EnterTransition.None
-            else androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220, delayMillis = 60)) +
-              androidx.compose.animation.scaleIn(initialScale = 0.94f, animationSpec = com.example.ui.theme.Motion.gel<Float>()),
+          enter = when {
+            miniFromPlayer -> androidx.compose.animation.EnterTransition.None
+            com.example.ui.theme.rememberReducedMotion() -> androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(120))
+            else -> androidx.compose.animation.fadeIn(com.example.ui.theme.Motion.defaultEffects()) +
+              androidx.compose.animation.scaleIn(initialScale = 0.94f, animationSpec = com.example.ui.theme.Motion.fluidFast())
+          },
           // Gone within a few frames: the cover of the opening player is drawn above it and takes its place.
           exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(60))
         ) {
@@ -1178,15 +1196,13 @@ fun TarkasAppContent(
         AnimatedVisibility(
           modifier = navSlot,
           visible = currentTab != TarkasNavTab.MUSIC && !imeVisible && !barsHidden,
-          enter = if (reducedChrome) androidx.compose.animation.EnterTransition.None
-            else androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200, delayMillis = 80)) +
-              androidx.compose.animation.slideInVertically(com.example.ui.theme.Motion.gel<androidx.compose.ui.unit.IntOffset>()) { it / 2 },
-          // It leaves downwards, quickly, as the player rises (95% gone with 15% of the opening done).
-          exit = if (reducedChrome) androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(150))
-            else androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)) +
-              androidx.compose.animation.slideOutVertically(
-                androidx.compose.animation.core.tween(150, easing = androidx.compose.animation.core.FastOutLinearInEasing)
-              ) { it / 2 }
+          enter = if (reducedChrome) androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(120))
+            else androidx.compose.animation.fadeIn(com.example.ui.theme.Motion.defaultEffects()) +
+              androidx.compose.animation.slideInVertically(com.example.ui.theme.Motion.fluidFast()) { it / 2 },
+          // It leaves downwards, briskly and critically damped, as the player rises.
+          exit = if (reducedChrome) androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(100))
+            else androidx.compose.animation.fadeOut(com.example.ui.theme.Motion.defaultEffects()) +
+              androidx.compose.animation.slideOutVertically(com.example.ui.theme.Motion.fluidExit()) { it / 2 }
         ) {
           TarkasBottomNav(
             currentTab = currentTab,

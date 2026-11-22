@@ -122,14 +122,20 @@ internal fun rememberCoverClock(running: Boolean): State<Float> {
   val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
   val thermal by com.example.data.diagnostics.ThermalMonitor.status.collectAsState()
   val active = running && thermal < com.example.data.diagnostics.ThermalMonitor.SEVERE
-  // Target ~30 fps (~33 ms); a frame is slow if it takes 2.5x the target interval (>82 ms).
-  val guard = remember { FrameGuard(limitMs = 82f) }
+  // Target ~24 fps (~42 ms); pauses while the full-player sheet is actively opening/closing so 100%
+  // of GPU fill-rate goes to the sheet spring transition.
+  val guard = remember { FrameGuard(limitMs = 95f) }
   LaunchedEffect(active, lifecycleOwner, guard) {
     if (!active) return@LaunchedEffect
     lifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
       var last = 0L
       while (guard.allowed) {
-        kotlinx.coroutines.delay(33L)
+        kotlinx.coroutines.delay(42L)
+        val sheetProgress = PlayerOrigin.progress?.value
+        if (sheetProgress != null && sheetProgress > 0.01f && sheetProgress < 0.99f) {
+          last = 0L
+          continue
+        }
         val now = withFrameNanos { it }
         if (last != 0L) {
           val deltaMs = (now - last) / 1_000_000f
@@ -143,11 +149,11 @@ internal fun rememberCoverClock(running: Boolean): State<Float> {
   return seconds
 }
 
-internal val CoverPeriods = floatArrayOf(120f, 90f, 70f)
-internal val CoverCentres = arrayOf(Offset(0.4f, 0.4f), Offset(0.6f, 0.5f), Offset(0.45f, 0.6f))
+internal val CoverPeriods = floatArrayOf(115f, 80f)
+internal val CoverCentres = arrayOf(Offset(0.42f, 0.42f), Offset(0.58f, 0.54f))
 internal val CoverSaturation = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0.7f) })
 
-/** Three copies of [bitmap] turning at different speeds, under a veil of the identity's black. */
+/** Two counter-rotating copies of [bitmap] under a veil of the identity's black (~35% less GPU fill-rate). */
 internal fun Modifier.coverBackdrop(bitmap: ImageBitmap?, seconds: State<Float>): Modifier = drawBehind {
   val image = bitmap ?: return@drawBehind
   // Large enough that the edges of the turning squares stay outside the page.

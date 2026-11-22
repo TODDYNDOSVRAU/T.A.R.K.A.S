@@ -69,9 +69,19 @@ fun TrackArtwork(
       }
     } else {
       Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(iconSize))
-      // The cover fades in over the placeholder instead of popping in.
+      // Explicit thumbnail target size (3x iconSize, e.g. 144..216 px) avoids Coil's dynamic view-size
+      // suspension and full-resolution decode during fast LazyColumn scrolling.
       val context = LocalContext.current
-      val request = remember(url) { ImageRequest.Builder(context).data(url).crossfade(220).build() }
+      val density = androidx.compose.ui.platform.LocalDensity.current
+      val targetPx = remember(iconSize, density) { with(density) { (iconSize * 3).roundToPx().coerceIn(128, 384) } }
+      val request = remember(url, targetPx) {
+        ImageRequest.Builder(context)
+          .data(url)
+          .size(targetPx, targetPx)
+          .precision(coil.size.Precision.INEXACT)
+          .crossfade(120)
+          .build()
+      }
       AsyncImage(
         model = request,
         contentDescription = null,

@@ -44,4 +44,9 @@
     <string name="update_problem_hash_unavailable">The update was not installed: the published checksum could not be fetched, so the file cannot be verified. Connect to the internet and tap \"Install now\" again.</string>
     <string name="settings_update_cancel_download">Cancel download</string>
     <string name="settings_update_notes_title">What is new in %1$s</string>
+    <string name="update_popup_downloading">Downloading update… %1$d%%</string>
+    <string name="update_popup_installing">Preparing and installing update…</string>
+    <string name="update_popup_awaiting_user">Confirm the installation in the Android dialog.</string>
+    <string name="update_popup_install_now">Install now</string>
+    <string name="update_popup_retry">Try again</string>
 </resources>

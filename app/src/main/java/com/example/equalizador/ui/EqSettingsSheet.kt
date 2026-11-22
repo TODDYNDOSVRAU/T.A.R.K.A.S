@@ -33,6 +33,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextAlign
 import com.example.R
 import com.example.data.model.EqSettings
@@ -159,50 +160,76 @@ internal fun ToneRow(label: String, db: Float, enabled: Boolean, tag: String, on
 internal fun CrossfeedSection(
   crossfeed: CrossfeedSettings,
   enabled: Boolean,
-  onChange: (CrossfeedSettings) -> Unit
+  onChange: (CrossfeedSettings) -> Unit,
+  wrap: Boolean = false
 ) {
   val colors = MaterialTheme.colorScheme
+  @Composable
+  fun PresetChip(preset: CrossfeedPreset, chipModifier: Modifier = Modifier, compact: Boolean = false) {
+    val selected = crossfeed.preset == preset
+    Box(
+      modifier = chipModifier
+        .height(if (compact) 38.dp else Grid.u48)
+        .clip(Grid.r12)
+        .background(if (selected) colors.primary.copy(alpha = 0.14f) else if (compact) colors.background.copy(alpha = 0.45f) else colors.surfaceContainer)
+        .selectable(
+          selected = selected,
+          enabled = enabled,
+          role = Role.RadioButton,
+          onClick = { onChange(crossfeed.copy(preset = preset)) }
+        )
+        .padding(horizontal = if (compact) Grid.u6 else Grid.u12)
+        .testTag("crossfeed_${preset.key}"),
+      contentAlignment = Alignment.Center
+    ) {
+      Text(
+        text = crossfeedPresetLabel(preset),
+        style = if (selected) EqType.LabelStrong else EqType.Label,
+        color = when {
+          !enabled -> colors.onSurface.copy(alpha = 0.38f)
+          selected -> colors.primary
+          else -> colors.onSurface
+        },
+        maxLines = 1,
+        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+      )
+    }
+  }
+
   Column(verticalArrangement = Arrangement.spacedBy(Grid.u6)) {
     Box(modifier = Modifier.fillMaxWidth().height(Grid.u24), contentAlignment = Alignment.CenterStart) {
       Text(stringResource(R.string.audio_crossfeed_title), style = EqType.LabelStrong, color = colors.onSurfaceVariant)
     }
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .height(Grid.u48)
-        .horizontalScroll(rememberScrollState())
-        .selectableGroup()
-        .testTag("crossfeed_presets"),
-      horizontalArrangement = Arrangement.spacedBy(Grid.u6),
-      verticalAlignment = Alignment.CenterVertically
-    ) {
-      CrossfeedPreset.entries.forEach { preset ->
-        val selected = crossfeed.preset == preset
-        Box(
-          modifier = Modifier
-            .height(Grid.u48)
-            .clip(Grid.r12)
-            .background(if (selected) colors.primary.copy(alpha = 0.14f) else colors.surfaceContainer)
-            .selectable(
-              selected = selected,
-              enabled = enabled,
-              role = Role.RadioButton,
-              onClick = { onChange(crossfeed.copy(preset = preset)) }
-            )
-            .padding(horizontal = Grid.u12)
-            .testTag("crossfeed_${preset.key}"),
-          contentAlignment = Alignment.Center
-        ) {
-          Text(
-            text = crossfeedPresetLabel(preset),
-            style = if (selected) EqType.LabelStrong else EqType.Label,
-            color = when {
-              !enabled -> colors.onSurface.copy(alpha = 0.38f)
-              selected -> colors.primary
-              else -> colors.onSurface
-            },
-            maxLines = 1
-          )
+    if (wrap) {
+      val entries = CrossfeedPreset.entries
+      Column(
+        modifier = Modifier.fillMaxWidth().selectableGroup().testTag("crossfeed_presets"),
+        verticalArrangement = Arrangement.spacedBy(Grid.u6)
+      ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Grid.u6)) {
+          entries.take(3).forEach { preset ->
+            PresetChip(preset, Modifier.weight(1f), compact = true)
+          }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Grid.u6)) {
+          entries.drop(3).forEach { preset ->
+            PresetChip(preset, Modifier.weight(1f), compact = true)
+          }
+        }
+      }
+    } else {
+      Row(
+        modifier = Modifier
+          .fillMaxWidth()
+          .height(Grid.u48)
+          .horizontalScroll(rememberScrollState())
+          .selectableGroup()
+          .testTag("crossfeed_presets"),
+        horizontalArrangement = Arrangement.spacedBy(Grid.u6),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        CrossfeedPreset.entries.forEach { preset ->
+          PresetChip(preset)
         }
       }
     }

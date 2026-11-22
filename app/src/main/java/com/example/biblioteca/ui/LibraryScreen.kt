@@ -23,6 +23,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -30,12 +31,26 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.example.ui.layout.WidthClass
+import com.example.ui.layout.rememberWidthClass
+import com.example.ui.theme.LocalBarInset
+import com.example.ui.theme.SquircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
@@ -361,13 +376,13 @@ fun LibraryScreen(
     )
   }
 
-  // An open playlist pushes in over the sections like a sub-page; the sections slide between them.
-  AnimatedContent(
-    targetState = openPlaylist?.id ?: openAuto?.let { "auto:${it.name}" } ?: openGroup?.key,
-    transitionSpec = { subPageTransition(forward = targetState != null, reduced = reduced) },
-    label = "playlistOpen",
-    modifier = modifier.fillMaxSize()
-  ) { shownId ->
+  val detailId = openPlaylist?.id ?: openAuto?.let { "auto:${it.name}" } ?: openGroup?.key
+  val cfg = LocalConfiguration.current
+  val isTabletConsole = rememberWidthClass() == WidthClass.EXPANDED &&
+    cfg.screenWidthDp > cfg.screenHeightDp && cfg.screenHeightDp >= 480
+
+  @Composable
+  fun DetailPane(shownId: String?) {
     val shownPlaylist = playlists.firstOrNull { it.id == shownId }
     val shownAuto = AutoList.entries.firstOrNull { "auto:${it.name}" == shownId }
     val shownGroup = shownId?.let { groupsByKey[it] }
@@ -413,304 +428,445 @@ fun LibraryScreen(
         },
         onRemoveTrack = { trackId -> onRemoveFromPlaylist(shownPlaylist.id, trackId) }
       )
-    } else {
-      Column(modifier = Modifier.fillMaxSize()) {
-        // Search bar + compact Sort/Folders menu button (Apple Music style) above the section chips in portrait.
-        if (!compact && section == LibrarySection.SONGS && musicAllowed && (deviceTracks.isNotEmpty() || folderRules.isFiltering)) {
-          var sortMenuOpen by remember { mutableStateOf(false) }
+    }
+  }
+
+  @Composable
+  fun SongsSearchAndSortBar(padHorizontal: Boolean = true) {
+    var sortMenuOpen by remember { mutableStateOf(false) }
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .then(if (padHorizontal) Modifier.padding(horizontal = Grid.margin) else Modifier)
+        .padding(bottom = Grid.u6),
+      horizontalArrangement = Arrangement.spacedBy(Grid.u6),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      SearchField(
+        value = songQuery,
+        onValueChange = { songQuery = it },
+        placeholder = stringResource(R.string.library_search_songs_hint),
+        modifier = Modifier
+          .weight(1f)
+          .testTag("library_search_songs")
+      )
+      Box {
+        val colors = MaterialTheme.colorScheme
+        val isLiquid = com.example.ui.theme.LocalSurfaceStyle.current == com.example.ui.theme.SurfaceStyle.LIQUID &&
+          com.example.ui.theme.liquidGlassSupported
+        Box(
+          modifier = Modifier
+            .size(Grid.u48)
+            .clip(Grid.pill)
+            .then(
+              if (isLiquid) Modifier.liquidChrome(Grid.pill, selected = folderRules.isFiltering)
+              else Modifier.background(colors.surfaceContainer)
+            )
+            .clickable(onClick = { sortMenuOpen = true })
+            .testTag("library_sort_menu_button"),
+          contentAlignment = Alignment.Center
+        ) {
+          Icon(
+            imageVector = Icons.Rounded.SwapVert,
+            contentDescription = stringResource(songOrder.labelRes()),
+            tint = if (folderRules.isFiltering) colors.primary else colors.onSurface,
+            modifier = Modifier.size(Grid.icon)
+          )
+        }
+        androidx.compose.material3.DropdownMenu(
+          expanded = sortMenuOpen,
+          onDismissRequest = { sortMenuOpen = false }
+        ) {
+          com.example.data.playback.SongOrder.entries.forEach { o ->
+            androidx.compose.material3.DropdownMenuItem(
+              text = {
+                Text(
+                  stringResource(o.labelRes()),
+                  color = if (o == songOrder) colors.primary else colors.onSurface
+                )
+              },
+              onClick = {
+                sortMenuOpen = false
+                songOrder = o
+                onSongOrderChange(o)
+              },
+              modifier = Modifier.testTag("song_order_${o.key}")
+            )
+          }
+          androidx.compose.material3.HorizontalDivider()
+          androidx.compose.material3.DropdownMenuItem(
+            text = {
+              Text(
+                stringResource(R.string.library_folders_chip),
+                color = if (folderRules.isFiltering) colors.primary else colors.onSurface
+              )
+            },
+            onClick = {
+              sortMenuOpen = false
+              showFolders = true
+            },
+            modifier = Modifier.testTag("song_order_folders")
+          )
+        }
+      }
+    }
+  }
+
+  @Composable
+  fun SectionBody(shownSection: LibrarySection) {
+    when (shownSection) {
+      LibrarySection.SONGS -> TrackList(
+        tracks = if (musicAllowed) shownSongs else emptyList(),
+        currentTrack = currentTrack,
+        isPlaying = isPlaying,
+        onPlay = { track -> onPlayFromList(track, shownSongs) },
+        onShuffle = { onShuffleList(shownSongs) },
+        header = {},
+        trailing = { track ->
+          TrackActionsMenu(
+            track = track,
+            isFavorite = track.id in favoriteIds,
+            playlists = playlists,
+            onToggleFavorite = { onToggleFavorite(track) },
+            onPlayNext = { onPlayNext(track) },
+            onAddToQueue = { onAddToQueue(track) },
+            onAddToPlaylist = { id -> onAddToPlaylist(id, track) },
+            onCreatePlaylist = { name -> onCreatePlaylistWith(name, track) },
+            modifier = Modifier.trailingEdge()
+          )
+        },
+        letters = songLetters,
+        subtitle = { t ->
+          val n = playCounts[t.id] ?: 0
+          if (songOrder == com.example.data.playback.SongOrder.MOST_PLAYED && n > 0) {
+            "${pluralStringResource(R.plurals.library_play_count, n, n)} · ${trackSubtitle(t)}"
+          } else trackSubtitle(t)
+        },
+        empty = {
+          when {
+            !musicAllowed -> MusicPermissionPrompt(
+              blocked = musicBlocked,
+              onAllow = { musicPermissionLauncher.launch(MusicPermission) },
+              onOpenSettings = openAppSettings
+            )
+            deviceScanning || (sortedSongs == null && deviceTracks.isNotEmpty()) -> Loading(stringResource(R.string.library_loading_songs))
+            deviceTracks.isEmpty() && songsPerFolder.isNotEmpty() -> EmptyState(
+              icon = Icons.Rounded.SearchOff,
+              title = stringResource(R.string.library_folders_all_out_title),
+              message = stringResource(R.string.library_folders_all_out_message),
+              modifier = Modifier.padding(horizontal = Grid.margin),
+              actionLabel = stringResource(R.string.library_folders_chip),
+              onAction = { showFolders = true }
+            )
+            deviceTracks.isNotEmpty() -> NoMatch(
+              message = stringResource(R.string.library_search_empty_songs, songQuery.trim()),
+              onClear = { songQuery = "" }
+            )
+            else -> EmptyLibrary(
+              onRefresh = onScanDevice,
+              onImport = { audioPickerLauncher.launch(arrayOf("audio/*")) }
+            )
+          }
+        }
+      )
+
+      LibrarySection.ALBUMS -> GroupsList(
+        groups = albumGroups,
+        kind = "albums",
+        hintRes = R.string.library_search_albums_hint,
+        emptyRes = R.string.library_albums_empty,
+        ready = musicAllowed && !deviceScanning && groups != null,
+        onOpen = { pushGroup(it.key) }
+      )
+
+      LibrarySection.ARTISTS -> GroupsList(
+        groups = artistGroups,
+        kind = "artists",
+        hintRes = R.string.library_search_artists_hint,
+        emptyRes = R.string.library_artists_empty,
+        ready = musicAllowed && !deviceScanning && groups != null,
+        onOpen = { pushGroup(it.key) }
+      )
+
+      LibrarySection.GENRES -> GroupsList(
+        groups = genreGroups,
+        kind = "genres",
+        hintRes = R.string.library_search_genres_hint,
+        emptyRes = R.string.library_genres_empty,
+        ready = musicAllowed && !deviceScanning && groups != null,
+        onOpen = { pushGroup(it.key) }
+      )
+
+      LibrarySection.FOLDERS -> GroupsList(
+        groups = folderGroups,
+        kind = "folders",
+        hintRes = R.string.library_search_folders_hint,
+        emptyRes = R.string.library_folders_browse_empty,
+        ready = musicAllowed && !deviceScanning,
+        onOpen = { pushGroup(it.key) }
+      )
+
+      LibrarySection.PLAYLISTS -> PlaylistsList(
+        playlists = playlists,
+        byId = byId,
+        onOpen = { openPlaylistId = it.id },
+        onNew = { showNewPlaylist = true },
+        onImportAudio = { audioPickerLauncher.launch(arrayOf("audio/*")) },
+        onImportM3u = { m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "application/vnd.apple.mpegurl", "text/plain", "*/*")) },
+        onAddStream = { showAddStream = true }
+      )
+
+      LibrarySection.FAVORITES -> TrackList(
+        tracks = shownFavorites,
+        currentTrack = currentTrack,
+        isPlaying = isPlaying,
+        onPlay = { track -> onPlayFromList(track, shownFavorites) },
+        onShuffle = { onShuffleList(shownFavorites) },
+        header = {
+          if (favoriteTracks.isNotEmpty()) item(key = "favorite_search") {
+            SearchField(
+              value = favoriteQuery,
+              onValueChange = { favoriteQuery = it },
+              placeholder = stringResource(R.string.library_search_favorites_hint),
+              modifier = Modifier
+                .padding(horizontal = Grid.margin)
+                .padding(top = Grid.u6, bottom = Grid.u6)
+                .testTag("library_search_favorites")
+            )
+          }
+        },
+        empty = {
+          if (favoriteTracks.isNotEmpty()) {
+            NoMatch(
+              message = stringResource(R.string.library_search_empty_favorites, favoriteQuery.trim()),
+              onClear = { favoriteQuery = "" }
+            )
+          } else {
+            EmptyState(
+              icon = Icons.Rounded.FavoriteBorder,
+              title = stringResource(R.string.library_favorites_empty_title),
+              message = stringResource(R.string.library_favorites_empty_message),
+              modifier = Modifier.padding(horizontal = Grid.margin)
+            )
+          }
+        },
+        trailing = { track ->
+          IconAction(
+            icon = Icons.Rounded.Favorite,
+            contentDescription = stringResource(R.string.library_favorite_remove, track.title),
+            onClick = { onToggleFavorite(track) },
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.trailingEdge()
+          )
+        }
+      )
+
+      LibrarySection.AUTO -> AutoListsOverview(
+        lists = autoLists,
+        byId = byId,
+        onOpen = { openAutoName = it.name }
+      )
+
+      LibrarySection.QUEUE -> QueueList(
+        queue = queue,
+        upcoming = upcoming,
+        onPlay = onPlayQueueItem,
+        onRemove = onRemoveQueueItem,
+        onMove = onMoveQueueItem,
+        onClear = onClearQueue,
+        onSaveAsPlaylist = onSaveQueueAsPlaylist,
+        onPlayUpcoming = onPlayUpcoming
+      )
+    }
+  }
+
+  val isTabletSidebar = isTabletConsole || !compact
+  if (isTabletSidebar) {
+    val colors = MaterialTheme.colorScheme
+    val cardShape = SquircleShape(18.dp)
+    val barInset = LocalBarInset.current
+    val sidebarWidth = if (isTabletConsole) 210.dp else 180.dp
+    Row(
+      modifier = modifier
+        .fillMaxSize()
+        .padding(start = Grid.margin, end = Grid.margin, bottom = barInset + Grid.u12),
+      horizontalArrangement = Arrangement.spacedBy(Grid.u12)
+    ) {
+      // Left iPadOS Sidebar (210 dp landscape / 180 dp portrait Squircle card): all 9 library sections always visible vertically.
+      Column(
+        modifier = Modifier
+          .width(sidebarWidth)
+          .fillMaxHeight()
+          .clip(cardShape)
+          .background(colors.surfaceContainer)
+          .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
+          .verticalScroll(rememberScrollState())
+          .padding(Grid.u6)
+          .selectableGroup(),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+      ) {
+        LibrarySection.entries.forEach { s ->
+          val selected = section == s
+          val label = if (s == LibrarySection.QUEUE && queue.isNotEmpty()) {
+            stringResource(R.string.library_section_queue_count, queue.size)
+          } else stringResource(s.labelRes)
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(42.dp)
+              .clip(SquircleShape(12.dp))
+              .background(if (selected) colors.primary.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent)
+              .selectable(
+                selected = selected,
+                role = Role.Tab,
+                onClick = {
+                  section = s
+                  openPlaylistId = null
+                  openAutoName = null
+                  openGroupKeys = ""
+                }
+              )
+              .padding(horizontal = Grid.u12)
+              .testTag("library_chip_${s.name.lowercase()}"),
+            contentAlignment = Alignment.CenterStart
+          ) {
+            Text(
+              text = label,
+              style = GridText.Small.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
+              color = if (selected) colors.primary else colors.onSurface,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
+            )
+          }
+        }
+      }
+
+      // Right Main Workspace: Unified Top Bar (in Músicas) + Master-Detail split when an Album/Artist/Playlist/AutoList is open.
+      Column(
+        modifier = Modifier.weight(1f).fillMaxHeight(),
+        verticalArrangement = Arrangement.spacedBy(Grid.u6)
+      ) {
+        if (section == LibrarySection.SONGS && musicAllowed && (deviceTracks.isNotEmpty() || folderRules.isFiltering)) {
+          SongsSearchAndSortBar(padHorizontal = false)
+        }
+        if (detailId != null && isTabletConsole) {
+          Row(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Grid.u12)
+          ) {
+            Box(
+              modifier = Modifier
+                .weight(0.42f)
+                .fillMaxHeight()
+                .clip(cardShape)
+                .background(colors.surfaceContainer)
+                .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
+            ) {
+              SectionBody(section)
+            }
+            Box(
+              modifier = Modifier
+                .weight(0.58f)
+                .fillMaxHeight()
+                .clip(cardShape)
+                .background(colors.surfaceContainer)
+                .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
+            ) {
+              DetailPane(detailId)
+            }
+          }
+        } else if (detailId != null) {
+          Box(
+            modifier = Modifier
+              .weight(1f)
+              .fillMaxWidth()
+              .clip(cardShape)
+              .background(colors.surfaceContainer)
+              .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
+          ) {
+            DetailPane(detailId)
+          }
+        } else {
+          AnimatedContent(
+            targetState = section,
+            transitionSpec = { sectionTransition(initialState.ordinal, targetState.ordinal, reduced) },
+            label = "librarySectionTablet",
+            modifier = Modifier
+              .weight(1f)
+              .fillMaxWidth()
+              .clip(cardShape)
+              .background(colors.surfaceContainer)
+              .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
+          ) { shownSection ->
+            SectionBody(shownSection)
+          }
+        }
+      }
+    }
+  } else {
+    val colors = MaterialTheme.colorScheme
+    val cardShape = SquircleShape(18.dp)
+    val barInset = LocalBarInset.current
+    // Smartphone portrait: horizontal section chips + unified top search/sort bar + main content in a Squircle card.
+    AnimatedContent(
+      targetState = detailId,
+      transitionSpec = { subPageTransition(forward = targetState != null, reduced = reduced) },
+      label = "playlistOpen",
+      modifier = modifier.fillMaxSize()
+    ) { shownId ->
+      if (shownId != null) {
+        Box(
+          modifier = Modifier
+            .fillMaxSize()
+            .padding(start = Grid.margin, end = Grid.margin, bottom = barInset + Grid.u12)
+            .clip(cardShape)
+            .background(colors.surfaceContainer)
+            .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
+        ) {
+          DetailPane(shownId)
+        }
+      } else {
+        Column(
+          modifier = Modifier
+            .fillMaxSize()
+            .padding(bottom = barInset + Grid.u12),
+          verticalArrangement = Arrangement.spacedBy(Grid.u6)
+        ) {
           Row(
             modifier = Modifier
               .fillMaxWidth()
               .padding(horizontal = Grid.margin)
-              .padding(bottom = Grid.u6),
-            horizontalArrangement = Arrangement.spacedBy(Grid.u6),
-            verticalAlignment = Alignment.CenterVertically
+              .horizontalScroll(rememberScrollState())
+              .selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(Grid.u6)
           ) {
-            SearchField(
-              value = songQuery,
-              onValueChange = { songQuery = it },
-              placeholder = stringResource(R.string.library_search_songs_hint),
-              modifier = Modifier
-                .weight(1f)
-                .testTag("library_search_songs")
-            )
-            Box {
-              val colors = MaterialTheme.colorScheme
-              val isLiquid = com.example.ui.theme.LocalSurfaceStyle.current == com.example.ui.theme.SurfaceStyle.LIQUID &&
-                com.example.ui.theme.liquidGlassSupported
-              Box(
-                modifier = Modifier
-                  .size(Grid.u48)
-                  .clip(Grid.pill)
-                  .then(
-                    if (isLiquid) Modifier.liquidChrome(Grid.pill, selected = folderRules.isFiltering)
-                    else Modifier.background(colors.surfaceContainer)
-                  )
-                  .clickable(onClick = { sortMenuOpen = true })
-                  .testTag("library_sort_menu_button"),
-                contentAlignment = Alignment.Center
-              ) {
-                Icon(
-                  imageVector = Icons.Rounded.SwapVert,
-                  contentDescription = stringResource(songOrder.labelRes()),
-                  tint = if (folderRules.isFiltering) colors.primary else colors.onSurface,
-                  modifier = Modifier.size(Grid.icon)
-                )
-              }
-              androidx.compose.material3.DropdownMenu(
-                expanded = sortMenuOpen,
-                onDismissRequest = { sortMenuOpen = false }
-              ) {
-                com.example.data.playback.SongOrder.entries.forEach { o ->
-                  androidx.compose.material3.DropdownMenuItem(
-                    text = {
-                      Text(
-                        stringResource(o.labelRes()),
-                        color = if (o == songOrder) colors.primary else colors.onSurface
-                      )
-                    },
-                    onClick = {
-                      sortMenuOpen = false
-                      songOrder = o
-                      onSongOrderChange(o)
-                    },
-                    modifier = Modifier.testTag("song_order_${o.key}")
-                  )
-                }
-                androidx.compose.material3.HorizontalDivider()
-                androidx.compose.material3.DropdownMenuItem(
-                  text = {
-                    Text(
-                      stringResource(R.string.library_folders_chip),
-                      color = if (folderRules.isFiltering) colors.primary else colors.onSurface
-                    )
-                  },
-                  onClick = {
-                    sortMenuOpen = false
-                    showFolders = true
-                  },
-                  modifier = Modifier.testTag("song_order_folders")
-                )
-              }
+            LibrarySection.entries.forEach { s ->
+              FilterChip(
+                label = if (s == LibrarySection.QUEUE && queue.isNotEmpty()) {
+                  stringResource(R.string.library_section_queue_count, queue.size)
+                } else stringResource(s.labelRes),
+                selected = section == s,
+                onClick = { section = s },
+                modifier = Modifier.testTag("library_chip_${s.name.lowercase()}")
+              )
             }
           }
-        }
-        // Scrolls sideways inside the T.A.L. 24 dp column so chips stay aligned with search and buttons.
-        Row(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Grid.margin)
-            .horizontalScroll(rememberScrollState())
-            .selectableGroup(),
-          horizontalArrangement = Arrangement.spacedBy(Grid.u6)
-        ) {
-          LibrarySection.entries.forEach { s ->
-            FilterChip(
-              label = if (s == LibrarySection.QUEUE && queue.isNotEmpty()) {
-                stringResource(R.string.library_section_queue_count, queue.size)
-              } else stringResource(s.labelRes),
-              selected = section == s,
-              onClick = { section = s },
-              modifier = Modifier.testTag("library_chip_${s.name.lowercase()}")
-            )
+          if (section == LibrarySection.SONGS && musicAllowed && (deviceTracks.isNotEmpty() || folderRules.isFiltering)) {
+            SongsSearchAndSortBar(padHorizontal = true)
           }
-        }
-
-        AnimatedContent(
-          targetState = section,
-          transitionSpec = { sectionTransition(initialState.ordinal, targetState.ordinal, reduced) },
-          label = "librarySection",
-          modifier = Modifier.weight(1f)
-        ) { shownSection ->
-          when (shownSection) {
-            LibrarySection.SONGS -> TrackList(
-              tracks = if (musicAllowed) shownSongs else emptyList(),
-              currentTrack = currentTrack,
-              isPlaying = isPlaying,
-              onPlay = { track -> onPlayFromList(track, shownSongs) },
-              onShuffle = { onShuffleList(shownSongs) },
-              header = {
-                if (musicAllowed && (deviceTracks.isNotEmpty() || folderRules.isFiltering) && compact) {
-                  item(key = "song_search") {
-                    Row(
-                      modifier = Modifier.padding(top = Grid.u6, bottom = Grid.u6),
-                      verticalAlignment = Alignment.CenterVertically
-                    ) {
-                      SearchField(
-                        value = songQuery,
-                        onValueChange = { songQuery = it },
-                        placeholder = stringResource(R.string.library_search_songs_hint),
-                        modifier = Modifier
-                          .weight(1f)
-                          .padding(start = Grid.margin)
-                          .testTag("library_search_songs")
-                      )
-                      SongOrderRow(
-                        songOrder,
-                        onChange = { songOrder = it; onSongOrderChange(it) },
-                        foldersActive = folderRules.isFiltering,
-                        onFolders = { showFolders = true },
-                        modifier = Modifier.weight(1f)
-                      )
-                    }
-                  }
-                }
-              },
-              trailing = { track ->
-                TrackActionsMenu(
-                  track = track,
-                  isFavorite = track.id in favoriteIds,
-                  playlists = playlists,
-                  onToggleFavorite = { onToggleFavorite(track) },
-                  onPlayNext = { onPlayNext(track) },
-                  onAddToQueue = { onAddToQueue(track) },
-                  onAddToPlaylist = { id -> onAddToPlaylist(id, track) },
-                  onCreatePlaylist = { name -> onCreatePlaylistWith(name, track) },
-                  modifier = Modifier.trailingEdge()
-                )
-              },
-              letters = songLetters,
-              subtitle = { t ->
-                val n = playCounts[t.id] ?: 0
-                if (songOrder == com.example.data.playback.SongOrder.MOST_PLAYED && n > 0) {
-                  "${pluralStringResource(R.plurals.library_play_count, n, n)} · ${trackSubtitle(t)}"
-                } else trackSubtitle(t)
-              },
-              empty = {
-                when {
-                  !musicAllowed -> MusicPermissionPrompt(
-                    blocked = musicBlocked,
-                    onAllow = { musicPermissionLauncher.launch(MusicPermission) },
-                    onOpenSettings = openAppSettings
-                  )
-                  deviceScanning || (sortedSongs == null && deviceTracks.isNotEmpty()) -> Loading(stringResource(R.string.library_loading_songs))
-                  deviceTracks.isEmpty() && songsPerFolder.isNotEmpty() -> EmptyState(
-                    icon = Icons.Rounded.SearchOff,
-                    title = stringResource(R.string.library_folders_all_out_title),
-                    message = stringResource(R.string.library_folders_all_out_message),
-                    modifier = Modifier.padding(horizontal = Grid.margin),
-                    actionLabel = stringResource(R.string.library_folders_chip),
-                    onAction = { showFolders = true }
-                  )
-                  deviceTracks.isNotEmpty() -> NoMatch(
-                    message = stringResource(R.string.library_search_empty_songs, songQuery.trim()),
-                    onClear = { songQuery = "" }
-                  )
-                  else -> EmptyLibrary(
-                    onRefresh = onScanDevice,
-                    onImport = { audioPickerLauncher.launch(arrayOf("audio/*")) }
-                  )
-                }
-              }
-            )
-
-            LibrarySection.ALBUMS -> GroupsList(
-              groups = albumGroups,
-              kind = "albums",
-              hintRes = R.string.library_search_albums_hint,
-              emptyRes = R.string.library_albums_empty,
-              ready = musicAllowed && !deviceScanning && groups != null,
-              onOpen = { pushGroup(it.key) }
-            )
-
-            LibrarySection.ARTISTS -> GroupsList(
-              groups = artistGroups,
-              kind = "artists",
-              hintRes = R.string.library_search_artists_hint,
-              emptyRes = R.string.library_artists_empty,
-              ready = musicAllowed && !deviceScanning && groups != null,
-              onOpen = { pushGroup(it.key) }
-            )
-
-            LibrarySection.GENRES -> GroupsList(
-              groups = genreGroups,
-              kind = "genres",
-              hintRes = R.string.library_search_genres_hint,
-              emptyRes = R.string.library_genres_empty,
-              ready = musicAllowed && !deviceScanning && groups != null,
-              onOpen = { pushGroup(it.key) }
-            )
-
-            LibrarySection.FOLDERS -> GroupsList(
-              groups = folderGroups,
-              kind = "folders",
-              hintRes = R.string.library_search_folders_hint,
-              emptyRes = R.string.library_folders_browse_empty,
-              ready = musicAllowed && !deviceScanning,
-              onOpen = { pushGroup(it.key) }
-            )
-
-            LibrarySection.PLAYLISTS -> PlaylistsList(
-              playlists = playlists,
-              byId = byId,
-              onOpen = { openPlaylistId = it.id },
-              onNew = { showNewPlaylist = true },
-              onImportAudio = { audioPickerLauncher.launch(arrayOf("audio/*")) },
-              onImportM3u = { m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "application/vnd.apple.mpegurl", "text/plain", "*/*")) },
-              onAddStream = { showAddStream = true }
-            )
-
-            LibrarySection.FAVORITES -> TrackList(
-              tracks = shownFavorites,
-              currentTrack = currentTrack,
-              isPlaying = isPlaying,
-              onPlay = { track -> onPlayFromList(track, shownFavorites) },
-              onShuffle = { onShuffleList(shownFavorites) },
-              header = {
-                if (favoriteTracks.isNotEmpty()) item(key = "favorite_search") {
-                  SearchField(
-                    value = favoriteQuery,
-                    onValueChange = { favoriteQuery = it },
-                    placeholder = stringResource(R.string.library_search_favorites_hint),
-                    modifier = Modifier
-                      .padding(horizontal = Grid.margin)
-                      .padding(top = Grid.u6, bottom = Grid.u6)
-                      .testTag("library_search_favorites")
-                  )
-                }
-              },
-              empty = {
-                if (favoriteTracks.isNotEmpty()) {
-                  NoMatch(
-                    message = stringResource(R.string.library_search_empty_favorites, favoriteQuery.trim()),
-                    onClear = { favoriteQuery = "" }
-                  )
-                } else {
-                  EmptyState(
-                    icon = Icons.Rounded.FavoriteBorder,
-                    title = stringResource(R.string.library_favorites_empty_title),
-                    message = stringResource(R.string.library_favorites_empty_message),
-                    modifier = Modifier.padding(horizontal = Grid.margin)
-                  )
-                }
-              },
-              trailing = { track ->
-                IconAction(
-                  icon = Icons.Rounded.Favorite,
-                  contentDescription = stringResource(R.string.library_favorite_remove, track.title),
-                  onClick = { onToggleFavorite(track) },
-                  tint = MaterialTheme.colorScheme.primary,
-                  modifier = Modifier.trailingEdge()
-                )
-              }
-            )
-
-            LibrarySection.AUTO -> AutoListsOverview(
-              lists = autoLists,
-              byId = byId,
-              onOpen = { openAutoName = it.name }
-            )
-
-            LibrarySection.QUEUE -> QueueList(
-              queue = queue,
-              upcoming = upcoming,
-              onPlay = onPlayQueueItem,
-              onRemove = onRemoveQueueItem,
-              onMove = onMoveQueueItem,
-              onClear = onClearQueue,
-              onSaveAsPlaylist = onSaveQueueAsPlaylist,
-              onPlayUpcoming = onPlayUpcoming
-            )
+          AnimatedContent(
+            targetState = section,
+            transitionSpec = { sectionTransition(initialState.ordinal, targetState.ordinal, reduced) },
+            label = "librarySection",
+            modifier = Modifier
+              .weight(1f)
+              .fillMaxWidth()
+              .padding(horizontal = Grid.margin)
+              .clip(cardShape)
+              .background(colors.surfaceContainer)
+              .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
+          ) { shownSection ->
+            SectionBody(shownSection)
           }
         }
       }

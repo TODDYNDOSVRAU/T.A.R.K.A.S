@@ -114,7 +114,11 @@ internal fun TrackList(
       }
     } else {
       item(key = "play_shuffle") { PlayShuffleRow(onPlay = { onPlay(tracks.first()) }, onShuffle = onShuffle) }
-      itemsIndexed(tracks, key = { _, t -> t.id }) { index, track ->
+      itemsIndexed(
+        items = tracks,
+        key = { _, t -> t.id },
+        contentType = { _, _ -> "lib_song_row" }
+      ) { index, track ->
         Column(modifier = itemMotion(index)) {
           if (index > 0) TrackDivider()
           TrackRow(

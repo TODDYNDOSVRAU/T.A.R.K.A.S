@@ -3,13 +3,19 @@ package com.example.ui.screens.player
 import android.content.BroadcastReceiver
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
+import com.example.ui.theme.LocalBackdrop
 import com.example.ui.theme.LocalSurfaceStyle
 import com.example.ui.theme.SurfaceStyle
 import com.example.ui.theme.drawLiquidGlassThumb
+import com.example.ui.theme.glassSurface
+import com.example.ui.theme.liquidChrome
 import com.example.ui.theme.liquidGlassSupported
 import com.example.ui.theme.liquidLensPill
+import com.example.ui.theme.pressClickable
 import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import kotlinx.coroutines.launch
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -21,6 +27,7 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -218,7 +225,7 @@ internal fun TitleRow(
         Column {
           Text(
             text = t?.title ?: stringResource(R.string.player_screen_nothing_playing),
-            style = GridText.Title,
+            style = GridText.Title.copy(fontSize = 22.sp, lineHeight = 28.sp),
             color = OnPage,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -234,33 +241,45 @@ internal fun TitleRow(
       }
     }
     if (track != null) {
-      GlyphButton(
-        icon = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-        contentDescription = stringResource(R.string.player_screen_favorite),
-        stateDescription = if (isFavorite) stringResource(R.string.player_screen_favorite_on) else stringResource(R.string.player_screen_favorite_off),
-        active = isFavorite,
-        inactiveTint = OnPage,
-        onClick = { onToggleFavorite(track) },
-        modifier = Modifier.revealWithPlayer().testTag("music_btn_favorite")
-      )
-      TrackActionsMenu(
-        modifier = Modifier.revealWithPlayer(),
-        track = track,
-        isFavorite = isFavorite,
-        playlists = playlists,
-        onToggleFavorite = { onToggleFavorite(track) },
-        onPlayNext = { onPlayNext(track) },
-        onAddToQueue = { onAddToQueue(track) },
-        onAddToPlaylist = { id -> onAddToPlaylist(id, track) },
-        onCreatePlaylist = { name -> onCreatePlaylist(name, track) },
-        iconTint = OnPage,
-        icon = Icons.Rounded.MoreHoriz,
-        sleepTimerLabel = sleepTimerLabel(sleepTimer),
-        onSleepTimer = onSleepTimer,
-        onAbout = { onAbout(track) },
-        onLyrics = { onLyrics(track) },
-        onDownloadOffline = { onDownloadOffline(track) }
-      )
+      val isLiquid = LocalSurfaceStyle.current == SurfaceStyle.LIQUID && liquidGlassSupported
+      val pillBtn: @Composable (Modifier) -> Modifier = { m ->
+        if (isLiquid && LocalBackdrop.current != null) m.glassSurface(CircleShape, interactive = true)
+        else m.clip(CircleShape).background(Color.White.copy(alpha = 0.12f))
+      }
+      Box(modifier = Modifier.size(Grid.u48).revealWithPlayer(), contentAlignment = Alignment.Center) {
+        Box(modifier = pillBtn(Modifier.size(36.dp)), contentAlignment = Alignment.Center) {
+          GlyphButton(
+            icon = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+            contentDescription = stringResource(R.string.player_screen_favorite),
+            stateDescription = if (isFavorite) stringResource(R.string.player_screen_favorite_on) else stringResource(R.string.player_screen_favorite_off),
+            active = isFavorite,
+            inactiveTint = OnPage,
+            onClick = { onToggleFavorite(track) },
+            modifier = Modifier.testTag("music_btn_favorite")
+          )
+        }
+      }
+      Box(modifier = Modifier.size(Grid.u48).revealWithPlayer(), contentAlignment = Alignment.Center) {
+        Box(modifier = pillBtn(Modifier.size(36.dp)), contentAlignment = Alignment.Center) {
+          TrackActionsMenu(
+            track = track,
+            isFavorite = isFavorite,
+            playlists = playlists,
+            onToggleFavorite = { onToggleFavorite(track) },
+            onPlayNext = { onPlayNext(track) },
+            onAddToQueue = { onAddToQueue(track) },
+            onAddToPlaylist = { id -> onAddToPlaylist(id, track) },
+            onCreatePlaylist = { name -> onCreatePlaylist(name, track) },
+            iconTint = OnPage,
+            icon = Icons.Rounded.MoreHoriz,
+            sleepTimerLabel = sleepTimerLabel(sleepTimer),
+            onSleepTimer = onSleepTimer,
+            onAbout = { onAbout(track) },
+            onLyrics = { onLyrics(track) },
+            onDownloadOffline = { onDownloadOffline(track) }
+          )
+        }
+      }
     }
   }
 }
@@ -366,7 +385,10 @@ internal fun PlayerProgress(
   reduced: Boolean,
   onScrubbing: (Boolean) -> Unit,
   onSeekTo: (Long) -> Unit,
-  waveform: ByteArray? = null
+  waveform: ByteArray? = null,
+  abLoopLabel: String? = null,
+  abLoopActive: Boolean = false,
+  onToggleAbLoop: (() -> Unit)? = null
 ) {
   val loadedDuration = durationMs()
   val rawPosition = positionMs()
@@ -407,10 +429,35 @@ internal fun PlayerProgress(
     waveform = waveform,
     modifier = Modifier.testTag("music_progress_slider")
   )
-  Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.SpaceBetween,
+    verticalAlignment = Alignment.CenterVertically
+  ) {
     // Tabular figures keep the clocks from jittering as digits change.
     val clockStyle = GridText.Label.copy(fontFeatureSettings = "tnum")
     Text(text = formatClock(position), style = clockStyle, color = OnPageMuted)
+    if (abLoopLabel != null && onToggleAbLoop != null) {
+      val isLiquid = LocalSurfaceStyle.current == SurfaceStyle.LIQUID && liquidGlassSupported
+      val colors = MaterialTheme.colorScheme
+      Box(
+        modifier = Modifier
+          .then(
+            if (isLiquid && LocalBackdrop.current != null) Modifier.glassSurface(CircleShape, interactive = true)
+            else Modifier.clip(CircleShape).background(if (abLoopActive) colors.primary.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.12f))
+          )
+          .pressClickable(onClick = onToggleAbLoop)
+          .padding(horizontal = Grid.inset, vertical = 4.dp)
+          .testTag("player_ab_loop"),
+        contentAlignment = Alignment.Center
+      ) {
+        Text(
+          text = abLoopLabel,
+          style = clockStyle,
+          color = if (abLoopActive) colors.primary else OnPageMuted
+        )
+      }
+    }
     Text(text = remaining, style = clockStyle, color = OnPageMuted)
   }
 }
@@ -443,9 +490,17 @@ internal fun ScrubBar(
   var dragging by remember { mutableStateOf(false) }
   val thickness by animateFloatAsState(
     targetValue = if (dragging) Grid.u12.value else Grid.u6.value,
-    animationSpec = if (reduced) snap() else if (dragging) spring(dampingRatio = 1f, stiffness = 900f) else Motion.gel(),
+    animationSpec = if (reduced) snap() else if (dragging) Motion.criticalSpatial(stiffness = 900f) else Motion.fluid(),
     label = "scrubThickness"
   )
+  val thumbScale = remember { androidx.compose.animation.core.Animatable(1f) }
+  val rubberX = remember { androidx.compose.animation.core.Animatable(0f) }
+  val scope = androidx.compose.runtime.rememberCoroutineScope()
+  androidx.compose.runtime.LaunchedEffect(dragging, reduced) {
+    val target = if (dragging && !reduced) 1.10f else 1f
+    if (reduced) thumbScale.snapTo(target)
+    else thumbScale.animateTo(target, if (dragging) Motion.criticalSpatial(stiffness = 900f) else Motion.fluidFast())
+  }
   val fill = if (dragging) OnPage else OnPage.copy(alpha = 0.85f)
   val rail = OnPage.copy(alpha = 0.22f)
   val shown = fraction.coerceIn(0f, 1f)
@@ -465,12 +520,9 @@ internal fun ScrubBar(
   )
   val accentColor = MaterialTheme.colorScheme.primary
   val isLiquid = LocalSurfaceStyle.current == SurfaceStyle.LIQUID && liquidGlassSupported
-  val barBackdrop = rememberLayerBackdrop(
-    onDraw = {
-      drawRect(Color(0xFF1A1A1A))
-      drawContent()
-    }
-  )
+  val pageBackdrop = LocalBackdrop.current
+  val barBackdrop = rememberLayerBackdrop()
+  val combinedBackdrop = if (pageBackdrop != null) rememberCombinedBackdrop(pageBackdrop, barBackdrop) else barBackdrop
   Box(
     modifier = modifier
       .fillMaxWidth()
@@ -505,19 +557,36 @@ internal fun ScrubBar(
           onDragEnd = {
             if (dragging) release(last)
             dragging = false
+            if (!reduced && rubberX.value != 0f) {
+              scope.launch { rubberX.animateTo(0f, Motion.fluidFast(visibilityThreshold = 0.5f)) }
+            }
           },
           onDragCancel = {
             if (dragging) release(last)
             dragging = false
+            if (!reduced && rubberX.value != 0f) {
+              scope.launch { rubberX.animateTo(0f, Motion.fluidFast(visibilityThreshold = 0.5f)) }
+            }
           }
         ) { pointer, _ ->
           if (dragging) {
             pointer.consume()
-            last = (pointer.position.x / size.width).coerceIn(0f, 1f)
+            val raw = pointer.position.x / size.width.coerceAtLeast(1)
+            last = raw.coerceIn(0f, 1f)
+            if (!reduced) {
+              val overPx = when {
+                raw < 0f -> pointer.position.x
+                raw > 1f -> pointer.position.x - size.width
+                else -> 0f
+              }
+              val rb = Motion.rubberBand(overPx, limit = 16.dp.toPx(), coefficient = 0.45f)
+              scope.launch { rubberX.snapTo(rb) }
+            }
             change(last)
           }
         }
-      },
+      }
+      .graphicsLayer { translationX = rubberX.value },
     contentAlignment = Alignment.CenterStart
   ) {
     Box(
@@ -556,15 +625,20 @@ internal fun ScrubBar(
         }
     )
     if (isLiquid && widthPx > 0) {
-      val pillH = if (dragging) 20.dp else 17.dp
-      val pillW = if (dragging) 31.dp else 27.dp
+      val pillH = 17.dp
+      val pillW = 27.dp
       val pillWPx = with(LocalDensity.current) { pillW.toPx() }
       val thumbOffsetX = ((widthPx * shown) - pillWPx / 2f).coerceIn(0f, (widthPx - pillWPx).coerceAtLeast(0f))
       Box(
         modifier = Modifier
-          .offset { androidx.compose.ui.unit.IntOffset(kotlin.math.round(thumbOffsetX).toInt(), 0) }
+          .graphicsLayer {
+            translationX = thumbOffsetX
+            val s = thumbScale.value
+            scaleX = s
+            scaleY = s
+          }
           .size(width = pillW, height = pillH)
-          .liquidLensPill(barBackdrop, isDark = true, trackAccent = fill)
+          .liquidLensPill(combinedBackdrop, isDark = true, trackAccent = fill)
       )
     }
   }
@@ -646,7 +720,10 @@ internal fun ProgressRow(
   reduced: Boolean,
   waveform: ByteArray?,
   onScrubbing: (Boolean) -> Unit,
-  onSeekTo: (Long) -> Unit
+  onSeekTo: (Long) -> Unit,
+  abLoopLabel: String? = null,
+  abLoopActive: Boolean = false,
+  onToggleAbLoop: (() -> Unit)? = null
 ) {
   Column(modifier = Modifier.fillMaxWidth().revealWithPlayer()) {
     PlayerProgress(
@@ -657,7 +734,10 @@ internal fun ProgressRow(
       reduced = reduced,
       onScrubbing = onScrubbing,
       onSeekTo = onSeekTo,
-      waveform = waveform
+      waveform = waveform,
+      abLoopLabel = abLoopLabel,
+      abLoopActive = abLoopActive,
+      onToggleAbLoop = onToggleAbLoop
     )
   }
 }
@@ -673,8 +753,8 @@ internal fun TransportRow(isPlaying: Boolean, onPrevious: () -> Unit, onTogglePl
       icon = Icons.Rounded.SkipPrevious,
       contentDescription = stringResource(R.string.player_screen_previous),
       onClick = onPrevious,
-      touch = Grid.u48,
-      glyph = Grid.u24,
+      touch = 56.dp,
+      glyph = 36.dp,
       tint = OnPage,
       modifier = Modifier.playerPart("prev", delay = 0.12f).testTag("music_btn_previous")
     )
@@ -683,8 +763,8 @@ internal fun TransportRow(isPlaying: Boolean, onPrevious: () -> Unit, onTogglePl
       icon = Icons.Rounded.SkipNext,
       contentDescription = stringResource(R.string.player_screen_next),
       onClick = onNext,
-      touch = Grid.u48,
-      glyph = Grid.u24,
+      touch = 56.dp,
+      glyph = 36.dp,
       tint = OnPage,
       modifier = Modifier.playerPart("next", delay = 0.12f).testTag("music_btn_next")
     )
@@ -729,8 +809,16 @@ internal fun ActionsRow(
   onOpenQueue: () -> Unit
 ) {
   val timerLabel = sleepTimerLabel(sleepTimer)
+  val isLiquid = LocalSurfaceStyle.current == SurfaceStyle.LIQUID && liquidGlassSupported
   Row(
-    modifier = Modifier.fillMaxWidth().revealWithPlayer(),
+    modifier = Modifier
+      .fillMaxWidth()
+      .revealWithPlayer()
+      .then(
+        if (isLiquid && LocalBackdrop.current != null) Modifier.glassSurface(com.example.ui.theme.Shapes.pill, interactive = true)
+        else Modifier.clip(com.example.ui.theme.Shapes.pill).background(Color.White.copy(alpha = 0.10f))
+      )
+      .padding(horizontal = Grid.u6, vertical = 2.dp),
     horizontalArrangement = Arrangement.SpaceBetween,
     verticalAlignment = Alignment.CenterVertically
   ) {

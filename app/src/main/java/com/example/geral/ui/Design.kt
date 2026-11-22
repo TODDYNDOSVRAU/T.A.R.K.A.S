@@ -1,12 +1,30 @@
 package com.example.ui.components
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalHapticFeedback
+import com.example.ui.theme.AppMotion
+import com.example.ui.theme.Motion
+import com.example.ui.theme.tactilePressScale
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -88,32 +106,51 @@ import com.example.ui.theme.gridHeight
 
 /**
  * Click with the platform's quiet highlight: the surface darkens slightly while pressed, instead of a
- * ripple or a bounce. Used by rows and list cells.
+ * ripple or a bounce. Driven purely in [drawBehind] via [Animatable] so tapping never recomposes.
  */
+@Composable
 fun Modifier.highlightClickable(
   enabled: Boolean = true,
   role: Role = Role.Button,
   onClickLabel: String? = null,
+  interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
   onClick: () -> Unit
-): Modifier = composed {
-  val interaction = remember { MutableInteractionSource() }
-  val pressed by interaction.collectIsPressedAsState()
-  val overlay by animateColorAsState(
-    targetValue = if (pressed) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f) else Color.Transparent,
-    // In at once, out gently: the highlight answers the finger immediately.
-    animationSpec = tween(if (pressed) 0 else 220),
-    label = "highlight"
-  )
-  this
+): Modifier {
+  val highlightColor = MaterialTheme.colorScheme.onSurface
+  val alpha = remember { Animatable(0f) }
+  LaunchedEffect(interactionSource) {
+    var pressCount = 0
+    var job: Job? = null
+    interactionSource.interactions.collect { ev ->
+      when (ev) {
+        is PressInteraction.Press -> {
+          pressCount++
+          job?.cancel()
+          job = launch { alpha.snapTo(0.08f) }
+        }
+        is PressInteraction.Release, is PressInteraction.Cancel -> {
+          pressCount = (pressCount - 1).coerceAtLeast(0)
+          if (pressCount == 0) {
+            job?.cancel()
+            job = launch { alpha.animateTo(0f, Motion.defaultEffects()) }
+          }
+        }
+      }
+    }
+  }
+  return this
     .clickable(
-      interactionSource = interaction,
+      interactionSource = interactionSource,
       indication = null,
       enabled = enabled,
       role = role,
       onClickLabel = onClickLabel,
       onClick = onClick
     )
-    .background(overlay)
+    .drawBehind {
+      val a = alpha.value
+      if (a > 0.001f) drawRect(highlightColor.copy(alpha = a))
+    }
 }
 
 // ---- headers ----
@@ -155,7 +192,7 @@ fun GroupHeader(text: String, modifier: Modifier = Modifier) {
     style = GridText.Small.copy(fontWeight = FontWeight.Medium),
     color = MaterialTheme.colorScheme.onSurfaceVariant,
     modifier = modifier
-      .padding(bottom = Grid.u6)
+      .padding(bottom = Grid.u12)
       .gridHeight(min = Grid.u24)
       .padding(start = Grid.margin + Grid.inset, end = Grid.margin + Grid.inset)
       .semantics { heading() }
@@ -407,35 +444,120 @@ fun SwitchRow(
     modifier = modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
   ) {
     Spacer(Modifier.width(Grid.inset))
-    GridSwitch(checked = checked, enabled = enabled)
+    GridSwitch(checked = checked, enabled = enabled, onCheckedChange = onCheckedChange)
   }
 }
 
 /**
- * The grid's switch: 48 x 24 dp, an 18 dp thumb 3 dp from the edge. On is the accent track with a dark
- * thumb; off is a quiet track. It only shows the state: the row around it is what toggles.
+ * The grid's switch: 48 x 24 dp, GPU-animated via [graphicsLayer] (0 relayouts per frame) with
+ * iOS 26 spring travel, subtle press-stretch, optional horizontal drag-to-toggle and haptic tick.
  */
 @Composable
-fun GridSwitch(checked: Boolean, modifier: Modifier = Modifier, enabled: Boolean = true) {
+fun GridSwitch(
+  checked: Boolean,
+  modifier: Modifier = Modifier,
+  enabled: Boolean = true,
+  onCheckedChange: ((Boolean) -> Unit)? = null
+) {
   val colors = MaterialTheme.colorScheme
   val isLiquid = com.example.ui.theme.LocalSurfaceStyle.current == com.example.ui.theme.SurfaceStyle.LIQUID &&
     com.example.ui.theme.liquidGlassSupported
   val isDark = colors.background.luminance() < 0.5f
+  val reduced = AppMotion.reduced
   val fade = if (enabled) 1f else 0.38f
+  val haptics = LocalHapticFeedback.current
+  val scope = rememberCoroutineScope()
+  val currentChecked by rememberUpdatedState(checked)
+  val currentOnChange by rememberUpdatedState(onCheckedChange)
+
+  val progress = remember { Animatable(if (checked) 1f else 0f) }
+  val stretch = remember { Animatable(1f) }
+  var dragging = remember { booleanArrayOf(false) }
+
+  LaunchedEffect(checked, reduced) {
+    if (!dragging[0]) {
+      val target = if (checked) 1f else 0f
+      if (reduced) progress.snapTo(target)
+      else progress.animateTo(target, Motion.fluid(visibilityThreshold = 0.002f))
+    }
+  }
+
   val track by animateColorAsState(
     if (checked) colors.primary.copy(alpha = (if (isLiquid) 0.78f else 1f) * fade)
     else colors.onSurface.copy(alpha = (if (isLiquid) 0.18f else 0.2f) * fade),
-    tween(200), label = "switchTrack"
+    Motion.defaultEffects(), label = "switchTrack"
   )
   val thumb by animateColorAsState(
     if (checked) colors.onPrimary else colors.onSurface.copy(alpha = fade),
-    tween(200), label = "switchThumb"
+    Motion.defaultEffects(), label = "switchThumb"
   )
-  val x by animateDpAsState(
-    if (checked) (if (isLiquid) 20.dp else Grid.u24 + 3.dp) else (if (isLiquid) 0.dp else 3.dp),
-    tween(250),
-    label = "switchX"
-  )
+
+  val travelDp = if (isLiquid) 20.dp else Grid.u24
+  val startOffsetDp = if (isLiquid) 0.dp else 3.dp
+
+  val gestureMod = if (!enabled) Modifier else Modifier.pointerInput(isLiquid, reduced) {
+    val travelPx = travelDp.toPx().coerceAtLeast(1f)
+    awaitEachGesture {
+      val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+      if (!reduced) {
+        scope.launch { stretch.animateTo(1.16f, Motion.criticalSpatial(stiffness = 900f)) }
+      }
+      val cb = currentOnChange
+      if (cb != null) {
+        var moved = false
+        var lastSide = currentChecked
+        try {
+          horizontalDrag(down.id) { change ->
+            val dx = change.positionChange().x
+            if (moved || kotlin.math.abs(dx) > 2f) {
+              moved = true
+              dragging[0] = true
+              change.consume()
+              val nextP = (progress.value + dx / travelPx).coerceIn(0f, 1f)
+              scope.launch { progress.snapTo(nextP) }
+              val side = nextP >= 0.5f
+              if (side != lastSide) {
+                lastSide = side
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+              }
+            }
+          }
+        } finally {
+          dragging[0] = false
+          if (moved) {
+            val targetChecked = progress.value >= 0.5f
+            if (targetChecked != currentChecked) cb(targetChecked)
+            scope.launch {
+              if (reduced) progress.snapTo(if (targetChecked) 1f else 0f)
+              else progress.animateTo(if (targetChecked) 1f else 0f, Motion.fluid(visibilityThreshold = 0.002f))
+            }
+          }
+          if (!reduced) {
+            scope.launch { stretch.animateTo(1f, Motion.fluidFast(visibilityThreshold = 0.002f)) }
+          }
+        }
+      } else {
+        // Observe release for press-stretch even when toggled by parent row.
+        while (true) {
+          val ev = awaitPointerEvent(PointerEventPass.Initial)
+          if (ev.changes.none { it.pressed }) break
+        }
+        if (!reduced) {
+          scope.launch { stretch.animateTo(1f, Motion.fluidFast(visibilityThreshold = 0.002f)) }
+        }
+      }
+    }
+  }
+
+  val thumbTransform = Modifier.graphicsLayer {
+    val p = progress.value
+    translationX = startOffsetDp.toPx() + p * travelDp.toPx()
+    val s = stretch.value
+    scaleX = s
+    scaleY = 1f - (s - 1f) * 0.25f
+    transformOrigin = TransformOrigin(if (p >= 0.5f) 1f else 0f, 0.5f)
+  }
+
   if (isLiquid) {
     val surfaceBg = colors.surface
     val trackBackdrop = rememberLayerBackdrop(
@@ -446,7 +568,9 @@ fun GridSwitch(checked: Boolean, modifier: Modifier = Modifier, enabled: Boolean
     )
     // Unclipped outer container so the oblong Liquid Glass pill floats cleanly over the track.
     Box(
-      modifier = modifier.size(width = Grid.u48, height = Grid.u24),
+      modifier = modifier
+        .size(width = Grid.u48, height = Grid.u24)
+        .then(gestureMod),
       contentAlignment = Alignment.CenterStart
     ) {
       Box(
@@ -459,7 +583,7 @@ fun GridSwitch(checked: Boolean, modifier: Modifier = Modifier, enabled: Boolean
       )
       Box(
         modifier = Modifier
-          .offset(x = x)
+          .then(thumbTransform)
           .size(width = 28.dp, height = 20.dp)
           .liquidLensPill(trackBackdrop, isDark = isDark, trackAccent = if (checked) colors.primary else null)
       )
@@ -468,13 +592,14 @@ fun GridSwitch(checked: Boolean, modifier: Modifier = Modifier, enabled: Boolean
     Box(
       modifier = modifier
         .size(width = Grid.u48, height = Grid.u24)
+        .then(gestureMod)
         .clip(Grid.r12)
         .background(track),
       contentAlignment = Alignment.CenterStart
     ) {
       Box(
         Modifier
-          .offset(x = x)
+          .then(thumbTransform)
           .size(18.dp)
           .clip(CircleShape)
           .background(thumb)
@@ -571,12 +696,14 @@ private fun ButtonLayout(
   onClick: () -> Unit,
   modifier: Modifier
 ) {
+  val interaction = remember { MutableInteractionSource() }
   Row(
     modifier = modifier
+      .tactilePressScale(interaction, pressedScale = 0.96f)
       .heightIn(min = Grid.u48)
       .clip(Grid.r24)
       .background(container)
-      .highlightClickable(enabled = enabled, onClick = onClick)
+      .highlightClickable(enabled = enabled, interactionSource = interaction, onClick = onClick)
       .padding(horizontal = Grid.inset),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.Center
@@ -650,10 +777,18 @@ fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: 
   val isLiquid = com.example.ui.theme.LocalSurfaceStyle.current == com.example.ui.theme.SurfaceStyle.LIQUID &&
     com.example.ui.theme.liquidGlassSupported
   // 48 dp touch target with a leaner 36 dp Apple HIG visual pill inside.
+  val chipInteraction = remember { MutableInteractionSource() }
   Box(
     modifier = modifier
+      .tactilePressScale(chipInteraction, pressedScale = 0.96f)
       .heightIn(min = Grid.u48)
-      .selectable(selected = selected, role = Role.Tab, onClick = onClick),
+      .selectable(
+        selected = selected,
+        interactionSource = chipInteraction,
+        indication = null,
+        role = Role.Tab,
+        onClick = onClick
+      ),
     contentAlignment = Alignment.Center
   ) {
     Box(
@@ -713,7 +848,7 @@ fun RowScope.Segment(label: String, selected: Boolean, onClick: () -> Unit, modi
     com.example.ui.theme.liquidGlassSupported
   val fill by animateColorAsState(
     if (selected) colors.surfaceContainerHigh else colors.surfaceContainerHigh.copy(alpha = 0f),
-    tween(200), label = "segmentFill"
+    Motion.defaultEffects(), label = "segmentFill"
   )
   val text by animateColorAsState(
     when {
@@ -721,7 +856,7 @@ fun RowScope.Segment(label: String, selected: Boolean, onClick: () -> Unit, modi
       selected -> colors.onSurface
       else -> colors.onSurfaceVariant
     },
-    tween(200), label = "segmentText"
+    Motion.defaultEffects(), label = "segmentText"
   )
   Box(
     modifier = modifier

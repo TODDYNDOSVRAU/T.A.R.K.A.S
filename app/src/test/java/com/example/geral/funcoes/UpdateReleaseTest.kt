@@ -145,15 +145,23 @@ class UpdateReleaseTest {
       .findAll(xml).associate { it.groupValues[1] to it.groupValues[2] }
   }
 
-  @Test fun theDevelopmentBuildNeverInstallsAndSaysWhy() {
-    // Unit tests run the debug variant, signed with the developer's key.
-    assertFalse(com.example.data.update.UpdateManager.installsUpdates)
+  @Test fun directInAppInstallIsEnabledAndPopupStringsHaveNoExclamation() {
+    assertTrue(com.example.data.update.UpdateManager.installsUpdates)
+    val required = listOf(
+      "update_popup_downloading",
+      "update_popup_installing",
+      "update_popup_awaiting_user",
+      "update_popup_install_now",
+      "update_popup_retry"
+    )
     for (dir in listOf("values", "values-pt")) {
-      val notice = stringsOf(dir)["update_dev_build_notice"]
-      assertNotNull(dir, notice)
-      assertFalse(dir, notice!!.contains('!'))
+      val map = stringsOf(dir)
+      for (key in required) {
+        val text = map[key]
+        assertNotNull("$dir/$key", text)
+        assertFalse("$dir/$key", text!!.contains('!'))
+      }
     }
-    assertTrue(stringsOf("values-pt")["update_dev_build_notice"]!!.contains("outra chave"))
   }
 
   @Test fun everyProblemSaysWhatHappenedAndHasNoExclamationInBothLanguages() {

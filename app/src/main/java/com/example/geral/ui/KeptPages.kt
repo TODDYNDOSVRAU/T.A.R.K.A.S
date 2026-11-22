@@ -78,9 +78,13 @@ fun <K : Any> KeptPages(
             .then(if (shown) Modifier else Modifier.clearAndSetSemantics {})
             .layout { measurable, constraints ->
               val placeable = measurable.measure(constraints)
-              layout(placeable.width, placeable.height) {
-                // Not placed once faded out: not drawn and not reachable by touch.
-                if (shown || alpha.value > 0f) placeable.placeWithLayer(0, 0) { this.alpha = alpha.value }
+              val visibleNow = shown || alpha.value > 0f
+              if (!visibleNow) {
+                layout(0, 0) {}
+              } else {
+                layout(placeable.width, placeable.height) {
+                  placeable.placeWithLayer(0, 0) { this.alpha = alpha.value }
+                }
               }
             }
         ) {

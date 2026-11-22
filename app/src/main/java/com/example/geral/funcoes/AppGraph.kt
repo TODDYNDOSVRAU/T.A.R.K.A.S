@@ -69,7 +69,8 @@ object AppGraph {
         .crossfade(150)
         .build()
     }
-    musicRepository = MusicRepository(app, lazy { database })
+    val dbLazy = lazy { database }
+    musicRepository = MusicRepository(app, dbLazy)
     curiosityRepository = CuriosityRepository(app)
     audioEngineManager = AudioEngineManager(app)
     preferencesRepository = PreferencesRepository(app)
@@ -84,7 +85,7 @@ object AppGraph {
     )
     curiositySpeechManager = CuriositySpeechManager(app)
     com.example.data.model.Placeholders.init(app)
-    libraryRepository = LibraryRepository(app, database)
+    libraryRepository = LibraryRepository(app, dbLazy)
     waveforms = com.example.data.waveform.WaveformRepository(
       app, kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
     )
@@ -96,7 +97,7 @@ object AppGraph {
       audioEngine = audioEngineManager,
       preferences = preferencesRepository,
       speech = curiositySpeechManager,
-      database = database
+      databaseLazy = dbLazy
     )
     initialized = true
   }

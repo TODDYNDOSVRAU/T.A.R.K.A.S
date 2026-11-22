@@ -12,20 +12,10 @@ import androidx.compose.ui.unit.Dp
 import com.example.ui.theme.Grid
 
 /**
- * Fades the top [height] of a scrolling list to transparent while it is scrolled away from its start, so
- * rows leave under the header softly instead of being cut in a straight line. At the very top nothing
- * is faded, so the first row keeps its full strength.
+ * Fades the top [height] of a scrolling list to transparent while it is scrolled away from its start.
+ * Note: [TarkasLargeTitle] already renders the top gradient overlay directly in [drawBehind], so we
+ * avoid wrapping full-screen LazyColumns in `CompositingStrategy.Offscreen` (which forced a second
+ * full-screen 2304x1440 hardware buffer allocation and BlendMode.DstIn pass on every scroll frame).
  */
+@Suppress("UNUSED_PARAMETER")
 fun Modifier.topScrollFade(state: LazyListState, height: Dp = Grid.u24): Modifier = this
-  .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-  .drawWithContent {
-    drawContent()
-    if (state.canScrollBackward) {
-      val h = height.toPx().coerceAtMost(size.height)
-      drawRect(
-        brush = Brush.verticalGradient(listOf(Color.Transparent, Color.Black), startY = 0f, endY = h),
-        size = androidx.compose.ui.geometry.Size(size.width, h),
-        blendMode = BlendMode.DstIn
-      )
-    }
-  }

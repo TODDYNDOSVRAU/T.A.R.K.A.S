@@ -70,7 +70,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.border
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import com.example.ui.layout.WidthClass
 import com.example.ui.layout.readingColumn
+import com.example.ui.layout.rememberWidthClass
+import com.example.ui.theme.SquircleShape
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -178,6 +186,13 @@ fun SettingsScreen(
   val reduced = rememberReducedMotion()
   // Kept here, outside the page switch, so coming back from Sobre lands where the list was left.
   val mainListState = androidx.compose.foundation.lazy.rememberLazyListState()
+  var layerKey by rememberSaveable { mutableStateOf(SettingsLayer.ESSENTIAL.key) }
+  var query by rememberSaveable { mutableStateOf("") }
+  val widthClass = rememberWidthClass()
+  val cfg = LocalConfiguration.current
+  val isTabletConsole = widthClass == WidthClass.EXPANDED &&
+    cfg.screenWidthDp > cfg.screenHeightDp && cfg.screenHeightDp >= 480
+  val isTabletSidebar = isTabletConsole || widthClass != WidthClass.COMPACT
 
   fun openText(target: SettingsPage, from: SettingsPage) {
     textOrigin = from
@@ -185,12 +200,8 @@ fun SettingsScreen(
   }
   val back = onSubPageBack
 
-  AnimatedContent(
-    targetState = page,
-    transitionSpec = { subPageTransition(forward = targetState.ordinal > initialState.ordinal, reduced = reduced) },
-    label = "settingsPage",
-    modifier = modifier.fillMaxSize()
-  ) { shown ->
+  @Composable
+  fun PagePane(shown: SettingsPage, showLayerTabs: Boolean, showInlineSearch: Boolean = true) {
     when (shown) {
       SettingsPage.MAIN -> MainSettings(
         themeMode, capabilities, onThemeModeChange, curiosityConfig, onOpenCuriositySettings, hasGeminiKey,
@@ -199,7 +210,6 @@ fun SettingsScreen(
         homeMusicFirst, onHomeMusicFirstChange,
         isShuffle, repeatMode, onToggleShuffle,
         onSetRepeatMode = { target ->
-          // Without a direct setter, step the cycle (Desligado → Lista → Faixa) until it lands on the choice.
           if (onSetRepeatMode != null) onSetRepeatMode(target)
           else repeat((target.ordinal - repeatMode.ordinal + RepeatMode.entries.size) % RepeatMode.entries.size) { onCycleRepeat() }
         },
@@ -209,7 +219,13 @@ fun SettingsScreen(
         onOpenPrivacy = { openText(SettingsPage.PRIVACY, SettingsPage.MAIN) },
         listState = mainListState,
         systemColors = systemColors,
-        onSystemColorsChange = onSystemColorsChange
+        onSystemColorsChange = onSystemColorsChange,
+        layerKey = layerKey,
+        onLayerKeyChange = { layerKey = it },
+        query = query,
+        onQueryChange = { query = it },
+        showLayerTabs = showLayerTabs,
+        showInlineSearch = showInlineSearch
       )
       SettingsPage.ABOUT -> AboutPage(
         termsAcceptedAt = termsAcceptedAt,
@@ -217,11 +233,189 @@ fun SettingsScreen(
         onOpen = { openText(it, SettingsPage.ABOUT) },
         onRestartOnboarding = onRestartOnboarding
       )
-      // These pages draw their own header, so they keep it below the status bar themselves.
-      SettingsPage.TERMS -> LegalScreen(currentLegalTexts().terms, textOrigin.backLabel(), onBack = back, modifier = Modifier.statusBarsPadding())
-      SettingsPage.PRIVACY -> LegalScreen(currentLegalTexts().privacy, textOrigin.backLabel(), onBack = back, modifier = Modifier.statusBarsPadding())
-      SettingsPage.LICENSES -> LegalScreen(currentLegalTexts().licenses, textOrigin.backLabel(), onBack = back, modifier = Modifier.statusBarsPadding())
-      SettingsPage.CHANGELOG -> LegalScreen(currentLegalTexts().changelog, textOrigin.backLabel(), onBack = back, modifier = Modifier.statusBarsPadding())
+      SettingsPage.TERMS -> LegalScreen(currentLegalTexts().terms, textOrigin.backLabel(), onBack = back, modifier = if (showLayerTabs) Modifier.statusBarsPadding() else Modifier)
+      SettingsPage.PRIVACY -> LegalScreen(currentLegalTexts().privacy, textOrigin.backLabel(), onBack = back, modifier = if (showLayerTabs) Modifier.statusBarsPadding() else Modifier)
+      SettingsPage.LICENSES -> LegalScreen(currentLegalTexts().licenses, textOrigin.backLabel(), onBack = back, modifier = if (showLayerTabs) Modifier.statusBarsPadding() else Modifier)
+      SettingsPage.CHANGELOG -> LegalScreen(currentLegalTexts().changelog, textOrigin.backLabel(), onBack = back, modifier = if (showLayerTabs) Modifier.statusBarsPadding() else Modifier)
+    }
+  }
+
+  if (isTabletSidebar) {
+    val colors = MaterialTheme.colorScheme
+    val cardShape = SquircleShape(18.dp)
+    val layer = SettingsLayer.fromKey(layerKey)
+    val searching = query.isNotBlank()
+    val sidebarWidth = if (isTabletConsole) 250.dp else 210.dp
+    Row(
+      modifier = modifier
+        .fillMaxSize()
+        .padding(start = Grid.margin, end = Grid.margin, bottom = LocalBarInset.current + Grid.u12),
+      horizontalArrangement = Arrangement.spacedBy(Grid.u12)
+    ) {
+      // Left iPadOS Settings Sidebar (250 dp landscape / 210 dp portrait Squircle card): 3 T.A.L. layers, quick links & device info
+      Column(
+        modifier = Modifier
+          .width(sidebarWidth)
+          .fillMaxHeight()
+          .clip(cardShape)
+          .background(colors.surfaceContainer)
+          .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
+          .verticalScroll(rememberScrollState())
+          .padding(Grid.u12)
+          .selectableGroup(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+      ) {
+        SettingsLayer.entries.forEach { l ->
+          val selected = page == SettingsPage.MAIN && !searching && layer == l
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(44.dp)
+              .clip(SquircleShape(12.dp))
+              .background(if (selected) colors.primary.copy(alpha = 0.16f) else Color.Transparent)
+              .selectable(
+                selected = selected,
+                role = Role.Tab,
+                onClick = {
+                  query = ""
+                  layerKey = l.key
+                  if (page != SettingsPage.MAIN) back()
+                }
+              )
+              .padding(horizontal = Grid.u12)
+              .testTag("settings_layer_${l.key}"),
+            contentAlignment = Alignment.CenterStart
+          ) {
+            Text(
+              text = stringResource(layerLabel(l)),
+              style = GridText.Body.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
+              color = if (selected) colors.primary else colors.onSurface,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
+            )
+          }
+        }
+
+        GroupDivider()
+
+        val quickLinks = listOf(
+          Triple(SettingsPage.ABOUT, stringResource(R.string.settings_about), { onOpenSubPage(SettingsSubPage.ABOUT) }),
+          Triple(SettingsPage.TERMS, stringResource(R.string.settings_terms), { openText(SettingsPage.TERMS, SettingsPage.MAIN) }),
+          Triple(SettingsPage.PRIVACY, stringResource(R.string.settings_privacy_policy), { openText(SettingsPage.PRIVACY, SettingsPage.MAIN) })
+        )
+        quickLinks.forEach { (targetPage, label, action) ->
+          val selected = page == targetPage
+          Box(
+            modifier = Modifier
+              .fillMaxWidth()
+              .height(40.dp)
+              .clip(SquircleShape(12.dp))
+              .background(if (selected) colors.primary.copy(alpha = 0.16f) else Color.Transparent)
+              .selectable(selected = selected, role = Role.Tab, onClick = action)
+              .padding(horizontal = Grid.u12),
+            contentAlignment = Alignment.CenterStart
+          ) {
+            Text(
+              text = label,
+              style = GridText.Small.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
+              color = if (selected) colors.primary else colors.onSurfaceVariant,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis
+            )
+          }
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .clip(SquircleShape(12.dp))
+            .background(colors.background.copy(alpha = 0.45f))
+            .padding(Grid.u12),
+          verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+          Text(
+            text = capabilities.deviceModel,
+            style = GridText.Small.copy(fontWeight = FontWeight.SemiBold),
+            color = colors.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+          )
+          Text(
+            text = "${capabilities.activeRouteName} · ${capabilities.sampleRateHz} Hz",
+            style = GridText.Small,
+            color = colors.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+          )
+        }
+      }
+
+      // Right Main Settings Content Pane (~75%)
+      AnimatedContent(
+        targetState = page,
+        transitionSpec = { subPageTransition(forward = targetState.ordinal > initialState.ordinal, reduced = reduced) },
+        label = "settingsPageTablet",
+        modifier = Modifier
+          .weight(1f)
+          .fillMaxHeight()
+          .clip(cardShape)
+          .background(colors.surfaceContainer)
+          .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
+      ) { shown ->
+        PagePane(shown, showLayerTabs = false)
+      }
+    }
+    return
+  }
+
+  AnimatedContent(
+    targetState = page,
+    transitionSpec = { subPageTransition(forward = targetState.ordinal > initialState.ordinal, reduced = reduced) },
+    label = "settingsPage",
+    modifier = modifier.fillMaxSize()
+  ) { shown ->
+    if (shown == SettingsPage.MAIN) {
+      val colors = MaterialTheme.colorScheme
+      val cardShape = SquircleShape(18.dp)
+      val layer = SettingsLayer.fromKey(layerKey)
+      val searching = query.isNotBlank()
+      Column(modifier = Modifier.fillMaxSize()) {
+        // Fixed top Squircle header card (Search + 3-layer selector) on smartphone portrait
+        Column(
+          modifier = Modifier
+            .padding(start = Grid.margin, end = Grid.margin, bottom = Grid.u6)
+            .fillMaxWidth()
+            .clip(cardShape)
+            .background(colors.surfaceContainer)
+            .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
+            .padding(Grid.u12),
+          verticalArrangement = Arrangement.spacedBy(Grid.u12)
+        ) {
+          com.example.ui.components.SearchField(
+            value = query,
+            onValueChange = { query = it },
+            placeholder = stringResource(R.string.settings_search_hint),
+            modifier = Modifier.testTag("settings_search")
+          )
+          SegmentedTabs {
+            SettingsLayer.entries.forEach { l ->
+              Segment(
+                label = stringResource(layerLabel(l)),
+                selected = !searching && layer == l,
+                onClick = { query = ""; layerKey = l.key },
+                modifier = Modifier.testTag("settings_layer_${l.key}")
+              )
+            }
+          }
+        }
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+          PagePane(shown, showLayerTabs = false, showInlineSearch = false)
+        }
+      }
+    } else {
+      PagePane(shown, showLayerTabs = true, showInlineSearch = true)
     }
   }
 }
@@ -279,7 +473,13 @@ private fun MainSettings(
   onOpenPrivacy: () -> Unit,
   listState: androidx.compose.foundation.lazy.LazyListState,
   systemColors: Boolean = false,
-  onSystemColorsChange: (Boolean) -> Unit = {}
+  onSystemColorsChange: (Boolean) -> Unit = {},
+  layerKey: String = SettingsLayer.ESSENTIAL.key,
+  onLayerKeyChange: (String) -> Unit = {},
+  query: String = "",
+  onQueryChange: (String) -> Unit = {},
+  showLayerTabs: Boolean = true,
+  showInlineSearch: Boolean = true
 ) {
   val colors = MaterialTheme.colorScheme
   val context = LocalContext.current
@@ -327,33 +527,37 @@ private fun MainSettings(
   val rows11 = listOf(stringResource(R.string.settings_erase))
   val rows12 = listOf(stringResource(R.string.settings_about_row))
 
-  var layerKey by rememberSaveable { mutableStateOf(SettingsLayer.ESSENTIAL.key) }
-  var query by rememberSaveable { mutableStateOf("") }
   val layer = SettingsLayer.fromKey(layerKey)
   val searching = query.isNotBlank()
 
   LazyColumn(
     state = listState,
-    modifier = Modifier.readingColumn().fillMaxHeight(),
-    contentPadding = PaddingValues(bottom = LocalBarInset.current + Grid.u24)
+    modifier = if (showLayerTabs || !showInlineSearch) Modifier.fillMaxSize() else Modifier.fillMaxSize(),
+    contentPadding = PaddingValues(bottom = if (showLayerTabs || !showInlineSearch) LocalBarInset.current + Grid.u24 else Grid.u24)
   ) {
-    item {
-      Column(Modifier.padding(horizontal = Grid.margin)) {
-        com.example.ui.components.SearchField(
-          value = query,
-          onValueChange = { query = it },
-          placeholder = stringResource(R.string.settings_search_hint),
-          modifier = Modifier.testTag("settings_search")
-        )
-        // A search looks in every layer, so the layer control only applies while the box is empty.
-        SegmentedTabs(modifier = Modifier.padding(top = Grid.u12)) {
-          SettingsLayer.entries.forEach { l ->
-            Segment(
-              label = stringResource(layerLabel(l)),
-              selected = !searching && layer == l,
-              onClick = { query = ""; layerKey = l.key },
-              modifier = Modifier.testTag("settings_layer_${l.key}")
+    if (showInlineSearch || showLayerTabs) {
+      item {
+        Column(Modifier.padding(horizontal = Grid.margin, vertical = if (showLayerTabs) 0.dp else Grid.u12)) {
+          if (showInlineSearch) {
+            com.example.ui.components.SearchField(
+              value = query,
+              onValueChange = onQueryChange,
+              placeholder = stringResource(R.string.settings_search_hint),
+              modifier = Modifier.testTag("settings_search")
             )
+          }
+          if (showLayerTabs) {
+            // A search looks in every layer, so the layer control only applies while the box is empty.
+            SegmentedTabs(modifier = Modifier.padding(top = Grid.u12)) {
+              SettingsLayer.entries.forEach { l ->
+                Segment(
+                  label = stringResource(layerLabel(l)),
+                  selected = !searching && layer == l,
+                  onClick = { onQueryChange(""); onLayerKeyChange(l.key) },
+                  modifier = Modifier.testTag("settings_layer_${l.key}")
+                )
+              }
+            }
           }
         }
       }

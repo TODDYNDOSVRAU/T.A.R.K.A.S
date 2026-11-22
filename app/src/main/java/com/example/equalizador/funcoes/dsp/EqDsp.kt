@@ -7,12 +7,15 @@ import com.example.data.model.EqSettings
 import com.example.data.model.FilterSlope
 import com.example.data.model.FilterType
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.log10
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.sin
 
 /**
  * The audio chain applied to everything the app plays: preamp, the parametric bands, bass and
@@ -83,6 +86,10 @@ class EqDsp {
   private var dynDetState = DoubleArray(0)
   private var dynEnv = DoubleArray(0)
   private var dynTarget = DoubleArray(0)
+  private var dynLastGainDb = DoubleArray(0)
+  private var dynRate = -1
+  private var dynAtk = 0.0
+  private var dynRel = 0.0
 
   @Volatile private var settings: EqSettings = EqSettings()
   @Volatile private var sampleRate = DEFAULT_RATE
@@ -117,6 +124,13 @@ class EqDsp {
   private val harmonicsDsp = AnalogHarmonicsDsp()
   val convolverDsp = ConvolverDsp()
 
+  /** Optional native Rust DSP engine (`libtarkas_dsp.so`); null on plain JVM tests (falls back to Kotlin). */
+  private val nativeEq: NativeEqDsp? = NativeEqDsp.createOrNull()
+  private var lastNativePlan: Plan? = null
+
+  /** True when audio is processed by the compiled Rust `tarkas-dsp` engine. */
+  val isUsingNativeRust: Boolean get() = nativeEq != null
+
   /** The input of the current frame, for the on/off crossfade. */
   private var dryFrame = FloatArray(2)
 
@@ -147,6 +161,8 @@ class EqDsp {
     companderDsp.configure(sampleRate, this.channels)
     harmonicsDsp.configure(sampleRate, this.channels)
     convolverDsp.configure(sampleRate)
+    nativeEq?.configure(sampleRate, this.channels)
+    lastNativePlan = null
     plan = buildPlan(settings, sampleRate, spatialStage, reference)
     reset()
   }
@@ -219,10 +235,12 @@ class EqDsp {
     companderDsp.reset()
     harmonicsDsp.reset()
     convolverDsp.reset()
+    nativeEq?.reset()
     if (soloState.size == ch * 2) soloState.fill(0.0) else soloState = DoubleArray(ch * 2)
     soloMix = 0f
     dynDetState.fill(0.0)
     dynEnv.fill(0.0)
+    dynLastGainDb.fill(Double.NaN)
   }
 
   /** Processes [frames] interleaved frames of [buffer] in place. Samples are in -1..1. */
@@ -264,9 +282,70 @@ class EqDsp {
     if (p.dynamicSpecs.isEmpty()) {
       target = p.coefs
     } else {
-      if (dynTarget.size != p.coefs.size) dynTarget = p.coefs.copyOf() else p.coefs.copyInto(dynTarget)
-      updateDynamicTargets(buffer, frames, ch, p.dynamicSpecs, dynTarget)
+      if (dynTarget.size != p.coefs.size) {
+        dynTarget = p.coefs.copyOf()
+        dynLastGainDb.fill(Double.NaN)
+      } else if (dynLastGainDb.isEmpty()) {
+        p.coefs.copyInto(dynTarget)
+      }
+      updateDynamicTargets(buffer, frames, ch, p.dynamicSpecs, p.coefs, dynTarget)
       target = dynTarget
+    }
+
+    // Native Rust fast path: executes the ENTIRE DSP chain (Crossfeed, 64-bit TDF-II EQ cascade,
+    // M/S, width/balance, Multiband Compander, 2x Tube/Tape + Sub-Bass, 16k-tap FFT Convolver,
+    // Lookahead Peak Limiter + Soft-Clipper) in a single zero-GC native call.
+    val rust = nativeEq
+    if (rust != null && solo == null && soloMix <= 0f) {
+      if (rtaOn) {
+        for (frame in 0 until frames) {
+          val base = frame * ch
+          val m = if (ch == 2) (buffer[base] + buffer[base + 1]) * 0.5f else buffer[base]
+          rtaAnalyzer.pushPre(m)
+        }
+      }
+      if (p !== lastNativePlan || p.dynamicSpecs.isNotEmpty()) {
+        lastNativePlan = p
+        rust.updatePlan(
+          enabled = p.enabled,
+          coefs = target,
+          masks = p.channelMasks,
+          slotActive = p.slotActive,
+          hasMidSide = p.hasMidSide,
+          preampGain = p.preampGain,
+          leftGain = p.leftGain,
+          rightGain = p.rightGain,
+          width = p.width,
+          dryGain = p.dryGain,
+          limiterEnabled = p.limiterEnabled,
+          ceiling = p.ceiling,
+          releaseCoef = p.releaseCoef,
+          softClip = p.limiterSoftClip
+        )
+        rust.updateFx(
+          crossfeedOn = p.enabled && p.crossfeed.enabled,
+          crossfeedCutoffHz = p.crossfeed.effectiveCutoffHz,
+          crossfeedFeedDb = p.crossfeed.effectiveFeedDb,
+          companderAmount = if (p.enabled) p.companderAmount else 0f,
+          tubeWarmth = if (p.enabled) p.tubeWarmth else 0f,
+          subBassHarmonic = if (p.enabled) p.subBassHarmonic else 0f,
+          convolverEnabled = p.enabled && p.convolverEnabled,
+          convolverMix = p.convolverMix,
+          convolverPath = p.convolverPath
+        )
+      }
+      val packed = rust.process(buffer, frames)
+      val lowestGain = java.lang.Float.intBitsToFloat((packed ushr 32).toInt())
+      val clips = (packed and 0xFFFF_FFFFL).toInt()
+      if (rtaOn) {
+        for (frame in 0 until frames) {
+          val base = frame * ch
+          val m = if (ch == 2) (buffer[base] + buffer[base + 1]) * 0.5f else buffer[base]
+          rtaAnalyzer.pushPostAndAdvance(m)
+        }
+      }
+      publishActivity(lowestGain, clips)
+      return
     }
     val masks = p.channelMasks
     val active = p.slotActive
@@ -472,21 +551,33 @@ class EqDsp {
 
   /**
    * Sidechain detector for Dynamic EQ bands: runs once per buffer (~5..10 ms) with zero allocations,
-   * updating only the dynamic slots inside [targetCoefs] so the per-sample smoother glides cleanly.
+   * updating only the dynamic slots inside [targetCoefs] when the envelope shifts by >= 0.02 dB.
    */
   private fun updateDynamicTargets(
     buffer: FloatArray,
     frames: Int,
     ch: Int,
     specs: List<DynamicSpec>,
+    baseCoefs: DoubleArray,
     targetCoefs: DoubleArray
   ) {
+    // Copy non-dynamic slots from baseCoefs while preserving already-designed dynamic slots inside the 0.02 dB deadband.
+    baseCoefs.copyInto(targetCoefs)
     val n = specs.size
     if (dynDetState.size != n * 2) dynDetState = DoubleArray(n * 2)
     if (dynEnv.size != n) dynEnv = DoubleArray(n)
-    val rate = sampleRate.toDouble()
-    val atk = 1.0 - exp(-1.0 / (0.015 * rate))
-    val rel = 1.0 - exp(-1.0 / (0.080 * rate))
+    if (dynLastGainDb.size != n) {
+      dynLastGainDb = DoubleArray(n) { Double.NaN }
+    }
+    val srInt = sampleRate
+    val rate = srInt.toDouble()
+    if (dynRate != srInt) {
+      dynRate = srInt
+      dynAtk = 1.0 - exp(-1.0 / (0.015 * rate))
+      dynRel = 1.0 - exp(-1.0 / (0.080 * rate))
+    }
+    val atk = dynAtk
+    val rel = dynRel
     for (idx in 0 until n) {
       val spec = specs[idx]
       val d = spec.detector
@@ -511,13 +602,15 @@ class EqDsp {
       val overDb = (envDb - spec.thresholdDb).coerceAtLeast(0.0)
       val frac = (overDb / 12.0).coerceIn(0.0, 1.0)
       val dynGain = (spec.baseGainDb + spec.rangeDb * frac).coerceIn(-24.0, 24.0)
-      val c = BiquadCoefficients.design(spec.type, spec.freqHz, dynGain, spec.q, rate)
+      val prevGain = dynLastGainDb[idx]
       val o = spec.slotIndex * 5
-      targetCoefs[o] = c.b0
-      targetCoefs[o + 1] = c.b1
-      targetCoefs[o + 2] = c.b2
-      targetCoefs[o + 3] = c.a1
-      targetCoefs[o + 4] = c.a2
+      val usedGain = if (prevGain.isNaN() || abs(dynGain - prevGain) >= 0.02) {
+        dynLastGainDb[idx] = dynGain
+        dynGain
+      } else {
+        prevGain
+      }
+      BiquadCoefficients.designInto(targetCoefs, o, spec.type, spec.freqHz, usedGain, spec.q, rate)
     }
   }
 
@@ -624,7 +717,48 @@ class EqDsp {
     /** Frequencies where the automatic preamp looks for the loudest boost: 1/6 octave, 20 Hz to 20 kHz. */
     private val PROBE_FREQS: DoubleArray = DoubleArray(61) { 20.0 * 2.0.pow(it / 6.0) }.filter { it <= 20000.0 }.toDoubleArray()
 
-    private fun bandsOf(s: EqSettings): List<EqBand> = s.device?.bands.orEmpty() + s.bands
+    /** Precomputed 64-bit `(cos(w), sin(w), cos(2w), sin(2w))` tables per sampleRate. */
+    private class FreqTrigLut(val freqs: DoubleArray, val rate: Int) {
+      val cos1 = DoubleArray(freqs.size)
+      val sin1 = DoubleArray(freqs.size)
+      val cos2 = DoubleArray(freqs.size)
+      val sin2 = DoubleArray(freqs.size)
+      init {
+        val sr = rate.toDouble()
+        for (i in freqs.indices) {
+          val w = 2.0 * PI * freqs[i] / sr
+          cos1[i] = cos(w)
+          sin1[i] = sin(w)
+          cos2[i] = cos(2.0 * w)
+          sin2[i] = sin(2.0 * w)
+        }
+      }
+    }
+
+    @Volatile private var probeLut: FreqTrigLut = FreqTrigLut(PROBE_FREQS, DEFAULT_RATE)
+    @Volatile private var curveLut: FreqTrigLut? = null
+
+    private fun probeLutFor(sampleRate: Int): FreqTrigLut {
+      val cur = probeLut
+      if (cur.rate == sampleRate) return cur
+      return FreqTrigLut(PROBE_FREQS, sampleRate).also { probeLut = it }
+    }
+
+    private fun curveLutFor(freqs: DoubleArray, sampleRate: Int): FreqTrigLut {
+      val cur = curveLut
+      if (cur != null && cur.rate == sampleRate && cur.freqs === freqs) return cur
+      return FreqTrigLut(freqs, sampleRate).also { curveLut = it }
+    }
+
+    /** Iterates over device correction bands and user bands without allocating a concatenated list. */
+    private inline fun forEachBand(s: EqSettings, action: (EqBand) -> Unit) {
+      val devBands = s.device?.bands
+      if (devBands != null) {
+        for (i in devBands.indices) action(devBands[i])
+      }
+      val userBands = s.bands
+      for (i in userBands.indices) action(userBands[i])
+    }
 
     private const val MASK_LEFT = 1
     private const val MASK_RIGHT = 2
@@ -644,9 +778,9 @@ class EqDsp {
     fun activeFilters(s: EqSettings, sampleRate: Int): List<BiquadCoefficients> {
       val rate = sampleRate.toDouble()
       val out = ArrayList<BiquadCoefficients>()
-      bandsOf(s).forEach { b ->
-        if (!b.enabled) return@forEach
-        if (b.type.usesGain && abs(b.gainDb) < 0.05f) return@forEach
+      forEachBand(s) { b ->
+        if (!b.enabled) return@forEachBand
+        if (b.type.usesGain && abs(b.gainDb) < 0.05f) return@forEachBand
         if (b.type.usesSlope && b.slope != FilterSlope.DB_12) {
           out += BiquadCoefficients.designSlope(b.type, b.freqHz.toDouble(), b.q.toDouble(), b.slope, rate)
         } else {
@@ -674,7 +808,7 @@ class EqDsp {
       val coefs = ArrayList<BiquadCoefficients>()
       val masks = ArrayList<Int>()
       val dynamics = ArrayList<DynamicSpec>()
-      bandsOf(s).forEach { b ->
+      forEachBand(s) { b ->
         val mask = maskOf(b.channel)
         val slotStart = coefs.size
         val isDynamic = b.enabled && b.type.usesGain && abs(b.dynamicRangeDb) >= 0.05f
@@ -774,8 +908,41 @@ class EqDsp {
     fun responseDb(s: EqSettings, freqHz: Double, sampleRate: Int = DEFAULT_RATE): Double {
       val (filters, preamp) = cached(s, sampleRate)
       var db = preamp.toDouble()
-      filters.forEach { db += it.magnitudeDb(freqHz, sampleRate.toDouble()) }
+      for (i in filters.indices) db += filters[i].magnitudeDb(freqHz, sampleRate.toDouble())
       return db
+    }
+
+    /**
+     * Evaluates the entire frequency response curve across [freqsHz] into [out] using a precomputed
+     * 64-bit trigonometric look-up table (`cos(w), sin(w), cos(2w), sin(2w)`), with zero per-point
+     * trig calls and zero heap allocations.
+     */
+    fun responseCurveInto(
+      s: EqSettings,
+      freqsHz: DoubleArray,
+      out: FloatArray,
+      subtractAutomaticPreamp: Boolean = true,
+      sampleRate: Int = DEFAULT_RATE
+    ) {
+      val (filters, totalPre) = cached(s, sampleRate)
+      val basePre = if (subtractAutomaticPreamp) s.preampDb.toDouble() else totalPre.toDouble()
+      val lut = curveLutFor(freqsHz, sampleRate)
+      val c1 = lut.cos1
+      val s1 = lut.sin1
+      val c2 = lut.cos2
+      val s2 = lut.sin2
+      val n = minOf(freqsHz.size, out.size)
+      for (i in 0 until n) {
+        var db = basePre
+        val cos1 = c1[i]
+        val sin1 = s1[i]
+        val cos2 = c2[i]
+        val sin2 = s2[i]
+        for (f in filters.indices) {
+          db += filters[f].magnitudeDbAtTrig(cos1, sin1, cos2, sin2)
+        }
+        out[i] = db.toFloat()
+      }
     }
 
     /**
@@ -789,13 +956,23 @@ class EqDsp {
      */
     fun loudnessMatchDb(s: EqSettings, spatialStage: Boolean = false, sampleRate: Int = DEFAULT_RATE): Float {
       if (!s.enabled) return 0f
-      val headroom = spatialHeadroomDb(s, spatialStage).toDouble()
+      val (filters, preamp) = cached(s, sampleRate)
+      val baseDb = preamp.toDouble() + spatialHeadroomDb(s, spatialStage).toDouble()
+      val lut = probeLutFor(sampleRate)
+      val freqs = lut.freqs
+      val c1 = lut.cos1
+      val s1 = lut.sin1
+      val c2 = lut.cos2
+      val s2 = lut.sin2
       val nyquist = sampleRate * 0.49
       var power = 0.0
       var count = 0
-      for (f in PROBE_FREQS) {
-        if (f <= nyquist) {
-          power += 10.0.pow((responseDb(s, f, sampleRate) + headroom) / 10.0)
+      for (i in freqs.indices) {
+        if (freqs[i] <= nyquist) {
+          var db = baseDb
+          val cos1 = c1[i]; val sin1 = s1[i]; val cos2 = c2[i]; val sin2 = s2[i]
+          for (f in filters.indices) db += filters[f].magnitudeDbAtTrig(cos1, sin1, cos2, sin2)
+          power += 10.0.pow(db / 10.0)
           count++
         }
       }
@@ -819,31 +996,54 @@ class EqDsp {
     fun autoPreampDb(s: EqSettings, spatialStage: Boolean = false, sampleRate: Int = DEFAULT_RATE): Float =
       curveAutoPreampDb(s, sampleRate) + spatialHeadroomDb(s, spatialStage)
 
-    private fun curveAutoPreampDb(s: EqSettings, sampleRate: Int = DEFAULT_RATE): Float {
+    private fun curveAutoPreampDb(s: EqSettings, sampleRate: Int = DEFAULT_RATE, prebuiltFilters: List<BiquadCoefficients>? = null): Float {
       if (!s.autoPreamp) return 0f
-      val filters = activeFilters(s, sampleRate)
+      val filters = prebuiltFilters ?: activeFilters(s, sampleRate)
       if (filters.isEmpty()) return 0f
-      val manual = s.preampDb + (s.device?.preampDb ?: 0f)
-      val rate = sampleRate.toDouble()
-      val nyquist = rate * 0.49
+      val manual = (s.preampDb + (s.device?.preampDb ?: 0f)).toDouble()
+      val lut = probeLutFor(sampleRate)
+      val freqs = lut.freqs
+      val c1 = lut.cos1
+      val s1 = lut.sin1
+      val c2 = lut.cos2
+      val s2 = lut.sin2
+      val nyquist = sampleRate * 0.49
       var loudest = Double.NEGATIVE_INFINITY
-      for (f in PROBE_FREQS) {
-        if (f > nyquist) continue
-        var db = manual.toDouble()
-        filters.forEach { db += it.magnitudeDb(f, rate) }
+      for (i in freqs.indices) {
+        if (freqs[i] > nyquist) continue
+        var db = manual
+        val cos1 = c1[i]; val sin1 = s1[i]; val cos2 = c2[i]; val sin2 = s2[i]
+        for (f in filters.indices) db += filters[f].magnitudeDbAtTrig(cos1, sin1, cos2, sin2)
         if (db > loudest) loudest = db
       }
       return if (loudest > AUTO_PREAMP_MIN_DB) (-loudest).toFloat() else 0f
     }
 
-    // The graph asks for the response at many points with the same settings: design the filters once.
-    private class Cache(val settings: EqSettings, val rate: Int, val filters: List<BiquadCoefficients>, val preamp: Float)
+    /** Canonical key for frequency-response caching so UI graph and DSP engine share 100% cache hits. */
+    fun EqSettings.responseCacheKey(): EqSettings =
+      if (balance == 0f && stereoWidth == 1f && limiterEnabled && limiterCeilingDb == 0f &&
+        virtualizerStrength == 0 && !crossfeed.enabled && rtaMode == com.example.data.model.RtaMode.OFF
+      ) this
+      else copy(
+        balance = 0f,
+        stereoWidth = 1f,
+        limiterEnabled = true,
+        limiterCeilingDb = 0f,
+        virtualizerStrength = 0,
+        crossfeed = CrossfeedSettings(),
+        rtaMode = com.example.data.model.RtaMode.OFF
+      )
+
+    // The graph and buildPlan both ask for the response with the same curve: design the filters once.
+    private class Cache(val key: EqSettings, val rate: Int, val filters: List<BiquadCoefficients>, val preamp: Float)
     @Volatile private var cache: Cache? = null
 
     private fun cached(s: EqSettings, sampleRate: Int): Pair<List<BiquadCoefficients>, Float> {
-      cache?.let { if (it.rate == sampleRate && it.settings == s) return it.filters to it.preamp }
-      val preamp = s.preampDb + (s.device?.preampDb ?: 0f) + curveAutoPreampDb(s, sampleRate)
-      val c = Cache(s, sampleRate, activeFilters(s, sampleRate), preamp)
+      val key = s.responseCacheKey()
+      cache?.let { if (it.rate == sampleRate && it.key == key) return it.filters to it.preamp }
+      val filters = activeFilters(key, sampleRate)
+      val preamp = key.preampDb + (key.device?.preampDb ?: 0f) + curveAutoPreampDb(key, sampleRate, filters)
+      val c = Cache(key, sampleRate, filters, preamp)
       cache = c
       return c.filters to c.preamp
     }

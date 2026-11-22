@@ -20,3 +20,11 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 -renamesourcefileattribute SourceFile
+
+# Preserve native Rust JNI symbols for tarkas-dsp (libtarkas_dsp.so)
+-keep class com.example.data.audio.dsp.NativeEqDsp {
+    native <methods>;
+}
+-keep class com.example.data.audio.dsp.NativeEqDsp$Companion {
+    native <methods>;
+}

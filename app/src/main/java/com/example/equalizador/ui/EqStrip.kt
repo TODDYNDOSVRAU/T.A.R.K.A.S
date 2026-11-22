@@ -109,7 +109,9 @@ import com.example.ui.components.IconAction
 import com.example.ui.components.TonalButton
 import com.example.ui.theme.EqSize
 import com.example.ui.theme.Grid
+import com.example.ui.theme.Motion
 import com.example.ui.theme.rememberReducedMotion
+import com.example.ui.theme.tactilePressScale
 import kotlin.math.pow
 
 /** How the bands are shown: one fader each, or one tile each with the editor behind it. */
@@ -121,28 +123,26 @@ private const val GAIN_STEPS = 29
 /** Height of the value line above the faders and of one label row under them. */
 private val LINE = Grid.u24 - Grid.u6
 
-/** Press feedback: the control sinks to 0.96 in 150 ms and comes back the same way. */
+/** Press feedback: zero-recomposition GPU press compression (0.96x) with iOS spring release. */
 @Composable
-internal fun Modifier.pressScale(source: MutableInteractionSource): Modifier {
-  val pressed by source.collectIsPressedAsState()
-  val scale by animateFloatAsState(if (pressed) 0.96f else 1f, tween(150), label = "press")
-  return this.graphicsLayer {
-    scaleX = scale
-    scaleY = scale
-  }
-}
+internal fun Modifier.pressScale(source: MutableInteractionSource): Modifier =
+  this.tactilePressScale(source, pressedScale = 0.96f)
 
-/** Fades and lifts an item in with a delay of [index] steps, so a view arrives as a cascade. */
+/** Fades and lifts an item in with a short spring cascade (GPU-only). */
 @Composable
-private fun Modifier.stagger(index: Int, stepMs: Int = 16): Modifier {
+private fun Modifier.stagger(index: Int, stepMs: Int = 14): Modifier {
   val reduced = rememberReducedMotion()
   val progress = remember { Animatable(if (reduced) 1f else 0f) }
   LaunchedEffect(Unit) {
-    if (!reduced) progress.animateTo(1f, tween(260, delayMillis = index.coerceAtMost(15) * stepMs))
+    if (!reduced) {
+      if (index > 0) kotlinx.coroutines.delay(index.coerceAtMost(12) * stepMs.toLong())
+      progress.animateTo(1f, Motion.fluid(visibilityThreshold = 0.002f))
+    }
   }
   return this.graphicsLayer {
-    alpha = progress.value
-    translationY = (1f - progress.value) * Grid.u6.toPx()
+    val p = progress.value
+    alpha = p.coerceIn(0f, 1f)
+    translationY = (1f - p) * Grid.u6.toPx()
   }
 }
 
@@ -200,20 +200,21 @@ internal fun BandArea(
   var area by remember { mutableStateOf(IntRect.Zero) }
 
   Box(modifier = modifier.onGloballyPositioned { area = it.onScreen(view) }) {
-  Column(modifier = Modifier.fillMaxSize()) {
+  Column(modifier = Modifier.fillMaxWidth()) {
     AnimatedContent(
       targetState = mode,
       transitionSpec = {
-        if (reduced) EnterTransition.None togetherWith ExitTransition.None
-        else fadeIn(tween(260, delayMillis = 150)) togetherWith fadeOut(tween(150))
+        if (reduced) fadeIn(tween(120)) togetherWith fadeOut(tween(100))
+        else (fadeIn(Motion.defaultEffects()) + scaleIn(initialScale = 0.98f, animationSpec = Motion.fluidFast())) togetherWith
+          (fadeOut(Motion.defaultEffects()) + scaleOut(targetScale = 0.98f, animationSpec = Motion.fluidExit()))
       },
       label = "eqMode",
-      modifier = Modifier.weight(1f).fillMaxWidth()
+      modifier = Modifier.weight(1f, fill = mode == EqMode.GRAPHIC).fillMaxWidth()
     ) { m ->
       when (m) {
         EqMode.GRAPHIC -> GraphicBands(settings) { i, db -> onUpdateBand(i) { it.copy(gainDb = db) } }
         EqMode.PARAMETRIC -> Column(
-          modifier = Modifier.fillMaxSize(),
+          modifier = Modifier.fillMaxWidth(),
           verticalArrangement = Arrangement.spacedBy(Grid.u12)
         ) {
           val selBand = settings.bands.getOrNull(selectedBand)
@@ -222,12 +223,12 @@ internal fun BandArea(
               index = selectedBand,
               band = selBand,
               eqEnabled = settings.enabled,
-              onChangeQ = { nextQ -> onUpdateBand(selectedBand) { it.copy(q = nextQ) } },
+              onChangeBand = { transform -> onUpdateBand(selectedBand, transform) },
               onSoloBand = onSoloBand,
               onOpenEditor = { editing = selectedBand }
             )
           }
-          Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+          Box(modifier = Modifier.weight(1f, fill = false).fillMaxWidth()) {
             ParametricTiles(
               settings = settings,
               selected = selectedBand,
@@ -459,15 +460,15 @@ private fun ParametricTiles(settings: EqSettings, selected: Int, dimmed: Boolean
   val cells = settings.bands.size + 1
   // Behind the open bubble the tiles step back: slightly blurred and at half strength, in 240 ms.
   val dim by animateFloatAsState(if (dimmed) 1f else 0f, tween(240), label = "tilesDim")
-  BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+  BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
     val cols = if (maxWidth >= 600.dp) (maxWidth / (Grid.u96 + Grid.u48)).toInt().coerceIn(4, 6) else 3
     Column(
       modifier = Modifier
-        .fillMaxSize()
+        .fillMaxWidth()
         .blur(Grid.u6 / 2 * dim)
         .graphicsLayer { alpha = 1f - 0.5f * dim }
         .verticalScroll(rememberScrollState()),
-      verticalArrangement = Arrangement.spacedBy(Grid.u24)
+      verticalArrangement = Arrangement.spacedBy(Grid.u12)
     ) {
       for (rowStart in 0 until cells step cols) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Grid.u12)) {
@@ -486,15 +487,16 @@ private fun ParametricTiles(settings: EqSettings, selected: Int, dimmed: Boolean
 }
 
 /**
- * Hybrid Pro-Q quick strip above the parametric tiles: 1-finger Q adjustment, press-and-hold Solo,
- * and quick open into the full band balloon.
+ * Hybrid Logic Pro iPad / Pro-Q Band Inspector above the parametric tiles: on wide tablet canvases
+ * (`>= 520 dp`) surfaces Frequency (Hz), Gain (dB) and Q side-by-side; on compact phones shows Q,
+ * plus press-and-hold Solo and quick open into the full band editor.
  */
 @Composable
 private fun SelectedBandQuickBar(
   index: Int,
   band: EqBand,
   eqEnabled: Boolean,
-  onChangeQ: (Float) -> Unit,
+  onChangeBand: ((EqBand) -> EqBand) -> Unit,
   onSoloBand: (EqBand?) -> Unit,
   onOpenEditor: () -> Unit
 ) {
@@ -504,7 +506,7 @@ private fun SelectedBandQuickBar(
   var soloHeld by remember { mutableStateOf(false) }
   androidx.compose.runtime.DisposableEffect(index) { onDispose { onSoloBand(null) } }
 
-  Row(
+  BoxWithConstraints(
     modifier = Modifier
       .fillMaxWidth()
       .height(Grid.u48)
@@ -512,84 +514,136 @@ private fun SelectedBandQuickBar(
       .background(colors.surfaceContainer)
       .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), Grid.r12)
       .padding(horizontal = Grid.u6)
-      .testTag("band_quick_bar"),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(Grid.u6)
+      .testTag("band_quick_bar")
   ) {
+    val wideInspector = maxWidth >= 520.dp
     Row(
-      modifier = Modifier
-        .height(Grid.u48)
-        .clip(Grid.r6)
-        .clickable(role = Role.Button, onClick = onOpenEditor)
-        .padding(horizontal = Grid.u6),
+      modifier = Modifier.fillMaxSize(),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(Grid.u6)
     ) {
-      Box(modifier = Modifier.size(Grid.u6).clip(CircleShape).background(if (live) tint else colors.onSurfaceVariant))
-      Text("#${index + 1}", style = EqType.MonoStrong, color = colors.onSurface, maxLines = 1)
-      FilterShapeIcon(type = band.type, color = if (live) colors.primary else colors.onSurfaceVariant)
-    }
-
-    // 1-finger Q control: - / Q value / +
-    Row(
-      modifier = Modifier.weight(1f),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.Center
-    ) {
-      StepButton(Icons.Rounded.Remove, "Q -", live) {
-        onChangeQ((band.q - 0.1f).coerceIn(EqBand.MIN_Q, EqBand.MAX_Q))
+      Row(
+        modifier = Modifier
+          .height(Grid.u48)
+          .clip(Grid.r6)
+          .clickable(role = Role.Button, onClick = onOpenEditor)
+          .padding(horizontal = Grid.u6),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Grid.u6)
+      ) {
+        Box(modifier = Modifier.size(Grid.u6).clip(CircleShape).background(if (live) tint else colors.onSurfaceVariant))
+        Text("#${index + 1}", style = EqType.MonoStrong, color = colors.onSurface, maxLines = 1)
+        FilterShapeIcon(type = band.type, color = if (live) colors.primary else colors.onSurfaceVariant)
       }
-      Text(
-        "Q ${formatQ(band.q)}",
-        style = EqType.MonoStrong,
-        color = if (live) colors.onSurface else colors.onSurfaceVariant,
-        maxLines = 1,
-        modifier = Modifier.padding(horizontal = Grid.u6)
-      )
-      StepButton(Icons.Rounded.Add, "Q +", live) {
-        onChangeQ((band.q + 0.1f).coerceIn(EqBand.MIN_Q, EqBand.MAX_Q))
-      }
-    }
 
-    // Press-and-hold Solo
-    Box(
-      modifier = Modifier
-        .size(Grid.u48)
-        .clip(CircleShape)
-        .background(if (soloHeld) colors.primary.copy(alpha = 0.22f) else Color.Transparent)
-        .pointerInput(band.freqHz, band.q, live) {
-          if (!live) return@pointerInput
-          detectTapGestures(
-            onPress = {
-              soloHeld = true
-              onSoloBand(band)
-              try {
-                tryAwaitRelease()
-              } finally {
-                soloHeld = false
-                onSoloBand(null)
-              }
-            }
+      if (wideInspector) {
+        // Frequency stepper (1/24-octave musical steps)
+        Row(
+          modifier = Modifier.weight(1f),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.Center
+        ) {
+          StepButton(Icons.Rounded.Remove, "Hz -", live) {
+            val step = (band.freqHz * 0.03f).coerceAtLeast(1f)
+            onChangeBand { it.copy(freqHz = (it.freqHz - step).coerceIn(EqBand.MIN_FREQ, EqBand.MAX_FREQ)) }
+          }
+          Text(
+            formatHz(band.freqHz),
+            style = EqType.MonoStrong,
+            color = if (live) colors.onSurface else colors.onSurfaceVariant,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 4.dp)
           )
+          StepButton(Icons.Rounded.Add, "Hz +", live) {
+            val step = (band.freqHz * 0.03f).coerceAtLeast(1f)
+            onChangeBand { it.copy(freqHz = (it.freqHz + step).coerceIn(EqBand.MIN_FREQ, EqBand.MAX_FREQ)) }
+          }
         }
-        .testTag("band_quick_solo"),
-      contentAlignment = Alignment.Center
-    ) {
-      Icon(
-        Icons.Rounded.Headphones,
-        contentDescription = stringResource(R.string.audio_band_solo),
-        tint = if (soloHeld) colors.primary else colors.onSurfaceVariant,
-        modifier = Modifier.size(Grid.icon)
+        // Gain stepper (0.5 dB steps, when filter uses gain)
+        if (band.type.usesGain) {
+          Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+          ) {
+            StepButton(Icons.Rounded.Remove, "dB -", live) {
+              onChangeBand { it.copy(gainDb = (it.gainDb - 0.5f).coerceIn(EqBand.MIN_GAIN, EqBand.MAX_GAIN)) }
+            }
+            Text(
+              "${formatDb(band.gainDb)} dB",
+              style = EqType.MonoStrong,
+              color = if (live) colors.primary else colors.onSurfaceVariant,
+              maxLines = 1,
+              modifier = Modifier.padding(horizontal = 4.dp)
+            )
+            StepButton(Icons.Rounded.Add, "dB +", live) {
+              onChangeBand { it.copy(gainDb = (it.gainDb + 0.5f).coerceIn(EqBand.MIN_GAIN, EqBand.MAX_GAIN)) }
+            }
+          }
+        }
+      }
+
+      // 1-finger Q control: - / Q value / +
+      Row(
+        modifier = Modifier.weight(1f),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+      ) {
+        StepButton(Icons.Rounded.Remove, "Q -", live) {
+          onChangeBand { it.copy(q = (it.q - 0.1f).coerceIn(EqBand.MIN_Q, EqBand.MAX_Q)) }
+        }
+        Text(
+          "Q ${formatQ(band.q)}",
+          style = EqType.MonoStrong,
+          color = if (live) colors.onSurface else colors.onSurfaceVariant,
+          maxLines = 1,
+          modifier = Modifier.padding(horizontal = if (wideInspector) 4.dp else Grid.u6)
+        )
+        StepButton(Icons.Rounded.Add, "Q +", live) {
+          onChangeBand { it.copy(q = (it.q + 0.1f).coerceIn(EqBand.MIN_Q, EqBand.MAX_Q)) }
+        }
+      }
+
+      // Press-and-hold Solo
+      Box(
+        modifier = Modifier
+          .size(Grid.u48)
+          .clip(CircleShape)
+          .background(if (soloHeld) colors.primary.copy(alpha = 0.22f) else Color.Transparent)
+          .pointerInput(band.freqHz, band.q, live) {
+            if (!live) return@pointerInput
+            detectTapGestures(
+              onPress = {
+                soloHeld = true
+                onSoloBand(band)
+                try {
+                  tryAwaitRelease()
+                } finally {
+                  soloHeld = false
+                  onSoloBand(null)
+                }
+              }
+            )
+          }
+          .testTag("band_quick_solo"),
+        contentAlignment = Alignment.Center
+      ) {
+        Icon(
+          Icons.Rounded.Headphones,
+          contentDescription = stringResource(R.string.audio_band_solo),
+          tint = if (soloHeld) colors.primary else colors.onSurfaceVariant,
+          modifier = Modifier.size(Grid.icon)
+        )
+      }
+
+      IconAction(
+        icon = Icons.Rounded.Tune,
+        contentDescription = stringResource(R.string.audio_band_edit),
+        onClick = onOpenEditor,
+        tint = colors.onSurface,
+        size = Grid.u48
       )
     }
-
-    IconAction(
-      icon = Icons.Rounded.Tune,
-      contentDescription = stringResource(R.string.audio_band_edit),
-      onClick = onOpenEditor,
-      tint = colors.onSurface,
-      size = Grid.u48
-    )
   }
 }
 

@@ -62,10 +62,21 @@ class PlaybackController(
   private val audioEngine: AudioEngineManager,
   private val preferences: PreferencesRepository,
   private val speech: CuriositySpeechManager,
-  private val database: AppDatabase
+  private val databaseLazy: Lazy<AppDatabase>
 ) {
+  constructor(
+    context: Context,
+    musicRepository: MusicRepository,
+    curiosityRepository: CuriosityRepository,
+    audioEngine: AudioEngineManager,
+    preferences: PreferencesRepository,
+    speech: CuriositySpeechManager,
+    database: AppDatabase
+  ) : this(context, musicRepository, curiosityRepository, audioEngine, preferences, speech, lazyOf(database))
+
+  private val database: AppDatabase get() = databaseLazy.value
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-  private val store = PlaybackStateStore(database.playback())
+  private val store by lazy { PlaybackStateStore(database.playback()) }
 
   val currentTrack: StateFlow<Track?> get() = musicRepository.currentTrack
 
@@ -78,7 +89,7 @@ class PlaybackController(
   val crossfadeSeconds: StateFlow<Int> = _crossfadeSeconds.asStateFlow()
 
   // Play and skip counters (declared before init, which restores the last track).
-  private val stats = PlayStatsStore(database.playStats())
+  private val stats by lazy { PlayStatsStore(database.playStats()) }
   /** The track whose end is not recorded yet: set when its audio starts, cleared when it ends. */
   private var unrecorded: Track? = null
   private val _playCounts = MutableStateFlow<Map<String, Int>>(emptyMap())

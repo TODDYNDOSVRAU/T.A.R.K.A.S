@@ -141,7 +141,18 @@ class AudioEngineManager(private val context: Context) {
   private var isRealFftActive = false
   private var effectsAttached = false
   private var spectrumVisible = false
+  @Volatile private var uiForeground = true
   private val fftSmooth = FloatArray(15) { 0.05f }
+  // Double-buffered primitive FloatArray wrappers so Visualizer updates emit new List instances
+  // to StateFlow without boxing 15 Floats or allocating a new ArrayList on every capture.
+  private val fftListBuffers = arrayOf(FloatArray(15) { 0.05f }, FloatArray(15) { 0.05f })
+  private var fftListSlot = 0
+  private class FloatArrayListView(private val data: FloatArray) : AbstractList<Float>(), RandomAccess {
+    override val size: Int get() = data.size
+    override fun get(index: Int): Float = data[index]
+    override fun equals(other: Any?): Boolean = this === other
+    override fun hashCode(): Int = System.identityHashCode(this)
+  }
 
   private val _audioHealth = MutableStateFlow(AudioHealth())
   val audioHealth: StateFlow<AudioHealth> = _audioHealth.asStateFlow()
@@ -703,6 +714,21 @@ class AudioEngineManager(private val context: Context) {
   }
 
   /**
+   * Informs the engine whether the app UI is currently visible in the foreground (`STARTED`).
+   * When in background / screen off (`false`), position polling hibernates from 10 Hz (100 ms)
+   * down to 1 Hz (1000 ms, strictly watching the crossfade trigger), and snaps back to 10 Hz immediately
+   * upon returning to the foreground.
+   */
+  fun setUiForeground(foreground: Boolean) {
+    if (uiForeground == foreground) return
+    uiForeground = foreground
+    if (foreground && _isPlaying.value) {
+      player?.let { _currentPositionMs.value = it.currentPosition.coerceAtLeast(0L) }
+      startProgressTracking()
+    }
+  }
+
+  /**
    * Tells the engine whether the live spectrum / EQ activity is currently visible on screen.
    * Uses the internal float FFT tap in [EqDsp.rtaAnalyzer] (zero RECORD_AUDIO permission, zero
    * Android Visualizer / AudioFlinger overhead). Runs only while playing and visible.
@@ -832,9 +858,12 @@ class AudioEngineManager(private val context: Context) {
           player?.let { p ->
             if (p.isPlaying) {
               val pos = p.currentPosition
-              _currentPositionMs.value = pos
+              if (uiForeground) {
+                _currentPositionMs.value = pos
+              }
               if (p.duration != C.TIME_UNSET) {
-                _durationMs.value = p.duration.coerceAtLeast(1L)
+                val dur = p.duration.coerceAtLeast(1L)
+                if (_durationMs.value != dur) _durationMs.value = dur
                 measuringDurationMs = p.duration
                 // Time to cross into the next track.
                 val overlap = crossfadeMs
@@ -855,7 +884,7 @@ class AudioEngineManager(private val context: Context) {
                 _spectrumBars.value = FLAT_SPECTRUM
               }
               // What the limiter and the clamp did in the last 100 ms, only while the equalizer screen is visible.
-              if (spectrumVisible) {
+              if (spectrumVisible && uiForeground) {
                 EqActivity.publish(eqDsp.takeActivity())
               }
             } else {
@@ -866,7 +895,7 @@ class AudioEngineManager(private val context: Context) {
             }
           }
         } catch (_: Exception) {}
-        delay(100)
+        delay(if (uiForeground) 100L else 1000L)
       }
     }
   }
@@ -920,7 +949,10 @@ class AudioEngineManager(private val context: Context) {
               val targetNorm = (avgMag / 48f).coerceIn(0.04f, 1f)
               fftSmooth[idx] = fftSmooth[idx] * 0.35f + targetNorm * 0.65f
             }
-            _spectrumBars.value = fftSmooth.asList().toList()
+            fftListSlot = fftListSlot xor 1
+            val dst = fftListBuffers[fftListSlot]
+            fftSmooth.copyInto(dst)
+            _spectrumBars.value = FloatArrayListView(dst)
           }
         }, Visualizer.getMaxCaptureRate() / 2, false, true)
         enabled = player?.isPlaying == true

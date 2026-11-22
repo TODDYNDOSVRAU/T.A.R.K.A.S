@@ -3,20 +3,26 @@ package com.example.ui.components
 import com.example.ui.theme.Grid
 import com.example.ui.theme.Space
 import com.example.ui.theme.EqSize
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.graphicsLayer
+import com.example.ui.theme.AppMotion
+import com.example.ui.theme.Motion
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -30,8 +36,7 @@ import com.example.ui.theme.SurfaceStyle
 import com.example.ui.theme.drawLiquidGlassPillThumb
 import com.example.ui.theme.liquidGlassSupported
 import com.example.ui.theme.liquidLensPill
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.backdrops.rememberCanvasBackdrop
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -121,10 +126,26 @@ fun EqFader(
   val colors = MaterialTheme.colorScheme
   val isLiquid = LocalSurfaceStyle.current == SurfaceStyle.LIQUID && liquidGlassSupported
   val isDark = colors.background.luminance() < 0.5f
+  val reduced = AppMotion.reduced
+  val scope = rememberCoroutineScope()
   val current by rememberUpdatedState(value)
   val change by rememberUpdatedState(onChange)
   val held by rememberUpdatedState(onHeldChange)
   var dragValue by remember { mutableFloatStateOf(value) }
+  val isDragging = remember { booleanArrayOf(false) }
+  val shownAnim = remember { Animatable(value.coerceIn(-1f, 1f)) }
+  val thumbScale = remember { Animatable(1f) }
+  val rubberY = remember { Animatable(0f) }
+
+  LaunchedEffect(value, reduced) {
+    val target = value.coerceIn(-1f, 1f)
+    if (isDragging[0] || reduced) {
+      shownAnim.snapTo(target)
+    } else {
+      shownAnim.animateTo(target, Motion.fluid(visibilityThreshold = 0.002f))
+    }
+  }
+
   val haptics = LocalHapticFeedback.current
   val track = colors.onSurface.copy(alpha = 0.12f)
   val tick = colors.onSurface.copy(alpha = 0.24f)
@@ -134,12 +155,6 @@ fun EqFader(
   val dash = if (enabled) colors.onSurface else colors.onSurface.copy(alpha = 0.38f)
 
   val faderBg = colors.background
-  val faderBackdrop = rememberLayerBackdrop(
-    onDraw = {
-      drawRect(faderBg)
-      drawContent()
-    }
-  )
   androidx.compose.foundation.layout.BoxWithConstraints(
     modifier = modifier
       .semantics {
@@ -180,14 +195,30 @@ fun EqFader(
           // Every move is consumed as it arrives, so the page never starts scrolling under a held
           // handle; the down itself is left alone so a double tap still reaches the tap detector.
           dragValue = current
+          var rawDrag = current
+          isDragging[0] = true
           held(true)
+          if (!reduced) {
+            scope.launch { thumbScale.animateTo(1.08f, Motion.criticalSpatial(stiffness = 900f)) }
+          }
           try {
             verticalDrag(down.id) { c ->
               val dy = c.positionChange().y
               c.consume()
-              val travel = bottom - top
+              val travel = (bottom - top).coerceAtLeast(1f)
               val before = dragValue
-              dragValue = (dragValue - 2f * dy / travel).coerceIn(-1f, 1f)
+              rawDrag -= 2f * dy / travel
+              dragValue = rawDrag.coerceIn(-1f, 1f)
+              scope.launch { shownAnim.snapTo(dragValue) }
+              if (!reduced) {
+                val overPx = when {
+                  rawDrag > 1f -> -(rawDrag - 1f) * (travel / 2f)
+                  rawDrag < -1f -> (-1f - rawDrag) * (travel / 2f)
+                  else -> 0f
+                }
+                val rb = Motion.rubberBand(overPx, limit = 10.dp.toPx(), coefficient = 0.45f)
+                scope.launch { rubberY.snapTo(rb) }
+              }
               // A tick when the handle crosses or lands on the centre, and at the two ends: the detent
               // a desk fader has, felt without looking.
               val crossed = (before > 0f && dragValue <= 0f) || (before < 0f && dragValue >= 0f)
@@ -196,18 +227,24 @@ fun EqFader(
               if (dragValue != before) change(dragValue)
             }
           } finally {
+            isDragging[0] = false
             held(false)
+            if (!reduced) {
+              scope.launch { thumbScale.animateTo(1f, Motion.fluidFast(visibilityThreshold = 0.002f)) }
+              if (rubberY.value != 0f) {
+                scope.launch { rubberY.animateTo(0f, Motion.fluidFast(visibilityThreshold = 0.5f)) }
+              }
+            }
           }
         }
-      },
+      }
+      .graphicsLayer { translationY = rubberY.value },
     contentAlignment = androidx.compose.ui.Alignment.TopCenter
   ) {
     val totalH = maxHeight
     val effHandleW = handleWidth.coerceAtMost(maxWidth)
     Canvas(
-      modifier = Modifier
-        .fillMaxSize()
-        .then(if (isLiquid && enabled) Modifier.layerBackdrop(faderBackdrop) else Modifier)
+      modifier = Modifier.fillMaxSize()
     ) {
       val cx = size.width / 2f
       val handleH = handleHeight.toPx()
@@ -215,7 +252,8 @@ fun EqFader(
       val top = handleH / 2f
       val bottom = size.height - handleH / 2f
       val mid = (top + bottom) / 2f
-      val y = bottom - (value.coerceIn(-1f, 1f) + 1f) / 2f * (bottom - top)
+      val shownVal = shownAnim.value.coerceIn(-1f, 1f)
+      val y = bottom - (shownVal + 1f) / 2f * (bottom - top)
       val trackW = trackWidth.toPx()
 
       // Dotted marks at +max, 0 dB and -max on both sides of the track, like the rule of a desk.
@@ -245,13 +283,33 @@ fun EqFader(
     }
     if (isLiquid && enabled) {
       val travelDp = (totalH - handleHeight).coerceAtLeast(0.dp)
-      val yOffsetDp = travelDp * (1f - (value.coerceIn(-1f, 1f) + 1f) / 2f)
+      // Lightweight CanvasBackdrop draws the fader's own track and coloured gain strip in the pill's
+      // local coordinates — eliminating 10 offscreen RenderNodes while preserving 100% AGSL refraction.
+      val pillBackdrop = rememberCanvasBackdrop {
+        drawRect(faderBg)
+        val cx = size.width / 2f
+        val trW = trackWidth.toPx()
+        val boldW = EqSize.lineBold.toPx()
+        drawLine(track, Offset(cx, 0f), Offset(cx, size.height), strokeWidth = trW, cap = StrokeCap.Round)
+        val sv = shownAnim.value.coerceIn(-1f, 1f)
+        if (abs(sv) > 0.01f) {
+          val cy = size.height / 2f
+          val endY = if (sv > 0f) size.height else 0f
+          drawLine(accent, Offset(cx, cy), Offset(cx, endY), strokeWidth = boldW, cap = StrokeCap.Round)
+        }
+      }
       Box(
         modifier = Modifier
-          .offset(y = yOffsetDp)
+          .graphicsLayer {
+            val shownVal = shownAnim.value.coerceIn(-1f, 1f)
+            translationY = travelDp.toPx() * (1f - (shownVal + 1f) / 2f)
+            val s = thumbScale.value
+            scaleX = s
+            scaleY = s
+          }
           .size(width = effHandleW, height = handleHeight)
           .liquidLensPill(
-            backdrop = faderBackdrop,
+            backdrop = pillBackdrop,
             isDark = isDark,
             trackAccent = if (abs(value) > 0.02f) accent else null
           )

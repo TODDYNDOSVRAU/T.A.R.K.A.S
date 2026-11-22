@@ -35,10 +35,24 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.BookmarkAdd
+import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.CompareArrows
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.ContentPaste
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.RestartAlt
+import androidx.compose.material.icons.rounded.Save
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -150,6 +164,24 @@ internal fun EqPowerConsole(
   )
 
   @Composable
+  fun curveFlex(m: Modifier) = EqGraph(
+    settings = eqSettings,
+    selectedBand = if (mode == EqMode.PARAMETRIC) bandIndex else -1,
+    spectrumBars = spectrumBars,
+    isPlaying = isPlaying,
+    modifier = m.testTag("audio_spectrum_graph_card"),
+    rtaFrame = rtaFrame,
+    onSelectBand = if (mode == EqMode.PARAMETRIC) onSelectBand else null,
+    onUpdateBand = if (mode == EqMode.PARAMETRIC) onUpdateBand else null,
+    onAddBand = if (mode == EqMode.PARAMETRIC) { freq, gain ->
+      onUpdateEq { s ->
+        if (s.bands.size >= 32) s else s.copy(bands = s.bands + EqBand(freqHz = freq, gainDb = gain, q = EqBand.DEFAULT_Q))
+      }
+      onSelectBand(eqSettings.bands.size)
+    } else null
+  )
+
+  @Composable
   fun bands(m: Modifier) = BandArea(eqSettings, mode, bandIndex, onSelectBand, onUpdateBand, onUpdateEq, m, onSoloBand = onSoloBand)
 
   @Composable
@@ -163,14 +195,75 @@ internal fun EqPowerConsole(
     val totalWidth = maxWidth
     val pageHeight = (maxHeight - barInset).coerceAtLeast(0.dp)
     if (maxWidth > maxHeight && maxWidth >= SIDE_MIN_WIDTH) {
+      val tabletRack = totalWidth >= com.example.ui.layout.WidthClass.EXPANDED_MIN_DP.dp &&
+        pageHeight >= Grid.u384 + Grid.u96
+      if (tabletRack) {
+        // Logic Pro iPad / Roon MUSE Studio Console architecture:
+        // 1) Unified Top Console Bar across the full width;
+        // 2) Left Main Workspace (~66%) with elastic EqGraph + Band Inspector/Bands (zero black void);
+        // 3) Right Studio Rack (~34%) split into two Squircle blocks (Tom & Ganho + Saída & Proteção)
+        //    aligned top-to-bottom with the Left Workspace.
+        Column(
+          modifier = Modifier
+            .fillMaxSize()
+            .padding(start = Grid.margin, end = Grid.margin, bottom = barInset + Grid.u12),
+          verticalArrangement = Arrangement.spacedBy(Grid.u12)
+        ) {
+          TabletTopConsoleBar(
+            capabilities = capabilities,
+            settings = eqSettings,
+            mode = mode,
+            activePreset = activePreset,
+            eqModified = eqModified,
+            presetActions = presetActions,
+            spatial = spatial,
+            compare = compare,
+            onSetEnabled = onSetEnabled,
+            onOpenSettings = onOpenSettings,
+            onOpenAdvanced = onOpenAdvanced,
+            onOpenSpatial = onOpenSpatial,
+            onUpdateEq = onUpdateEq
+          )
+          Row(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Grid.u12)
+          ) {
+            Column(
+              modifier = Modifier.weight(1f).fillMaxHeight(),
+              verticalArrangement = Arrangement.spacedBy(Grid.u12)
+            ) {
+              if (mode == EqMode.PARAMETRIC) {
+                curveFlex(Modifier.weight(1f).fillMaxWidth())
+                bands(Modifier.fillMaxWidth().heightIn(max = 180.dp))
+              } else {
+                curveFlex(Modifier.weight(0.46f).fillMaxWidth())
+                bands(Modifier.weight(0.54f).fillMaxWidth())
+              }
+            }
+            Column(
+              modifier = Modifier
+                .width(360.dp)
+                .fillMaxHeight(),
+              verticalArrangement = Arrangement.spacedBy(Grid.u12)
+            ) {
+              TabletToneRack(
+                settings = eqSettings,
+                capabilities = capabilities,
+                compare = compare,
+                onUpdateEq = onUpdateEq,
+                modifier = Modifier.fillMaxSize()
+              )
+            }
+          }
+        }
+        return@BoxWithConstraints
+      }
+
       Row(
         modifier = Modifier.fillMaxSize().padding(horizontal = Grid.margin),
         horizontalArrangement = Arrangement.spacedBy(Grid.u24)
       ) {
-        // The curve and bands take the height there is, and no less than the curve plus the band minimum;
-        // below that the column scrolls behind the floating glass capsules.
         Box(modifier = Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
-          // A short screen (a phone on its side) gets the curve at half height; a tall tablet scales it to 288 dp.
           val curveHeight = when {
             pageHeight < Grid.u192 + Grid.u12 + BANDS_MIN -> Grid.u96
             pageHeight >= Grid.u384 + Grid.u192 -> Grid.u192 + Grid.u96
@@ -187,11 +280,6 @@ internal fun EqPowerConsole(
             bands(Modifier.weight(1f).fillMaxWidth())
           }
         }
-        // On a short window (phone landscape) the four rows sit 6 dp apart; on a tall tablet
-        // (>= 840 dp wide x >= 520 dp tall) the right rack also surfaces Preamp, Tone, Limiter and
-        // Crossfeed inline so the tablet canvas acts as a complete 2-pane studio console.
-        val tabletRack = totalWidth >= com.example.ui.layout.WidthClass.EXPANDED_MIN_DP.dp &&
-          pageHeight >= Grid.u384 + Grid.u96 + Grid.u48
         Column(
           modifier = Modifier
             .width(Grid.u384)
@@ -204,38 +292,103 @@ internal fun EqPowerConsole(
           presets()
           dock(Modifier.fillMaxWidth())
           path()
-          if (tabletRack) {
-            TabletToneRack(settings = eqSettings, onUpdateEq = onUpdateEq)
-          }
         }
       }
       return@BoxWithConstraints
     }
 
-    // Rows 48 + 48 + 48 + 48 + 48, the curve card 192 (or 288 on tall tablet portrait), and gaps around bands.
+    // Portrait mode: Studio Console Vertical Unificado (Smartphone < 600 dp & Tablet Portrait 600-839 dp).
+    val colors = MaterialTheme.colorScheme
+    val cardShape = com.example.ui.theme.SquircleShape(18.dp)
     val isTabletPortrait = maxWidth >= com.example.ui.layout.WidthClass.MEDIUM_MIN_DP.dp
-    val portraitCurve = if (isTabletPortrait && pageHeight >= Grid.u384 * 2) Grid.u192 + Grid.u96 else Grid.u192
-    val extraCurve = portraitCurve - Grid.u192
-    val maxBands = if (isTabletPortrait) Grid.u384 else BANDS_MAX
-    val bandHeight = (pageHeight - FIXED_HEIGHT - extraCurve).coerceIn(BANDS_MIN, maxBands)
-    Box(
-      modifier = Modifier.fillMaxSize(),
-      contentAlignment = Alignment.TopCenter
-    ) {
+    if (isTabletPortrait) {
+      val portraitCurve = if (pageHeight >= Grid.u384 * 2) Grid.u192 + Grid.u96 else Grid.u192
+      val bandHeight = if (mode == EqMode.PARAMETRIC) 180.dp else (Grid.u192 + Grid.u48)
       Column(
         modifier = Modifier
-          .then(if (isTabletPortrait) Modifier.widthIn(max = com.example.ui.layout.ReadingColumnMaxDp.dp) else Modifier)
           .fillMaxSize()
           .verticalScroll(rememberScrollState())
           .padding(start = Grid.margin, end = Grid.margin, bottom = Grid.u12 + barInset),
         verticalArrangement = Arrangement.spacedBy(Grid.u12)
       ) {
-        top()
-        presets()
+        // Unified Top Console Card (Title/Power + Presets + Mode/Spatial Dock)
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .background(colors.surfaceContainer)
+            .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
+            .padding(Grid.u12),
+          verticalArrangement = Arrangement.spacedBy(Grid.u12)
+        ) {
+          top()
+          presets()
+          dock(Modifier.fillMaxWidth())
+        }
+        // Main Curve + Bands / Band Inspector
         curve(portraitCurve)
         bands(Modifier.fillMaxWidth().height(bandHeight))
-        dock(Modifier.fillMaxWidth())
-        path()
+        // Side-by-side 2-column Studio Rack (Tom & Ganho | Saída & Proteção)
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .height(androidx.compose.foundation.layout.IntrinsicSize.Max)
+            .testTag("eq_tablet_portrait_rack"),
+          horizontalArrangement = Arrangement.spacedBy(Grid.u12)
+        ) {
+          ToneGainRackBlock(
+            settings = eqSettings,
+            onUpdateEq = onUpdateEq,
+            modifier = Modifier.weight(1f).fillMaxHeight()
+          )
+          OutputProtectionRackBlock(
+            settings = eqSettings,
+            capabilities = capabilities,
+            compare = compare,
+            onUpdateEq = onUpdateEq,
+            scrollable = false,
+            modifier = Modifier.weight(1f).fillMaxHeight()
+          )
+        }
+      }
+    } else {
+      val portraitCurve = Grid.u192
+      val bandHeight = (pageHeight - FIXED_HEIGHT - Grid.u24).coerceIn(BANDS_MIN, BANDS_MAX)
+      Column(
+        modifier = Modifier
+          .fillMaxSize()
+          .verticalScroll(rememberScrollState())
+          .padding(start = Grid.margin, end = Grid.margin, bottom = Grid.u12 + barInset),
+        verticalArrangement = Arrangement.spacedBy(Grid.u12)
+      ) {
+        // Compact Studio Console Header Card (Title/Power + Presets)
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .background(colors.surfaceContainer)
+            .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
+            .padding(Grid.u12),
+          verticalArrangement = Arrangement.spacedBy(Grid.u6)
+        ) {
+          top()
+          presets()
+        }
+        curve(portraitCurve)
+        bands(Modifier.fillMaxWidth().height(bandHeight))
+        // Unified Footer Card (Mode/Spatial Dock + Signal Path)
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .background(colors.surfaceContainer)
+            .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
+            .padding(Grid.u12),
+          verticalArrangement = Arrangement.spacedBy(Grid.u6)
+        ) {
+          dock(Modifier.fillMaxWidth())
+          path()
+        }
       }
     }
   }
@@ -251,26 +404,201 @@ private val BANDS_MAX = Grid.u192 + Grid.u48
 private val FIXED_HEIGHT = Grid.u48 * 5 + Grid.u192 + Grid.u12 * 7
 
 /**
- * Tablet-only inline studio rack (shown only on expanded screens >= 840 dp x >= 528 dp):
- * surfaces Preamp, Bass/Treble tone shelves, Limiter and Binaural Crossfeed directly in the right
- * control column without altering the smartphone layout.
+ * Unified full-width Top Console Bar for tablet landscape (Logic Pro iPad / Roon MUSE style):
+ * left = active audio route & sample rate; centre = Mode toggle, Preset, AutoEq Correction & Spatial;
+ * right = EQ master switch & (...) overflow menu. Eliminates the duplicate "Equalizador" header.
+ */
+@Composable
+private fun TabletTopConsoleBar(
+  capabilities: AudioCapabilities,
+  settings: EqSettings,
+  mode: EqMode,
+  activePreset: EqPreset?,
+  eqModified: Boolean,
+  presetActions: PresetActions,
+  spatial: SpatialUi,
+  compare: CompareState,
+  onSetEnabled: (Boolean) -> Unit,
+  onOpenSettings: () -> Unit,
+  onOpenAdvanced: () -> Unit,
+  onOpenSpatial: (() -> Unit)?,
+  onUpdateEq: ((EqSettings) -> EqSettings) -> Unit
+) {
+  val colors = MaterialTheme.colorScheme
+  val presetName = activePreset?.localizedName() ?: stringResource(R.string.audio_preset_custom)
+  val presetDescription = if (eqModified) stringResource(R.string.audio_preset_modified_desc, presetName) else presetName
+  val spatialSub = if (spatial.enabled) {
+    stringResource(R.string.audio_spatial_sub_on, spatialPresetLabel(spatial.preset), (spatial.intensity * 100f).roundToInt())
+  } else stringResource(R.string.audio_spatial_sub_off)
+  val spatialSource = remember { MutableInteractionSource() }
+  val spatialEnabled = onOpenSpatial != null
+
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .height(Grid.u48),
+    horizontalArrangement = Arrangement.spacedBy(Grid.u12),
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    // Active Route pill on the left
+    Row(
+      modifier = Modifier
+        .height(Grid.u48)
+        .clip(Grid.r24)
+        .background(colors.surfaceContainer)
+        .padding(horizontal = Grid.u12),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      if (compare.comparing) {
+        Text(
+          stringResource(R.string.audio_compare_banner),
+          style = EqType.MonoStrong,
+          color = colors.primary,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.testTag("eq_compare_banner")
+        )
+      } else {
+        Box(
+          modifier = Modifier
+            .size(Grid.u6)
+            .clip(CircleShape)
+            .background(if (settings.enabled) colors.primary else colors.onSurface.copy(alpha = 0.38f))
+        )
+        Spacer(Modifier.width(Grid.u6))
+        val rate = formatSampleRate(capabilities.sampleRateHz)
+        val outputLine = stringResource(R.string.audio_output_line, capabilities.activeRouteName, rate)
+        Text(
+          capabilities.activeRouteName + " · " + rate,
+          style = EqType.Mono,
+          color = colors.onSurfaceVariant,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.semantics { contentDescription = outputLine }
+        )
+      }
+    }
+
+    // Graphic | Parametric mode toggle
+    ModeSegments(
+      parametric = mode == EqMode.PARAMETRIC,
+      width = 180.dp,
+      onSelect = { parametric -> if (parametric != (mode == EqMode.PARAMETRIC)) onUpdateEq { it.withLayout(parametric) } }
+    )
+
+    // Preset selector (takes flexible remaining space)
+    Pill(
+      text = presetName,
+      sub = stringResource(if (eqModified) R.string.audio_preset_sub_modified else R.string.audio_preset_sub),
+      chevron = true,
+      description = presetDescription,
+      modifier = Modifier.weight(1f),
+      onClickLabel = stringResource(R.string.audio_choose_preset),
+      onClick = presetActions.onOpen,
+      tag = "eq_preset_button"
+    )
+
+    // AutoEq Correction pill
+    Pill(
+      text = stringResource(R.string.audio_correction),
+      sub = settings.device?.name ?: stringResource(R.string.audio_correction_off),
+      active = settings.device != null,
+      description = stringResource(R.string.audio_correction_desc),
+      modifier = Modifier.width(116.dp),
+      onClickLabel = stringResource(R.string.audio_correction),
+      onClick = presetActions.onOpenCorrection,
+      tag = "eq_correction_button"
+    )
+
+    // Tarkas Spatial pill
+    Column(
+      modifier = Modifier
+        .width(136.dp)
+        .fillMaxHeight()
+        .pressScale(spatialSource)
+        .clip(Grid.r24)
+        .background(if (spatial.enabled) colors.primary.copy(alpha = 0.14f) else colors.surfaceContainer)
+        .clickable(
+          interactionSource = spatialSource, indication = null, enabled = spatialEnabled, role = Role.Button,
+          onClickLabel = stringResource(R.string.audio_spatial_title), onClick = { onOpenSpatial?.invoke() }
+        )
+        .padding(horizontal = Grid.u12)
+        .testTag("eq_open_spatial"),
+      verticalArrangement = Arrangement.Center,
+      horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+      Text(
+        stringResource(R.string.audio_spatial_title),
+        style = EqType.LabelStrong,
+        color = if (spatialEnabled) colors.onSurface else colors.onSurface.copy(alpha = 0.38f),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+      )
+      Text(
+        spatialSub,
+        style = EqType.Mono,
+        color = if (spatial.enabled) colors.primary else colors.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+      )
+    }
+
+    // Master EQ Power switch + (...) Overflow menu
+    PowerPill(settings.enabled, compare, onSetEnabled)
+    OverflowMenu(settings, activePreset, eqModified, presetActions, onOpenSettings, onOpenAdvanced, onOpenSpatial, onUpdateEq)
+  }
+}
+
+/**
+ * Tablet-only two-block right studio rack:
+ * - Block 1 (Tom & Ganho): Preamp, Bass and Treble shelves aligned with the top of the EQ Graph.
+ * - Block 2 (Saída & Proteção): Headroom meter + A/B "Sem EQ", Limiter and wrapped Binaural Crossfeed
+ *   aligned with the bottom of the Left Workspace.
  */
 @Composable
 private fun TabletToneRack(
   settings: EqSettings,
-  onUpdateEq: ((EqSettings) -> EqSettings) -> Unit
+  capabilities: AudioCapabilities,
+  compare: CompareState,
+  onUpdateEq: ((EqSettings) -> EqSettings) -> Unit,
+  modifier: Modifier = Modifier
+) {
+  Column(
+    modifier = modifier.testTag("eq_tablet_rack"),
+    verticalArrangement = Arrangement.spacedBy(Grid.u12)
+  ) {
+    ToneGainRackBlock(
+      settings = settings,
+      onUpdateEq = onUpdateEq,
+      modifier = Modifier.fillMaxWidth()
+    )
+    OutputProtectionRackBlock(
+      settings = settings,
+      capabilities = capabilities,
+      compare = compare,
+      onUpdateEq = onUpdateEq,
+      scrollable = true,
+      modifier = Modifier.weight(1f).fillMaxWidth()
+    )
+  }
+}
+
+@Composable
+private fun ToneGainRackBlock(
+  settings: EqSettings,
+  onUpdateEq: ((EqSettings) -> EqSettings) -> Unit,
+  modifier: Modifier = Modifier
 ) {
   val colors = MaterialTheme.colorScheme
   val preampRange = EqSettings.PREAMP_RANGE_DB
-  val shape = Grid.r12
+  val shape = com.example.ui.theme.SquircleShape(18.dp)
+  // Block 1: Tom & Ganho (Preamp, Graves, Agudos)
   Column(
-    modifier = Modifier
-      .fillMaxWidth()
+    modifier = modifier
       .clip(shape)
       .background(colors.surfaceContainer)
       .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), shape)
-      .padding(Grid.u12)
-      .testTag("eq_tablet_rack"),
+      .padding(horizontal = Grid.u12, vertical = Grid.u12),
     verticalArrangement = Arrangement.spacedBy(Grid.u6)
   ) {
     StepperRow(
@@ -293,10 +621,35 @@ private fun TabletToneRack(
     ToneRow(stringResource(R.string.audio_tone_treble), settings.trebleDb, settings.enabled, "tablet_knob_treble") { db ->
       onUpdateEq { it.copy(trebleDb = db) }
     }
+  }
+}
+
+@Composable
+private fun OutputProtectionRackBlock(
+  settings: EqSettings,
+  capabilities: AudioCapabilities,
+  compare: CompareState,
+  onUpdateEq: ((EqSettings) -> EqSettings) -> Unit,
+  scrollable: Boolean,
+  modifier: Modifier = Modifier
+) {
+  val colors = MaterialTheme.colorScheme
+  val shape = com.example.ui.theme.SquircleShape(18.dp)
+  // Block 2: Saída & Proteção (Folga / Sem EQ, Limitador, Crossfeed binaural wrapped in 2 rows)
+  Column(
+    modifier = modifier
+      .clip(shape)
+      .background(colors.surfaceContainer)
+      .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), shape)
+      .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+      .padding(Grid.u12),
+    verticalArrangement = Arrangement.spacedBy(Grid.u12)
+  ) {
+    PathBar(settings, capabilities, compare)
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .height(Grid.u48)
+        .height(42.dp)
         .clip(Grid.r12)
         .clickable(role = Role.Switch) { onUpdateEq { it.copy(limiterEnabled = !it.limiterEnabled) } }
         .testTag("tablet_switch_limiter"),
@@ -308,7 +661,8 @@ private fun TabletToneRack(
     CrossfeedSection(
       crossfeed = settings.crossfeed,
       enabled = settings.enabled,
-      onChange = { next -> onUpdateEq { it.copy(crossfeed = next) } }
+      onChange = { next -> onUpdateEq { it.copy(crossfeed = next) } },
+      wrap = true
     )
   }
 }
@@ -918,24 +1272,91 @@ private fun OverflowMenu(
         modifier = Modifier.size(Grid.icon)
       )
     }
-    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-      @Composable
-      fun item(text: String, tag: String? = null, onClick: () -> Unit) = DropdownMenuItem(
-        text = { Text(text, style = EqType.Body) },
-        onClick = { open = false; onClick() },
-        modifier = if (tag != null) Modifier.testTag(tag) else Modifier
-      )
-      item(stringResource(R.string.audio_menu_save_as), "eq_save_as", actions.onSaveAs)
-      if (isCustom && modified) item(stringResource(R.string.audio_menu_update, preset!!.name), onClick = actions.onOverwrite)
-      if (isCustom) {
-        item(stringResource(R.string.audio_action_rename), onClick = actions.onRename)
-        item(stringResource(R.string.audio_menu_delete_preset), onClick = actions.onDelete)
+    val menuColors = MaterialTheme.colorScheme
+    val reducedMenu = com.example.ui.theme.AppMotion.reduced
+    val menuScale = remember { androidx.compose.animation.core.Animatable(1f) }
+    androidx.compose.runtime.LaunchedEffect(open, reducedMenu) {
+      if (open && !reducedMenu) {
+        menuScale.snapTo(0.88f)
+        menuScale.animateTo(1f, com.example.ui.theme.Motion.fluidFast(visibilityThreshold = 0.002f))
+      } else {
+        menuScale.snapTo(1f)
       }
-      item(stringResource(R.string.audio_menu_copy_curve), "eq_export_text") {
+    }
+    DropdownMenu(
+      expanded = open,
+      onDismissRequest = { open = false },
+      modifier = Modifier.graphicsLayer {
+        val s = menuScale.value
+        scaleX = s
+        scaleY = s
+        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f)
+      },
+      shape = com.example.ui.theme.SquircleShape(18.dp),
+      containerColor = menuColors.surface,
+      tonalElevation = 0.dp,
+      shadowElevation = 12.dp,
+      border = androidx.compose.foundation.BorderStroke(0.8.dp, menuColors.onSurface.copy(alpha = 0.12f))
+    ) {
+      @Composable
+      fun item(
+        text: String,
+        icon: ImageVector,
+        tag: String? = null,
+        destructive: Boolean = false,
+        onClick: () -> Unit
+      ) {
+        val tint = if (destructive) menuColors.error else menuColors.onSurface
+        DropdownMenuItem(
+          text = { Text(text, style = EqType.Body, color = tint) },
+          leadingIcon = {
+            Icon(
+              imageVector = icon,
+              contentDescription = null,
+              tint = if (destructive) menuColors.error else menuColors.onSurfaceVariant,
+              modifier = Modifier.size(20.dp)
+            )
+          },
+          onClick = { open = false; onClick() },
+          modifier = if (tag != null) Modifier.testTag(tag) else Modifier
+        )
+      }
+
+      @Composable
+      fun divider() = HorizontalDivider(
+        modifier = Modifier.padding(horizontal = Grid.inset, vertical = 4.dp),
+        thickness = Grid.hairline,
+        color = menuColors.onSurface.copy(alpha = 0.10f)
+      )
+
+      // Section 1: Preset & Reset
+      item(stringResource(R.string.audio_menu_save_as), Icons.Rounded.BookmarkAdd, "eq_save_as", onClick = actions.onSaveAs)
+      if (isCustom && modified) item(stringResource(R.string.audio_menu_update, preset!!.name), Icons.Rounded.Save, onClick = actions.onOverwrite)
+      if (isCustom) {
+        item(stringResource(R.string.audio_action_rename), Icons.Rounded.Edit, onClick = actions.onRename)
+        item(stringResource(R.string.audio_menu_delete_preset), Icons.Rounded.DeleteOutline, destructive = true, onClick = actions.onDelete)
+      }
+      item(stringResource(R.string.audio_menu_reset), Icons.Rounded.RestartAlt, "eq_reset", onClick = actions.onReset)
+
+      divider()
+
+      // Section 2: A/B Comparison & Curve Import/Export
+      val targetSlot = if (activeSlot == 'A') 'B' else 'A'
+      item(stringResource(R.string.audio_ab_switch_to, targetSlot.toString()), Icons.Rounded.CompareArrows, "eq_ab_switch") {
+        val incoming = otherSlot ?: settings
+        otherSlot = settings
+        activeSlot = targetSlot
+        onUpdateEq { incoming }
+      }
+      item(stringResource(R.string.audio_ab_copy, activeSlot.toString(), targetSlot.toString()), Icons.Rounded.ContentCopy, "eq_ab_copy") {
+        otherSlot = settings
+        toast(resources.getString(R.string.audio_ab_copied, activeSlot.toString(), targetSlot.toString()))
+      }
+      item(stringResource(R.string.audio_menu_copy_curve), Icons.Rounded.Code, "eq_export_text") {
         clipboard()?.setPrimaryClip(ClipData.newPlainText(resources.getString(R.string.audio_clipboard_curve), EqTextFormat.export(settings)))
         toast(resources.getString(R.string.audio_toast_curve_copied))
       }
-      item(stringResource(R.string.audio_menu_import_text), "eq_import_text") {
+      item(stringResource(R.string.audio_menu_import_text), Icons.Rounded.ContentPaste, "eq_import_text") {
         val text = clipboard()?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString().orEmpty()
         when (val result = EqTextFormat.parse(text)) {
           null -> toast(resources.getString(R.string.audio_toast_import_failed))
@@ -949,24 +1370,15 @@ private fun OverflowMenu(
           }
         }
       }
-      item(stringResource(R.string.audio_menu_import_file), "eq_import_file") {
+      item(stringResource(R.string.audio_menu_import_file), Icons.Rounded.UploadFile, "eq_import_file") {
         fileLauncher.launch(arrayOf("text/plain", "text/*"))
       }
-      val targetSlot = if (activeSlot == 'A') 'B' else 'A'
-      item(stringResource(R.string.audio_ab_switch_to, targetSlot.toString()), "eq_ab_switch") {
-        val incoming = otherSlot ?: settings
-        otherSlot = settings
-        activeSlot = targetSlot
-        onUpdateEq { incoming }
-      }
-      item(stringResource(R.string.audio_ab_copy, activeSlot.toString(), targetSlot.toString()), "eq_ab_copy") {
-        otherSlot = settings
-        toast(resources.getString(R.string.audio_ab_copied, activeSlot.toString(), targetSlot.toString()))
-      }
-      item(stringResource(R.string.audio_menu_reset), "eq_reset", actions.onReset)
-      if (onOpenSpatial != null) item(stringResource(R.string.audio_spatial_title), "eq_open_spatial_menu", onOpenSpatial)
-      item(stringResource(R.string.audio_settings_title), "eq_open_settings", onOpenSettings)
-      item(stringResource(R.string.audio_menu_advanced), "eq_open_advanced", onOpenAdvanced)
+
+      divider()
+
+      // Section 3: Audio Settings & Advanced (Tarkas Spatial removed: already has its own dock button)
+      item(stringResource(R.string.audio_settings_title), Icons.Rounded.Tune, "eq_open_settings", onClick = onOpenSettings)
+      item(stringResource(R.string.audio_menu_advanced), Icons.Rounded.Settings, "eq_open_advanced", onClick = onOpenAdvanced)
     }
   }
 }
