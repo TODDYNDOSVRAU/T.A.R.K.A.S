@@ -79,6 +79,15 @@ class PreferencesRepository(context: Context) {
     prefs.edit().putString("surface_style", key).apply()
   }
 
+  /** Liquid glass opacity intensity: 0f = 100% transparent, 1f = 100% opaque. */
+  fun getLiquidGlassOpacity(): Float {
+    return prefs.getFloat("liquid_glass_opacity", com.example.ui.theme.DefaultLiquidGlassOpacity).coerceIn(0f, 1f)
+  }
+
+  fun saveLiquidGlassOpacity(value: Float) {
+    prefs.edit().putFloat("liquid_glass_opacity", value.coerceIn(0f, 1f)).apply()
+  }
+
   /** "Reduzir animações": off by default, so the app animates even when the system scale is zero. */
   /** Material You: follow the phone's colours instead of the T.A.L. palette. Off by default. */
   fun getSystemColors(): Boolean = prefs.getBoolean("system_colors", false)

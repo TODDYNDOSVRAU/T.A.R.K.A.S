@@ -1,5 +1,6 @@
 package com.example.data.audio.dsp
 
+import com.example.data.model.BandChannel
 import com.example.data.model.EqBand
 import com.example.data.model.EqSettings
 import com.example.data.model.FilterType
@@ -28,6 +29,7 @@ object EqTextFormat {
   const val MIN_GRAPHIC_POINTS = 5
 
   private val preampLine = Regex("""Preamp:\s*(-?[\d.]+)\s*dB""", RegexOption.IGNORE_CASE)
+  private val channelLine = Regex("""^\s*Channel:\s*(.+)$""", RegexOption.IGNORE_CASE)
   private val filterLine = Regex(
     """Filter\s*\d*:\s*(ON|OFF)\s+(\w+)\s+Fc\s+([\d.]+)\s*(?:Hz)?(?:\s+Gain\s+(-?[\d.]+)\s*(?:dB)?)?(?:\s+Q\s+([\d.]+))?""",
     RegexOption.IGNORE_CASE
@@ -42,23 +44,45 @@ object EqTextFormat {
   fun parse(text: String): Result? = normalize(text).let { parseGraphic(it) ?: parseParametric(it) }
 
   private fun parseParametric(text: String): Result.Parametric? {
-    val bands = filterLine.findAll(text).take(MAX_FILTERS).mapNotNull { m ->
+    var activeChannel = BandChannel.STEREO
+    val bands = ArrayList<EqBand>()
+    for (rawLine in text.lineSequence()) {
+      if (bands.size >= MAX_FILTERS) break
+      val line = rawLine.trim()
+      if (line.isEmpty() || line.startsWith("#")) continue
+      channelLine.matchEntire(line)?.let { chMatch ->
+        val token = chMatch.groupValues[1].trim().lowercase()
+        activeChannel = when {
+          token == "l" || token == "left" -> BandChannel.LEFT
+          token == "r" || token == "right" -> BandChannel.RIGHT
+          token == "m" || token == "mid" -> BandChannel.MID
+          token == "s" || token == "side" -> BandChannel.SIDE
+          else -> BandChannel.STEREO
+        }
+        continue
+      }
+      val m = filterLine.find(line) ?: continue
       val type = when (m.groupValues[2].uppercase()) {
         "PK", "PEQ" -> FilterType.PEAK
         "LSC", "LS", "LSQ" -> FilterType.LOW_SHELF
         "HSC", "HS", "HSQ" -> FilterType.HIGH_SHELF
         "HP", "HPQ" -> FilterType.HIGH_PASS
         "LP", "LPQ" -> FilterType.LOW_PASS
-        else -> return@mapNotNull null
+        "NO", "NOTCH" -> FilterType.NOTCH
+        "BP", "BANDPASS" -> FilterType.BAND_PASS
+        "TILT", "TS" -> FilterType.TILT_SHELF
+        else -> continue
       }
-      EqBand(
-        freqHz = (m.groupValues[3].toFloatOrNull() ?: return@mapNotNull null).coerceIn(EqBand.MIN_FREQ, EqBand.MAX_FREQ),
+      val freq = m.groupValues[3].toFloatOrNull() ?: continue
+      bands += EqBand(
+        freqHz = freq.coerceIn(EqBand.MIN_FREQ, EqBand.MAX_FREQ),
         gainDb = (m.groupValues[4].toFloatOrNull() ?: 0f).coerceIn(EqBand.MIN_GAIN, EqBand.MAX_GAIN),
         q = (m.groupValues[5].toFloatOrNull() ?: 0.7f).coerceIn(EqBand.MIN_Q, EqBand.MAX_Q),
         type = type,
-        enabled = m.groupValues[1].equals("ON", ignoreCase = true)
+        enabled = m.groupValues[1].equals("ON", ignoreCase = true),
+        channel = activeChannel
       )
-    }.toList()
+    }
     if (bands.isEmpty()) return null
     val preamp = preampLine.find(text)?.groupValues?.get(1)?.toFloatOrNull() ?: 0f
     return Result.Parametric(bands, preamp.coerceIn(-EqSettings.PREAMP_RANGE_DB, EqSettings.PREAMP_RANGE_DB))
@@ -97,13 +121,28 @@ object EqTextFormat {
     val preamp = s.preampDb + (s.device?.preampDb ?: 0f)
     append("Preamp: ").append(fmt(preamp)).append(" dB\n")
     var n = 1
+    var lastChannel = BandChannel.STEREO
     fun line(b: EqBand) {
+      if (b.channel != lastChannel) {
+        lastChannel = b.channel
+        val ch = when (b.channel) {
+          BandChannel.STEREO -> "all"
+          BandChannel.LEFT -> "L"
+          BandChannel.RIGHT -> "R"
+          BandChannel.MID -> "M"
+          BandChannel.SIDE -> "S"
+        }
+        append("Channel: ").append(ch).append('\n')
+      }
       val code = when (b.type) {
         FilterType.PEAK -> "PK"
         FilterType.LOW_SHELF -> "LSC"
         FilterType.HIGH_SHELF -> "HSC"
         FilterType.HIGH_PASS -> "HP"
         FilterType.LOW_PASS -> "LP"
+        FilterType.NOTCH -> "NO"
+        FilterType.BAND_PASS -> "BP"
+        FilterType.TILT_SHELF -> "TILT"
       }
       append("Filter ").append(n++).append(": ").append(if (b.enabled) "ON " else "OFF ").append(code)
         .append(" Fc ").append(fmt(b.freqHz)).append(" Hz")

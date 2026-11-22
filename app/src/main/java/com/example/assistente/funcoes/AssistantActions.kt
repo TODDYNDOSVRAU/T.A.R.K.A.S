@@ -20,6 +20,7 @@ interface AssistantActions {
   fun cancelSleep(): Boolean
   fun setSpatial(on: Boolean): Boolean
   fun setVolumePercent(percent: Int): Boolean
+  fun toggleAbLoop(): Boolean = false
 }
 
 /** Used when the engine runs without the app (tests, previews): nothing is found and nothing changes. */

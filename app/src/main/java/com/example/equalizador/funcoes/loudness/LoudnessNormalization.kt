@@ -102,7 +102,9 @@ object LoudnessNormalization {
     tags: TaggedLoudness,
     measuredLufs: Double?,
     /** For [NormalizationMode.AUTO]: the track plays as part of its album, in order. */
-    albumInOrder: Boolean = false
+    albumInOrder: Boolean = false,
+    targetLufs: Double = TARGET_LUFS,
+    fallbackGainDb: Double = 0.0
   ): NormalizationDecision {
     if (mode == NormalizationMode.OFF) return NormalizationDecision(LoudnessSource.NONE, null, 0.0)
     val useAlbum = mode == NormalizationMode.ALBUM || (mode == NormalizationMode.AUTO && albumInOrder)
@@ -110,13 +112,13 @@ object LoudnessNormalization {
       useAlbum && tags.albumLufs != null -> LoudnessSource.TAG_ALBUM to tags.albumLufs
       tags.trackLufs != null -> LoudnessSource.TAG_TRACK to tags.trackLufs
       measuredLufs != null -> LoudnessSource.MEASURED to measuredLufs
-      else -> return NormalizationDecision(LoudnessSource.NONE, null, 0.0)
+      else -> return NormalizationDecision(LoudnessSource.NONE, null, min(0.0, fallbackGainDb))
     }
-    return NormalizationDecision(source, lufs, gainFor(lufs))
+    return NormalizationDecision(source, lufs, gainFor(lufs, targetLufs))
   }
 
   /** Only lowers: a quiet track stays as it is, so the output never goes past what the file holds. */
-  fun gainFor(loudnessLufs: Double): Double = min(0.0, TARGET_LUFS - loudnessLufs)
+  fun gainFor(loudnessLufs: Double, targetLufs: Double = TARGET_LUFS): Double = min(0.0, targetLufs - loudnessLufs)
 
   /** A measurement is kept only when it covered most of the track: a skipped track says little. */
   fun isMeasurementComplete(measuredSeconds: Double, durationMs: Long): Boolean =

@@ -196,10 +196,64 @@ internal fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modi
     // The sound of a speaker test is the Cinema room's: the stage answers taps only while that preset is on.
     LaunchedEffect(ui.enabled, ui.preset) { if (!ui.enabled || !ui.preset.virtual51) SpeakerTestPlayer.stop() }
     Box(modifier = Modifier.padding(top = Grid.u12)) {
+      val shownParams = SpatialControl.paramsFor(ui.preset, ui.tuning[ui.preset].orEmpty())
+      var pendingWidth by androidx.compose.runtime.remember(ui.preset) {
+        androidx.compose.runtime.mutableDoubleStateOf(SpatialKnob.WIDTH.read(shownParams))
+      }
+      var lastWidthPushMs by androidx.compose.runtime.remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+      LaunchedEffect(ui.tuning, ui.preset) {
+        pendingWidth = SpatialKnob.WIDTH.read(SpatialControl.paramsFor(ui.preset, ui.tuning[ui.preset].orEmpty()))
+      }
       SpatialStage(
         enabled = ui.enabled, preset = ui.preset, intensity = ui.intensity,
         activeChannel = testing,
-        onSpeakerTap = { ch -> if (testing == ch) SpeakerTestPlayer.stop() else SpeakerTestPlayer.play(testContext, ch) }
+        onSpeakerTap = { ch -> if (testing == ch) SpeakerTestPlayer.stop() else SpeakerTestPlayer.play(testContext, ch) },
+        onStageDrag = { dxDp, dyDp ->
+          if (ui.preset.virtual51) {
+            if (kotlin.math.abs(dxDp) > 0.1f) {
+              val nextYaw = (SpatialControl.headYaw - dxDp * 0.45).coerceIn(-60.0, 60.0)
+              SpatialControl.setHeadYaw(nextYaw)
+            }
+            if (kotlin.math.abs(dyDp) > 0.1f) {
+              val nextHeight = (SpatialControl.atmosHeightMix.value - dyDp * 0.006).coerceIn(0.0, 1.0)
+              SpatialControl.setAtmosHeightMix(nextHeight)
+            }
+          } else {
+            if (kotlin.math.abs(dxDp) > 0.1f) {
+              pendingWidth = (pendingWidth + dxDp * 0.008).coerceIn(SpatialKnob.WIDTH.min, SpatialKnob.WIDTH.max)
+              val now = android.os.SystemClock.uptimeMillis()
+              if (now - lastWidthPushMs >= 100L) {
+                lastWidthPushMs = now
+                actions.onKnob(ui.preset, SpatialKnob.WIDTH, pendingWidth)
+              }
+            }
+            if (kotlin.math.abs(dyDp) > 0.1f) {
+              val nextInt = (ui.intensity - dyDp * 0.005f).coerceIn(0.2f, 1f)
+              actions.onIntensity(nextInt)
+            }
+          }
+        },
+        onStageDragEnd = {
+          if (!ui.preset.virtual51) {
+            actions.onKnob(ui.preset, SpatialKnob.WIDTH, pendingWidth)
+          }
+          actions.onIntensityFinished(ui.intensity)
+        },
+        onStageReset = {
+          if (ui.preset.virtual51) {
+            SpatialControl.setHeadYaw(0.0)
+          } else {
+            val defW = SpatialKnob.WIDTH.read(ui.preset.params)
+            pendingWidth = defW
+            actions.onKnob(ui.preset, SpatialKnob.WIDTH, defW)
+          }
+        }
+      )
+    }
+    if (ui.enabled) {
+      Text(
+        stringResource(R.string.audio_spatial_drag_hint), modifier = Modifier.padding(top = Grid.u6),
+        style = GridText.Small, color = colors.onSurfaceVariant
       )
     }
     if (ui.enabled && ui.preset.virtual51) {
@@ -275,10 +329,34 @@ internal fun SpatialPanel(ui: SpatialUi, actions: SpatialActions, modifier: Modi
             color = colors.onSurfaceVariant
           )
           if (ui.preset.virtual51) {
+            val atmosHeight by SpatialControl.atmosHeightMix.collectAsState()
+            val atmosRoom by SpatialControl.atmosRoomTail.collectAsState()
             Text(
               stringResource(R.string.audio_spatial_cinema_hint),
               modifier = Modifier.padding(horizontal = Grid.u12, vertical = Grid.u12),
               style = GridText.Small, color = colors.onSurfaceVariant
+            )
+            GroupDivider()
+            SliderRow(
+              label = stringResource(R.string.audio_spatial_atmos_height),
+              valueText = "${(atmosHeight * 100).roundToInt()}%",
+              value = atmosHeight,
+              range = 0f..1f,
+              defaultValue = 0.38f,
+              onChange = { SpatialControl.setAtmosHeightMix(it.toDouble()) },
+              enabled = ui.enabled,
+              testTag = "spatial_atmos_height"
+            )
+            GroupDivider()
+            SliderRow(
+              label = stringResource(R.string.audio_spatial_atmos_room),
+              valueText = "${(atmosRoom * 100).roundToInt()}%",
+              value = atmosRoom,
+              range = 0f..2f,
+              defaultValue = com.example.data.audio.spatial.RoomParams.APPROVED_LEVEL.toFloat(),
+              onChange = { SpatialControl.setAtmosRoomTail(it.toDouble()) },
+              enabled = ui.enabled,
+              testTag = "spatial_atmos_room"
             )
           } else {
             SpatialTuning(ui.preset, ui, actions)

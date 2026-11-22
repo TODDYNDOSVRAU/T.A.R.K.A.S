@@ -40,7 +40,9 @@ data class PlayerState(
   /** The tracks beside the cover: what Previous and Next go to. */
   val coverNeighbors: CoverNeighbors.Result = CoverNeighbors.Result(),
   /** Why the current track does not play; null when nothing is wrong. Shown on the screen until it plays. */
-  val problem: PlaybackProblem? = null
+  val problem: PlaybackProblem? = null,
+  /** A-B Loop markers for repeating a track passage. */
+  val abLoop: com.example.data.playback.AbLoop = com.example.data.playback.AbLoop()
 ) {
   // A ByteArray is compared by content, not by reference, so the data class's equals stays meaningful.
   override fun equals(other: Any?): Boolean {
@@ -52,7 +54,7 @@ data class PlayerState(
       waveform.contentEquals(other.waveform) && isShuffle == other.isShuffle &&
       repeatMode == other.repeatMode && favoriteIds == other.favoriteIds && playlists == other.playlists &&
       sleepTimer == other.sleepTimer && trackDetails == other.trackDetails && lyrics == other.lyrics &&
-      coverNeighbors == other.coverNeighbors && problem == other.problem
+      coverNeighbors == other.coverNeighbors && problem == other.problem && abLoop == other.abLoop
   }
 
   override fun hashCode(): Int {
@@ -72,6 +74,7 @@ data class PlayerState(
     h = 31 * h + lyrics.hashCode()
     h = 31 * h + coverNeighbors.hashCode()
     h = 31 * h + problem.hashCode()
+    h = 31 * h + abLoop.hashCode()
     return h
   }
 }
@@ -102,5 +105,11 @@ data class PlayerActions(
   val onLoadTrackDetails: (Track) -> Unit = {},
   val onLoadLyrics: (Track) -> Unit = {},
   /** Tries again the track that failed. */
-  val onRetry: () -> Unit = {}
+  val onRetry: () -> Unit = {},
+  /** Cycles A-B Loop (Off -> A -> B -> Off). */
+  val onToggleAbLoop: () -> Unit = {},
+  /** Saves a manually imported `.lrc` text for [Track]. */
+  val onImportLyrics: (Track, String) -> Unit = { _, _ -> },
+  /** Downloads a free remote track (Jamendo / Audius) to offline storage. */
+  val onDownloadOffline: (Track) -> Unit = {}
 )

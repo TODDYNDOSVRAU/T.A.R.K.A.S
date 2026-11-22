@@ -28,6 +28,8 @@ class SessionEqualizer {
   /** The curve for the current settings, laid onto the bands; built once per update for every session. */
   private var curve: FloatArray? = null
   private val virtualizers = mutableMapOf<Int, Virtualizer>()
+  private val pendingSpatialCommits = mutableMapOf<Int, Runnable>()
+  private val mainHandler by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
   private var settings = EqSettings()
   private var spatialStrength = 0
 
@@ -78,8 +80,9 @@ class SessionEqualizer {
     attachFailures.remove(sessionId)
     noControl.remove(sessionId)
     sent.remove(sessionId)
+    pendingSpatialCommits.remove(sessionId)?.let { mainHandler.removeCallbacks(it) }
     effects.remove(sessionId)?.let { runCatching { it.release() } }
-    virtualizers.remove(sessionId)?.let { runCatching { it.release() } }
+    virtualizers.remove(sessionId)?.let { runCatching { it.enabled = false; it.release() } }
   }
 
   /** Keeps only [alive] attached: sessions that ended are released. */
@@ -100,22 +103,42 @@ class SessionEqualizer {
   }
 
   private fun applySpatial(sessionId: Int) {
+    pendingSpatialCommits.remove(sessionId)?.let { mainHandler.removeCallbacks(it) }
     if (spatialStrength == 0) {
-      virtualizers.remove(sessionId)?.let { runCatching { it.release() } }
+      virtualizers.remove(sessionId)?.let { runCatching { it.enabled = false; it.release() } }
       return
     }
     try {
-      val virt = virtualizers.getOrPut(sessionId) { Virtualizer(PRIORITY, sessionId) }
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        // Binaural where the device can; otherwise the effect picks its own mode.
-        runCatching {
-          if (virt.canVirtualize(AudioFormat.CHANNEL_OUT_STEREO, Virtualizer.VIRTUALIZATION_MODE_BINAURAL)) {
-            virt.forceVirtualizationMode(Virtualizer.VIRTUALIZATION_MODE_BINAURAL)
+      var created = false
+      val virt = virtualizers.getOrPut(sessionId) {
+        created = true
+        Virtualizer(PRIORITY, sessionId)
+      }
+      val wasEnabled = runCatching { virt.enabled }.getOrDefault(false)
+      if (!wasEnabled) virt.enabled = true
+      val target = spatialStrength.toShort()
+      if (virt.strengthSupported) virt.setStrength(target)
+      // NXP/AIDL Virtualizer HALs (libbundlewrapper.so) can drop or ignore setStrength() sent on the
+      // same millisecond as EffectCreate/ENABLE before AudioFlinger's mixer thread starts the effect.
+      // Re-commit with a 1-unit nudge after ~60 ms (3 mixer cycles) so the strength always takes hold.
+      if (created || !wasEnabled) {
+        val commit = Runnable {
+          pendingSpatialCommits.remove(sessionId)
+          val v = virtualizers[sessionId] ?: return@Runnable
+          val s = spatialStrength
+          if (s <= 0) return@Runnable
+          runCatching {
+            if (!v.enabled) v.enabled = true
+            if (v.strengthSupported) {
+              val nudge = if (s > 1) s - 1 else s + 1
+              v.setStrength(nudge.toShort())
+              v.setStrength(s.toShort())
+            }
           }
         }
+        pendingSpatialCommits[sessionId] = commit
+        mainHandler.postDelayed(commit, SPATIAL_COMMIT_DELAY_MS)
       }
-      if (virt.strengthSupported) virt.setStrength(spatialStrength.toShort())
-      virt.enabled = true
     } catch (e: Exception) {
       Log.w(TAG, "No spatial effect for session $sessionId: ${e.javaClass.simpleName}")
       virtualizers.remove(sessionId)?.let { runCatching { it.release() } }
@@ -125,20 +148,29 @@ class SessionEqualizer {
 
   fun releaseAll() {
     attachFailures.clear()
+    pendingSpatialCommits.values.forEach { mainHandler.removeCallbacks(it) }
+    pendingSpatialCommits.clear()
     effects.values.forEach { runCatching { it.release() } }
     effects.clear()
     sent.clear()
-    virtualizers.values.forEach { runCatching { it.release() } }
+    virtualizers.values.forEach { runCatching { it.enabled = false; it.release() } }
     virtualizers.clear()
   }
 
   private fun apply(sessionId: Int, effect: AudioEffect) {
     try {
+      val wasEnabled = runCatching { effect.enabled }.getOrDefault(false)
+      if (settings.enabled && !wasEnabled) {
+        // Re-send every band when turning the effect on: some Android HALs drop parameter updates
+        // sent while the effect was disabled.
+        effect.enabled = true
+        sent.remove(sessionId)
+      }
       when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && effect is DynamicsProcessing -> applyDynamics(sessionId, effect)
         effect is Equalizer -> applyLegacy(effect)
       }
-      effect.enabled = settings.enabled
+      if (!settings.enabled && wasEnabled) effect.enabled = false
     } catch (e: Exception) {
       Log.w(TAG, "Could not update an effect: ${e.javaClass.simpleName}")
     }
@@ -243,6 +275,8 @@ class SessionEqualizer {
      */
     const val RMS_TO_PEAK_DB = 3f
     const val MAX_DB = 24f
+    /** Delay (ms) before re-committing Virtualizer strength after AudioFlinger starts the effect. */
+    const val SPATIAL_COMMIT_DELAY_MS = 60L
     /** A band is sent again only when its gain moved at least this much. */
     const val RESEND_DB = 0.05f
     /** Band counts tried, most first. 256 is beyond what the finest layout needs at 48 kHz. */

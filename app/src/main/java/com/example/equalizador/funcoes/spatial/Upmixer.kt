@@ -60,8 +60,18 @@ data class UpmixParams(
    * back pair: wide instruments mostly on the sides, diffuse ambience mostly on the backs (which also get less
    * of the voice band and their own decorrelation). Off = 5.1, 6 channels.
    */
-  val backs: Boolean = false
+  val backs: Boolean = false,
+  /**
+   * 7.1.4 overhead dome: adds four height speakers (TFL, TFR, TBL, TBR; 12 channels out) carrying high-frequency
+   * diffuse ambience and air (> 600 Hz), power-preserved with the ear-level bed while keeping bass and centred
+   * lead vocals anchored below. Requires [backs] = true.
+   */
+  val heights: Boolean = false,
+  /** 0..0.65, share of high-frequency diffuse ambience lifted into the 4 overhead channels when [heights] is on. */
+  val heightMix: Double = 0.35
 ) {
+  init { require(!heights || backs) { "heights requires backs = true" } }
+
   companion object {
     /**
      * The Cinema preset: voice-focused centre, wide content moved to the rears with a low cut,
@@ -71,6 +81,12 @@ data class UpmixParams(
       center = 0.95, ambience = 0.5, lfe = true, lfeLevel = 0.8,
       rearFill = 0.75, vocalFocus = 0.6, rearLowCutHz = 150.0, bassManage = true, backs = true
     )
+
+    /**
+     * 7.1.4 overhead dome: extends [CINEMA] with 4 elevated speakers (TFL/TFR ±35° +45° el, TBL/TBR ±135° +45° el)
+     * carrying decorrelated high-frequency ambience & air while keeping centred voice and bass below.
+     */
+    val ATMOS_714 = CINEMA.copy(heights = true, heightMix = 0.38)
   }
 }
 
@@ -82,6 +98,9 @@ internal class UpmixTables(sampleRate: Int, params: UpmixParams) {
   /** Extra phase turn that decorrelates a back speaker from its side speaker. */
   val relRe = DoubleArray(BINS)
   val relIm = DoubleArray(BINS)
+  /** Independent decorrelation phase for the 4 overhead height speakers (7.1.4). */
+  val topRe = DoubleArray(BINS)
+  val topIm = DoubleArray(BINS)
   val lfeGain = DoubleArray(BINS)
   /** Music-mode gentle surround high-shelf (-2.8 dB above ~6.5 kHz to avoid rear harshness). */
   val surroundShelf = DoubleArray(BINS)
@@ -89,6 +108,8 @@ internal class UpmixTables(sampleRate: Int, params: UpmixParams) {
   val voiceWeight = DoubleArray(BINS)
   /** High-pass for the rear feed (rearLowCutHz), 1 when off. */
   val rearGain = DoubleArray(BINS)
+  /** Smooth high-pass for overhead height extraction (0 below 300 Hz, 1 above 1.2 kHz). */
+  val heightWeight = DoubleArray(BINS)
 
   init {
     val rng = java.util.Random(11)
@@ -97,18 +118,25 @@ internal class UpmixTables(sampleRate: Int, params: UpmixParams) {
     val kSum = kern.sum()
     val rng2 = java.util.Random(31)
     val raw2 = DoubleArray(BINS) { (rng2.nextDouble() * 2 - 1) * PI }
+    val rng3 = java.util.Random(53)
+    val raw3 = DoubleArray(BINS) { (rng3.nextDouble() * 2 - 1) * PI }
     val hfTargetGain = 0.724 // -2.8 dB gentle surround shelf
     for (k in 0 until BINS) {
-      var s = 0.0; var s2 = 0.0
+      var s = 0.0; var s2 = 0.0; var s3 = 0.0
       for (d in -4..4) {
         val j = k + d
-        if (j in 0 until BINS) { s += kern[d + 4] / kSum * raw[j]; s2 += kern[d + 4] / kSum * raw2[j] }
+        if (j in 0 until BINS) {
+          val w = kern[d + 4] / kSum
+          s += w * raw[j]; s2 += w * raw2[j]; s3 += w * raw3[j]
+        }
       }
       val f = k * sampleRate.toDouble() / NFFT
       val phi = s * 1.2 * (f / 300.0).coerceIn(0.0, 1.0)
       rotRe[k] = cos(phi); rotIm[k] = sin(phi)
       val phi2 = s2 * 1.2 * (f / 300.0).coerceIn(0.0, 1.0)
       relRe[k] = cos(phi2); relIm[k] = sin(phi2)
+      val phi3 = s3 * 1.2 * (f / 300.0).coerceIn(0.0, 1.0)
+      topRe[k] = cos(phi3); topIm[k] = sin(phi3)
       val x = (ln(max(f, 1.0) / (params.lfeHz * 0.8)) / ln(1.5625)).coerceIn(0.0, 1.0)
       lfeGain[k] = 1 - (0.5 - 0.5 * cos(PI * x))
       voiceWeight[k] = when {
@@ -116,6 +144,11 @@ internal class UpmixTables(sampleRate: Int, params: UpmixParams) {
         f < 250.0 -> 0.5 - 0.5 * cos(PI * (ln(f / 125.0) / ln(2.0)))
         f <= 3500.0 -> 1.0
         else -> 0.5 + 0.5 * cos(PI * (ln(f / 3500.0) / ln(2.0)))
+      }
+      heightWeight[k] = when {
+        f <= 300.0 -> 0.0
+        f >= 1200.0 -> 1.0
+        else -> 0.5 - 0.5 * cos(PI * (ln(f / 300.0) / ln(4.0)))
       }
       rearGain[k] = if (params.rearLowCutHz <= 0.0) 1.0 else {
         val r = f / params.rearLowCutHz
@@ -138,8 +171,12 @@ internal class UpmixTables(sampleRate: Int, params: UpmixParams) {
  * (straight to binaural headphones). Zero heap allocation during [analyse].
  */
 internal class UpmixSpectra(private val p: UpmixParams, private val tables: UpmixTables) {
-  /** Channels produced: 6 (L R C LFE Ls Rs) or 8 with [UpmixParams.backs] (…SBL SBR). */
-  val channels = if (p.backs) 8 else 6
+  /** Channels produced: 6 (5.1), 8 (7.1 with [UpmixParams.backs]), or 12 (7.1.4 with [UpmixParams.heights]). */
+  val channels = when {
+    p.heights -> 12
+    p.backs -> 8
+    else -> 6
+  }
   val specRe = Array(channels) { DoubleArray(BINS) }
   val specIm = Array(channels) { DoubleArray(BINS) }
   // Shares of the rear feed that stay on the side pair (power-preserving with the back share).
@@ -147,6 +184,9 @@ internal class UpmixSpectra(private val p: UpmixParams, private val tables: Upmi
   private val backFill = if (p.backs) sin(BACK_FILL_ANGLE) else 0.0
   private val sideAmb = if (p.backs) cos(BACK_AMB_ANGLE) else 1.0
   private val backAmb = if (p.backs) sin(BACK_AMB_ANGLE) else 0.0
+
+  /** Live overhead height mix (0..1), updated from the UI without rebuilding tables. */
+  @Volatile var liveHeightMix: Double = p.heightMix
 
   private val fft = Fft(NFFT)
   private val win = DoubleArray(WIN) { 0.5 - 0.5 * cos(2 * PI * it / WIN) }
@@ -191,6 +231,12 @@ internal class UpmixSpectra(private val p: UpmixParams, private val tables: Upmi
         if (p.backs) {
           specRe[CH_SBL][k] = 0.0; specIm[CH_SBL][k] = 0.0
           specRe[CH_SBR][k] = 0.0; specIm[CH_SBR][k] = 0.0
+        }
+        if (p.heights) {
+          specRe[CH_TFL][k] = 0.0; specIm[CH_TFL][k] = 0.0
+          specRe[CH_TFR][k] = 0.0; specIm[CH_TFR][k] = 0.0
+          specRe[CH_TBL][k] = 0.0; specIm[CH_TBL][k] = 0.0
+          specRe[CH_TBR][k] = 0.0; specIm[CH_TBR][k] = 0.0
         }
         if (p.lfe) {
           specRe[CH_LFE][k] = (lRe + rRe) * k2 * tables.lfeGain[k]
@@ -270,10 +316,14 @@ internal class UpmixSpectra(private val p: UpmixParams, private val tables: Upmi
         pRsRe = panRs * (qRe * rotRe - qIm * rotIm); pRsIm = panRs * (qIm * rotRe + qRe * rotIm)
       }
 
-      // 2. Isotropic diffuse ambience (lambda2 subspace): stays out of C, splits across L/R and decorrelated Ls/Rs.
+      // 2. Isotropic diffuse ambience (lambda2 subspace): stays out of C, splits across L/R, Ls/Rs, and optional heights.
       val ambFrac = (p.ambience * (1.0 - 0.5 * pca.ppr) * (1.0 + 0.5 * p.dimension)).coerceIn(0.0, 1.0)
-      val ambFront = sqrt(max(0.0, 1.0 - ambFrac))
-      val ambSurr = sqrt(ambFrac) * shelf
+      val hFrac = if (p.heights) {
+        (liveHeightMix.coerceIn(0.0, 0.95) * tables.heightWeight[k] * (1.0 - 0.8 * p.vocalFocus * tables.voiceWeight[k])).coerceIn(0.0, 0.95)
+      } else 0.0
+      val earAmbScale = if (hFrac > 0.0) sqrt(1.0 - hFrac) else 1.0
+      val ambFront = sqrt(max(0.0, 1.0 - ambFrac)) * earAmbScale
+      val ambSurr = sqrt(ambFrac) * shelf * earAmbScale
       val alRe = pca.aReL; val alIm = pca.aImL
       val arRe = pca.aReR; val arIm = pca.aImR
 
@@ -310,6 +360,27 @@ internal class UpmixSpectra(private val p: UpmixParams, private val tables: Upmi
         specRe[CH_SBL][k] = bLRe * qRe - bLIm * qIm; specIm[CH_SBL][k] = bLRe * qIm + bLIm * qRe
         specRe[CH_SBR][k] = bRRe * qRe + bRIm * qIm; specIm[CH_SBR][k] = bRIm * qRe - bRRe * qIm
       }
+      if (p.heights) {
+        // Overhead height bed (7.1.4): lifts high-frequency diffuse ambience into TFL/TFR (60%) and TBL/TBR (40%)
+        // with independent decorrelation phases; bass (< 300 Hz) and centred voice stay anchored below.
+        val hGain = sqrt(hFrac) * shelf
+        val tfGain = hGain * TOP_FRONT_SHARE
+        val tbGain = hGain * TOP_BACK_SHARE
+        val tRe = tables.topRe[k]; val tIm = tables.topIm[k]
+        val qRe = tables.relRe[k]; val qIm = tables.relIm[k]
+        // TFL/TFR: decorrelated by topRe/topIm (opposite sign per ear-side for stereo width overhead).
+        specRe[CH_TFL][k] = tfGain * (alRe * tRe - alIm * tIm)
+        specIm[CH_TFL][k] = tfGain * (alRe * tIm + alIm * tRe)
+        specRe[CH_TFR][k] = tfGain * (arRe * tRe + arIm * tIm)
+        specIm[CH_TFR][k] = tfGain * (arIm * tRe - arRe * tIm)
+        // TBL/TBR: further decorrelated by relRe/relIm so top-back never combs with top-front or backs.
+        val tbLRe = alRe * qRe + alIm * qIm; val tbLIm = alIm * qRe - alRe * qIm
+        val tbRRe = arRe * qRe - arIm * qIm; val tbRIm = arIm * qRe + arRe * qIm
+        specRe[CH_TBL][k] = tbGain * (tbLRe * tRe - tbLIm * tIm)
+        specIm[CH_TBL][k] = tbGain * (tbLRe * tIm + tbLIm * tRe)
+        specRe[CH_TBR][k] = tbGain * (tbRRe * tRe + tbRIm * tIm)
+        specIm[CH_TBR][k] = tbGain * (tbRIm * tRe - tbRRe * tIm)
+      }
     }
   }
 
@@ -322,9 +393,16 @@ internal class UpmixSpectra(private val p: UpmixParams, private val tables: Upmi
     const val CH_RS = 5
     const val CH_SBL = 6
     const val CH_SBR = 7
+    const val CH_TFL = 8
+    const val CH_TFR = 9
+    const val CH_TBL = 10
+    const val CH_TBR = 11
     /** Angles of the side/back split: wide fill 68% / 32%, ambience 45% / 55% (side / back power). */
     private const val BACK_FILL_ANGLE = 0.6
     private const val BACK_AMB_ANGLE = 0.83
+    /** Overhead front/back split: 60% front heights, 40% back heights (power-preserving: 0.6 + 0.4 = 1.0). */
+    private val TOP_FRONT_SHARE = sqrt(0.6)
+    private val TOP_BACK_SHARE = sqrt(0.4)
     val INV_SQRT2 = 1 / sqrt(2.0)
     private val SQRT2 = sqrt(2.0)
     /** Exact DPL II surround encode level asymmetry ratio: (sqrt(19) - sqrt(6)) / (sqrt(19) + sqrt(6)) ~= 0.28162. */
@@ -354,8 +432,12 @@ internal fun packTwoReal(aRe: DoubleArray, aIm: DoubleArray, bRe: DoubleArray, b
  */
 class Upmixer(sampleRate: Int, params: UpmixParams = UpmixParams()) {
 
-  /** Channels per output frame: 6, or 8 with [UpmixParams.backs] (order L R C LFE Ls Rs SBL SBR). */
-  val channels = if (params.backs) 8 else 6
+  /** Channels per output frame: 6 (5.1), 8 (7.1), or 12 (7.1.4 with [UpmixParams.heights]). */
+  val channels = when {
+    params.heights -> 12
+    params.backs -> 8
+    else -> 6
+  }
 
   companion object {
     /** Window minus hop: 512 samples (10.7 ms at 48 kHz). */

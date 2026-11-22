@@ -28,17 +28,24 @@ import kotlin.math.sqrt
  */
 class SurroundFilters(
   val sampleRate: Int, hrtf: HrtfSource, val room: RoomParams = RoomParams.OFF,
-  /** 6 (5.1: surrounds at 110°) or 8 (7.1: sides at 90°, backs at 150°). */
+  /** 6 (5.1: surrounds at 110°), 8 (7.1: sides 90°, backs 150°), or 12 (7.1.4: +4 overhead heights at +45°). */
   val channels: Int = 6
 ) {
-  init { require(channels == 6 || channels == 8) { "channels $channels" } }
+  init { require(channels == 6 || channels == 8 || channels == 12) { "channels $channels" } }
 
   /** Azimuth of each channel in degrees (NaN = the LFE, which has no direction). */
-  val azimuths: DoubleArray = if (channels == 8) {
-    doubleArrayOf(FRONT_AZ, -FRONT_AZ, 0.0, Double.NaN, SIDE_AZ, -SIDE_AZ, BACK_AZ, -BACK_AZ)
-  } else {
-    doubleArrayOf(FRONT_AZ, -FRONT_AZ, 0.0, Double.NaN, SURROUND_AZ, -SURROUND_AZ)
+  val azimuths: DoubleArray = when (channels) {
+    12 -> doubleArrayOf(
+      FRONT_AZ, -FRONT_AZ, 0.0, Double.NaN,
+      SIDE_AZ, -SIDE_AZ, BACK_AZ, -BACK_AZ,
+      TOP_FRONT_AZ, -TOP_FRONT_AZ, TOP_BACK_AZ, -TOP_BACK_AZ
+    )
+    8 -> doubleArrayOf(FRONT_AZ, -FRONT_AZ, 0.0, Double.NaN, SIDE_AZ, -SIDE_AZ, BACK_AZ, -BACK_AZ)
+    else -> doubleArrayOf(FRONT_AZ, -FRONT_AZ, 0.0, Double.NaN, SURROUND_AZ, -SURROUND_AZ)
   }
+
+  /** Elevation of each channel in degrees (0° ear-level for 0..7; +45° overhead for 8..11 in 7.1.4). */
+  val elevations: DoubleArray = DoubleArray(channels) { ch -> if (ch >= CH_TFL) HEIGHT_EL else 0.0 }
 
   /** Combined direct + room filter, index `channel * 2 + ear` (ear 0 = left), real and imaginary parts per bin. */
   val re = Array(channels * 2) { DoubleArray(BINS) }
@@ -67,14 +74,14 @@ class SurroundFilters(
         }
         continue
       }
-      val (dl, dr) = hrtf.response(azimuths[ch], 0.0)
+      val (dl, dr) = hrtf.response(azimuths[ch], elevations[ch])
       System.arraycopy(dl, 0, rawDirect[ch * 2], 0, BINS * 2)
       System.arraycopy(dr, 0, rawDirect[ch * 2 + 1], 0, BINS * 2)
 
       if (room.enabled) {
         val rl = DoubleArray(BINS * 2)
         val rr = DoubleArray(BINS * 2)
-        SurroundRoom.addReflections(rl, rr, SurroundRoom.paths(azimuths[ch], 0.0, room, sampleRate), hrtf, sampleRate, room)
+        SurroundRoom.addReflections(rl, rr, SurroundRoom.paths(azimuths[ch], elevations[ch], room, sampleRate), hrtf, sampleRate, room)
         System.arraycopy(rl, 0, rawRefl[ch * 2], 0, BINS * 2)
         System.arraycopy(rr, 0, rawRefl[ch * 2 + 1], 0, BINS * 2)
       }
@@ -88,9 +95,15 @@ class SurroundFilters(
       symmetrizeSymmetricSpeakers(rawRefl, CH_L, CH_R)
       symmetrizeSymmetricSpeakers(rawDirect, CH_LS, CH_RS)
       symmetrizeSymmetricSpeakers(rawRefl, CH_LS, CH_RS)
-      if (channels == 8) {
+      if (channels >= 8) {
         symmetrizeSymmetricSpeakers(rawDirect, CH_SBL, CH_SBR)
         symmetrizeSymmetricSpeakers(rawRefl, CH_SBL, CH_SBR)
+      }
+      if (channels == 12) {
+        symmetrizeSymmetricSpeakers(rawDirect, CH_TFL, CH_TFR)
+        symmetrizeSymmetricSpeakers(rawRefl, CH_TFL, CH_TFR)
+        symmetrizeSymmetricSpeakers(rawDirect, CH_TBL, CH_TBR)
+        symmetrizeSymmetricSpeakers(rawRefl, CH_TBL, CH_TBR)
       }
 
       // 2. Grathwohl multi-speaker notch stack protection & Gunnarsson HF phase smoothness across (L, C, R):
@@ -183,8 +196,11 @@ class SurroundFilters(
     val mag = DoubleArray(BINS)
     val cRe = DoubleArray(NFFT); val cIm = DoubleArray(NFFT)
     val mpRe = DoubleArray(BINS); val mpIm = DoubleArray(BINS)
-    val directional = if (channels == 8) intArrayOf(CH_L, CH_R, CH_C, CH_LS, CH_RS, CH_SBL, CH_SBR)
-    else intArrayOf(CH_L, CH_R, CH_C, CH_LS, CH_RS)
+    val directional = when (channels) {
+      12 -> intArrayOf(CH_L, CH_R, CH_C, CH_LS, CH_RS, CH_SBL, CH_SBR, CH_TFL, CH_TFR, CH_TBL, CH_TBR)
+      8 -> intArrayOf(CH_L, CH_R, CH_C, CH_LS, CH_RS, CH_SBL, CH_SBR)
+      else -> intArrayOf(CH_L, CH_R, CH_C, CH_LS, CH_RS)
+    }
     for (ch in directional) {
       for (ear in 0..1) {
         val h = rawDirect[ch * 2 + ear]
@@ -199,7 +215,8 @@ class SurroundFilters(
         AcousticPhysics.minimumPhaseFromMagnitude(mag, fft, cRe, cIm, mpRe, mpIm)
         // Estimate pure excess phase group delay relative to HRTF_DELAY from 200-1200 Hz correlation.
         val azSpeaker = azimuths[ch]
-        val dot = AcousticPhysics.sourceEarCos(azSpeaker, 0.0, ear == 0, AcousticPhysics.HeadGeometry.DEFAULT)
+        val elSpeaker = elevations[ch]
+        val dot = AcousticPhysics.sourceEarCos(azSpeaker, elSpeaker, ear == 0, AcousticPhysics.HeadGeometry.DEFAULT)
         val pureDelay = AcousticPhysics.extendedWoodworthDelaySec(dot, AcousticPhysics.HeadGeometry.DEFAULT) +
           HRTF_DELAY.toDouble() / sampleRate
         for (k in 0 until BINS) {
@@ -255,6 +272,10 @@ class SurroundFilters(
     /** 7.1 layout (ITU): side pair at 90°, back pair at 150°. */
     const val SIDE_AZ = 90.0
     const val BACK_AZ = 150.0
+    /** 7.1.4 overhead dome: front heights at ±35° az, back heights at ±135° az, all at +45° elevation. */
+    const val TOP_FRONT_AZ = 35.0
+    const val TOP_BACK_AZ = 135.0
+    const val HEIGHT_EL = 45.0
     private const val CH_L = 0
     private const val CH_R = 1
     private const val CH_C = 2
@@ -262,6 +283,10 @@ class SurroundFilters(
     private const val CH_RS = 5
     private const val CH_SBL = 6
     private const val CH_SBR = 7
+    const val CH_TFL = 8
+    const val CH_TFR = 9
+    const val CH_TBL = 10
+    const val CH_TBR = 11
     private val INV_SQRT2 = 1 / sqrt(2.0)
   }
 }
@@ -308,6 +333,20 @@ class SurroundVirtualizer(
       }
     }
 
+    /** Fold-down for a 7.1.4 frame (L R C LFE Ls Rs SBL SBR TFL TFR TBL TBR): heights fold at -6 dB. */
+    fun downmix12(input: FloatArray, offset: Int, frames: Int, out: FloatArray, outOffset: Int = 0) {
+      for (i in 0 until frames) {
+        val p = offset + 12 * i
+        val l = finite(input[p]); val r = finite(input[p + 1]); val c = finite(input[p + 2])
+        val ls = finite(input[p + 4]) + finite(input[p + 6])
+        val rs = finite(input[p + 5]) + finite(input[p + 7])
+        val tl = 0.5f * (finite(input[p + 8]) + finite(input[p + 10]))
+        val tr = 0.5f * (finite(input[p + 9]) + finite(input[p + 11]))
+        out[outOffset + 2 * i] = DOWNMIX_GAIN * (l + DOWNMIX_GAIN * c + DOWNMIX_GAIN * ls + tl)
+        out[outOffset + 2 * i + 1] = DOWNMIX_GAIN * (r + DOWNMIX_GAIN * c + DOWNMIX_GAIN * rs + tr)
+      }
+    }
+
     /**
      * Puts [frames] frames of a 5.1 file (L R C LFE Ls Rs) on the 7.1 stage the app draws: the surrounds are
      * shared between the side pair (90°) and the back pair (150°), half each, so they sit between the two,
@@ -319,6 +358,26 @@ class SurroundVirtualizer(
         out[b] = input[a]; out[b + 1] = input[a + 1]; out[b + 2] = input[a + 2]; out[b + 3] = input[a + 3]
         out[b + 4] = 0.5f * input[a + 4]; out[b + 5] = 0.5f * input[a + 5]
         out[b + 6] = 0.5f * input[a + 4]; out[b + 7] = 0.5f * input[a + 5]
+      }
+    }
+
+    /** Expands 5.1 into the 12-channel 7.1.4 bed (ear-level identical to [expand51To71], heights silent). */
+    fun expand51To714(input: FloatArray, frames: Int, out: FloatArray) {
+      for (i in 0 until frames) {
+        val a = 6 * i; val b = 12 * i
+        out[b] = input[a]; out[b + 1] = input[a + 1]; out[b + 2] = input[a + 2]; out[b + 3] = input[a + 3]
+        out[b + 4] = 0.5f * input[a + 4]; out[b + 5] = 0.5f * input[a + 5]
+        out[b + 6] = 0.5f * input[a + 4]; out[b + 7] = 0.5f * input[a + 5]
+        out[b + 8] = 0f; out[b + 9] = 0f; out[b + 10] = 0f; out[b + 11] = 0f
+      }
+    }
+
+    /** Expands 7.1 into the 12-channel 7.1.4 bed (ear-level untouched, heights silent). */
+    fun expand71To714(input: FloatArray, frames: Int, out: FloatArray) {
+      for (i in 0 until frames) {
+        val a = 8 * i; val b = 12 * i
+        for (c in 0..7) out[b + c] = input[a + c]
+        out[b + 8] = 0f; out[b + 9] = 0f; out[b + 10] = 0f; out[b + 11] = 0f
       }
     }
 
@@ -364,13 +423,13 @@ class SurroundVirtualizer(
     reset()
   }
 
-  /** Same fold-down as [downmix] for one frame; a 7.1 frame also folds the back pair into the sides. */
+  /** Same fold-down as [downmix] for one frame; handles 5.1 (6ch), 7.1 (8ch), and 7.1.4 (12ch). */
   private fun dryFold(input: FloatArray, p: Int) {
-    if (n == 6) { downmix(input, p, 1, dmTmp); return }
-    val l = finite(input[p]); val r = finite(input[p + 1]); val c = finite(input[p + 2])
-    val ls = finite(input[p + 4]) + finite(input[p + 6]); val rs = finite(input[p + 5]) + finite(input[p + 7])
-    dmTmp[0] = DOWNMIX_GAIN * (l + DOWNMIX_GAIN * c + DOWNMIX_GAIN * ls)
-    dmTmp[1] = DOWNMIX_GAIN * (r + DOWNMIX_GAIN * c + DOWNMIX_GAIN * rs)
+    when (n) {
+      6 -> downmix(input, p, 1, dmTmp)
+      8 -> downmix8(input, p, 1, dmTmp)
+      else -> downmix12(input, p, 1, dmTmp)
+    }
   }
 
   override fun reset(startIntensity: Double) {
@@ -497,7 +556,7 @@ internal fun updateRotatedSpeakerFilters(
   for (ch in 0 until filters.channels) {
     val az = filters.azimuths[ch]
     if (az.isNaN()) continue
-    headHrtf.evaluateContinuous(az - yawDeg, 0.0, dynLRe[ch], dynLIm[ch], dynRRe[ch], dynRIm[ch])
+    headHrtf.evaluateContinuous(az - yawDeg, filters.elevations[ch], dynLRe[ch], dynLIm[ch], dynRRe[ch], dynRIm[ch])
     val scale = filters.speakerScale[ch]
     if (filters.room.enabled) {
       val rlRe = filters.roomRe[ch * 2]; val rlIm = filters.roomIm[ch * 2]

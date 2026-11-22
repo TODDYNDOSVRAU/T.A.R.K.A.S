@@ -22,8 +22,11 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -36,7 +39,10 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.SwapVert
+import androidx.compose.material3.Icon
 import com.example.ui.components.TarkasAlertDialog
+import com.example.ui.theme.liquidChrome
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,6 +55,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -102,6 +109,7 @@ private enum class LibrarySection(@StringRes val labelRes: Int) {
   ALBUMS(R.string.library_section_albums),
   ARTISTS(R.string.library_section_artists),
   GENRES(R.string.library_section_genres),
+  FOLDERS(R.string.library_section_folders),
   PLAYLISTS(R.string.library_section_playlists),
   FAVORITES(R.string.library_section_favorites),
   AUTO(R.string.library_section_auto),
@@ -125,6 +133,7 @@ fun LibraryScreen(
   val deviceScanning = state.deviceScanning
   val hasMusicPermission = state.hasMusicPermission
   val songsPerFolder = state.songsPerFolder
+  val trackFolders = state.trackFolders
   val folderRules = state.folderRules
   val queue = state.queue
   val currentTrack = state.currentTrack
@@ -138,6 +147,7 @@ fun LibraryScreen(
   val onPlayFromList = actions.onPlayFromList
   val onShuffleList = actions.onShuffleList
   val onCreatePlaylist = actions.onCreatePlaylist
+  val onImportPlaylistM3u = actions.onImportPlaylistM3u
   val onAddLocalTrack = actions.onAddLocalTrack
   val onRenamePlaylist = actions.onRenamePlaylist
   val onDeletePlaylist = actions.onDeletePlaylist
@@ -199,8 +209,12 @@ fun LibraryScreen(
   val albumGroups = groups?.first.orEmpty()
   val artistGroups = groups?.second.orEmpty()
   val genreGroups = groups?.third.orEmpty()
-  val groupsByKey = remember(albumGroups, artistGroups, genreGroups) {
-    (albumGroups + artistGroups + genreGroups).associateBy { it.key }
+  val foldersRootLabel = stringResource(R.string.library_folders_root)
+  val folderGroups = rememberComputed(deviceTracks, trackFolders, foldersRootLabel) {
+    LibraryGroups.folders(deviceTracks, trackFolders, foldersRootLabel)
+  }.orEmpty()
+  val groupsByKey = remember(albumGroups, artistGroups, genreGroups, folderGroups) {
+    (albumGroups + artistGroups + genreGroups + folderGroups).associateBy { it.key }
   }
   var openGroupKeys by rememberSaveable { mutableStateOf("") }
   val openGroup = openGroupKeys.split(GroupKeySeparator).lastOrNull { it.isNotEmpty() }?.let { groupsByKey[it] }
@@ -208,9 +222,11 @@ fun LibraryScreen(
   fun popGroup() { openGroupKeys = openGroupKeys.substringBeforeLast(GroupKeySeparator, missingDelimiterValue = "") }
   // Dialogs are saved by id, so a rotation keeps them open on the same playlist.
   var showNewPlaylist by rememberSaveable { mutableStateOf(false) }
+  var showAddStream by rememberSaveable { mutableStateOf(false) }
   var showFolders by rememberSaveable { mutableStateOf(false) }
   var renamingId by rememberSaveable { mutableStateOf<String?>(null) }
   var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
+  var pendingExportPlaylist by remember { mutableStateOf<Pair<String, List<Track>>?>(null) }
 
   // The player's queue button lands here on Fila, whatever section was open before.
   LaunchedEffect(openQueue) {
@@ -237,6 +253,53 @@ fun LibraryScreen(
         val (name, durationMs) = withContext(Dispatchers.IO) { readAudioFile(appContext, uri, audioFallbackName) }
         // Falls back to 3 min only when the file has no duration in its metadata.
         onAddLocalTrack(name, localLibraryName, uri.toString(), if (durationMs > 0) durationMs else 180_000L)
+      }
+    }
+  }
+  val m3uImportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+    if (uri != null) {
+      val appContext = context.applicationContext
+      scope.launch {
+        val (name, text) = withContext(Dispatchers.IO) {
+          var displayName = "Playlist"
+          runCatching {
+            appContext.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+              val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+              if (idx != -1 && c.moveToFirst()) {
+                c.getString(idx)?.takeIf { it.isNotBlank() }?.let { displayName = it }
+              }
+            }
+          }
+          val cleanName = displayName.substringBeforeLast('.').ifBlank { "Playlist" }
+          val content = runCatching {
+            appContext.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+          }.getOrNull().orEmpty()
+          cleanName to content
+        }
+        if (text.isNotBlank()) onImportPlaylistM3u(name, text)
+      }
+    }
+  }
+  val exportDoneMsg = stringResource(R.string.library_m3u_export_done)
+  val exportFailedMsg = stringResource(R.string.library_m3u_export_failed)
+  val m3uExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/x-mpegurl")) { uri: Uri? ->
+    val target = pendingExportPlaylist
+    pendingExportPlaylist = null
+    if (uri != null && target != null) {
+      val appContext = context.applicationContext
+      scope.launch {
+        val ok = withContext(Dispatchers.IO) {
+          runCatching {
+            val content = com.example.data.library.M3uFormat.export(target.first, target.second)
+            appContext.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(content) }
+            true
+          }.getOrDefault(false)
+        }
+        android.widget.Toast.makeText(
+          appContext,
+          if (ok) exportDoneMsg else exportFailedMsg,
+          android.widget.Toast.LENGTH_SHORT
+        ).show()
       }
     }
   }
@@ -343,16 +406,101 @@ fun LibraryScreen(
         onShuffle = { onShuffleList(tracks) },
         onRename = { renamingId = shownPlaylist.id },
         onDelete = { deletingId = shownPlaylist.id },
+        onExport = {
+          pendingExportPlaylist = shownPlaylist.name to tracks
+          val safeName = shownPlaylist.name.trim().replace(Regex("[^A-Za-z0-9._ -]"), "_").ifBlank { "playlist" }
+          m3uExportLauncher.launch("$safeName.m3u8")
+        },
         onRemoveTrack = { trackId -> onRemoveFromPlaylist(shownPlaylist.id, trackId) }
       )
     } else {
       Column(modifier = Modifier.fillMaxSize()) {
-        // Scrolls sideways, so the last chip is never cut by the screen edge at large font sizes.
+        // Search bar + compact Sort/Folders menu button (Apple Music style) above the section chips in portrait.
+        if (!compact && section == LibrarySection.SONGS && musicAllowed && (deviceTracks.isNotEmpty() || folderRules.isFiltering)) {
+          var sortMenuOpen by remember { mutableStateOf(false) }
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(horizontal = Grid.margin)
+              .padding(bottom = Grid.u6),
+            horizontalArrangement = Arrangement.spacedBy(Grid.u6),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            SearchField(
+              value = songQuery,
+              onValueChange = { songQuery = it },
+              placeholder = stringResource(R.string.library_search_songs_hint),
+              modifier = Modifier
+                .weight(1f)
+                .testTag("library_search_songs")
+            )
+            Box {
+              val colors = MaterialTheme.colorScheme
+              val isLiquid = com.example.ui.theme.LocalSurfaceStyle.current == com.example.ui.theme.SurfaceStyle.LIQUID &&
+                com.example.ui.theme.liquidGlassSupported
+              Box(
+                modifier = Modifier
+                  .size(Grid.u48)
+                  .clip(Grid.pill)
+                  .then(
+                    if (isLiquid) Modifier.liquidChrome(Grid.pill, selected = folderRules.isFiltering)
+                    else Modifier.background(colors.surfaceContainer)
+                  )
+                  .clickable(onClick = { sortMenuOpen = true })
+                  .testTag("library_sort_menu_button"),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(
+                  imageVector = Icons.Rounded.SwapVert,
+                  contentDescription = stringResource(songOrder.labelRes()),
+                  tint = if (folderRules.isFiltering) colors.primary else colors.onSurface,
+                  modifier = Modifier.size(Grid.icon)
+                )
+              }
+              androidx.compose.material3.DropdownMenu(
+                expanded = sortMenuOpen,
+                onDismissRequest = { sortMenuOpen = false }
+              ) {
+                com.example.data.playback.SongOrder.entries.forEach { o ->
+                  androidx.compose.material3.DropdownMenuItem(
+                    text = {
+                      Text(
+                        stringResource(o.labelRes()),
+                        color = if (o == songOrder) colors.primary else colors.onSurface
+                      )
+                    },
+                    onClick = {
+                      sortMenuOpen = false
+                      songOrder = o
+                      onSongOrderChange(o)
+                    },
+                    modifier = Modifier.testTag("song_order_${o.key}")
+                  )
+                }
+                androidx.compose.material3.HorizontalDivider()
+                androidx.compose.material3.DropdownMenuItem(
+                  text = {
+                    Text(
+                      stringResource(R.string.library_folders_chip),
+                      color = if (folderRules.isFiltering) colors.primary else colors.onSurface
+                    )
+                  },
+                  onClick = {
+                    sortMenuOpen = false
+                    showFolders = true
+                  },
+                  modifier = Modifier.testTag("song_order_folders")
+                )
+              }
+            }
+          }
+        }
+        // Scrolls sideways inside the T.A.L. 24 dp column so chips stay aligned with search and buttons.
         Row(
           modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
             .padding(horizontal = Grid.margin)
+            .horizontalScroll(rememberScrollState())
             .selectableGroup(),
           horizontalArrangement = Arrangement.spacedBy(Grid.u6)
         ) {
@@ -382,45 +530,28 @@ fun LibraryScreen(
               onPlay = { track -> onPlayFromList(track, shownSongs) },
               onShuffle = { onShuffleList(shownSongs) },
               header = {
-                if (musicAllowed && (deviceTracks.isNotEmpty() || folderRules.isFiltering)) {
-                  if (compact) {
-                    item(key = "song_search") {
-                      Row(
-                        modifier = Modifier.padding(top = Grid.u6, bottom = Grid.u6),
-                        verticalAlignment = Alignment.CenterVertically
-                      ) {
-                        SearchField(
-                          value = songQuery,
-                          onValueChange = { songQuery = it },
-                          placeholder = stringResource(R.string.library_search_songs_hint),
-                          modifier = Modifier
-                            .weight(1f)
-                            .padding(start = Grid.margin)
-                            .testTag("library_search_songs")
-                        )
-                        SongOrderRow(
-                          songOrder,
-                          onChange = { songOrder = it; onSongOrderChange(it) },
-                          foldersActive = folderRules.isFiltering,
-                          onFolders = { showFolders = true },
-                          modifier = Modifier.weight(1f)
-                        )
-                      }
-                    }
-                  } else {
-                    item(key = "song_search") {
+                if (musicAllowed && (deviceTracks.isNotEmpty() || folderRules.isFiltering) && compact) {
+                  item(key = "song_search") {
+                    Row(
+                      modifier = Modifier.padding(top = Grid.u6, bottom = Grid.u6),
+                      verticalAlignment = Alignment.CenterVertically
+                    ) {
                       SearchField(
                         value = songQuery,
                         onValueChange = { songQuery = it },
                         placeholder = stringResource(R.string.library_search_songs_hint),
                         modifier = Modifier
-                          .padding(horizontal = Grid.margin)
-                          .padding(top = Grid.u6, bottom = Grid.u6)
+                          .weight(1f)
+                          .padding(start = Grid.margin)
                           .testTag("library_search_songs")
                       )
-                    }
-                    item(key = "song_order") {
-                      SongOrderRow(songOrder, onChange = { songOrder = it; onSongOrderChange(it) }, foldersActive = folderRules.isFiltering, onFolders = { showFolders = true })
+                      SongOrderRow(
+                        songOrder,
+                        onChange = { songOrder = it; onSongOrderChange(it) },
+                        foldersActive = folderRules.isFiltering,
+                        onFolders = { showFolders = true },
+                        modifier = Modifier.weight(1f)
+                      )
                     }
                   }
                 }
@@ -500,12 +631,23 @@ fun LibraryScreen(
               onOpen = { pushGroup(it.key) }
             )
 
+            LibrarySection.FOLDERS -> GroupsList(
+              groups = folderGroups,
+              kind = "folders",
+              hintRes = R.string.library_search_folders_hint,
+              emptyRes = R.string.library_folders_browse_empty,
+              ready = musicAllowed && !deviceScanning,
+              onOpen = { pushGroup(it.key) }
+            )
+
             LibrarySection.PLAYLISTS -> PlaylistsList(
               playlists = playlists,
               byId = byId,
               onOpen = { openPlaylistId = it.id },
               onNew = { showNewPlaylist = true },
-              onImportAudio = { audioPickerLauncher.launch(arrayOf("audio/*")) }
+              onImportAudio = { audioPickerLauncher.launch(arrayOf("audio/*")) },
+              onImportM3u = { m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "application/vnd.apple.mpegurl", "text/plain", "*/*")) },
+              onAddStream = { showAddStream = true }
             )
 
             LibrarySection.FAVORITES -> TrackList(
@@ -591,6 +733,54 @@ fun LibraryScreen(
       initialName = "",
       onConfirm = { name -> onCreatePlaylist(name); showNewPlaylist = false },
       onDismiss = { showNewPlaylist = false }
+    )
+  }
+  if (showAddStream) {
+    var streamName by rememberSaveable { mutableStateOf("") }
+    var streamUrl by rememberSaveable { mutableStateOf("") }
+    val streamArtist = stringResource(R.string.library_add_stream_artist)
+    val urlValid = streamUrl.trim().let {
+      it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true)
+    }
+    TarkasAlertDialog(
+      onDismissRequest = { showAddStream = false },
+      title = { Text(stringResource(R.string.library_add_stream_title), style = GridText.Title) },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(Grid.u12)) {
+          androidx.compose.material3.OutlinedTextField(
+            value = streamName,
+            onValueChange = { streamName = it },
+            placeholder = { Text(stringResource(R.string.library_add_stream_name_hint), style = GridText.Body) },
+            textStyle = GridText.Body,
+            singleLine = true,
+            shape = Grid.r12,
+            modifier = Modifier.fillMaxWidth().testTag("stream_name_input")
+          )
+          androidx.compose.material3.OutlinedTextField(
+            value = streamUrl,
+            onValueChange = { streamUrl = it },
+            placeholder = { Text(stringResource(R.string.library_add_stream_url_hint), style = GridText.Body) },
+            textStyle = GridText.Body,
+            singleLine = true,
+            shape = Grid.r12,
+            modifier = Modifier.fillMaxWidth().testTag("stream_url_input")
+          )
+        }
+      },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            val cleanName = streamName.trim().ifBlank { streamArtist }
+            onAddLocalTrack(cleanName, streamArtist, streamUrl.trim(), 0L)
+            showAddStream = false
+          },
+          enabled = urlValid,
+          modifier = Modifier.testTag("stream_confirm_add")
+        ) { Text(stringResource(R.string.library_add_stream_confirm)) }
+      },
+      dismissButton = {
+        TextButton(onClick = { showAddStream = false }) { Text(stringResource(R.string.library_cancel)) }
+      }
     )
   }
   playlists.firstOrNull { it.id == renamingId }?.let { pl ->

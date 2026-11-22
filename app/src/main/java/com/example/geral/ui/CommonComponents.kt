@@ -64,7 +64,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -96,11 +98,14 @@ import com.example.data.model.Track
 import com.example.ui.theme.AppText
 import com.example.ui.theme.Motion
 import com.example.ui.theme.Grid
+import com.example.ui.theme.LocalSurfaceStyle
 import com.example.ui.theme.Shapes
 import com.example.ui.theme.Space
+import com.example.ui.theme.SurfaceStyle
 import com.example.ui.theme.glassContentColor
 import com.example.ui.theme.glassControl
 import com.example.ui.theme.glassSurface
+import com.example.ui.theme.liquidGlassSupported
 import com.example.ui.theme.pressClickable
 import com.example.ui.theme.rememberReducedMotion
 import com.example.ui.viewmodel.TarkasNavTab
@@ -446,7 +451,10 @@ fun TarkasBottomNav(
   val fold = remember { { 1f - (1f - shrink.value) * presence.value } }
 
   val colors = MaterialTheme.colorScheme
-  val pillColor = colors.onSurface.copy(alpha = 0.12f)
+  val isDark = colors.background.luminance() < 0.5f
+  val liquidPill = LocalSurfaceStyle.current == SurfaceStyle.LIQUID && liquidGlassSupported
+  val pillColor = colors.onSurface.copy(alpha = if (liquidPill) (if (isDark) 0.14f else 0.10f) else 0.12f)
+  val pillRimTop = Color.White.copy(alpha = if (isDark) 0.30f else 0.65f)
   val labelStyle = remember { AppText.Caption1.copy(fontWeight = FontWeight.SemiBold) }
   val density = LocalDensity.current
   val measurer = rememberTextMeasurer()
@@ -485,7 +493,7 @@ fun TarkasBottomNav(
         scaleY = s
         transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
       }
-      .glassSurface(Shapes.pill)
+      .glassSurface(Shapes.pill, interactive = true)
       .padding(Grid.u6)
   ) {
     Layout(
@@ -530,12 +538,25 @@ fun TarkasBottomNav(
             left += (geometry.pillLeft - left) * f
             right += (geometry.pillRight - right) * f
           }
+          val pillTopLeft = Offset(left, 0f)
+          val pillSize = Size(right - left, size.height)
+          val pillRadius = CornerRadius(size.height / 2f)
           drawRoundRect(
-            pillColor.copy(alpha = pillColor.alpha * alpha),
-            topLeft = Offset(left, 0f),
-            size = Size(right - left, size.height),
-            cornerRadius = CornerRadius(size.height / 2f)
+            color = pillColor.copy(alpha = pillColor.alpha * alpha),
+            topLeft = pillTopLeft,
+            size = pillSize,
+            cornerRadius = pillRadius
           )
+          if (liquidPill && pillSize.width > 1f) {
+            val strokePx = 0.85.dp.toPx()
+            drawRoundRect(
+              color = pillRimTop.copy(alpha = pillRimTop.alpha * alpha),
+              topLeft = Offset(left + strokePx / 2f, strokePx / 2f),
+              size = Size((pillSize.width - strokePx).coerceAtLeast(0f), (size.height - strokePx).coerceAtLeast(0f)),
+              cornerRadius = pillRadius,
+              style = Stroke(width = strokePx)
+            )
+          }
         }
     ) { measurables, constraints ->
       val total = constraints.maxWidth.toFloat()
@@ -762,7 +783,7 @@ fun MiniPlayerBar(
   Box(
     modifier = modifier
       .fillMaxWidth()
-      .glassSurface(Shapes.pill)
+      .glassSurface(Shapes.pill, interactive = true)
       .clip(Shapes.pill)
       .pointerInput(Unit) {
         val threshold = size.width * 0.22f
@@ -824,16 +845,16 @@ fun MiniPlayerBar(
           translationX = swipe
           alpha = 1f - (kotlin.math.abs(swipe) / size.width.coerceAtLeast(1f)).coerceIn(0f, 0.6f)
         }
-        // The start gap clears the capsule's round end, so the thumbnail's corners stay inside it.
-        .padding(start = Grid.u12, end = Grid.u6, top = Grid.u6, bottom = Grid.u6),
+        // Compact Apple-style mini player (54 dp tall) with concentric 42 dp round cover.
+        .padding(start = Grid.u6, end = Grid.u6, top = Grid.u6, bottom = Grid.u6),
       verticalAlignment = Alignment.CenterVertically
     ) {
       TrackArtwork(
         track = track,
-        shape = Grid.r6,
+        shape = androidx.compose.foundation.shape.CircleShape,
         iconSize = Grid.icon,
         modifier = Modifier
-          .size(Grid.u48)
+          .size(42.dp)
           // The player's cover starts here and lands back here when it closes.
           .onGloballyPositioned { com.example.ui.theme.PlayerOrigin.miniCover = it.boundsInWindow() }
       )

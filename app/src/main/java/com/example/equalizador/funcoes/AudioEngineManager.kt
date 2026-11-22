@@ -25,10 +25,17 @@ import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.util.Util
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioTrackBufferSizeProvider
+import androidx.media3.exoplayer.source.LoadEventInfo
+import androidx.media3.exoplayer.source.MediaLoadData
+import com.example.data.diagnostics.Diagnostics
+import java.io.IOException
 import androidx.media3.extractor.metadata.id3.InternalFrame
 import androidx.media3.extractor.metadata.id3.TextInformationFrame
 import androidx.media3.extractor.metadata.vorbis.VorbisComment
@@ -43,8 +50,11 @@ import com.example.data.audio.loudness.NormalizationMode
 import com.example.data.audio.loudness.TaggedLoudness
 import com.example.data.audio.dsp.OwnAudioProcessorChain
 import com.example.data.audio.dsp.ParametricEqAudioProcessor
+import com.example.data.audio.dsp.RtaFrame
 import com.example.data.model.AudioCapabilities
+import com.example.data.model.EqBand
 import com.example.data.model.EqSettings
+import com.example.data.model.RtaMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -53,9 +63,19 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
+
+/** Live playback stability counters, updated by ExoPlayer's [AnalyticsListener]. */
+data class AudioHealth(
+  val underruns: Int = 0,
+  val lastUnderrunBufferMs: Long = 0L,
+  val lastUnderrunElapsedMs: Long = 0L,
+  val sinkErrors: Int = 0,
+  val codecErrors: Int = 0
+)
 
 /**
  * Plays tracks with ExoPlayer and runs every sample through our own processing chain ([EqDsp]):
@@ -78,6 +98,13 @@ class AudioEngineManager(private val context: Context) {
     const val CROSSFADE_MIN_MS = 500L
     const val CROSSFADE_MAX_MS = 12_000L
     val EXTERNAL_KINDS = setOf(OutputKind.WIRED, OutputKind.BLUETOOTH, OutputKind.USB)
+    /** Reused flat floor when the live spectrum is idle or hidden (avoids 10 Hz allocations). */
+    val FLAT_SPECTRUM: List<Float> = List(15) { 0.05f }
+    /** 15 logarithmic FFT bin ranges (25 Hz .. 16 kHz) pre-allocated once. */
+    val FFT_RANGES: Array<IntRange> = arrayOf(
+      1..1, 1..2, 2..3, 3..5, 5..7, 7..11, 11..18, 18..28,
+      28..45, 45..72, 72..115, 115..180, 180..270, 270..380, 380..500
+    )
   }
   private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
@@ -102,7 +129,9 @@ class AudioEngineManager(private val context: Context) {
   /** Tags of the playing track, kept so a change of mode can decide again. */
   private var currentTags = TaggedLoudness()
 
-  private val _loudness = MutableStateFlow(LoudnessUi(mode = loudnessStore.mode))
+  private val _loudness = MutableStateFlow(
+    LoudnessUi(mode = loudnessStore.mode, targetLufs = loudnessStore.targetLufs, fallbackGainDb = loudnessStore.fallbackGainDb)
+  )
   val loudness: StateFlow<LoudnessUi> = _loudness.asStateFlow()
 
   private var player: ExoPlayer? = null
@@ -111,6 +140,11 @@ class AudioEngineManager(private val context: Context) {
   private var visualizer: Visualizer? = null
   private var isRealFftActive = false
   private var effectsAttached = false
+  private var spectrumVisible = false
+  private val fftSmooth = FloatArray(15) { 0.05f }
+
+  private val _audioHealth = MutableStateFlow(AudioHealth())
+  val audioHealth: StateFlow<AudioHealth> = _audioHealth.asStateFlow()
 
   // Set by playTrack; consumed when the new item is ready, so focus is asked only once per track.
   private var pendingStart = false
@@ -141,8 +175,13 @@ class AudioEngineManager(private val context: Context) {
   private val _capabilities = MutableStateFlow(detectCapabilities(0))
   val capabilities: StateFlow<AudioCapabilities> = _capabilities.asStateFlow()
 
-  private val _spectrumBars = MutableStateFlow<List<Float>>(List(15) { 0.05f })
+  private val _spectrumBars = MutableStateFlow<List<Float>>(FLAT_SPECTRUM)
   val spectrumBars: StateFlow<List<Float>> = _spectrumBars.asStateFlow()
+
+  private val _rtaFrame = MutableStateFlow(RtaFrame.FLAT)
+  /** Internal 64-band FFT RTA (Pre/Post EQ, +3 dB/oct tilt), zero microphone permission required. */
+  val rtaFrame: StateFlow<RtaFrame> = _rtaFrame.asStateFlow()
+  private var rtaJob: Job? = null
 
   private val _output = MutableStateFlow(detectOutput())
   /** The output the music goes to, updated as fones connect and disconnect. */
@@ -172,6 +211,9 @@ class AudioEngineManager(private val context: Context) {
     // The automatic preamp lowers the level more while the spatial stage is on.
     com.example.data.audio.spatial.SpatialControl.onActiveChanged = { eqDsp.setSpatialStage(it) }
     eqDsp.setSpatialStage(com.example.data.audio.spatial.SpatialControl.active)
+    coroutineScope.launch {
+      _isPlaying.collect { com.example.data.systemaudio.GlobalEq.ownPlayerActive.value = it }
+    }
     runCatching { audioManager.registerAudioDeviceCallback(deviceCallback, android.os.Handler(android.os.Looper.getMainLooper())) }
       .onFailure { Log.w(TAG, "No output change events", it) }
   }
@@ -320,8 +362,10 @@ class AudioEngineManager(private val context: Context) {
       // The position is read ten times a second only while something plays.
       if (isPlaying) {
         if (!effectsAttached) attachAudioEffects()
+        updateVisualizerState()
         startProgressTracking()
       } else {
+        updateVisualizerState()
         progressJob?.cancel()
         player?.let { _currentPositionMs.value = it.currentPosition.coerceAtLeast(0L) }
       }
@@ -373,7 +417,7 @@ class AudioEngineManager(private val context: Context) {
           unregisterNoisyReceiver()
           _isPlaying.value = false
           _currentPositionMs.value = 0L
-          _spectrumBars.value = List(15) { 0.05f }
+          _spectrumBars.value = FLAT_SPECTRUM
           completionCallback()
         }
         else -> Unit
@@ -424,25 +468,85 @@ class AudioEngineManager(private val context: Context) {
     }
   }
 
+  private val analyticsListener = object : AnalyticsListener {
+    override fun onAudioUnderrun(
+      eventTime: AnalyticsListener.EventTime,
+      bufferSize: Int,
+      bufferSizeMs: Long,
+      elapsedSinceLastFeedMs: Long
+    ) {
+      val next = _audioHealth.value.let {
+        it.copy(
+          underruns = it.underruns + 1,
+          lastUnderrunBufferMs = bufferSizeMs,
+          lastUnderrunElapsedMs = elapsedSinceLastFeedMs
+        )
+      }
+      _audioHealth.value = next
+      Diagnostics.record(
+        "audio.underrun",
+        "underrun #${next.underruns} buffer=${bufferSize}B (${bufferSizeMs}ms) elapsed=${elapsedSinceLastFeedMs}ms"
+      )
+    }
+
+    override fun onAudioSinkError(eventTime: AnalyticsListener.EventTime, audioSinkError: Exception) {
+      _audioHealth.value = _audioHealth.value.copy(sinkErrors = _audioHealth.value.sinkErrors + 1)
+      Diagnostics.record("audio.sink", "AudioSink error", audioSinkError)
+    }
+
+    override fun onAudioCodecError(eventTime: AnalyticsListener.EventTime, audioCodecError: Exception) {
+      _audioHealth.value = _audioHealth.value.copy(codecErrors = _audioHealth.value.codecErrors + 1)
+      Diagnostics.record("audio.codec", "AudioCodec error", audioCodecError)
+    }
+
+    override fun onLoadError(
+      eventTime: AnalyticsListener.EventTime,
+      loadEventInfo: LoadEventInfo,
+      mediaLoadData: MediaLoadData,
+      error: IOException,
+      wasCanceled: Boolean
+    ) {
+      if (!wasCanceled) {
+        Diagnostics.record("audio.load", "Load error uri=${loadEventInfo.uri}", error)
+      }
+    }
+  }
+
   /** One player for the whole session; its audio sink runs our processing chain. */
   private fun ensurePlayer(): ExoPlayer {
     player?.let { return it }
+    val bufferSizeProvider = DefaultAudioTrackBufferSizeProvider.Builder()
+      .setMinPcmBufferDurationUs(250_000)
+      .setMaxPcmBufferDurationUs(750_000)
+      .setPcmBufferMultiplicationFactor(4)
+      .build()
     val renderers = object : DefaultRenderersFactory(context) {
       override fun buildAudioSink(
         context: Context,
         enableFloatOutput: Boolean,
         enableAudioTrackPlaybackParams: Boolean
       ): AudioSink = DefaultAudioSink.Builder(context)
+        .setAudioTrackBufferSizeProvider(bufferSizeProvider)
         .setAudioProcessorChain(OwnAudioProcessorChain(arrayOf(FloatPcmAudioProcessor(), loudnessMeter, spatialProcessor, eqProcessor)))
         .build()
     }
+    val loadControl = DefaultLoadControl.Builder()
+      .setBufferDurationsMs(
+        /* minBufferMs = */ 15_000,
+        /* maxBufferMs = */ 50_000,
+        /* bufferForPlaybackMs = */ 1_500,
+        /* bufferForPlaybackAfterRebufferMs = */ 3_000
+      )
+      .build()
     val media3Attributes = androidx.media3.common.AudioAttributes.Builder()
       .setUsage(C.USAGE_MEDIA)
       .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+      .setSpatializationBehavior(C.SPATIALIZATION_BEHAVIOR_NEVER)
       .build()
     // A fixed session id, so the visualizer and virtualizer can attach before the first sample plays.
     audioSessionId = Util.generateAudioSessionIdV21(context)
     return ExoPlayer.Builder(context, renderers)
+      .setLoadControl(loadControl)
       // Focus is handled here (AudioFocusPolicy), as before, so ExoPlayer must not also handle it.
       .setAudioAttributes(media3Attributes, false)
       .setWakeMode(C.WAKE_MODE_NETWORK)
@@ -450,6 +554,7 @@ class AudioEngineManager(private val context: Context) {
       .also {
         it.setAudioSessionId(audioSessionId)
         it.addListener(playerListener)
+        it.addAnalyticsListener(analyticsListener)
         player = it
       }
   }
@@ -587,9 +692,59 @@ class AudioEngineManager(private val context: Context) {
     }
   }
 
-  /** Attaches the live spectrum again, after the microphone permission it needs was granted. */
+  /** Attaches the live spectrum again (no-op with internal DSP RTA, kept for call-site compatibility). */
   fun refreshVisualizer() {
-    if (player != null && _isPlaying.value) attachAudioEffects()
+    updateVisualizerState()
+  }
+
+  /** Press-and-hold band audition (Solo): isolates [band] in [EqDsp]; null exits Solo. */
+  fun setSoloBand(band: EqBand?) {
+    eqDsp.setSoloBand(band)
+  }
+
+  /**
+   * Tells the engine whether the live spectrum / EQ activity is currently visible on screen.
+   * Uses the internal float FFT tap in [EqDsp.rtaAnalyzer] (zero RECORD_AUDIO permission, zero
+   * Android Visualizer / AudioFlinger overhead). Runs only while playing and visible.
+   */
+  fun setSpectrumVisible(visible: Boolean) {
+    if (spectrumVisible == visible) return
+    spectrumVisible = visible
+    updateVisualizerState()
+    if (!visible) {
+      _rtaFrame.value = RtaFrame.FLAT
+      _spectrumBars.value = FLAT_SPECTRUM
+      EqActivity.clear()
+    }
+  }
+
+  private fun updateVisualizerState() {
+    val mode = _eqSettings.value.rtaMode
+    val shouldRun = spectrumVisible && mode != RtaMode.OFF && player?.isPlaying == true
+    eqDsp.rtaAnalyzer.enabled = shouldRun
+    if (shouldRun) {
+      isRealFftActive = true
+      if (rtaJob?.isActive != true) {
+        rtaJob = coroutineScope.launch(Dispatchers.Default) {
+          while (isActive && eqDsp.rtaAnalyzer.enabled) {
+            val m = _eqSettings.value.rtaMode
+            val needPre = m == RtaMode.PRE || m == RtaMode.BOTH
+            val needPost = m == RtaMode.POST || m == RtaMode.BOTH
+            eqDsp.rtaAnalyzer.computeFrame(needPre, needPost)?.let { frame ->
+              _rtaFrame.value = frame
+            }
+            // Thermal-adaptive RTA rate: ~30 fps normal, ~15 fps when thermally warm.
+            delay(if (com.example.data.diagnostics.ThermalMonitor.isWarm) 66L else 33L)
+          }
+        }
+      }
+    } else {
+      rtaJob?.cancel()
+      rtaJob = null
+      eqDsp.rtaAnalyzer.clear()
+      isRealFftActive = false
+      _rtaFrame.value = RtaFrame.FLAT
+    }
   }
 
   fun pause() {
@@ -651,7 +806,7 @@ class AudioEngineManager(private val context: Context) {
       unregisterNoisyReceiver()
       _currentPositionMs.value = 0L
       _durationMs.value = 0L
-      _spectrumBars.value = List(15) { 0.05f }
+      _spectrumBars.value = FLAT_SPECTRUM
       _loudness.value = _loudness.value.copy(hasTrack = false)
       releaseAudioEffects()
       updateCapabilities()
@@ -694,15 +849,20 @@ class AudioEngineManager(private val context: Context) {
                 fadeInPending = false
                 runCrossfadeRamp()
               }
-              // Without a real FFT (no RECORD_AUDIO or unsupported device) show a flat floor,
-              // never a fake animated spectrum.
-              if (!isRealFftActive) {
-                _spectrumBars.value = List(15) { 0.05f }
+              // Without a real FFT (no RECORD_AUDIO, unsupported device, or spectrum hidden) keep a flat floor,
+              // never a fake animated spectrum and never allocate a new list every 100 ms.
+              if (!isRealFftActive && _spectrumBars.value !== FLAT_SPECTRUM) {
+                _spectrumBars.value = FLAT_SPECTRUM
               }
-              // What the limiter and the clamp did in the last 100 ms, for the equalizer screen.
-              EqActivity.publish(eqDsp.takeActivity())
+              // What the limiter and the clamp did in the last 100 ms, only while the equalizer screen is visible.
+              if (spectrumVisible) {
+                EqActivity.publish(eqDsp.takeActivity())
+              }
             } else {
               EqActivity.clear()
+              // Event-driven standby: suspend until playback resumes instead of waking every 100 ms.
+              _isPlaying.first { it }
+              continue
             }
           }
         } catch (_: Exception) {}
@@ -724,7 +884,12 @@ class AudioEngineManager(private val context: Context) {
       virtualizer = null
     }
     applyVirtualizer()
+    updateVisualizerState()
+  }
 
+  private fun attachVisualizer() {
+    val sessionId = audioSessionId
+    if (sessionId == 0 || visualizer != null) return
     try {
       val viz = Visualizer(sessionId).apply {
         val range = Visualizer.getCaptureSizeRange()
@@ -733,38 +898,32 @@ class AudioEngineManager(private val context: Context) {
           override fun onWaveFormDataCapture(v: Visualizer?, waveform: ByteArray?, samplingRate: Int) = Unit
 
           override fun onFftDataCapture(v: Visualizer?, fft: ByteArray?, samplingRate: Int) {
-            fft?.let { bytes ->
-              isRealFftActive = true
-              val binCount = bytes.size / 2
-              // Map to 15 logarithmic frequency ranges for 25Hz to 16kHz
-              val ranges = listOf(
-                1..1, 1..2, 2..3, 3..5, 5..7, 7..11, 11..18, 18..28,
-                28..45, 45..72, 72..115, 115..180, 180..270, 270..380,
-                380..binCount.coerceAtMost(500)
-              )
-              val oldBars = _spectrumBars.value
-              // The visualizer sees the processed output, so the bars already include the EQ.
-              val newBars = ranges.mapIndexed { idx, range ->
-                var sumMag = 0f
-                var count = 0
-                for (k in range) {
-                  if (k * 2 + 1 < bytes.size) {
-                    val r = bytes[k * 2].toFloat()
-                    val i = bytes[k * 2 + 1].toFloat()
-                    sumMag += kotlin.math.sqrt(r * r + i * i)
-                    count++
-                  }
+            if (!spectrumVisible) return
+            val bytes = fft ?: return
+            isRealFftActive = true
+            val maxBin = (bytes.size / 2).coerceAtMost(500)
+            // The visualizer sees the processed output, so the bars already include the EQ.
+            for (idx in FFT_RANGES.indices) {
+              val r = FFT_RANGES[idx]
+              val end = if (idx == FFT_RANGES.lastIndex) maxBin else r.last
+              var sumMag = 0f
+              var count = 0
+              for (k in r.first..end) {
+                if (k * 2 + 1 < bytes.size) {
+                  val re = bytes[k * 2].toFloat()
+                  val im = bytes[k * 2 + 1].toFloat()
+                  sumMag += kotlin.math.sqrt(re * re + im * im)
+                  count++
                 }
-                val avgMag = if (count > 0) sumMag / count else 0f
-                val targetNorm = (avgMag / 48f).coerceIn(0.04f, 1f)
-                val prev = oldBars.getOrElse(idx) { 0.05f }
-                (prev * 0.35f + targetNorm * 0.65f)
               }
-              _spectrumBars.value = newBars
+              val avgMag = if (count > 0) sumMag / count else 0f
+              val targetNorm = (avgMag / 48f).coerceIn(0.04f, 1f)
+              fftSmooth[idx] = fftSmooth[idx] * 0.35f + targetNorm * 0.65f
             }
+            _spectrumBars.value = fftSmooth.asList().toList()
           }
         }, Visualizer.getMaxCaptureRate() / 2, false, true)
-        enabled = true
+        enabled = player?.isPlaying == true
       }
       visualizer = viz
     } catch (e: Exception) {
@@ -774,19 +933,23 @@ class AudioEngineManager(private val context: Context) {
     }
   }
 
-  private fun releaseAudioEffects() {
+  private fun releaseVisualizerOnly() {
     try {
       visualizer?.apply {
         enabled = false
         release()
       }
     } catch (_: Exception) {}
+    visualizer = null
+    isRealFftActive = false
+  }
+
+  private fun releaseAudioEffects() {
+    releaseVisualizerOnly()
     try {
       virtualizer?.release()
     } catch (_: Exception) {}
-    visualizer = null
     virtualizer = null
-    isRealFftActive = false
     effectsAttached = false
   }
 
@@ -841,7 +1004,10 @@ class AudioEngineManager(private val context: Context) {
             .build()
       }
       val attributes = androidx.media3.common.AudioAttributes.Builder()
-        .setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build()
+        .setUsage(C.USAGE_MEDIA)
+        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+        .setSpatializationBehavior(C.SPATIALIZATION_BEHAVIOR_NEVER)
+        .build()
       tailGain = normalizationGain
       tail = ExoPlayer.Builder(context, renderers)
         .setAudioAttributes(attributes, false)
@@ -942,12 +1108,27 @@ class AudioEngineManager(private val context: Context) {
   private fun applyNormalization() {
     val key = player?.currentMediaItem?.mediaId?.takeIf { it.isNotEmpty() }
     val mode = loudnessStore.mode
+    val target = loudnessStore.targetLufs
+    val fallback = loudnessStore.fallbackGainDb
     val decision = LoudnessNormalization.decide(
-      mode, currentTags, key?.let(loudnessStore::measured), albumInOrder = key != null && key in albumInOrderKeys
+      mode = mode,
+      tags = currentTags,
+      measuredLufs = key?.let(loudnessStore::measured),
+      albumInOrder = key != null && key in albumInOrderKeys,
+      targetLufs = target,
+      fallbackGainDb = fallback
     )
     normalizationGain = decision.linearGain
     setLevel(levelVolume)
-    _loudness.value = LoudnessUi(mode, decision.source, decision.loudnessLufs, decision.gainDb, hasTrack = true)
+    _loudness.value = LoudnessUi(
+      mode = mode,
+      source = decision.source,
+      loudnessLufs = decision.loudnessLufs,
+      gainDb = decision.gainDb,
+      hasTrack = true,
+      targetLufs = target,
+      fallbackGainDb = fallback
+    )
   }
 
   /**
@@ -958,6 +1139,18 @@ class AudioEngineManager(private val context: Context) {
     loudnessStore.mode = mode
     if (player?.currentMediaItem != null) applyNormalization()
     else _loudness.value = _loudness.value.copy(mode = mode)
+  }
+
+  fun setTargetLufs(targetLufs: Double) {
+    loudnessStore.targetLufs = targetLufs
+    if (player?.currentMediaItem != null) applyNormalization()
+    else _loudness.value = _loudness.value.copy(targetLufs = loudnessStore.targetLufs)
+  }
+
+  fun setFallbackGainDb(fallbackDb: Double) {
+    loudnessStore.fallbackGainDb = fallbackDb
+    if (player?.currentMediaItem != null) applyNormalization()
+    else _loudness.value = _loudness.value.copy(fallbackGainDb = loudnessStore.fallbackGainDb)
   }
 
   /** The text tags of [metadata] as key and value: ID3 TXXX, Vorbis comments and MP4 iTunes atoms. */
@@ -980,10 +1173,12 @@ class AudioEngineManager(private val context: Context) {
 
   /** Applies the whole equalizer state. Takes effect on the next audio buffer (a few ms). */
   fun applyEqSettings(settings: EqSettings) {
+    val rtaChanged = _eqSettings.value.rtaMode != settings.rtaMode
     _eqSettings.value = settings
     if (bypass) eqDsp.setCompareReference(processedSettings(ignoreBypass = true))
     eqDsp.update(processedSettings())
     applyVirtualizer()
+    if (rtaChanged) updateVisualizerState()
   }
 
   /** The root equalizer on the output mix processes this player too; then its own curve is bypassed. */

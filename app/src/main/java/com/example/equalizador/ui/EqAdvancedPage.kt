@@ -65,6 +65,7 @@ import com.example.ui.theme.LocalBarInset
 import com.example.ui.theme.Motion
 import com.example.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -93,11 +94,15 @@ internal fun EqAdvancedPage(
   onStopSystemAudioCapture: () -> Unit,
   loudness: LoudnessUi,
   onSetNormalizationMode: (NormalizationMode) -> Unit,
+  onSetTargetLufs: (Double) -> Unit = {},
+  audioHealth: com.example.data.audio.AudioHealth = com.example.data.audio.AudioHealth(),
   crossfadeSeconds: Int = 0,
   onSetCrossfade: (Int) -> Unit = {},
   spatialOn: Boolean = false,
   outputCorrection: com.example.ui.screens.OutputCorrectionUi = com.example.ui.screens.OutputCorrectionUi(),
   onSetAutoOutputCorrection: (Boolean) -> Unit = {},
+  onExportOutputProfiles: () -> String = { "{}" },
+  onImportOutputProfiles: (String) -> Int = { -1 },
   onBack: () -> Unit
 ) {
   val reduced = rememberReducedMotion()
@@ -141,6 +146,43 @@ internal fun EqAdvancedPage(
     item { GroupLabel(stringResource(R.string.audio_adv_group_sound)) }
 
     item {
+      val ctx = androidx.compose.ui.platform.LocalContext.current
+      val scope = androidx.compose.runtime.rememberCoroutineScope()
+      val exportedMsg = stringResource(R.string.audio_adv_profiles_exported)
+      val importedFmt = stringResource(R.string.audio_adv_profiles_imported)
+      val invalidProfilesMsg = stringResource(R.string.audio_adv_profiles_invalid)
+      val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")
+      ) { uri ->
+        if (uri != null) {
+          val appCtx = ctx.applicationContext
+          val json = onExportOutputProfiles()
+          scope.launch {
+            val ok = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+              runCatching {
+                appCtx.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(json) }
+                true
+              }.getOrDefault(false)
+            }
+            if (ok) android.widget.Toast.makeText(appCtx, exportedMsg, android.widget.Toast.LENGTH_SHORT).show()
+          }
+        }
+      }
+      val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+      ) { uri ->
+        if (uri != null) {
+          val appCtx = ctx.applicationContext
+          scope.launch {
+            val text = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+              runCatching { appCtx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } }.getOrNull()
+            }
+            val count = if (text != null) onImportOutputProfiles(text) else -1
+            val msg = if (count >= 0) String.format(importedFmt, count) else invalidProfilesMsg
+            android.widget.Toast.makeText(appCtx, msg, android.widget.Toast.LENGTH_SHORT).show()
+          }
+        }
+      }
       Section(stringResource(R.string.audio_adv_section_correction)) {
         InsetGroup {
           SwitchRow(
@@ -149,6 +191,18 @@ internal fun EqAdvancedPage(
             checked = outputCorrection.auto,
             onCheckedChange = onSetAutoOutputCorrection,
             modifier = Modifier.testTag("switch_auto_output_correction")
+          )
+          GroupDivider()
+          ListRow(
+            title = stringResource(R.string.audio_adv_profiles_export),
+            onClick = { exportLauncher.launch("tarkas-output-profiles.json") },
+            modifier = Modifier.testTag("btn_export_output_profiles")
+          )
+          GroupDivider()
+          ListRow(
+            title = stringResource(R.string.audio_adv_profiles_import),
+            onClick = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
+            modifier = Modifier.testTag("btn_import_output_profiles")
           )
         }
         GroupFooter(
@@ -252,6 +306,24 @@ internal fun EqAdvancedPage(
                 defaultValue = 0f,
                 onChange = { v -> onUpdateEq { it.copy(limiterCeilingDb = (v * 2).roundToInt() / 2f) } }
               )
+              GroupDivider()
+              SliderRow(
+                label = stringResource(R.string.audio_adv_limiter_release),
+                valueText = "${eqSettings.limiterReleaseMs.roundToInt()} ms",
+                value = eqSettings.limiterReleaseMs,
+                range = 20f..500f,
+                defaultValue = 120f,
+                testTag = "slider_limiter_release",
+                onChange = { v -> onUpdateEq { it.copy(limiterReleaseMs = (v / 5f).roundToInt() * 5f) } }
+              )
+              GroupDivider()
+              SwitchRow(
+                title = stringResource(R.string.audio_adv_limiter_soft_clip),
+                subtitle = stringResource(R.string.audio_adv_limiter_soft_clip_sub),
+                checked = eqSettings.limiterSoftClip,
+                onCheckedChange = { on -> onUpdateEq { it.copy(limiterSoftClip = on) } },
+                modifier = Modifier.testTag("switch_limiter_soft_clip")
+              )
             }
           }
           if (capabilities.isVirtualizerAvailable) {
@@ -291,7 +363,15 @@ internal fun EqAdvancedPage(
 
     item { GroupLabel(stringResource(R.string.audio_adv_group_playback)) }
 
-    item { LoudnessSection(loudness, onSetNormalizationMode) }
+    item {
+      AdvancedDspSection(eqSettings = eqSettings, reduced = reduced, onUpdateEq = onUpdateEq)
+    }
+
+    item {
+      ConvolverSection(eqSettings = eqSettings, reduced = reduced, onUpdateEq = onUpdateEq)
+    }
+
+    item { LoudnessSection(loudness, onSetNormalizationMode, onSetTargetLufs) }
 
     item {
       Section(stringResource(R.string.audio_adv_section_transition)) {
@@ -393,6 +473,11 @@ internal fun EqAdvancedPage(
       }
     }
 
+    // Live Engineering Pipeline & Telemetry (Hi-Res Route, Underruns, Thermal)
+    item {
+      LiveEngineeringSection(capabilities = capabilities, health = audioHealth)
+    }
+
     // Honest limits of Android audio
     item {
       GroupFooter(
@@ -412,7 +497,11 @@ internal fun EqAdvancedPage(
  * loudness came from and the change applied), so the effect can be checked, not only trusted.
  */
 @Composable
-private fun LoudnessSection(loudness: LoudnessUi, onSetMode: (NormalizationMode) -> Unit) {
+private fun LoudnessSection(
+  loudness: LoudnessUi,
+  onSetMode: (NormalizationMode) -> Unit,
+  onSetTargetLufs: (Double) -> Unit = {}
+) {
   Section(stringResource(R.string.audio_adv_section_loudness)) {
     InsetGroup(modifier = Modifier.testTag("loudness_panel")) {
       RadioRow(
@@ -441,6 +530,26 @@ private fun LoudnessSection(loudness: LoudnessUi, onSetMode: (NormalizationMode)
         selected = loudness.mode == NormalizationMode.ALBUM,
         onClick = { onSetMode(NormalizationMode.ALBUM) }
       )
+      if (loudness.mode != NormalizationMode.OFF) {
+        val nextTarget = when (loudness.targetLufs.roundToInt()) {
+          -14 -> -16.0
+          -16 -> -18.0
+          else -> -14.0
+        }
+        val targetLabel = when (loudness.targetLufs.roundToInt()) {
+          -14 -> "-14 LUFS (Streaming)"
+          -16 -> "-16 LUFS (Apple)"
+          -18 -> "-18 LUFS (EBU / RG)"
+          else -> "${loudness.targetLufs.roundToInt()} LUFS"
+        }
+        GroupDivider()
+        ListRow(
+          title = stringResource(R.string.audio_adv_loudness_target),
+          value = targetLabel,
+          onClick = { onSetTargetLufs(nextTarget) },
+          modifier = Modifier.testTag("loudness_target_row")
+        )
+      }
       if (loudness.mode != NormalizationMode.OFF && loudness.hasTrack) {
         GroupDivider()
         InfoRow(title = stringResource(R.string.audio_adv_loudness_current), value = loudnessReadout(loudness))
@@ -457,6 +566,44 @@ private fun LoudnessSection(loudness: LoudnessUi, onSetMode: (NormalizationMode)
     GroupFooter(
       stringResource(R.string.audio_adv_loudness_footer)
     )
+  }
+}
+
+/** Live Engineering Panel: active audio route & native sample rate, track format, underrun counters, and thermal status. */
+@Composable
+private fun LiveEngineeringSection(
+  capabilities: AudioCapabilities,
+  health: com.example.data.audio.AudioHealth
+) {
+  val routeValue = buildString {
+    append(capabilities.activeRouteName)
+    if (capabilities.sampleRateHz > 0) append(" · ").append(capabilities.sampleRateHz / 1000).append(" kHz")
+    capabilities.outputMaxRateHz?.takeIf { it > capabilities.sampleRateHz }?.let { maxHz ->
+      append(" (máx ").append(maxHz / 1000).append(" kHz)")
+    }
+  }
+  Section(stringResource(R.string.audio_adv_eng_pipeline)) {
+    InsetGroup(modifier = Modifier.testTag("live_engineering_panel")) {
+      InfoRow(
+        title = stringResource(R.string.audio_adv_eng_route),
+        value = routeValue
+      )
+      GroupDivider()
+      InfoRow(
+        title = stringResource(R.string.audio_adv_eng_track),
+        value = capabilities.trackFormat ?: "—"
+      )
+      GroupDivider()
+      InfoRow(
+        title = stringResource(R.string.audio_adv_eng_health),
+        value = "${health.underruns} · ${health.sinkErrors} · ${health.codecErrors}"
+      )
+      GroupDivider()
+      InfoRow(
+        title = stringResource(R.string.audio_adv_eng_thermal),
+        value = com.example.data.diagnostics.ThermalMonitor.label()
+      )
+    }
   }
 }
 
@@ -606,6 +753,165 @@ private fun ActiveAppsGroup(state: ActiveAppsState) {
               InfoRow(title = app.label, value = usageLabel(app.usage))
             }
           }
+        }
+      }
+    }
+  }
+}
+
+
+@Composable
+private fun AdvancedDspSection(
+  eqSettings: EqSettings,
+  reduced: Boolean,
+  onUpdateEq: ((EqSettings) -> EqSettings) -> Unit
+) {
+  Section(stringResource(R.string.audio_adv_section_dsp)) {
+    InsetGroup {
+      SwitchRow(
+        title = stringResource(R.string.audio_adv_equal_loudness),
+        subtitle = stringResource(R.string.audio_adv_equal_loudness_sub),
+        checked = eqSettings.equalLoudnessEnabled,
+        onCheckedChange = { on -> onUpdateEq { it.copy(equalLoudnessEnabled = on) } },
+        modifier = Modifier.testTag("switch_equal_loudness")
+      )
+      AnimatedVisibility(
+        visible = eqSettings.equalLoudnessEnabled,
+        enter = if (reduced) EnterTransition.None else expandVertically(Motion.gel()) + fadeIn(),
+        exit = if (reduced) ExitTransition.None else shrinkVertically(Motion.gelExit()) + fadeOut()
+      ) {
+        Column {
+          GroupDivider()
+          SliderRow(
+            label = stringResource(R.string.audio_adv_equal_loudness_level),
+            valueText = "${eqSettings.equalLoudnessLevelPhon.roundToInt()} phon",
+            value = eqSettings.equalLoudnessLevelPhon,
+            range = com.example.data.audio.dsp.EqualLoudnessDsp.MIN_PHON..com.example.data.audio.dsp.EqualLoudnessDsp.MAX_PHON,
+            defaultValue = 65f,
+            testTag = "slider_equal_loudness_phon",
+            onChange = { v -> onUpdateEq { it.copy(equalLoudnessLevelPhon = v.roundToInt().toFloat()) } }
+          )
+        }
+      }
+      GroupDivider()
+      SliderRow(
+        label = stringResource(R.string.audio_adv_compander),
+        valueText = "${(eqSettings.companderAmount * 100f).roundToInt()}%",
+        value = eqSettings.companderAmount,
+        range = 0f..1f,
+        defaultValue = 0f,
+        testTag = "slider_compander",
+        onChange = { v -> onUpdateEq { it.copy(companderAmount = (v * 20f).roundToInt() / 20f) } }
+      )
+      GroupDivider()
+      SliderRow(
+        label = stringResource(R.string.audio_adv_tube_warmth),
+        valueText = "${(eqSettings.tubeWarmth * 100f).roundToInt()}%",
+        value = eqSettings.tubeWarmth,
+        range = 0f..1f,
+        defaultValue = 0f,
+        testTag = "slider_tube_warmth",
+        onChange = { v -> onUpdateEq { it.copy(tubeWarmth = (v * 20f).roundToInt() / 20f) } }
+      )
+      GroupDivider()
+      SliderRow(
+        label = stringResource(R.string.audio_adv_sub_bass),
+        valueText = "${(eqSettings.subBassHarmonic * 100f).roundToInt()}%",
+        value = eqSettings.subBassHarmonic,
+        range = 0f..1f,
+        defaultValue = 0f,
+        testTag = "slider_sub_bass",
+        onChange = { v -> onUpdateEq { it.copy(subBassHarmonic = (v * 20f).roundToInt() / 20f) } }
+      )
+    }
+    GroupFooter(stringResource(R.string.audio_adv_dsp_footer))
+  }
+}
+
+@Composable
+private fun ConvolverSection(
+  eqSettings: EqSettings,
+  reduced: Boolean,
+  onUpdateEq: ((EqSettings) -> EqSettings) -> Unit
+) {
+  val context = androidx.compose.ui.platform.LocalContext.current
+  val scope = androidx.compose.runtime.rememberCoroutineScope()
+  val loadedFmt = stringResource(R.string.audio_adv_convolver_loaded)
+  val invalidMsg = stringResource(R.string.audio_adv_convolver_invalid)
+  val irPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+    androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+  ) { uri ->
+    if (uri != null) {
+      val appContext = context.applicationContext
+      scope.launch {
+        val savedPath = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+          runCatching {
+            var name = "impulse.wav"
+            appContext.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+              val idx = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+              if (idx != -1 && c.moveToFirst()) c.getString(idx)?.takeIf { it.isNotBlank() }?.let { name = it }
+            }
+            val bytes = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@runCatching null
+            if (com.example.data.audio.dsp.ConvolverDsp.parseWav(bytes, name) == null) return@runCatching null
+            val dir = java.io.File(appContext.filesDir, "convolver").apply { mkdirs() }
+            val safe = name.replace(Regex("[^A-Za-z0-9._-]"), "_").ifBlank { "impulse.wav" }
+            val dest = java.io.File(dir, safe)
+            dest.writeBytes(bytes)
+            dest.absolutePath to name
+          }.getOrNull()
+        }
+        if (savedPath != null) {
+          onUpdateEq { it.copy(convolverPath = savedPath.first, convolverEnabled = true) }
+          android.widget.Toast.makeText(appContext, String.format(loadedFmt, savedPath.second), android.widget.Toast.LENGTH_SHORT).show()
+        } else {
+          android.widget.Toast.makeText(appContext, invalidMsg, android.widget.Toast.LENGTH_SHORT).show()
+        }
+      }
+    }
+  }
+
+  val loadedName = eqSettings.convolverPath?.let { java.io.File(it).name }
+  Section(stringResource(R.string.audio_adv_section_convolver)) {
+    InsetGroup {
+      SwitchRow(
+        title = stringResource(R.string.audio_adv_convolver_on),
+        subtitle = loadedName ?: stringResource(R.string.audio_adv_convolver_none),
+        checked = eqSettings.convolverEnabled && loadedName != null,
+        onCheckedChange = { on ->
+          if (loadedName != null) onUpdateEq { it.copy(convolverEnabled = on) }
+          else irPicker.launch(arrayOf("audio/wav", "audio/x-wav", "application/octet-stream", "*/*"))
+        },
+        modifier = Modifier.testTag("switch_convolver")
+      )
+      GroupDivider()
+      ListRow(
+        title = stringResource(R.string.audio_adv_convolver_load),
+        onClick = { irPicker.launch(arrayOf("audio/wav", "audio/x-wav", "application/octet-stream", "*/*")) },
+        modifier = Modifier.testTag("btn_convolver_load")
+      )
+      AnimatedVisibility(
+        visible = loadedName != null,
+        enter = if (reduced) EnterTransition.None else expandVertically(Motion.gel()) + fadeIn(),
+        exit = if (reduced) ExitTransition.None else shrinkVertically(Motion.gelExit()) + fadeOut()
+      ) {
+        Column {
+          GroupDivider()
+          SliderRow(
+            label = stringResource(R.string.audio_adv_convolver_mix),
+            valueText = "${(eqSettings.convolverMix * 100f).roundToInt()}%",
+            value = eqSettings.convolverMix,
+            range = 0f..1f,
+            defaultValue = 1f,
+            testTag = "slider_convolver_mix",
+            onChange = { v -> onUpdateEq { it.copy(convolverMix = (v * 20f).roundToInt() / 20f) } }
+          )
+          GroupDivider()
+          ListRow(
+            title = stringResource(R.string.audio_adv_convolver_clear),
+            chevron = false,
+            onClick = { onUpdateEq { it.copy(convolverEnabled = false, convolverPath = null) } },
+            modifier = Modifier.testTag("btn_convolver_clear")
+          )
         }
       }
     }

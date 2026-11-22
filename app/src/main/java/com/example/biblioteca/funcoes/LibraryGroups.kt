@@ -36,6 +36,13 @@ data class GenreGroup(
   override val tracks: List<Track>
 ) : LibraryGroup
 
+data class FolderGroup(
+  override val key: String,
+  override val name: String,
+  val fullPath: String,
+  override val tracks: List<Track>
+) : LibraryGroup
+
 /**
  * Groups the songs of the library into albums, artists and genres. Pure, so the rules are tested on the
  * JVM. Lists are sorted by name the way the library sorts songs (accents and case ignored, a leading
@@ -95,6 +102,23 @@ object LibraryGroups {
       .groupBy { "genre:${key(it.genre)}" }
       .map { (k, list) ->
         GenreGroup(k, commonName(list.map { it.genre }), LibrarySort.sorted(list, SongOrder.ARTIST))
+      }
+      .let(::byName)
+
+  fun folders(
+    tracks: List<Track>,
+    folderOf: Map<String, String>,
+    rootLabel: String = "/"
+  ): List<FolderGroup> =
+    tracks.groupBy { folderOf[it.id]?.trim('/') ?: "" }
+      .map { (path, list) ->
+        val displayName = path.substringAfterLast('/').ifBlank { rootLabel }
+        FolderGroup(
+          key = "folder:$path",
+          name = displayName,
+          fullPath = path,
+          tracks = LibrarySort.sorted(list, SongOrder.TITLE)
+        )
       }
       .let(::byName)
 }

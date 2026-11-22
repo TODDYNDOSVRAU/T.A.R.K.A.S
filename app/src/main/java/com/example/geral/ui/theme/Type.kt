@@ -73,8 +73,8 @@ object AppText {
  * line heights are multiples of 6 so a block of text can land on the 12 dp rhythm.
  */
 object GridText {
-  /** A screen's or a sheet's title. */
-  val Title = style(24, 30, FontWeight.SemiBold, -0.02f, SpaceGrotesk)
+  /** A screen's or a sheet's title (Apple HIG Large Title scale). */
+  val Title = style(28, 34, FontWeight.Bold, -0.025f, SpaceGrotesk)
   /** Row titles, buttons, running text. */
   val Body = style(18, 24, FontWeight.Normal)
   /** Body with emphasis: buttons, the chosen item. */

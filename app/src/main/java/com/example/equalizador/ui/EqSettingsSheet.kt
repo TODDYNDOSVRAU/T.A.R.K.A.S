@@ -1,6 +1,8 @@
 package com.example.ui.screens.audio
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,8 +15,12 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
+import com.example.data.model.CrossfeedPreset
+import com.example.data.model.CrossfeedSettings
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Remove
@@ -92,18 +98,16 @@ internal fun EqSettingsSheet(
       GridSwitch(checked = settings.limiterEnabled)
     }
 
-    if (!spectrumAllowed) {
-      Row(modifier = Modifier.fillMaxWidth().heightIn(min = Grid.u48), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-          text = stringResource(R.string.audio_spectrum_permission),
-          style = EqType.Label,
-          color = colors.onSurfaceVariant,
-          modifier = Modifier.weight(1f)
-        )
-        Spacer(Modifier.width(Grid.u12))
-        TextAction(stringResource(R.string.audio_spectrum_show), onAllowSpectrum, modifier = Modifier.testTag("audio_allow_spectrum"))
-      }
-    }
+    CrossfeedSection(
+      crossfeed = settings.crossfeed,
+      enabled = settings.enabled,
+      onChange = { next -> onUpdateEq { it.copy(crossfeed = next) } }
+    )
+
+    RtaSection(
+      mode = settings.rtaMode,
+      onChange = { next -> onUpdateEq { it.copy(rtaMode = next) } }
+    )
 
     Box(
       modifier = Modifier
@@ -121,7 +125,7 @@ internal fun EqSettingsSheet(
 
 /** A tone control: name, minus, the knob, plus, and the value. The buttons are the alternative to turning the knob. */
 @Composable
-private fun ToneRow(label: String, db: Float, enabled: Boolean, tag: String, onChange: (Float) -> Unit) {
+internal fun ToneRow(label: String, db: Float, enabled: Boolean, tag: String, onChange: (Float) -> Unit) {
   val colors = MaterialTheme.colorScheme
   val range = EqSettings.TONE_RANGE_DB
   Row(modifier = Modifier.fillMaxWidth().height(Grid.u48), verticalAlignment = Alignment.CenterVertically) {
@@ -147,5 +151,139 @@ private fun ToneRow(label: String, db: Float, enabled: Boolean, tag: String, onC
       textAlign = TextAlign.Center,
       modifier = Modifier.weight(1f)
     )
+  }
+}
+
+/** Purist binaural crossfeed (BS2B / Chu Moy / Jan Meier / Custom) on the 48 dp T.A.L. grid. */
+@Composable
+internal fun CrossfeedSection(
+  crossfeed: CrossfeedSettings,
+  enabled: Boolean,
+  onChange: (CrossfeedSettings) -> Unit
+) {
+  val colors = MaterialTheme.colorScheme
+  Column(verticalArrangement = Arrangement.spacedBy(Grid.u6)) {
+    Box(modifier = Modifier.fillMaxWidth().height(Grid.u24), contentAlignment = Alignment.CenterStart) {
+      Text(stringResource(R.string.audio_crossfeed_title), style = EqType.LabelStrong, color = colors.onSurfaceVariant)
+    }
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(Grid.u48)
+        .horizontalScroll(rememberScrollState())
+        .selectableGroup()
+        .testTag("crossfeed_presets"),
+      horizontalArrangement = Arrangement.spacedBy(Grid.u6),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      CrossfeedPreset.entries.forEach { preset ->
+        val selected = crossfeed.preset == preset
+        Box(
+          modifier = Modifier
+            .height(Grid.u48)
+            .clip(Grid.r12)
+            .background(if (selected) colors.primary.copy(alpha = 0.14f) else colors.surfaceContainer)
+            .selectable(
+              selected = selected,
+              enabled = enabled,
+              role = Role.RadioButton,
+              onClick = { onChange(crossfeed.copy(preset = preset)) }
+            )
+            .padding(horizontal = Grid.u12)
+            .testTag("crossfeed_${preset.key}"),
+          contentAlignment = Alignment.Center
+        ) {
+          Text(
+            text = crossfeedPresetLabel(preset),
+            style = if (selected) EqType.LabelStrong else EqType.Label,
+            color = when {
+              !enabled -> colors.onSurface.copy(alpha = 0.38f)
+              selected -> colors.primary
+              else -> colors.onSurface
+            },
+            maxLines = 1
+          )
+        }
+      }
+    }
+    if (crossfeed.preset == CrossfeedPreset.CUSTOM) {
+      StepperRow(
+        label = stringResource(R.string.audio_crossfeed_cutoff),
+        value = formatHz(crossfeed.cutoffHz),
+        enabled = enabled,
+        onLess = { onChange(crossfeed.copy(cutoffHz = (crossfeed.cutoffHz - 50f).coerceIn(CrossfeedSettings.MIN_CUTOFF_HZ, CrossfeedSettings.MAX_CUTOFF_HZ))) },
+        onMore = { onChange(crossfeed.copy(cutoffHz = (crossfeed.cutoffHz + 50f).coerceIn(CrossfeedSettings.MIN_CUTOFF_HZ, CrossfeedSettings.MAX_CUTOFF_HZ))) },
+        onReset = { onChange(crossfeed.copy(cutoffHz = 700f)) },
+        edit = NumberEdit(
+          title = stringResource(R.string.audio_crossfeed_cutoff), unit = "Hz", value = crossfeed.cutoffHz,
+          min = CrossfeedSettings.MIN_CUTOFF_HZ, max = CrossfeedSettings.MAX_CUTOFF_HZ, step = 50f, decimals = 0, defaultValue = 700f,
+          onApply = { v -> onChange(crossfeed.copy(cutoffHz = v)) }
+        ),
+        tag = "crossfeed_cutoff"
+      )
+      StepperRow(
+        label = stringResource(R.string.audio_crossfeed_feed),
+        value = "${formatNumber(crossfeed.feedDb, 1)} dB",
+        enabled = enabled,
+        onLess = { onChange(crossfeed.copy(feedDb = (crossfeed.feedDb - 0.5f).coerceIn(CrossfeedSettings.MIN_FEED_DB, CrossfeedSettings.MAX_FEED_DB))) },
+        onMore = { onChange(crossfeed.copy(feedDb = (crossfeed.feedDb + 0.5f).coerceIn(CrossfeedSettings.MIN_FEED_DB, CrossfeedSettings.MAX_FEED_DB))) },
+        onReset = { onChange(crossfeed.copy(feedDb = 4.5f)) },
+        edit = NumberEdit(
+          title = stringResource(R.string.audio_crossfeed_feed), unit = "dB", value = crossfeed.feedDb,
+          min = CrossfeedSettings.MIN_FEED_DB, max = CrossfeedSettings.MAX_FEED_DB, step = 0.5f, decimals = 1, defaultValue = 4.5f,
+          onApply = { v -> onChange(crossfeed.copy(feedDb = v)) }
+        ),
+        tag = "crossfeed_feed"
+      )
+    }
+  }
+}
+
+/** Selects which internal DSP FFT tap (Post-EQ, Pre-EQ, Both, or Off) draws behind the EQ curve. */
+@Composable
+internal fun RtaSection(
+  mode: com.example.data.model.RtaMode,
+  onChange: (com.example.data.model.RtaMode) -> Unit
+) {
+  val colors = MaterialTheme.colorScheme
+  Column(verticalArrangement = Arrangement.spacedBy(Grid.u6)) {
+    Box(modifier = Modifier.fillMaxWidth().height(Grid.u24), contentAlignment = Alignment.CenterStart) {
+      Text(stringResource(R.string.audio_rta_title), style = EqType.LabelStrong, color = colors.onSurfaceVariant)
+    }
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(Grid.u48)
+        .horizontalScroll(rememberScrollState())
+        .selectableGroup()
+        .testTag("rta_modes"),
+      horizontalArrangement = Arrangement.spacedBy(Grid.u6),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      com.example.data.model.RtaMode.entries.forEach { option ->
+        val selected = mode == option
+        Box(
+          modifier = Modifier
+            .height(Grid.u48)
+            .clip(Grid.r12)
+            .background(if (selected) colors.primary.copy(alpha = 0.14f) else colors.surfaceContainer)
+            .selectable(
+              selected = selected,
+              role = Role.RadioButton,
+              onClick = { onChange(option) }
+            )
+            .padding(horizontal = Grid.u12)
+            .testTag("rta_${option.key}"),
+          contentAlignment = Alignment.Center
+        ) {
+          Text(
+            text = rtaModeLabel(option),
+            style = if (selected) EqType.LabelStrong else EqType.Label,
+            color = if (selected) colors.primary else colors.onSurface,
+            maxLines = 1
+          )
+        }
+      }
+    }
   }
 }

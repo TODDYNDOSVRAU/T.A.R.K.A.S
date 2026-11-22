@@ -276,6 +276,9 @@
     <string name="settings_surface_frosted_desc">Desfoca o que passa por trás</string>
     <string name="settings_surface_liquid_desc">Vidro que curva o fundo, usa mais a GPU</string>
     <string name="settings_surface_liquid_unsupported">Precisa do Android 13; aqui vira vidro fosco</string>
+    <string name="settings_surface_liquid_opacity">Intensidade</string>
+    <string name="settings_surface_liquid_transparent">0% Transparente</string>
+    <string name="settings_surface_liquid_opaque">100% Opaco</string>
 
     <!-- UpdateSettings.kt -->
     <string name="settings_update_header">Atualizações</string>
@@ -429,4 +432,8 @@
     <string name="widget_cd_next">Próxima</string>
     <string name="player_problem_failed">Esta faixa não toca. Tente de novo ou escolha outra.</string>
     <string name="player_problem_offline">Sem conexão. Confira a internet e tente de novo.</string>
+    <string name="lyrics_import_lrc">Importar .lrc</string>
+    <string name="player_ab_loop_off">A-B</string>
+    <string name="player_ab_loop_pending">A %1$s · Marcar B</string>
+    <string name="player_ab_loop_active">Loop %1$s – %2$s</string>
 </resources>

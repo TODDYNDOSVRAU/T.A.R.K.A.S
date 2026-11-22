@@ -188,8 +188,10 @@ fun MusicScreen(
 
   // ---- the page's parts, shared by the portrait and the landscape layouts ----
   // Two halves when the window is on its side or wide enough (a tablet upright), one column otherwise.
+  val widthClass = rememberWidthClass()
   val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE ||
-    rememberWidthClass().twoPane
+    widthClass.twoPane
+  val tabletSideLyrics = widthClass == com.example.ui.layout.WidthClass.EXPANDED && landscape && showLyrics && currentTrack != null
 
   val artworkPart: @Composable (Modifier, Dp) -> Unit = { m, fade ->
     Artwork(
@@ -221,21 +223,52 @@ fun MusicScreen(
       onCreatePlaylist = onCreatePlaylist,
       onSleepTimer = { showSleepTimer = true },
       onAbout = { track -> onLoadTrackDetails(track); showDetails = true },
-      onLyrics = { track -> onLoadLyrics(track); showLyrics = true }
+      onLyrics = { track -> onLoadLyrics(track); showLyrics = true },
+      onDownloadOffline = actions.onDownloadOffline
     )
     }
   }
   val progressPart: @Composable () -> Unit = {
-    ProgressRow(
-      currentTrack = currentTrack,
-      positionMs = currentPositionMs,
-      durationMs = durationMs,
-      isPlaying = isPlaying,
-      reduced = reduced,
-      waveform = waveform,
-      onScrubbing = { scrubbing = it },
-      onSeekTo = onSeekTo
-    )
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+      ProgressRow(
+        currentTrack = currentTrack,
+        positionMs = currentPositionMs,
+        durationMs = durationMs,
+        isPlaying = isPlaying,
+        reduced = reduced,
+        waveform = waveform,
+        onScrubbing = { scrubbing = it },
+        onSeekTo = onSeekTo
+      )
+      if (currentTrack != null) {
+        val loop = state.abLoop
+        val loopLabel = when {
+          loop.isActive -> androidx.compose.ui.res.stringResource(
+            com.example.R.string.player_ab_loop_active,
+            formatLoopTime(loop.startMs!!),
+            formatLoopTime(loop.endMs!!)
+          )
+          loop.isPendingB -> androidx.compose.ui.res.stringResource(
+            com.example.R.string.player_ab_loop_pending,
+            formatLoopTime(loop.startMs!!)
+          )
+          else -> androidx.compose.ui.res.stringResource(com.example.R.string.player_ab_loop_off)
+        }
+        androidx.compose.foundation.layout.Box(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = Grid.u6 / 2),
+          contentAlignment = Alignment.CenterEnd
+        ) {
+          com.example.ui.components.GlassChip(
+            label = loopLabel,
+            selected = loop.isActive || loop.isPendingB,
+            onClick = actions.onToggleAbLoop,
+            modifier = Modifier.testTag("player_ab_loop")
+          )
+        }
+      }
+    }
   }
   val transportPart: @Composable () -> Unit = {
     TransportRow(isPlaying, onPrevious = onPreviousTrack, onTogglePlayPause = onTogglePlayPause, onNext = onNextTrack)
@@ -315,13 +348,36 @@ fun MusicScreen(
           horizontalAlignment = Alignment.CenterHorizontally
         ) {
           CloseHandle(onClose = onClose, modifier = Modifier.revealWithPlayer())
-          Spacer(Modifier.weight(1f))
-          transportPart()
-          Spacer(Modifier.height(Grid.u12))
-          volumePart()
-          Spacer(Modifier.height(Grid.u12))
-          actionsPart()
-          Spacer(Modifier.weight(1f))
+          if (tabletSideLyrics && currentTrack != null) {
+            // Tablet expanded (>= 840 dp): inline side-by-side lyrics panel (Apple Music iPad style).
+            androidx.compose.foundation.layout.Box(
+              modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .clip(Grid.r12)
+            ) {
+              com.example.ui.components.LyricsPanelContent(
+                track = currentTrack,
+                state = lyrics,
+                currentPositionMs = currentPositionMs,
+                onSeek = onSeekTo,
+                onImportLrc = actions.onImportLyrics,
+                onCloseInline = { showLyrics = false }
+              )
+            }
+            Spacer(Modifier.height(Grid.u12))
+            transportPart()
+            Spacer(Modifier.height(Grid.u6))
+            actionsPart()
+          } else {
+            Spacer(Modifier.weight(1f))
+            transportPart()
+            Spacer(Modifier.height(Grid.u12))
+            volumePart()
+            Spacer(Modifier.height(Grid.u12))
+            actionsPart()
+            Spacer(Modifier.weight(1f))
+          }
         }
       }
     } else {
@@ -368,17 +424,27 @@ fun MusicScreen(
   }
 
   if (showLyrics && currentTrack != null) {
-    LyricsSheet(
-      track = currentTrack,
-      state = lyrics,
-      currentPositionMs = currentPositionMs,
-      onSeek = onSeekTo,
-      onDismiss = { showLyrics = false }
-    )
+    if (!tabletSideLyrics) {
+      LyricsSheet(
+        track = currentTrack,
+        state = lyrics,
+        currentPositionMs = currentPositionMs,
+        onSeek = onSeekTo,
+        onDismiss = { showLyrics = false },
+        onImportLrc = actions.onImportLyrics
+      )
+    }
     LaunchedEffect(currentTrack.id) { onLoadLyrics(currentTrack) }
   }
 
   if (showCuriosityDialog && activeCuriosity != null) {
     CuriosityDetailDialog(curiosity = activeCuriosity, onDismiss = { showCuriosityDialog = false })
   }
+}
+
+private fun formatLoopTime(ms: Long): String {
+  val totalSec = (ms / 1000L).coerceAtLeast(0L)
+  val m = totalSec / 60L
+  val s = totalSec % 60L
+  return "%d:%02d".format(m, s)
 }

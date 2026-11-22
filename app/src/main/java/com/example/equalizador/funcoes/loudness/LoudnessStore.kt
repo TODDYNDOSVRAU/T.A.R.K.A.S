@@ -23,6 +23,14 @@ class LoudnessStore(context: Context) {
       ?: NormalizationMode.AUTO
     set(value) = prefs.edit().putString(KEY_MODE, value.name).apply()
 
+  var targetLufs: Double
+    get() = prefs.getFloat(KEY_TARGET_LUFS, LoudnessNormalization.TARGET_LUFS.toFloat()).toDouble().coerceIn(-24.0, -9.0)
+    set(value) = prefs.edit().putFloat(KEY_TARGET_LUFS, value.coerceIn(-24.0, -9.0).toFloat()).apply()
+
+  var fallbackGainDb: Double
+    get() = prefs.getFloat(KEY_FALLBACK_DB, 0f).toDouble().coerceIn(-12.0, 0.0)
+    set(value) = prefs.edit().putFloat(KEY_FALLBACK_DB, value.coerceIn(-12.0, 0.0).toFloat()).apply()
+
   fun measured(trackId: String): Double? =
     prefs.getString(MEASURED_PREFIX + trackId, null)?.toDoubleOrNull()
 
@@ -32,6 +40,8 @@ class LoudnessStore(context: Context) {
 
   private companion object {
     const val KEY_MODE = "mode"
+    const val KEY_TARGET_LUFS = "target_lufs"
+    const val KEY_FALLBACK_DB = "fallback_db"
     /** The "v1" is the measuring method; a change to it would start a new prefix instead of mixing values. */
     const val MEASURED_PREFIX = "measured_v1_"
   }

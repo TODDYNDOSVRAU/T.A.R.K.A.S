@@ -1,5 +1,6 @@
 package com.example.data.audio.dsp
 
+import com.example.data.model.FilterSlope
 import com.example.data.model.FilterType
 import kotlin.math.PI
 import kotlin.math.cos
@@ -7,6 +8,7 @@ import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.math.tan
 
 /**
  * Normalised biquad coefficients (a0 = 1), from Robert Bristow-Johnson's "Audio EQ Cookbook".
@@ -100,8 +102,76 @@ class BiquadCoefficients(
           a1 = -2 * cosW
           a2 = 1 - alpha
         }
+        FilterType.NOTCH -> {
+          b0 = 1.0
+          b1 = -2 * cosW
+          b2 = 1.0
+          a0 = 1 + alpha
+          a1 = -2 * cosW
+          a2 = 1 - alpha
+        }
+        FilterType.BAND_PASS -> {
+          // Constant 0 dB peak gain at centre frequency (RBJ Audio EQ Cookbook).
+          b0 = alpha
+          b1 = 0.0
+          b2 = -alpha
+          a0 = 1 + alpha
+          a1 = -2 * cosW
+          a2 = 1 - alpha
+        }
+        FilterType.TILT_SHELF -> {
+          // Symmetric tilt shelf: +gainDb/2 at Nyquist, -gainDb/2 at DC, 0.00 dB at pivot freqHz.
+          val s = 2 * sqrt(a) * alpha
+          val scale = 1.0 / a // a = 10^(gainDb/40) -> multiplies overall gain by -gainDb/2 dB
+          b0 = scale * (a * ((a + 1) + (a - 1) * cosW + s))
+          b1 = scale * (-2 * a * ((a - 1) + (a + 1) * cosW))
+          b2 = scale * (a * ((a + 1) + (a - 1) * cosW - s))
+          a0 = (a + 1) - (a - 1) * cosW + s
+          a1 = 2 * ((a - 1) - (a + 1) * cosW)
+          a2 = (a + 1) - (a - 1) * cosW - s
+        }
       }
       return BiquadCoefficients(b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0)
+    }
+
+    /**
+     * Designs a 1st-order (6 dB/oct) or cascaded Butterworth (18, 24, 36, 48 dB/oct) High-Pass or
+     * Low-Pass filter. For 12 dB/oct, uses the standard 2nd-order biquad with the user's [q].
+     */
+    fun designSlope(
+      type: FilterType,
+      freqHz: Double,
+      q: Double,
+      slope: FilterSlope,
+      sampleRate: Double
+    ): List<BiquadCoefficients> {
+      if (!type.usesSlope || slope == FilterSlope.DB_12) {
+        return listOf(design(type, freqHz, 0.0, q, sampleRate))
+      }
+      val f = freqHz.coerceIn(10.0, sampleRate * 0.49)
+      val n = slope.order
+      val sections = ArrayList<BiquadCoefficients>((n + 1) / 2)
+      if (n % 2 == 1) {
+        // Exact bilinear 1st-order section (-3.01 dB at f, 6 dB/oct).
+        val k = tan(PI * f / sampleRate)
+        val a0 = 1.0 + k
+        val a1 = (k - 1.0) / a0
+        if (type == FilterType.LOW_PASS) {
+          val b = k / a0
+          sections += BiquadCoefficients(b, b, 0.0, a1, 0.0)
+        } else {
+          val b = 1.0 / a0
+          sections += BiquadCoefficients(b, -b, 0.0, a1, 0.0)
+        }
+      }
+      val pairs = n / 2
+      for (k in 0 until pairs) {
+        // Butterworth pole angles on the left half-plane.
+        val angle = (2 * k + 1) * PI / (2 * n)
+        val qSection = 1.0 / (2.0 * sin(angle))
+        sections += design(type, f, 0.0, qSection, sampleRate)
+      }
+      return sections
     }
   }
 }

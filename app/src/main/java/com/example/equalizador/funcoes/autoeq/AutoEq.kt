@@ -1,6 +1,7 @@
 package com.example.data.autoeq
 
 import android.content.Context
+import com.example.data.model.BandChannel
 import com.example.data.model.DeviceCorrection
 import com.example.data.model.EqBand
 import com.example.data.model.FilterType
@@ -46,35 +47,62 @@ object AutoEqParser {
   }.toList()
 
   // Preamp: -6.1 dB
+  // Channel: L
   // Filter 1: ON LSC Fc 105 Hz Gain 6.4 dB Q 0.70
   private val preampLine = Regex("""Preamp:\s*(-?[\d.]+)\s*dB""", RegexOption.IGNORE_CASE)
+  private val channelLine = Regex("""^\s*Channel:\s*(.+)$""", RegexOption.IGNORE_CASE)
   private val filterLine = Regex(
     """Filter\s+\d+:\s*(ON|OFF)\s+(\w+)\s+Fc\s+([\d.]+)\s*Hz(?:\s+Gain\s+(-?[\d.]+)\s*dB)?(?:\s+Q\s+([\d.]+))?""",
     RegexOption.IGNORE_CASE
   )
 
   fun parseParametric(text: String, entry: AutoEqEntry): DeviceCorrection? {
-    val preamp = preampLine.find(text)?.groupValues?.get(1)?.toFloatOrNull() ?: 0f
-    val bands = filterLine.findAll(text).mapNotNull { m ->
+    val preamp = preampLine.find(text)?.groupValues?.get(1)?.toFloatOrNull()?.coerceIn(-30f, 10f) ?: 0f
+    var activeChannel = BandChannel.STEREO
+    val bands = ArrayList<EqBand>()
+    for (rawLine in text.lineSequence()) {
+      val line = rawLine.trim()
+      if (line.isEmpty() || line.startsWith("#")) continue
+      channelLine.matchEntire(line)?.let { chMatch ->
+        val token = chMatch.groupValues[1].trim().lowercase()
+        activeChannel = when {
+          token == "l" || token == "left" -> BandChannel.LEFT
+          token == "r" || token == "right" -> BandChannel.RIGHT
+          else -> BandChannel.STEREO
+        }
+        continue
+      }
+      val m = filterLine.find(line) ?: continue
       val type = when (m.groupValues[2].uppercase()) {
         "PK", "PEQ" -> FilterType.PEAK
         "LSC", "LS", "LSQ" -> FilterType.LOW_SHELF
         "HSC", "HS", "HSQ" -> FilterType.HIGH_SHELF
         "HP", "HPQ" -> FilterType.HIGH_PASS
         "LP", "LPQ" -> FilterType.LOW_PASS
-        else -> return@mapNotNull null
+        "NO", "NOTCH" -> FilterType.NOTCH
+        "BP", "BANDPASS" -> FilterType.BAND_PASS
+        else -> continue
       }
-      EqBand(
-        freqHz = (m.groupValues[3].toFloatOrNull() ?: return@mapNotNull null).coerceIn(EqBand.MIN_FREQ, EqBand.MAX_FREQ),
+      val freq = m.groupValues[3].toFloatOrNull() ?: continue
+      bands += EqBand(
+        freqHz = freq.coerceIn(EqBand.MIN_FREQ, EqBand.MAX_FREQ),
         gainDb = (m.groupValues[4].toFloatOrNull() ?: 0f).coerceIn(-20f, 20f),
         q = (m.groupValues[5].toFloatOrNull() ?: 0.7f).coerceIn(EqBand.MIN_Q, EqBand.MAX_Q),
         type = type,
-        enabled = m.groupValues[1].equals("ON", ignoreCase = true)
+        enabled = m.groupValues[1].equals("ON", ignoreCase = true),
+        channel = activeChannel
       )
-    }.toList()
+    }
     if (bands.isEmpty()) return null
     return DeviceCorrection(name = entry.name, source = entry.source, rig = entry.rig, bands = bands, preampDb = preamp)
   }
+
+  /**
+   * Parses an arbitrary Equalizer APO / Squiglink / REW `.txt` file into a [DeviceCorrection]
+   * ready to preview and apply either as a headphone correction or as a user parametric preset.
+   */
+  fun parseApoText(text: String, name: String = "Importado"): DeviceCorrection? =
+    parseParametric(text, AutoEqEntry(name = name.ifBlank { "Importado" }, source = "Equalizer APO", rig = "", path = ""))
 
   /** Lowercase letters and digits only, so "hd650", "HD 650" and "HD-650" all match. */
   fun searchKey(s: String): String = s.lowercase().filter { it.isLetterOrDigit() }

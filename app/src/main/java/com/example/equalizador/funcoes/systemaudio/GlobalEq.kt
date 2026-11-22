@@ -57,6 +57,9 @@ object GlobalEq {
   /** On/off asked from outside the app's screens (the quick settings tile); the view model applies it. */
   val enabledRequests = kotlinx.coroutines.flow.MutableSharedFlow<Boolean>(extraBufferCapacity = 4)
 
+  /** True while this app's own player is actively playing (so session-0 Virtualizer avoids double-virtualizing it). */
+  val ownPlayerActive = MutableStateFlow(false)
+
   /** Whether a view model collects [enabledRequests]; otherwise the tile writes the preference itself. */
   @Volatile var appListening = false
 }

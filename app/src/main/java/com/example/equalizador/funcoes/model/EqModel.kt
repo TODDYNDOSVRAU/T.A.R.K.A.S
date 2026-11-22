@@ -9,13 +9,91 @@ enum class FilterType(val key: String, val label: String) {
   LOW_SHELF("low_shelf", "Prateleira grave"),
   HIGH_SHELF("high_shelf", "Prateleira aguda"),
   HIGH_PASS("high_pass", "Passa-alta"),
-  LOW_PASS("low_pass", "Passa-baixa");
+  LOW_PASS("low_pass", "Passa-baixa"),
+  NOTCH("notch", "Rejeita-faixa"),
+  BAND_PASS("band_pass", "Passa-faixa"),
+  TILT_SHELF("tilt_shelf", "Inclinação");
 
-  /** Passes cut everything past their frequency, so their gain control does nothing. */
-  val usesGain: Boolean get() = this == PEAK || this == LOW_SHELF || this == HIGH_SHELF
+  /** Passes and notch cut or isolate around their frequency, so their gain control does nothing. */
+  val usesGain: Boolean get() = this == PEAK || this == LOW_SHELF || this == HIGH_SHELF || this == TILT_SHELF
+  /** High-pass and low-pass support variable Butterworth cascade slopes (6..48 dB/oct). */
+  val usesSlope: Boolean get() = this == HIGH_PASS || this == LOW_PASS
 
   companion object {
     fun fromKey(key: String?): FilterType = entries.firstOrNull { it.key == key } ?: PEAK
+  }
+}
+
+/** Roll-off steepness for High-Pass and Low-Pass filters (Butterworth cascade order). */
+enum class FilterSlope(val dbPerOct: Int, val order: Int) {
+  DB_6(6, 1),
+  DB_12(12, 2),
+  DB_18(18, 3),
+  DB_24(24, 4),
+  DB_36(36, 6),
+  DB_48(48, 8);
+
+  companion object {
+    fun fromDb(db: Int): FilterSlope = entries.firstOrNull { it.dbPerOct == db } ?: DB_12
+  }
+}
+
+/** Which stereo or Mid/Side component a parametric band processes. */
+enum class BandChannel(val key: String) {
+  STEREO("both"),
+  LEFT("left"),
+  RIGHT("right"),
+  MID("mid"),
+  SIDE("side");
+
+  companion object {
+    fun fromKey(key: String?): BandChannel = entries.firstOrNull { it.key == key } ?: STEREO
+  }
+}
+
+/** Which signal tap(s) the internal 64-band FFT RTA displays behind the EQ curve. */
+enum class RtaMode(val key: String) {
+  POST("post"),
+  PRE("pre"),
+  BOTH("both"),
+  OFF("off");
+
+  companion object {
+    fun fromKey(key: String?): RtaMode = entries.firstOrNull { it.key == key } ?: POST
+  }
+}
+
+/** Standard Bauer Stereophonic-to-Binaural (BS2B) crossfeed presets plus a custom mode. */
+enum class CrossfeedPreset(val key: String, val cutoffHz: Float, val feedDb: Float) {
+  OFF("off", 700f, 4.5f),
+  BS2B_DEFAULT("bs2b", 700f, 4.5f),
+  BS2B_CMOY("cmoy", 700f, 6.0f),
+  BS2B_JMEIER("jmeier", 650f, 9.5f),
+  CUSTOM("custom", 700f, 4.5f);
+
+  companion object {
+    fun fromKey(key: String?): CrossfeedPreset = entries.firstOrNull { it.key == key } ?: OFF
+  }
+}
+
+/**
+ * Purist binaural crossfeed (~0 ms latency): blends low frequencies across ears to reduce headphone
+ * listening fatigue without adding room reverb.
+ */
+data class CrossfeedSettings(
+  val preset: CrossfeedPreset = CrossfeedPreset.OFF,
+  val cutoffHz: Float = 700f,
+  val feedDb: Float = 4.5f
+) {
+  val enabled: Boolean get() = preset != CrossfeedPreset.OFF
+  val effectiveCutoffHz: Float get() = if (preset == CrossfeedPreset.CUSTOM) cutoffHz.coerceIn(MIN_CUTOFF_HZ, MAX_CUTOFF_HZ) else preset.cutoffHz
+  val effectiveFeedDb: Float get() = if (preset == CrossfeedPreset.CUSTOM) feedDb.coerceIn(MIN_FEED_DB, MAX_FEED_DB) else preset.feedDb
+
+  companion object {
+    const val MIN_CUTOFF_HZ = 300f
+    const val MAX_CUTOFF_HZ = 2000f
+    const val MIN_FEED_DB = 1.0f
+    const val MAX_FEED_DB = 15.0f
   }
 }
 
@@ -25,7 +103,13 @@ data class EqBand(
   val gainDb: Float = 0f,
   val q: Float = DEFAULT_Q,
   val type: FilterType = FilterType.PEAK,
-  val enabled: Boolean = true
+  val enabled: Boolean = true,
+  val channel: BandChannel = BandChannel.STEREO,
+  val slope: FilterSlope = FilterSlope.DB_12,
+  /** Dynamic EQ maximum excursion in dB (-15..+15); 0 = static filter (zero dynamic CPU cost). */
+  val dynamicRangeDb: Float = 0f,
+  /** Dynamic EQ trigger threshold in dBFS (-48..0). */
+  val dynamicThresholdDb: Float = -18f
 ) {
   companion object {
     /** About 2/3 of an octave wide: neighbouring graphic bands meet without gaps or big overlaps. */
@@ -70,10 +154,31 @@ data class EqSettings(
   val stereoWidth: Float = 1f,
   val limiterEnabled: Boolean = true,
   val limiterCeilingDb: Float = 0f,
+  /** Limiter release time in milliseconds (20..500 ms). */
+  val limiterReleaseMs: Float = 120f,
+  /** Optional smooth tanh soft-clipper before final clamp to avoid harsh digital clipping. */
+  val limiterSoftClip: Boolean = false,
+  /** ISO 226:2003 equal-loudness contour compensation for low-volume listening. */
+  val equalLoudnessEnabled: Boolean = false,
+  val equalLoudnessLevelPhon: Float = 65f,
+  /** 3-band Linkwitz-Riley multiband compander amount (0 = off, 1 = full). */
+  val companderAmount: Float = 0f,
+  /** 2x oversampled Tube/Tape harmonic warmth (0 = off, 1 = full). */
+  val tubeWarmth: Float = 0f,
+  /** Psychoacoustic sub-bass harmonic generator (0 = off, 1 = full). */
+  val subBassHarmonic: Float = 0f,
+  /** Partitioned FFT impulse response convolver (.irs / .wav). */
+  val convolverEnabled: Boolean = false,
+  val convolverPath: String? = null,
+  val convolverMix: Float = 1f,
   /** Lowers the level by the curve's loudest boost, so boosting never pushes the music into the limiter. */
   val autoPreamp: Boolean = true,
   /** Android's hardware virtualizer, 0..1000. Only works where the device offers it. */
   val virtualizerStrength: Int = 0,
+  /** Purist binaural crossfeed (BS2B / Jan Meier / Chu Moy / Custom), ~0 ms latency. */
+  val crossfeed: CrossfeedSettings = CrossfeedSettings(),
+  /** Internal 64-band FFT RTA spectrum tap behind the EQ curve (no microphone permission required). */
+  val rtaMode: RtaMode = RtaMode.POST,
   /** Correction for the fone in use, applied before everything else. Null = none chosen. */
   val device: DeviceCorrection? = null,
   /** True when the bands are parametric (any number, with Q and type), false for the 10 graphic faders. */
@@ -234,6 +339,14 @@ object EqPresets {
     .put("q", b.q.toDouble())
     .put("t", b.type.key)
     .put("on", b.enabled)
+    .apply { if (b.channel != BandChannel.STEREO) put("ch", b.channel.key) }
+    .apply { if (b.slope != FilterSlope.DB_12) put("sl", b.slope.dbPerOct) }
+    .apply {
+      if (kotlin.math.abs(b.dynamicRangeDb) >= 0.05f) {
+        put("dr", b.dynamicRangeDb.toDouble())
+        put("dt", b.dynamicThresholdDb.toDouble())
+      }
+    }
 
   /** [maxGainDb]: the user's bands stop at ±15 dB; fone corrections may need up to ±20 dB. */
   fun bandFromJson(o: JSONObject, maxGainDb: Float = EqBand.MAX_GAIN): EqBand = EqBand(
@@ -241,7 +354,11 @@ object EqPresets {
     gainDb = o.finiteDouble("g", 0.0).toFloat().coerceIn(-maxGainDb, maxGainDb),
     q = o.finiteDouble("q", EqBand.DEFAULT_Q.toDouble()).toFloat().coerceIn(EqBand.MIN_Q, EqBand.MAX_Q),
     type = FilterType.fromKey(o.optString("t")),
-    enabled = o.optBoolean("on", true)
+    enabled = o.optBoolean("on", true),
+    channel = BandChannel.fromKey(o.optString("ch", BandChannel.STEREO.key)),
+    slope = FilterSlope.fromDb(o.optInt("sl", FilterSlope.DB_12.dbPerOct)),
+    dynamicRangeDb = o.finiteDouble("dr", 0.0).toFloat().coerceIn(-EqBand.MAX_GAIN, EqBand.MAX_GAIN),
+    dynamicThresholdDb = o.finiteDouble("dt", -18.0).toFloat().coerceIn(-48f, 0f)
   )
 
   fun settingsToJson(s: EqSettings): JSONObject = JSONObject()
@@ -256,8 +373,38 @@ object EqPresets {
     .put("width", s.stereoWidth.toDouble())
     .put("limiter", s.limiterEnabled)
     .put("ceiling", s.limiterCeilingDb.toDouble())
+    .apply { if (kotlin.math.abs(s.limiterReleaseMs - 120f) >= 0.5f) put("limRel", s.limiterReleaseMs.toDouble()) }
+    .apply { if (s.limiterSoftClip) put("limSoft", true) }
+    .apply {
+      if (s.equalLoudnessEnabled) {
+        put("eqLoud", true)
+        put("eqPhon", s.equalLoudnessLevelPhon.toDouble())
+      }
+    }
+    .apply { if (s.companderAmount > 0.005f) put("comp", s.companderAmount.toDouble()) }
+    .apply { if (s.tubeWarmth > 0.005f) put("tube", s.tubeWarmth.toDouble()) }
+    .apply { if (s.subBassHarmonic > 0.005f) put("subH", s.subBassHarmonic.toDouble()) }
+    .apply {
+      if (s.convolverEnabled || !s.convolverPath.isNullOrBlank()) {
+        put("convOn", s.convolverEnabled)
+        s.convolverPath?.let { put("convPath", it) }
+        put("convMix", s.convolverMix.toDouble())
+      }
+    }
     .put("autoPre", s.autoPreamp)
     .put("virt", s.virtualizerStrength)
+    .apply {
+      if (s.crossfeed.enabled) {
+        put(
+          "xf",
+          JSONObject()
+            .put("p", s.crossfeed.preset.key)
+            .put("fc", s.crossfeed.cutoffHz.toDouble())
+            .put("fd", s.crossfeed.feedDb.toDouble())
+        )
+      }
+    }
+    .apply { if (s.rtaMode != RtaMode.POST) put("rta", s.rtaMode.key) }
     .apply { s.device?.let { put("device", deviceToJson(it)) } }
     .put("parametric", s.parametric)
     .put("paramBands", JSONArray().apply { s.bandsOf(true).forEach { put(bandToJson(it)) } })
@@ -309,8 +456,26 @@ object EqPresets {
       stereoWidth = o.finiteDouble("width", 1.0).toFloat().coerceIn(0f, 2f),
       limiterEnabled = o.optBoolean("limiter", true),
       limiterCeilingDb = o.finiteDouble("ceiling", 0.0).toFloat().coerceIn(-12f, 0f),
+      limiterReleaseMs = o.finiteDouble("limRel", 120.0).toFloat().coerceIn(20f, 500f),
+      limiterSoftClip = o.optBoolean("limSoft", false),
+      equalLoudnessEnabled = o.optBoolean("eqLoud", false),
+      equalLoudnessLevelPhon = o.finiteDouble("eqPhon", 65.0).toFloat().coerceIn(40f, 85f),
+      companderAmount = o.finiteDouble("comp", 0.0).toFloat().coerceIn(0f, 1f),
+      tubeWarmth = o.finiteDouble("tube", 0.0).toFloat().coerceIn(0f, 1f),
+      subBassHarmonic = o.finiteDouble("subH", 0.0).toFloat().coerceIn(0f, 1f),
+      convolverEnabled = o.optBoolean("convOn", false),
+      convolverPath = o.optString("convPath", "").takeIf { it.isNotBlank() },
+      convolverMix = o.finiteDouble("convMix", 1.0).toFloat().coerceIn(0f, 1f),
       autoPreamp = o.optBoolean("autoPre", true),
       virtualizerStrength = o.optInt("virt", 0).coerceIn(0, 1000),
+      crossfeed = o.optJSONObject("xf")?.let { xf ->
+        CrossfeedSettings(
+          preset = CrossfeedPreset.fromKey(xf.optString("p")),
+          cutoffHz = xf.finiteDouble("fc", 700.0).toFloat().coerceIn(CrossfeedSettings.MIN_CUTOFF_HZ, CrossfeedSettings.MAX_CUTOFF_HZ),
+          feedDb = xf.finiteDouble("fd", 4.5).toFloat().coerceIn(CrossfeedSettings.MIN_FEED_DB, CrossfeedSettings.MAX_FEED_DB)
+        )
+      } ?: CrossfeedSettings(),
+      rtaMode = RtaMode.fromKey(o.optString("rta", RtaMode.POST.key)),
       device = deviceFromJson(o.optJSONObject("device"))
     )
   }

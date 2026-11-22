@@ -57,7 +57,8 @@ fun LyricsSheet(
   state: LyricsState,
   currentPositionMs: () -> Long,
   onSeek: (Long) -> Unit,
-  onDismiss: () -> Unit
+  onDismiss: () -> Unit,
+  onImportLrc: ((Track, String) -> Unit)? = null
 ) {
   ModalBottomSheet(
     sheetMaxWidth = Grid.u384 * 2,
@@ -67,8 +68,46 @@ fun LyricsSheet(
     shape = RoundedCornerShape(topStart = Grid.u24, topEnd = Grid.u24),
     dragHandle = { SheetHandle() }
   ) {
-    Column(modifier = Modifier.fillMaxSize().testTag("lyrics_sheet")) {
-      Column(modifier = Modifier.fillMaxWidth().padding(horizontal = Grid.margin, vertical = Grid.u6)) {
+    LyricsPanelContent(
+      track = track,
+      state = state,
+      currentPositionMs = currentPositionMs,
+      onSeek = onSeek,
+      onImportLrc = onImportLrc
+    )
+  }
+}
+
+/**
+ * Reusable lyrics panel used both inside [LyricsSheet] (smartphones/portrait) and inline in the
+ * right pane of the full player on expanded tablets (>= 840 dp).
+ */
+@Composable
+fun LyricsPanelContent(
+  track: Track,
+  state: LyricsState,
+  currentPositionMs: () -> Long,
+  onSeek: (Long) -> Unit,
+  onImportLrc: ((Track, String) -> Unit)? = null,
+  onCloseInline: (() -> Unit)? = null,
+  modifier: Modifier = Modifier
+) {
+  val context = androidx.compose.ui.platform.LocalContext.current
+  val lrcPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+    androidx.activity.result.contract.ActivityResultContracts.OpenDocument()
+  ) { uri ->
+    if (uri == null || onImportLrc == null) return@rememberLauncherForActivityResult
+    val raw = runCatching {
+      context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+    }.getOrNull()
+    if (!raw.isNullOrBlank()) onImportLrc(track, raw)
+  }
+  Column(modifier = modifier.fillMaxSize().testTag("lyrics_sheet")) {
+    androidx.compose.foundation.layout.Row(
+      modifier = Modifier.fillMaxWidth().padding(horizontal = Grid.margin, vertical = Grid.u6),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Column(modifier = Modifier.weight(1f)) {
         Text(
           stringResource(R.string.lyrics_title),
           style = GridText.Small,
@@ -78,18 +117,31 @@ fun LyricsSheet(
         Text(track.title, style = GridText.BodyStrong, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(track.artist, style = GridText.Small, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
       }
-      Hairline(Modifier.padding(vertical = Grid.u6))
-      val lyrics = state.lyrics
-      when {
-        state.loading || state.trackId != track.id -> Centered {
-          CircularProgressIndicator(
-            modifier = Modifier.semantics { stateDescription = "" }
-          )
+      if (onImportLrc != null) {
+        androidx.compose.material3.TextButton(
+          onClick = { lrcPicker.launch(arrayOf("text/*", "application/octet-stream")) },
+          modifier = Modifier.testTag("lyrics_import_btn")
+        ) {
+          Text(stringResource(R.string.lyrics_import_lrc), style = GridText.Small)
         }
-        lyrics != null -> LyricsList(lyrics, currentPositionMs, onSeek)
-        state.notOnDevice -> Message(stringResource(R.string.lyrics_not_on_device))
-        else -> Message(stringResource(R.string.lyrics_none))
       }
+      if (onCloseInline != null) {
+        androidx.compose.material3.TextButton(onClick = onCloseInline) {
+          Text("×", style = GridText.BodyStrong)
+        }
+      }
+    }
+    Hairline(Modifier.padding(vertical = Grid.u6))
+    val lyrics = state.lyrics
+    when {
+      state.loading || state.trackId != track.id -> Centered {
+        CircularProgressIndicator(
+          modifier = Modifier.semantics { stateDescription = "" }
+        )
+      }
+      lyrics != null -> LyricsList(lyrics, currentPositionMs, onSeek)
+      state.notOnDevice -> Message(stringResource(R.string.lyrics_not_on_device))
+      else -> Message(stringResource(R.string.lyrics_none))
     }
   }
 }

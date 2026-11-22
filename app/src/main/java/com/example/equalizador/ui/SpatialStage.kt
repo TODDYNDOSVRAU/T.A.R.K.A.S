@@ -6,8 +6,10 @@ import android.graphics.Path
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -75,7 +77,11 @@ internal fun SpatialStage(
   /** Audio channel (L R C LFE Ls Rs SBL SBR = 0..7) under test, drawn lit; null when none. */
   activeChannel: Int? = null,
   /** Tap on a drawn speaker, with its audio channel. Null: the stage is only a picture. */
-  onSpeakerTap: ((Int) -> Unit)? = null
+  onSpeakerTap: ((Int) -> Unit)? = null,
+  /** Live 3D drag delta (dx, dy) in dp; lets the listener widen/rotate the stage directly. */
+  onStageDrag: ((dxDp: Float, dyDp: Float) -> Unit)? = null,
+  onStageDragEnd: (() -> Unit)? = null,
+  onStageReset: (() -> Unit)? = null
 ) {
   val colors = MaterialTheme.colorScheme
   val scene = remember { StageScene() }
@@ -86,6 +92,7 @@ internal fun SpatialStage(
   val owner = LocalLifecycleOwner.current
 
   // Frames only while the screen is RESUMED and the stage is active or transitioning.
+  // Thermal-adaptive pacing: ~60 fps normal, ~30 fps when device is thermally warm.
   LaunchedEffect(owner) {
     owner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
       var last = 0L
@@ -96,12 +103,15 @@ internal fun SpatialStage(
           delay(32L)
           continue
         }
+        val minStepNs = if (com.example.data.diagnostics.ThermalMonitor.isWarm) 33_000_000L else 16_000_000L
         androidx.compose.runtime.withFrameNanos { now ->
-          val dt = if (last == 0L) 0f else min(0.05f, (now - last) / 1_000_000_000f)
-          last = now
-          val (curU, curM, curOn) = target
-          anim.step(dt, curU, curM, curOn)
-          tick.longValue = now
+          if (last == 0L || now - last >= minStepNs) {
+            val dt = if (last == 0L) 0f else min(0.05f, (now - last) / 1_000_000_000f)
+            last = now
+            val (curU, curM, curOn) = target
+            anim.step(dt, curU, curM, curOn)
+            tick.longValue = now
+          }
         }
       }
     }
@@ -126,6 +136,10 @@ internal fun SpatialStage(
   val description = stringResource(R.string.audio_spatial_stage_desc, spatialStageCaption(enabled, preset))
   val testActionLabel = stringResource(R.string.audio_spatial_test_speaker)
   val tapHandler by rememberUpdatedState(onSpeakerTap)
+  val dragHandler by rememberUpdatedState(onStageDrag)
+  val dragEndHandler by rememberUpdatedState(onStageDragEnd)
+  val resetHandler by rememberUpdatedState(onStageReset)
+  val isEnabled by rememberUpdatedState(enabled)
   val speakersTappable = onSpeakerTap != null && enabled && preset.virtual51
   val activeSpeaker = if (activeChannel == null) -1 else STAGE_TO_AUDIO_CHANNEL.indexOf(activeChannel)
 
@@ -147,28 +161,72 @@ internal fun SpatialStage(
         }
       }
       .pointerInput(Unit) {
-        // One detector for both: two stacked ones let the double-tap reset swallow the speaker tap.
-        detectTapGestures(
-          onDoubleTap = {
-            anim.held = false
-            anim.drag = 0f
-            tick.longValue = System.nanoTime()
-          },
-          onTap = { pos ->
-            val cb = tapHandler ?: return@detectTapGestures
-            val scale = size.height / STAGE_H
-            val hit = scene.hitTest(pos.x / scale, pos.y / scale, 24f * density / scale)
-            if (hit >= 0) cb(STAGE_TO_AUDIO_CHANNEL[hit])
+        // Unified gesture handler: captures 3D drag inside the stage before parent LazyColumn or swipeTabs
+        // can steal the pointer, while preserving single-tap speaker test and double-tap recenter.
+        var lastTapTime = 0L
+        var lastTapPos = Offset.Zero
+        val slopPx = viewConfiguration.touchSlop
+        val doubleTapTimeout = viewConfiguration.doubleTapTimeoutMillis
+        awaitEachGesture {
+          val down = awaitFirstDown(requireUnconsumed = false)
+          val startPos = down.position
+          var totalDx = 0f
+          var totalDy = 0f
+          var dragging = false
+          val pointerId = down.id
+
+          while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+            if (!change.pressed) {
+              if (dragging) {
+                change.consume()
+                anim.held = false
+                dragEndHandler?.invoke()
+              } else {
+                val now = System.currentTimeMillis()
+                val distSq = (startPos - lastTapPos).getDistanceSquared()
+                if (now - lastTapTime <= doubleTapTimeout && distSq < (slopPx * 4f) * (slopPx * 4f)) {
+                  lastTapTime = 0L
+                  anim.held = false
+                  anim.drag = 0f
+                  resetHandler?.invoke()
+                  tick.longValue = System.nanoTime()
+                } else {
+                  lastTapTime = now
+                  lastTapPos = startPos
+                  val cb = tapHandler
+                  if (cb != null) {
+                    val scale = size.height / STAGE_H
+                    val hit = scene.hitTest(startPos.x / scale, startPos.y / scale, 24f * density / scale)
+                    if (hit >= 0) cb(STAGE_TO_AUDIO_CHANNEL[hit])
+                  }
+                }
+              }
+              break
+            }
+
+            val delta = change.positionChange()
+            if (delta != Offset.Zero) {
+              totalDx += delta.x
+              totalDy += delta.y
+              if (!dragging && (totalDx * totalDx + totalDy * totalDy) > slopPx * slopPx) {
+                dragging = true
+                anim.held = true
+              }
+              if (dragging) {
+                change.consume()
+                val dxDp = delta.x / density
+                val dyDp = delta.y / density
+                anim.dragTo(anim.drag + dxDp * 0.014f)
+                if (isEnabled) {
+                  dragHandler?.invoke(dxDp, dyDp)
+                }
+                tick.longValue = System.nanoTime()
+              }
+            }
           }
-        )
-      }
-      .pointerInput(Unit) {
-        // Decorative orbit: the head turns with the finger and springs back when it lifts.
-        detectHorizontalDragGestures(
-          onDragStart = { anim.held = true },
-          onDragEnd = { anim.held = false },
-          onDragCancel = { anim.held = false }
-        ) { _, amount -> anim.dragTo(anim.drag + amount / density * 0.012f) }
+        }
       }
   ) {
     tick.longValue // the only state read: redraws every frame without recomposing

@@ -28,6 +28,7 @@ class CuriositySpeechManager(
 
   private var tts: TextToSpeech? = null
   private var isInitialized = false
+  private var pendingAfterInit: (() -> Unit)? = null
 
   private val _isSpeaking = MutableStateFlow(false)
   val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
@@ -75,11 +76,14 @@ class CuriositySpeechManager(
     }
   }
 
-  init {
-    try {
-      tts = TextToSpeech(context.applicationContext, this)
+  /** Lazily binds the Android TextToSpeech IPC service on first actual speech request (keeps cold start fast). */
+  private fun ensureTts(): TextToSpeech? {
+    tts?.let { return it }
+    return try {
+      TextToSpeech(context.applicationContext, this).also { tts = it }
     } catch (e: Exception) {
       Log.e(TAG, "Failed to instantiate TextToSpeech", e)
+      null
     }
   }
 
@@ -123,6 +127,9 @@ class CuriositySpeechManager(
         })
       }
       isInitialized = true
+      val queued = pendingAfterInit
+      pendingAfterInit = null
+      queued?.invoke()
     } else {
       Log.w(TAG, "TextToSpeech init failed with status: $status")
       isInitialized = false
@@ -170,6 +177,7 @@ class CuriositySpeechManager(
     _currentSpokenText.value = spokenText
     _speechStage.value = if (isIntro) "intro" else "outro"
 
+    if (tts == null) ensureTts()
     if (!isInitialized || tts == null) {
       Log.w(TAG, "TTS not initialized, skipping vocalization")
       _currentSpokenText.value = null
@@ -214,6 +222,11 @@ class CuriositySpeechManager(
     _speechStage.value = "test"
 
     if (!isInitialized || tts == null) {
+      if (tts == null) {
+        pendingAfterInit = { testVoiceSample(config, onDone) }
+        ensureTts()
+        return
+      }
       _currentSpokenText.value = null
       _speechStage.value = null
       onDone()

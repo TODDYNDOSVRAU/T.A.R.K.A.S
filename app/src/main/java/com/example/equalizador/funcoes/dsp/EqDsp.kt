@@ -1,7 +1,10 @@
 package com.example.data.audio.dsp
 
+import com.example.data.model.BandChannel
+import com.example.data.model.CrossfeedSettings
 import com.example.data.model.EqBand
 import com.example.data.model.EqSettings
+import com.example.data.model.FilterSlope
 import com.example.data.model.FilterType
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.abs
@@ -25,23 +28,61 @@ import kotlin.math.pow
  */
 class EqDsp {
 
+  private class DynamicSpec(
+    val slotIndex: Int,
+    val type: FilterType,
+    val freqHz: Double,
+    val baseGainDb: Double,
+    val q: Double,
+    val rangeDb: Double,
+    val thresholdDb: Double,
+    val detector: BiquadCoefficients
+  )
+
   /** Everything the audio thread needs for one buffer, computed ahead of time. */
   private class Plan(
     val sampleRate: Int,
     val enabled: Boolean,
     /** b0, b1, b2, a1, a2 per slot. */
     val coefs: DoubleArray,
+    /** Per-slot channel mask: 1=L, 2=R, 3=Stereo, 4=Mid, 8=Side. */
+    val channelMasks: IntArray,
+    /** True when the slot is non-identity or dynamic; settled identity slots are skipped in the hot loop. */
+    val slotActive: BooleanArray,
+    val hasMidSide: Boolean,
+    val dynamicSpecs: List<DynamicSpec>,
     val preampGain: Float,
     val leftGain: Float,
     val rightGain: Float,
     val width: Float,
+    val crossfeed: CrossfeedSettings,
     val limiterEnabled: Boolean,
     val ceiling: Float,
+    val releaseCoef: Float = releaseCoefFor(DEFAULT_RATE, 120f),
+    val limiterSoftClip: Boolean = false,
+    val companderAmount: Float = 0f,
+    val tubeWarmth: Float = 0f,
+    val subBassHarmonic: Float = 0f,
+    val convolverEnabled: Boolean = false,
+    val convolverMix: Float = 1f,
+    val convolverPath: String? = null,
     /** Gain on the untouched signal, so a comparison without the equalizer plays at the same volume; 1 = none. */
     val dryGain: Float = 1f
   ) {
     val slots: Int get() = coefs.size / 5
   }
+
+  /** Internal 64-band FFT RTA tapped directly from this float pipeline (zero permissions required). */
+  val rtaAnalyzer = RtaAnalyzer()
+
+  @Volatile private var soloCoefs: BiquadCoefficients? = null
+  private var soloState = DoubleArray(4)
+  private var soloMix = 0f
+
+  // Dynamic EQ per-band sidechain detector states (allocated only when dynamic bands exist).
+  private var dynDetState = DoubleArray(0)
+  private var dynEnv = DoubleArray(0)
+  private var dynTarget = DoubleArray(0)
 
   @Volatile private var settings: EqSettings = EqSettings()
   @Volatile private var sampleRate = DEFAULT_RATE
@@ -70,6 +111,11 @@ class EqDsp {
   private var dryGain = 1f
 
   private var smoothCoef = smoothCoefFor(DEFAULT_RATE)
+  private val crossfeedDsp = CrossfeedDsp()
+  private var lastCrossfeed: CrossfeedSettings? = null
+  private val companderDsp = MultibandCompanderDsp()
+  private val harmonicsDsp = AnalogHarmonicsDsp()
+  val convolverDsp = ConvolverDsp()
 
   /** The input of the current frame, for the on/off crossfade. */
   private var dryFrame = FloatArray(2)
@@ -94,8 +140,31 @@ class EqDsp {
     releaseCoef = releaseCoefFor(sampleRate)
     lookahead = lookaheadFor(sampleRate)
     this.sampleRate = sampleRate
+    rtaAnalyzer.sampleRate = sampleRate
+    rtaAnalyzer.clear()
+    crossfeedDsp.configure(sampleRate)
+    lastCrossfeed = null
+    companderDsp.configure(sampleRate, this.channels)
+    harmonicsDsp.configure(sampleRate, this.channels)
+    convolverDsp.configure(sampleRate)
     plan = buildPlan(settings, sampleRate, spatialStage, reference)
     reset()
+  }
+
+  /**
+   * Press-and-hold band audition (Solo): isolates [band]'s centre frequency and Q with a narrow
+   * band-pass filter so the listener can hunt resonances and sibilance. Pass null to exit Solo.
+   */
+  fun setSoloBand(band: EqBand?) {
+    soloCoefs = band?.let {
+      BiquadCoefficients.design(
+        FilterType.BAND_PASS,
+        it.freqHz.toDouble(),
+        0.0,
+        it.q.coerceIn(0.7f, 12f).toDouble(),
+        sampleRate.toDouble()
+      )
+    }
   }
 
   fun update(newSettings: EqSettings) {
@@ -144,6 +213,16 @@ class EqDsp {
     width = p.width
     mix = if (p.enabled) 1f else 0f
     dryGain = p.dryGain
+    crossfeedDsp.update(if (p.enabled) p.crossfeed else CrossfeedSettings())
+    lastCrossfeed = if (p.enabled) p.crossfeed else CrossfeedSettings()
+    crossfeedDsp.reset()
+    companderDsp.reset()
+    harmonicsDsp.reset()
+    convolverDsp.reset()
+    if (soloState.size == ch * 2) soloState.fill(0.0) else soloState = DoubleArray(ch * 2)
+    soloMix = 0f
+    dynDetState.fill(0.0)
+    dynEnv.fill(0.0)
   }
 
   /** Processes [frames] interleaved frames of [buffer] in place. Samples are in -1..1. */
@@ -154,10 +233,45 @@ class EqDsp {
       p = buildPlan(settings, sampleRate, spatialStage, reference)
       plan = p
     }
-    if (!p.enabled && mix <= 0f && dryGain == 1f && p.dryGain == 1f) return
+    val targetXf = if (p.enabled) p.crossfeed else CrossfeedSettings()
+    if (targetXf !== lastCrossfeed) {
+      crossfeedDsp.update(targetXf)
+      lastCrossfeed = targetXf
+    }
+    companderDsp.update(if (p.enabled) p.companderAmount else 0f)
+    harmonicsDsp.update(if (p.enabled) p.tubeWarmth else 0f, if (p.enabled) p.subBassHarmonic else 0f)
+    convolverDsp.update(p.enabled && p.convolverEnabled, p.convolverMix, p.convolverPath)
+    val solo = soloCoefs
+    val rtaOn = rtaAnalyzer.enabled
+    if (!p.enabled && mix <= 0f && dryGain == 1f && p.dryGain == 1f && !crossfeedDsp.isProcessing &&
+      !companderDsp.isProcessing && !harmonicsDsp.isProcessing && !convolverDsp.isProcessing &&
+      solo == null && soloMix <= 0f
+    ) {
+      if (rtaOn) {
+        val ch = channels
+        for (frame in 0 until frames) {
+          val base = frame * ch
+          val m = if (ch == 2) (buffer[base] + buffer[base + 1]) * 0.5f else buffer[base]
+          rtaAnalyzer.pushPre(m)
+          rtaAnalyzer.pushPostAndAdvance(m)
+        }
+      }
+      return
+    }
     val ch = channels
     val nf = p.slots
-    val target = p.coefs
+    val target: DoubleArray
+    if (p.dynamicSpecs.isEmpty()) {
+      target = p.coefs
+    } else {
+      if (dynTarget.size != p.coefs.size) dynTarget = p.coefs.copyOf() else p.coefs.copyInto(dynTarget)
+      updateDynamicTargets(buffer, frames, ch, p.dynamicSpecs, dynTarget)
+      target = dynTarget
+    }
+    val masks = p.channelMasks
+    val active = p.slotActive
+    val hasMidSide = p.hasMidSide && ch == 2
+    if (soloState.size != ch * 2) soloState = DoubleArray(ch * 2)
 
     if (currentSlots != nf || state.size != nf * ch * 2) {
       // A band was added or removed: the layout changed, so start from the plan as it is.
@@ -205,9 +319,23 @@ class EqDsp {
         val raw = buffer[base + c]
         val dry = if (raw.isFinite()) raw else 0f
         dryFrame[c] = dry * dryGain
-        var x = (dry * preamp).toDouble()
+        buffer[base + c] = dry
+      }
+      if (rtaOn) {
+        val mPre = if (ch == 2) (buffer[base] + buffer[base + 1]) * 0.5f else buffer[base]
+        rtaAnalyzer.pushPre(mPre)
+      }
+      if (ch == 2 && crossfeedDsp.isProcessing) {
+        crossfeedDsp.processFrame(buffer, base)
+      }
+      for (c in 0 until ch) {
+        val chBit = if (ch == 2) (1 shl c) else 3
+        var x = (buffer[base + c] * preamp).toDouble()
         val s = c * 2
         for (f in 0 until nf) {
+          if (!gliding && !active[f]) continue
+          val mask = masks[f]
+          if (mask >= MASK_MID || (mask and chBit) == 0) continue
           val o = f * 5
           val idx = f * ch * 2 + s
           // Transposed direct form II
@@ -224,6 +352,31 @@ class EqDsp {
         }
         buffer[base + c] = x.toFloat()
       }
+      if (hasMidSide) {
+        var mid = (buffer[base].toDouble() + buffer[base + 1].toDouble()) * 0.5
+        var side = (buffer[base].toDouble() - buffer[base + 1].toDouble()) * 0.5
+        for (f in 0 until nf) {
+          if (!gliding && !active[f]) continue
+          val mask = masks[f]
+          if (mask != MASK_MID && mask != MASK_SIDE) continue
+          val o = f * 5
+          val isMid = mask == MASK_MID
+          val idx = f * ch * 2 + if (isMid) 0 else 2
+          val x = if (isMid) mid else side
+          val y = cur[o] * x + st[idx]
+          if (!y.isFinite()) {
+            st[idx] = 0.0
+            st[idx + 1] = 0.0
+            if (isMid) mid = 0.0 else side = 0.0
+          } else {
+            st[idx] = cur[o + 1] * x - cur[o + 3] * y + st[idx + 1]
+            st[idx + 1] = cur[o + 2] * x - cur[o + 4] * y
+            if (isMid) mid = y else side = y
+          }
+        }
+        buffer[base] = (mid + side).toFloat()
+        buffer[base + 1] = (mid - side).toFloat()
+      }
 
       if (ch == 2) {
         var l = buffer[base]
@@ -238,14 +391,46 @@ class EqDsp {
         buffer[base + 1] = r * right
       }
 
+      if (companderDsp.isProcessing) {
+        companderDsp.processFrame(buffer, base, ch)
+      }
+      if (harmonicsDsp.isProcessing) {
+        harmonicsDsp.processFrame(buffer, base, ch)
+      }
+      if (convolverDsp.isProcessing) {
+        convolverDsp.processFrame(buffer, base, ch)
+      }
+
       if (mix < 1f) {
         // Crossfade with the untouched signal while the equalizer is being switched on or off.
         for (c in 0 until ch) buffer[base + c] = buffer[base + c] * mix + dryFrame[c] * (1f - mix)
       }
 
+      val soloTarget = if (solo != null) 1f else 0f
+      if (soloTarget > 0f || soloMix > 0f) {
+        soloMix = glide(soloMix, soloTarget, kf)
+        if (solo != null && soloMix > 0f) {
+          for (c in 0 until ch) {
+            val sIdx = c * 2
+            val x = dryFrame[c].toDouble()
+            val y = solo.b0 * x + soloState[sIdx]
+            if (!y.isFinite()) {
+              soloState[sIdx] = 0.0
+              soloState[sIdx + 1] = 0.0
+            } else {
+              soloState[sIdx] = solo.b1 * x - solo.a1 * y + soloState[sIdx + 1]
+              soloState[sIdx + 1] = solo.b2 * x - solo.a2 * y
+              buffer[base + c] = buffer[base + c] * (1f - soloMix) + y.toFloat() * soloMix
+            }
+          }
+        }
+      }
+
       if (p.limiterEnabled) {
-        limit(buffer, base, ch, p.ceiling)
+        limit(buffer, base, ch, p.ceiling, p.releaseCoef, p.limiterSoftClip)
         if (limiterGain < lowestGain) lowestGain = limiterGain
+      } else if (p.limiterSoftClip) {
+        applySoftClip(buffer, base, ch, p.ceiling)
       }
       // Safety: never hand the sink a sample outside the legal range. A sample caught here is a clip.
       for (c in 0 until ch) {
@@ -256,6 +441,10 @@ class EqDsp {
           clips++
           buffer[base + c] = v.coerceIn(-1f, 1f)
         }
+      }
+      if (rtaOn) {
+        val mPost = if (ch == 2) (buffer[base] + buffer[base + 1]) * 0.5f else buffer[base]
+        rtaAnalyzer.pushPostAndAdvance(mPost)
       }
     }
     publishActivity(lowestGain, clips)
@@ -281,6 +470,57 @@ class EqDsp {
     return LimiterActivity(reductionDb = gainToReductionDb(gain), clippedSamples = clippedSamples.getAndSet(0))
   }
 
+  /**
+   * Sidechain detector for Dynamic EQ bands: runs once per buffer (~5..10 ms) with zero allocations,
+   * updating only the dynamic slots inside [targetCoefs] so the per-sample smoother glides cleanly.
+   */
+  private fun updateDynamicTargets(
+    buffer: FloatArray,
+    frames: Int,
+    ch: Int,
+    specs: List<DynamicSpec>,
+    targetCoefs: DoubleArray
+  ) {
+    val n = specs.size
+    if (dynDetState.size != n * 2) dynDetState = DoubleArray(n * 2)
+    if (dynEnv.size != n) dynEnv = DoubleArray(n)
+    val rate = sampleRate.toDouble()
+    val atk = 1.0 - exp(-1.0 / (0.015 * rate))
+    val rel = 1.0 - exp(-1.0 / (0.080 * rate))
+    for (idx in 0 until n) {
+      val spec = specs[idx]
+      val d = spec.detector
+      var z1 = dynDetState[idx * 2]
+      var z2 = dynDetState[idx * 2 + 1]
+      var env = dynEnv[idx]
+      for (frame in 0 until frames) {
+        val base = frame * ch
+        val x = if (ch == 2) (buffer[base].toDouble() + buffer[base + 1].toDouble()) * 0.5 else buffer[base].toDouble()
+        val y = d.b0 * x + z1
+        z1 = d.b1 * x - d.a1 * y + z2
+        z2 = d.b2 * x - d.a2 * y
+        val mag = abs(y)
+        env += (mag - env) * if (mag > env) atk else rel
+      }
+      if (!z1.isFinite() || !z2.isFinite()) { z1 = 0.0; z2 = 0.0 }
+      if (!env.isFinite()) env = 0.0
+      dynDetState[idx * 2] = z1
+      dynDetState[idx * 2 + 1] = z2
+      dynEnv[idx] = env
+      val envDb = 20.0 * log10(env.coerceAtLeast(1e-6))
+      val overDb = (envDb - spec.thresholdDb).coerceAtLeast(0.0)
+      val frac = (overDb / 12.0).coerceIn(0.0, 1.0)
+      val dynGain = (spec.baseGainDb + spec.rangeDb * frac).coerceIn(-24.0, 24.0)
+      val c = BiquadCoefficients.design(spec.type, spec.freqHz, dynGain, spec.q, rate)
+      val o = spec.slotIndex * 5
+      targetCoefs[o] = c.b0
+      targetCoefs[o + 1] = c.b1
+      targetCoefs[o + 2] = c.b2
+      targetCoefs[o + 3] = c.a1
+      targetCoefs[o + 4] = c.a2
+    }
+  }
+
   /** One step of a smooth approach to [target], landing on it exactly once inaudibly close. */
   private fun glide(value: Float, target: Float, k: Float): Float {
     val next = value + (target - value) * k
@@ -293,7 +533,7 @@ class EqDsp {
    * Unlike an instant-attack limiter it does not change the gain sample by sample at every peak, which
    * is what made loud presets sound distorted.
    */
-  private fun limit(buffer: FloatArray, base: Int, ch: Int, ceiling: Float) {
+  private fun limit(buffer: FloatArray, base: Int, ch: Int, ceiling: Float, relCoef: Float, softClip: Boolean) {
     var peak = 0f
     for (c in 0 until ch) peak = max(peak, abs(buffer[base + c]))
     if (peak > ceiling) {
@@ -312,7 +552,7 @@ class EqDsp {
     } else {
       attackStep = 0f
       attackTarget = 1f
-      limiterGain += (1f - limiterGain) * releaseCoef
+      limiterGain += (1f - limiterGain) * relCoef
     }
 
     // Out goes the sample from [lookahead] frames ago, at the gain computed for it now.
@@ -323,6 +563,22 @@ class EqDsp {
       buffer[base + c] = delayed * limiterGain
     }
     delayPos = (delayPos + 1) % lookahead
+    if (softClip) applySoftClip(buffer, base, ch, ceiling)
+  }
+
+  /** Smooth soft-clipper above 85% of [ceiling]; strictly linear (0.00 dB) below the knee. */
+  private fun applySoftClip(buffer: FloatArray, base: Int, ch: Int, ceiling: Float) {
+    val ceil = ceiling.coerceAtLeast(0.05f)
+    val knee = ceil * 0.85f
+    val span = ceil - knee
+    for (c in 0 until ch) {
+      val x = buffer[base + c]
+      val ax = abs(x)
+      if (ax > knee) {
+        val shaped = knee + span * kotlin.math.tanh(((ax - knee) / span).toDouble()).toFloat()
+        buffer[base + c] = if (x >= 0f) shaped else -shaped
+      }
+    }
   }
 
   companion object {
@@ -356,7 +612,10 @@ class EqDsp {
      */
     const val SPATIAL_HEADROOM_DB = 3.5f
 
-    private fun releaseCoefFor(rate: Int): Float = (1.0 - exp(-1.0 / (RELEASE_SECONDS * rate))).toFloat()
+    private fun releaseCoefFor(rate: Int, releaseMs: Float = 120f): Float {
+      val sec = (releaseMs.coerceIn(20f, 500f) / 1000.0)
+      return (1.0 - exp(-1.0 / (sec * rate))).toFloat()
+    }
     private fun smoothCoefFor(rate: Int): Double = 1.0 - exp(-1.0 / (SMOOTH_SECONDS * rate))
     private fun lookaheadFor(rate: Int): Int = (LOOKAHEAD_SECONDS * rate).toInt().coerceAtLeast(1)
 
@@ -367,6 +626,20 @@ class EqDsp {
 
     private fun bandsOf(s: EqSettings): List<EqBand> = s.device?.bands.orEmpty() + s.bands
 
+    private const val MASK_LEFT = 1
+    private const val MASK_RIGHT = 2
+    private const val MASK_STEREO = 3
+    private const val MASK_MID = 4
+    private const val MASK_SIDE = 8
+
+    private fun maskOf(ch: BandChannel): Int = when (ch) {
+      BandChannel.STEREO -> MASK_STEREO
+      BandChannel.LEFT -> MASK_LEFT
+      BandChannel.RIGHT -> MASK_RIGHT
+      BandChannel.MID -> MASK_MID
+      BandChannel.SIDE -> MASK_SIDE
+    }
+
     /** The filters that actually change the sound; flat peaks and shelves are skipped. Used for the curve. */
     fun activeFilters(s: EqSettings, sampleRate: Int): List<BiquadCoefficients> {
       val rate = sampleRate.toDouble()
@@ -374,7 +647,11 @@ class EqDsp {
       bandsOf(s).forEach { b ->
         if (!b.enabled) return@forEach
         if (b.type.usesGain && abs(b.gainDb) < 0.05f) return@forEach
-        out += BiquadCoefficients.design(b.type, b.freqHz.toDouble(), b.gainDb.toDouble(), b.q.toDouble(), rate)
+        if (b.type.usesSlope && b.slope != FilterSlope.DB_12) {
+          out += BiquadCoefficients.designSlope(b.type, b.freqHz.toDouble(), b.q.toDouble(), b.slope, rate)
+        } else {
+          out += BiquadCoefficients.design(b.type, b.freqHz.toDouble(), b.gainDb.toDouble(), b.q.toDouble(), rate)
+        }
       }
       if (abs(s.bassDb) >= 0.05f) {
         out += BiquadCoefficients.design(FilterType.LOW_SHELF, s.bassFreqHz.toDouble(), s.bassDb.toDouble(), TONE_Q, rate)
@@ -382,43 +659,113 @@ class EqDsp {
       if (abs(s.trebleDb) >= 0.05f) {
         out += BiquadCoefficients.design(FilterType.HIGH_SHELF, s.trebleFreqHz.toDouble(), s.trebleDb.toDouble(), TONE_Q, rate)
       }
+      if (s.equalLoudnessEnabled) {
+        out += EqualLoudnessDsp.biquads(true, s.equalLoudnessLevelPhon, sampleRate)
+      }
       return out
     }
 
     /**
-     * One filter per band (disabled or flat bands are exact pass-throughs) plus the two tone shelves,
-     * so the layout only changes when a band is added or removed.
+     * One or more filter slots per band (cascaded Butterworth sections for steeper HP/LP slopes;
+     * disabled or flat bands stay as exact pass-throughs) plus the two tone shelves.
      */
-    private fun slotCoefficients(s: EqSettings, sampleRate: Int): DoubleArray {
+    private fun buildSlots(s: EqSettings, sampleRate: Int): Triple<DoubleArray, IntArray, List<DynamicSpec>> {
       val rate = sampleRate.toDouble()
-      val list = ArrayList<BiquadCoefficients>()
+      val coefs = ArrayList<BiquadCoefficients>()
+      val masks = ArrayList<Int>()
+      val dynamics = ArrayList<DynamicSpec>()
       bandsOf(s).forEach { b ->
-        list += if (!b.enabled || (b.type.usesGain && abs(b.gainDb) < 0.05f)) BiquadCoefficients.IDENTITY
-        else BiquadCoefficients.design(b.type, b.freqHz.toDouble(), b.gainDb.toDouble(), b.q.toDouble(), rate)
+        val mask = maskOf(b.channel)
+        val slotStart = coefs.size
+        val isDynamic = b.enabled && b.type.usesGain && abs(b.dynamicRangeDb) >= 0.05f
+        if (!b.enabled || (!isDynamic && b.type.usesGain && abs(b.gainDb) < 0.05f)) {
+          val sectionCount = if (b.type.usesSlope && b.slope != FilterSlope.DB_12) (b.slope.order + 1) / 2 else 1
+          repeat(sectionCount) {
+            coefs += BiquadCoefficients.IDENTITY
+            masks += mask
+          }
+        } else if (b.type.usesSlope && b.slope != FilterSlope.DB_12) {
+          val sections = BiquadCoefficients.designSlope(b.type, b.freqHz.toDouble(), b.q.toDouble(), b.slope, rate)
+          sections.forEach { sec ->
+            coefs += sec
+            masks += mask
+          }
+        } else {
+          coefs += BiquadCoefficients.design(b.type, b.freqHz.toDouble(), b.gainDb.toDouble(), b.q.toDouble(), rate)
+          masks += mask
+          if (isDynamic) {
+            dynamics += DynamicSpec(
+              slotIndex = slotStart,
+              type = b.type,
+              freqHz = b.freqHz.toDouble(),
+              baseGainDb = b.gainDb.toDouble(),
+              q = b.q.toDouble(),
+              rangeDb = b.dynamicRangeDb.toDouble(),
+              thresholdDb = b.dynamicThresholdDb.toDouble(),
+              detector = BiquadCoefficients.design(FilterType.BAND_PASS, b.freqHz.toDouble(), 0.0, b.q.toDouble().coerceIn(0.7, 12.0), rate)
+            )
+          }
+        }
       }
-      list += if (abs(s.bassDb) < 0.05f) BiquadCoefficients.IDENTITY
+      coefs += if (abs(s.bassDb) < 0.05f) BiquadCoefficients.IDENTITY
       else BiquadCoefficients.design(FilterType.LOW_SHELF, s.bassFreqHz.toDouble(), s.bassDb.toDouble(), TONE_Q, rate)
-      list += if (abs(s.trebleDb) < 0.05f) BiquadCoefficients.IDENTITY
+      masks += MASK_STEREO
+      coefs += if (abs(s.trebleDb) < 0.05f) BiquadCoefficients.IDENTITY
       else BiquadCoefficients.design(FilterType.HIGH_SHELF, s.trebleFreqHz.toDouble(), s.trebleDb.toDouble(), TONE_Q, rate)
-      val out = DoubleArray(list.size * 5)
-      list.forEachIndexed { i, c ->
-        out[i * 5] = c.b0; out[i * 5 + 1] = c.b1; out[i * 5 + 2] = c.b2; out[i * 5 + 3] = c.a1; out[i * 5 + 4] = c.a2
+      masks += MASK_STEREO
+      val isoGains = EqualLoudnessDsp.gainsFor(s.equalLoudnessEnabled, s.equalLoudnessLevelPhon)
+      coefs += if (abs(isoGains.bassDb) < 0.05) BiquadCoefficients.IDENTITY
+      else BiquadCoefficients.design(FilterType.LOW_SHELF, EqualLoudnessDsp.LOW_SHELF_HZ, isoGains.bassDb, EqualLoudnessDsp.SHELF_Q, rate)
+      masks += MASK_STEREO
+      coefs += if (abs(isoGains.trebleDb) < 0.05) BiquadCoefficients.IDENTITY
+      else BiquadCoefficients.design(FilterType.HIGH_SHELF, EqualLoudnessDsp.HIGH_SHELF_HZ, isoGains.trebleDb, EqualLoudnessDsp.SHELF_Q, rate)
+      masks += MASK_STEREO
+      val outCoefs = DoubleArray(coefs.size * 5)
+      coefs.forEachIndexed { i, c ->
+        outCoefs[i * 5] = c.b0; outCoefs[i * 5 + 1] = c.b1; outCoefs[i * 5 + 2] = c.b2; outCoefs[i * 5 + 3] = c.a1; outCoefs[i * 5 + 4] = c.a2
       }
-      return out
+      return Triple(outCoefs, masks.toIntArray(), dynamics)
     }
 
-    private fun buildPlan(s: EqSettings, sampleRate: Int, spatialStage: Boolean, reference: EqSettings?): Plan = Plan(
-      sampleRate = sampleRate,
-      enabled = s.enabled,
-      coefs = slotCoefficients(s, sampleRate),
-      preampGain = dbToGain(totalPreampDb(s, spatialStage, sampleRate)),
-      leftGain = min(1f, 1f - s.balance),
-      rightGain = min(1f, 1f + s.balance),
-      width = s.stereoWidth,
-      limiterEnabled = s.limiterEnabled,
-      ceiling = dbToGain(s.limiterCeilingDb),
-      dryGain = if (reference == null || s.enabled) 1f else dbToGain(loudnessMatchDb(reference, spatialStage, sampleRate))
-    )
+    private fun buildPlan(s: EqSettings, sampleRate: Int, spatialStage: Boolean, reference: EqSettings?): Plan {
+      val (coefs, masks, dynamics) = buildSlots(s, sampleRate)
+      val hasMidSide = masks.any { it == MASK_MID || it == MASK_SIDE }
+      val dynamicSlots = if (dynamics.isEmpty()) emptySet() else dynamics.map { it.slotIndex }.toSet()
+      val slotCount = coefs.size / 5
+      val slotActive = BooleanArray(slotCount) { f ->
+        if (f in dynamicSlots) true
+        else {
+          val o = f * 5
+          abs(coefs[o] - 1.0) > 1e-9 || abs(coefs[o + 1]) > 1e-9 || abs(coefs[o + 2]) > 1e-9 ||
+            abs(coefs[o + 3]) > 1e-9 || abs(coefs[o + 4]) > 1e-9
+        }
+      }
+      return Plan(
+        sampleRate = sampleRate,
+        enabled = s.enabled,
+        coefs = coefs,
+        channelMasks = masks,
+        slotActive = slotActive,
+        hasMidSide = hasMidSide,
+        dynamicSpecs = dynamics,
+        preampGain = dbToGain(totalPreampDb(s, spatialStage, sampleRate)),
+        leftGain = min(1f, 1f - s.balance),
+        rightGain = min(1f, 1f + s.balance),
+        width = s.stereoWidth,
+        crossfeed = s.crossfeed,
+        limiterEnabled = s.limiterEnabled,
+        ceiling = dbToGain(s.limiterCeilingDb),
+        releaseCoef = releaseCoefFor(sampleRate, s.limiterReleaseMs),
+        limiterSoftClip = s.limiterSoftClip,
+        companderAmount = s.companderAmount,
+        tubeWarmth = s.tubeWarmth,
+        subBassHarmonic = s.subBassHarmonic,
+        convolverEnabled = s.convolverEnabled,
+        convolverMix = s.convolverMix,
+        convolverPath = s.convolverPath,
+        dryGain = if (reference == null || s.enabled) 1f else dbToGain(loudnessMatchDb(reference, spatialStage, sampleRate))
+      )
+    }
 
     /**
      * The real frequency response of [s] at [freqHz] (filters + preamp), in dB, as the user will hear

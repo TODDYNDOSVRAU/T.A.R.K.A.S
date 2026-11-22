@@ -6,25 +6,32 @@ import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
 import androidx.media3.common.util.UnstableApi
 import java.nio.ByteBuffer
+import java.util.concurrent.ConcurrentLinkedDeque
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * First stage of the audio chain: lets the audio through unchanged and measures its loudness on the
  * way, before the spatial and the equalizer touch it, so the value describes the track itself.
  * 16-bit and float PCM are measured; any other encoding passes untouched and is not measured.
  *
- * The meter is filled on the playback thread and read on the main one, so every access holds [lock].
+ * Lock-free on the audio thread: [meter] is owned exclusively by the playback thread, while the main
+ * thread reads finished tracks from [closed] or the latest [partial] snapshot and signals [clearRequested].
  */
 @OptIn(UnstableApi::class)
 class LoudnessMeterProcessor : BaseAudioProcessor() {
 
-  private val lock = Any()
   private val meter = LoudnessMeter()
   private var scratch = FloatArray(0)
   private var encoding = C.ENCODING_INVALID
   private var channels = 2
   private var sampleRate = 0
+  private var lastMeasuredSeconds = 0.0
   /** Tracks measured to their end of stream, oldest first, not yet taken. */
-  private val closed = ArrayDeque<Measurement>()
+  private val closed = ConcurrentLinkedDeque<Measurement>()
+  /** Latest partial snapshot published on the audio thread whenever a 100 ms block completes. */
+  @Volatile private var partial = Measurement(null, 0.0)
+  /** Set by the main thread to ask the audio thread to clear [meter] before its next buffer. */
+  private val clearRequested = AtomicBoolean(false)
   /** This stream's end was already handled (see [onQueueEndOfStream]). */
   private var streamClosed = false
 
@@ -37,6 +44,7 @@ class LoudnessMeterProcessor : BaseAudioProcessor() {
   override fun queueInput(inputBuffer: ByteBuffer) {
     val bytes = inputBuffer.remaining()
     if (bytes == 0) return
+    applyPendingClear()
     val out = replaceOutputBuffer(bytes)
     if (encoding == C.ENCODING_PCM_16BIT) {
       val samples = bytes / 2
@@ -46,7 +54,7 @@ class LoudnessMeterProcessor : BaseAudioProcessor() {
         out.putShort(v)
         scratch[i] = v / 32768f
       }
-      synchronized(lock) { meter.process(scratch, samples / channels) }
+      meter.process(scratch, samples / channels)
     } else {
       val samples = bytes / 4
       ensureScratch(samples)
@@ -55,7 +63,12 @@ class LoudnessMeterProcessor : BaseAudioProcessor() {
         out.putFloat(v)
         scratch[i] = v
       }
-      synchronized(lock) { meter.process(scratch, samples / channels) }
+      meter.process(scratch, samples / channels)
+    }
+    val secs = meter.measuredSeconds
+    if (secs != lastMeasuredSeconds) {
+      lastMeasuredSeconds = secs
+      partial = Measurement(meter.result(), secs)
     }
     out.flip()
   }
@@ -73,31 +86,31 @@ class LoudnessMeterProcessor : BaseAudioProcessor() {
   override fun onQueueEndOfStream() {
     if (streamClosed) return
     streamClosed = true
-    synchronized(lock) {
-      if (meter.measuredSeconds == 0.0) return
-      closed.addLast(Measurement(meter.result(), meter.measuredSeconds))
-      // Only the latest tracks matter; older ones were never taken (a stop in between).
-      while (closed.size > 4) closed.removeFirst()
-      meter.clear()
-    }
+    applyPendingClear()
+    if (meter.measuredSeconds == 0.0) return
+    closed.addLast(Measurement(meter.result(), meter.measuredSeconds))
+    // Only the latest tracks matter; older ones were never taken (a stop in between).
+    while (closed.size > 4) closed.pollFirst()
+    meter.clear()
+    lastMeasuredSeconds = 0.0
+    partial = Measurement(null, 0.0)
   }
 
   override fun onFlush() {
     streamClosed = false
+    applyPendingClear()
     val format = inputAudioFormat
-    synchronized(lock) {
-      if (format != AudioProcessor.AudioFormat.NOT_SET &&
-        (format.encoding != encoding || format.channelCount != channels || format.sampleRate != sampleRate)
-      ) {
-        // As in the equalizer: a new format applies once the previous track's audio has drained.
-        encoding = format.encoding
-        channels = format.channelCount
-        sampleRate = format.sampleRate
-        meter.configure(sampleRate, channels)
-      }
-      // A seek or a stop: the filters restart, what was measured is kept until take().
-      meter.resetFilters()
+    if (format != AudioProcessor.AudioFormat.NOT_SET &&
+      (format.encoding != encoding || format.channelCount != channels || format.sampleRate != sampleRate)
+    ) {
+      // As in the equalizer: a new format applies once the previous track's audio has drained.
+      encoding = format.encoding
+      channels = format.channelCount
+      sampleRate = format.sampleRate
+      meter.configure(sampleRate, channels)
     }
+    // A seek or a stop: the filters restart, what was measured is kept until take().
+    meter.resetFilters()
   }
 
   override fun onReset() {
@@ -106,22 +119,32 @@ class LoudnessMeterProcessor : BaseAudioProcessor() {
     sampleRate = 0
   }
 
+  private fun applyPendingClear() {
+    if (clearRequested.compareAndSet(true, false)) {
+      meter.clear()
+      lastMeasuredSeconds = 0.0
+      partial = Measurement(null, 0.0)
+    }
+  }
+
   /**
    * The measurement of the track that just finished or was left: the oldest track closed at its end of
    * stream if there is one (a natural end, gapless or not), otherwise what was measured so far (a skip or
    * a stop, which the caller usually discards as incomplete). Taking the partial one starts over.
    */
-  fun take(): Measurement = synchronized(lock) {
-    closed.removeFirstOrNull()
-      ?: Measurement(meter.result(), meter.measuredSeconds).also {
-        meter.clear()
-        closed.clear()
-      }
+  fun take(): Measurement {
+    closed.pollFirst()?.let { return it }
+    val snap = partial
+    partial = Measurement(null, 0.0)
+    clearRequested.set(true)
+    closed.clear()
+    return snap
   }
 
   /** Forgets everything, for a track loaded from scratch: nothing measured before belongs to it. */
-  fun clear() = synchronized(lock) {
-    meter.clear()
+  fun clear() {
+    clearRequested.set(true)
+    partial = Measurement(null, 0.0)
     closed.clear()
   }
 

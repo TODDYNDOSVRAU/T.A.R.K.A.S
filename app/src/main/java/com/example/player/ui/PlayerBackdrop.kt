@@ -16,7 +16,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -109,26 +111,33 @@ internal fun rememberCoverBlur(track: Track?): ImageBitmap? {
 }
 
 /**
- * Seconds of drift for the cover behind the page, advanced on every frame while [running]. It
- * measures the time between frames and stops for good (see [FrameGuard]) when the device cannot keep up.
+ * Seconds of drift for the cover behind the page, advanced at ~30 fps while [running] and the
+ * activity is resumed (the slow 70–120 s rotation is indistinguishable above 24–30 fps, whereas
+ * running at 120 Hz keeps the GPU and SurfaceFlinger at high power). Pauses automatically when
+ * [com.example.data.diagnostics.ThermalMonitor] reports severe thermal pressure.
  */
 @Composable
 internal fun rememberCoverClock(running: Boolean): State<Float> {
   val seconds = remember { mutableFloatStateOf(0f) }
-  // A frame is slow when it takes 1.5 refresh intervals or more, whatever the panel's rate is.
-  val hz = LocalView.current.display?.refreshRate ?: 60f
-  val guard = remember(hz) { FrameGuard(limitMs = 1500f / hz) }
-  LaunchedEffect(running, guard) {
-    if (!running) return@LaunchedEffect
-    var last = 0L
-    while (guard.allowed) {
-      val now = withFrameNanos { it }
-      if (last != 0L) {
-        val delta = (now - last) / 1_000_000f
-        guard.onFrame(delta)
-        seconds.floatValue += delta / 1000f
+  val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+  val thermal by com.example.data.diagnostics.ThermalMonitor.status.collectAsState()
+  val active = running && thermal < com.example.data.diagnostics.ThermalMonitor.SEVERE
+  // Target ~30 fps (~33 ms); a frame is slow if it takes 2.5x the target interval (>82 ms).
+  val guard = remember { FrameGuard(limitMs = 82f) }
+  LaunchedEffect(active, lifecycleOwner, guard) {
+    if (!active) return@LaunchedEffect
+    lifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+      var last = 0L
+      while (guard.allowed) {
+        kotlinx.coroutines.delay(33L)
+        val now = withFrameNanos { it }
+        if (last != 0L) {
+          val deltaMs = (now - last) / 1_000_000f
+          guard.onFrame(deltaMs)
+          seconds.floatValue += deltaMs / 1000f
+        }
+        last = now
       }
-      last = now
     }
   }
   return seconds

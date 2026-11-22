@@ -27,6 +27,9 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.FileOpen
+import androidx.compose.material.icons.rounded.IosShare
+import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -67,7 +70,9 @@ internal fun PlaylistsList(
   byId: Map<String, Track>,
   onOpen: (Playlist) -> Unit,
   onNew: () -> Unit,
-  onImportAudio: () -> Unit
+  onImportAudio: () -> Unit,
+  onImportM3u: () -> Unit = {},
+  onAddStream: () -> Unit = {}
 ) {
   var query by rememberSaveable { mutableStateOf("") }
   val shown = playlists.filter { com.example.data.TextMatch.contains(it.name, query) }
@@ -92,6 +97,14 @@ internal fun PlaylistsList(
     item(key = "import") {
       TrackDivider()
       ActionRow(stringResource(R.string.library_import_audio), Icons.Rounded.AudioFile, onImportAudio, Modifier.testTag("library_add_local_audio"))
+    }
+    item(key = "import_m3u") {
+      TrackDivider()
+      ActionRow(stringResource(R.string.library_import_m3u), Icons.Rounded.FileOpen, onImportM3u, Modifier.testTag("library_import_m3u"))
+    }
+    item(key = "add_stream") {
+      TrackDivider()
+      ActionRow(stringResource(R.string.library_add_stream), Icons.Rounded.Radio, onAddStream, Modifier.testTag("library_add_stream"))
     }
     when {
       playlists.isEmpty() -> item(key = "empty") {
@@ -217,6 +230,7 @@ internal fun PlaylistDetail(
   onShuffle: () -> Unit,
   onRename: () -> Unit,
   onDelete: () -> Unit,
+  onExport: () -> Unit = {},
   onRemoveTrack: (String) -> Unit
 ) {
   TrackList(
@@ -233,6 +247,9 @@ internal fun PlaylistDetail(
           onBack = onBack,
           modifier = Modifier.testTag("library_back"),
           trailing = {
+            if (tracks.isNotEmpty()) {
+              IconAction(Icons.Rounded.IosShare, contentDescription = stringResource(R.string.library_export_m3u_desc), onClick = onExport, tint = MaterialTheme.colorScheme.primary)
+            }
             IconAction(Icons.Rounded.Edit, contentDescription = stringResource(R.string.library_rename_desc), onClick = onRename, tint = MaterialTheme.colorScheme.primary)
             IconAction(Icons.Rounded.Delete, contentDescription = stringResource(R.string.library_delete_desc), onClick = onDelete, tint = MaterialTheme.colorScheme.error)
           }

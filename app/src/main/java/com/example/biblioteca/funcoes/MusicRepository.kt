@@ -84,6 +84,10 @@ class MusicRepository(
   /** How many songs each folder holds on the device, counting the ones the folder choice leaves out. */
   val deviceFolders: StateFlow<Map<String, Int>> = _deviceFolders.asStateFlow()
 
+  private val _trackFolders = MutableStateFlow<Map<String, String>>(emptyMap())
+  /** Folder path of each device track by track id, for direct folder browsing. */
+  val trackFolders: StateFlow<Map<String, String>> = _trackFolders.asStateFlow()
+
   private val _folderRules = MutableStateFlow(FolderRules.None)
   /** Which folders are in the library. */
   val folderRules: StateFlow<FolderRules> = _folderRules.asStateFlow()
@@ -98,7 +102,10 @@ class MusicRepository(
     _state.value = new
     _tracks.value = new.tracks
     _deviceTracks.value = new.device
-    if (new.catalog !== old.catalog) _deviceFolders.value = new.catalog.folderCounts
+    if (new.catalog !== old.catalog) {
+      _deviceFolders.value = new.catalog.folderCounts
+      _trackFolders.value = new.catalog.folderOf
+    }
     _folderRules.value = new.rules
   }
 

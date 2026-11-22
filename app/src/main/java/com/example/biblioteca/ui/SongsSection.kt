@@ -97,9 +97,8 @@ internal fun TrackList(
   LazyColumn(
     state = listState,
     modifier = Modifier.fillMaxSize(),
-    // With the strip on, rows and their dividers stop before it instead of running under it.
+    // Keep the full T.A.L. margin alignment (24 dp left & right) so Play/Shuffle and rows stay centred with search and the rest of the app.
     contentPadding = PaddingValues(
-      end = if (showStrip) LetterStripWidth else 0.dp,
       bottom = LocalBarInset.current + Grid.inset
     )
   ) {
@@ -162,9 +161,11 @@ internal fun SongOrderRow(
   LaunchedEffect(order) { rowState.animateScrollToItem(order.ordinal) }
   androidx.compose.foundation.lazy.LazyRow(
     state = rowState,
-    modifier = modifier,
+    modifier = modifier
+      .fillMaxWidth()
+      .padding(horizontal = Grid.margin),
     horizontalArrangement = Arrangement.spacedBy(Grid.u6),
-    contentPadding = PaddingValues(horizontal = Grid.margin, vertical = Grid.u6)
+    contentPadding = PaddingValues(vertical = Grid.u6)
   ) {
     items(com.example.data.playback.SongOrder.entries.size) { i ->
       val o = com.example.data.playback.SongOrder.entries[i]
@@ -186,8 +187,8 @@ internal fun SongOrderRow(
   }
 }
 
-/** Width of the A–Z strip: a touch target close to the 48 dp minimum; sliding makes the height forgiving. */
-internal val LetterStripWidth = Grid.u48
+/** Width of the A–Z strip: sits neatly inside the right 24 dp T.A.L. margin without shifting the list off-centre. */
+internal val LetterStripWidth = Grid.margin
 
 /**
  * A–Z strip on the list's right edge: touching or sliding along it jumps to the first track of the

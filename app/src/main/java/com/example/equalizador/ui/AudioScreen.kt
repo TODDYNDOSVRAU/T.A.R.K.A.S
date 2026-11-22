@@ -131,6 +131,8 @@ fun AudioScreen(
   onClearDevice: () -> Unit = {},
   outputCorrection: OutputCorrectionUi = OutputCorrectionUi(),
   onSetAutoOutputCorrection: (Boolean) -> Unit = {},
+  onExportOutputProfiles: () -> String = { "{}" },
+  onImportOutputProfiles: (String) -> Int = { -1 },
   /** A search to open the fone list with (from a suggestion); [onDevicePickerOpened] clears it. */
   crossfadeSeconds: Int = 0,
   onSetCrossfade: (Int) -> Unit = {},
@@ -154,7 +156,11 @@ fun AudioScreen(
   onCompare: (Boolean) -> Unit = {},
   loudness: LoudnessUi = LoudnessUi(),
   onSetNormalizationMode: (NormalizationMode) -> Unit = {},
-  modifier: Modifier = Modifier
+  onSetTargetLufs: (Double) -> Unit = {},
+  audioHealth: com.example.data.audio.AudioHealth = com.example.data.audio.AudioHealth(),
+  modifier: Modifier = Modifier,
+  rtaFrame: () -> com.example.data.audio.dsp.RtaFrame = { com.example.data.audio.dsp.RtaFrame.FLAT },
+  onSoloBand: (EqBand?) -> Unit = {}
 ) {
   var page by rememberSaveable { mutableStateOf(AudioPage.MAIN) }
   var showPresets by rememberSaveable { mutableStateOf(false) }
@@ -224,7 +230,9 @@ fun AudioScreen(
           onOpenAdvanced = { page = AudioPage.ADVANCED },
           spatial = spatial.copy(othersNote = spatialOthersNote(spatial.enabled, eqReach, globalEqStatus)),
           spatialActions = spatialActions,
-          onCompare = onCompare
+          onCompare = onCompare,
+          rtaFrame = rtaFrame,
+          onSoloBand = onSoloBand
         )
         AudioPage.ADVANCED -> EqAdvancedPage(
           capabilities = capabilities,
@@ -241,8 +249,12 @@ fun AudioScreen(
           onStopSystemAudioCapture = onStopSystemAudioCapture,
           loudness = loudness,
           onSetNormalizationMode = onSetNormalizationMode,
+          onSetTargetLufs = onSetTargetLufs,
+          audioHealth = audioHealth,
           outputCorrection = outputCorrection,
           onSetAutoOutputCorrection = onSetAutoOutputCorrection,
+          onExportOutputProfiles = onExportOutputProfiles,
+          onImportOutputProfiles = onImportOutputProfiles,
           crossfadeSeconds = crossfadeSeconds,
           onSetCrossfade = onSetCrossfade,
           spatialOn = spatial.enabled,

@@ -104,6 +104,7 @@ fun HomeScreen(
   onAddToQueue: (Track) -> Unit,
   onAddToPlaylist: (String, Track) -> Unit,
   onCreatePlaylist: (String, Track) -> Unit,
+  onDownloadOffline: (Track) -> Unit = {},
   trending: TrendingState,
   onRetryTrending: () -> Unit,
   onPlayTrending: (Track) -> Unit,
@@ -195,6 +196,7 @@ fun HomeScreen(
               onAddToQueue = { onAddToQueue(track) },
               onAddToPlaylist = { id -> onAddToPlaylist(id, track) },
               onCreatePlaylist = { name -> onCreatePlaylist(name, track) },
+              onDownloadOffline = { onDownloadOffline(track) },
               modifier = Modifier.trailingEdge()
             )
           }

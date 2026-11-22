@@ -30,6 +30,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import com.example.data.repository.PreferencesRepository
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -140,7 +142,18 @@ class GlobalEqService : Service() {
       }
     }
     scope.launch {
-      com.example.data.audio.spatial.SpatialControl.otherAppsStrength.collect { equalizer.setSpatial(it) }
+      kotlinx.coroutines.flow.combine(
+        com.example.data.audio.spatial.SpatialControl.otherAppsStrength,
+        GlobalEq.ownPlayerActive,
+        GlobalEq.status.map { it.globalOutput }.distinctUntilChanged()
+      ) { strength, ownPlaying, globalOut ->
+        // On the global output mix (session 0), Tarkas's own player already runs its 7.1.4 KU100 stage;
+        // stacking Android's NXP Virtualizer on top would double-virtualize and dull mids/highs.
+        if (ownPlaying && globalOut) 0 else strength
+      }.distinctUntilChanged().collect {
+        equalizer.setSpatial(it)
+        delay(SETTINGS_MIN_INTERVAL_MS)
+      }
     }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
       // Fires for every player that starts, pauses or stops. Apps without special access get the

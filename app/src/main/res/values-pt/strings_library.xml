@@ -136,4 +136,25 @@
         <item quantity="one">%1$d álbum</item>
         <item quantity="other">%1$d álbuns</item>
     </plurals>
+
+    <!-- Sprint 3: Aba Pastas, M3U import/export, Web Radio / Streams, Download offline -->
+    <string name="library_section_folders">Pastas</string>
+    <string name="library_search_folders_hint">Buscar pastas</string>
+    <string name="library_folders_browse_empty">Nenhuma pasta com música foi encontrada neste aparelho.</string>
+    <string name="library_import_m3u">Importar playlist M3U / M3U8…</string>
+    <string name="library_export_m3u_desc">Exportar playlist em M3U8</string>
+    <string name="library_m3u_import_done">“%1$s” importada (%2$d faixas).</string>
+    <string name="library_m3u_import_empty">Nenhuma faixa do arquivo M3U foi encontrada na biblioteca.</string>
+    <string name="library_m3u_export_done">Playlist exportada em M3U8.</string>
+    <string name="library_m3u_export_failed">Não foi possível exportar a playlist.</string>
+    <string name="library_add_stream">Adicionar rádio / stream HTTP…</string>
+    <string name="library_add_stream_title">Adicionar rádio ou stream</string>
+    <string name="library_add_stream_name_hint">Nome da rádio ou stream</string>
+    <string name="library_add_stream_url_hint">URL do stream (https://…)</string>
+    <string name="library_add_stream_artist">Rádio Web</string>
+    <string name="library_add_stream_confirm">Adicionar e tocar</string>
+    <string name="player_menu_download_offline">Salvar offline</string>
+    <string name="library_offline_downloading">Baixando “%1$s”…</string>
+    <string name="library_offline_saved">“%1$s” salva para ouvir offline.</string>
+    <string name="library_offline_failed">Não foi possível baixar “%1$s”.</string>
 </resources>

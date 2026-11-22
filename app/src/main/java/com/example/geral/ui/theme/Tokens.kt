@@ -1,7 +1,51 @@
 package com.example.ui.theme
 
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import kotlin.math.min
+
+/**
+ * Apple HIG-style continuous rounded rectangle (squircle): smooths the transition from straight
+ * edges into corners using cubic Beziers instead of circular arcs.
+ */
+class SquircleShape(
+  private val cornerRadius: Dp,
+  private val smoothing: Float = 0.6f
+) : Shape {
+  override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+    val w = size.width
+    val h = size.height
+    val r = min(with(density) { cornerRadius.toPx() }, min(w, h) / 2f).coerceAtLeast(0f)
+    if (r <= 0f) return Outline.Rectangle(androidx.compose.ui.geometry.Rect(0f, 0f, w, h))
+    val s = (r * (1f + smoothing * 0.35f)).coerceAtMost(min(w, h) / 2f)
+    val c = r * 0.4477f * (1f - smoothing * 0.25f)
+    val path = Path().apply {
+      moveTo(s, 0f)
+      lineTo(w - s, 0f)
+      cubicTo(w - c, 0f, w, c, w, s)
+      lineTo(w, h - s)
+      cubicTo(w, h - c, w - c, h, w - s, h)
+      lineTo(s, h)
+      cubicTo(c, h, 0f, h - c, 0f, h - s)
+      lineTo(0f, s)
+      cubicTo(0f, c, c, 0f, s, 0f)
+      close()
+    }
+    return Outline.Generic(path)
+  }
+
+  override fun equals(other: Any?): Boolean =
+    other is SquircleShape && other.cornerRadius == cornerRadius && other.smoothing == smoothing
+
+  override fun hashCode(): Int = 31 * cornerRadius.hashCode() + smoothing.hashCode()
+}
 
 /**
  * Spacing on a 4 dp grid. Screens use these instead of numbers of their own, so margins and gaps line
@@ -88,7 +132,8 @@ object Grid {
   val icon = u24
   /** Hairlines are drawn over the surface and take no room in the layout. */
   val hairline = 1.dp
-  val r6 = RoundedCornerShape(u6)
-  val r12 = RoundedCornerShape(u12)
-  val r24 = RoundedCornerShape(u24)
+  val r6: Shape = SquircleShape(10.dp)
+  val r12: Shape = SquircleShape(16.dp)
+  val r24: Shape = SquircleShape(24.dp)
+  val pill = RoundedCornerShape(percent = 50)
 }

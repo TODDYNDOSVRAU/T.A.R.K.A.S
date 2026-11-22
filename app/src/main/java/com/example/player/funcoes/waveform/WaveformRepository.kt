@@ -38,6 +38,7 @@ class WaveformRepository(
   private val ready = MutableStateFlow<Map<String, ByteArray>>(emptyMap())
   private val lock = Any()
   private val queue = ArrayDeque<Track>()
+  private val urgentIds = HashSet<String>()
   private val known = HashSet<String>() // queued, measured or given up on, in this run
   private var running = false
   @Volatile private var stopRequested = false
@@ -54,17 +55,17 @@ class WaveformRepository(
       .distinctUntilChanged()
       .onStart { enqueue(listOf(track), urgent = true) }
 
-  /** Queues the whole library behind whatever was asked for, skipping battery saver. */
+  /** Queues the whole library behind whatever was asked for, skipping battery saver and warm thermal states. */
   fun prepare(tracks: List<Track>) {
     val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
-    if (pm?.isPowerSaveMode == true) return
+    if (pm?.isPowerSaveMode == true || com.example.data.diagnostics.ThermalMonitor.isWarm) return
     enqueue(tracks, urgent = false)
   }
 
   /** Stops measuring (the app is closing, or the user turned it off); what was saved stays. */
   fun cancel() {
     stopRequested = true
-    synchronized(lock) { queue.clear(); known.clear() }
+    synchronized(lock) { queue.clear(); urgentIds.clear(); known.clear() }
   }
 
   /** Forgets the shapes of tracks that are gone from the library. */
@@ -78,7 +79,12 @@ class WaveformRepository(
       for (t in tracks) {
         if (!t.isLocalFile || t.filePath == null || t.id in known) continue
         known += t.id
-        if (urgent) queue.addFirst(t) else queue.addLast(t)
+        if (urgent) {
+          urgentIds += t.id
+          queue.addFirst(t)
+        } else {
+          queue.addLast(t)
+        }
       }
       if (queue.isNotEmpty()) stopRequested = false
       if (queue.isNotEmpty() && !running) {
@@ -90,15 +96,41 @@ class WaveformRepository(
 
   private fun drain() {
     while (true) {
-      val track = synchronized(lock) {
+      val item = synchronized(lock) {
         val next = queue.removeFirstOrNull()
-        // Decided under the lock, so a track queued just now either is seen here or starts a new run.
-        if (next == null) running = false
-        next
+        if (next == null) {
+          running = false
+          null
+        } else {
+          val isUrgent = urgentIds.remove(next.id)
+          if (!isUrgent && com.example.data.diagnostics.ThermalMonitor.isWarm) {
+            // Device is warm: pause bulk library decoding; keep only urgent (now-playing) requests.
+            known -= next.id
+            val keep = queue.filter { it.id in urgentIds }
+            queue.filterTo(ArrayList()) { it.id !in urgentIds }.forEach { known -= it.id }
+            queue.clear()
+            queue.addAll(keep)
+            if (queue.isEmpty()) {
+              running = false
+              null
+            } else {
+              val urgentNext = queue.removeFirst()
+              urgentIds.remove(urgentNext.id)
+              urgentNext to true
+            }
+          } else {
+            next to isUrgent
+          }
+        }
       } ?: return
+      val (track, isUrgent) = item
       if (!measure(track)) {
         synchronized(lock) { running = false }
         return
+      }
+      // Small breath between bulk decodes so MediaCodec + disk I/O do not contend with audio playback.
+      if (!isUrgent && !stopRequested) {
+        try { Thread.sleep(50L) } catch (_: InterruptedException) { return }
       }
     }
   }

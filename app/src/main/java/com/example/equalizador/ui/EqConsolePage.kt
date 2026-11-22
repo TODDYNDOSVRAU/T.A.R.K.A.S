@@ -46,7 +46,6 @@ import com.example.data.model.EqSettings
 import com.example.ui.screens.SpatialActions
 import com.example.ui.screens.SpatialUi
 import com.example.ui.theme.Grid
-import com.example.ui.theme.LocalBarInset
 import com.example.ui.theme.Motion
 import com.example.ui.theme.rememberReducedMotion
 
@@ -122,7 +121,9 @@ internal fun EqConsolePage(
   onOpenAdvanced: () -> Unit,
   spatial: SpatialUi,
   spatialActions: SpatialActions?,
-  onCompare: (Boolean) -> Unit = {}
+  onCompare: (Boolean) -> Unit = {},
+  rtaFrame: () -> com.example.data.audio.dsp.RtaFrame = { com.example.data.audio.dsp.RtaFrame.FLAT },
+  onSoloBand: (EqBand?) -> Unit = {}
 ) {
   val colors = MaterialTheme.colorScheme
   var selectedBand by rememberSaveable { mutableIntStateOf(0) }
@@ -153,7 +154,9 @@ internal fun EqConsolePage(
     compare = compare,
     selectedBand = bandIndex,
     onSelectBand = { selectedBand = it },
-    modifier = Modifier.fillMaxSize().padding(top = Grid.u12, bottom = LocalBarInset.current)
+    modifier = Modifier.fillMaxSize().padding(top = Grid.u12),
+    rtaFrame = rtaFrame,
+    onSoloBand = onSoloBand
   )
 
   if (showSpatial && spatialActions != null) {

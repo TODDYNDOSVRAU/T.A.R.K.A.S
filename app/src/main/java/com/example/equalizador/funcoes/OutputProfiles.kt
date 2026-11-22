@@ -223,6 +223,25 @@ class OutputProfileManager(
     }
   }
 
+  /** Exports all saved output profiles as JSON for backup or transfer between devices. */
+  fun exportJson(): String = OutputProfiles.toJson(book)
+
+  /**
+   * Imports output profiles from a JSON backup, merging them into the current book.
+   * Returns the number of imported profiles, or -1 if the JSON is invalid.
+   */
+  fun importJson(json: String): Int {
+    val imported = OutputProfiles.fromJson(json) ?: return -1
+    if (imported.profiles.isEmpty()) return 0
+    book = book.copy(
+      profiles = book.profiles + imported.profiles,
+      chosen = book.chosen + imported.chosen
+    )
+    save()
+    if (_auto.value) applyOutput(host.output.value, announce = false)
+    return imported.profiles.size
+  }
+
   private fun save() {
     store.saveProfilesJson(OutputProfiles.toJson(book))
   }

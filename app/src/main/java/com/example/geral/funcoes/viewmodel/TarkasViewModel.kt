@@ -355,6 +355,12 @@ class TarkasViewModel(
       audio.setStreamVolume(stream, target, 0)
       return true
     }
+
+    override fun toggleAbLoop(): Boolean {
+      if (musicRepository.currentTrack.value == null) return false
+      this@TarkasViewModel.toggleAbLoop()
+      return true
+    }
   }
 
   val assistantEngine: AssistantEngine = AssistantEngine(
@@ -782,7 +788,22 @@ class TarkasViewModel(
   private val lyricsRepository = com.example.data.lyrics.LyricsRepository(context)
   private val _lyrics = MutableStateFlow(com.example.data.lyrics.LyricsState())
   val lyrics: StateFlow<com.example.data.lyrics.LyricsState> = _lyrics.asStateFlow()
+  val abLoop: StateFlow<com.example.data.playback.AbLoop> get() = playback.abLoop
+  fun toggleAbLoop() = playback.toggleAbLoop()
+  fun clearAbLoop() = playback.clearAbLoop()
   private var lyricsJob: Job? = null
+
+  fun importLyrics(track: Track, rawText: String) {
+    lyricsJob?.cancel()
+    lyricsJob = viewModelScope.launch {
+      val result = lyricsRepository.importLrc(track, rawText)
+      _lyrics.value = when (result) {
+        is com.example.data.lyrics.LyricsRepository.Result.Found -> com.example.data.lyrics.LyricsState(trackId = track.id, lyrics = result.lyrics)
+        com.example.data.lyrics.LyricsRepository.Result.NotOnDevice -> com.example.data.lyrics.LyricsState(trackId = track.id, notOnDevice = true)
+        com.example.data.lyrics.LyricsRepository.Result.None -> com.example.data.lyrics.LyricsState(trackId = track.id)
+      }
+    }
+  }
 
   /** Looks for the lyrics of [track] (tag and .lrc beside the file); a repeat for the same song is free. */
   fun loadLyrics(track: Track) {
@@ -835,6 +856,8 @@ class TarkasViewModel(
 
   fun setNormalizationMode(mode: com.example.data.audio.loudness.NormalizationMode) =
     audioEngineManager.setNormalizationMode(mode)
+
+  fun setTargetLufs(targetLufs: Double) = audioEngineManager.setTargetLufs(targetLufs)
 
   /** Edits a band of the mode in use (graphic or parametric). */
   fun updateEqBand(index: Int, transform: (EqBand) -> EqBand) = updateEq { s ->
@@ -934,6 +957,7 @@ class TarkasViewModel(
   }
 
   val surfaceStyle: StateFlow<SurfaceStyle> = settings.surfaceStyle
+  val liquidGlassOpacity: StateFlow<Float> = settings.liquidGlassOpacity
 
   fun setSurfaceStyle(style: SurfaceStyle) = settings.setSurfaceStyle(style)
 
@@ -1485,10 +1509,16 @@ class TarkasViewModel(
   /** The direction the listener faces now becomes the front of the scene. */
   fun recenterHead() = headTracker.recenter()
 
-  /** It runs only while the spatial stage is on: without it there is no scene to turn. */
-  private fun syncHeadTracking() = headTracker.setEnabled(_headTracking.value && _spatialEnabled.value)
+  /** It runs only while the spatial stage is on AND audio is playing (saves 50 Hz sensor battery when paused). */
+  private fun syncHeadTracking() =
+    headTracker.setEnabled(_headTracking.value && _spatialEnabled.value && audioEngineManager.isPlaying.value)
 
-  init { syncHeadTracking() }
+  init {
+    syncHeadTracking()
+    viewModelScope.launch {
+      audioEngineManager.isPlaying.collect { syncHeadTracking() }
+    }
+  }
 
   private fun saveSpatial() {
     preferencesRepository.saveSpatial(_spatialEnabled.value, _spatialPreset.value.key, _spatialIntensity.value)
@@ -1555,6 +1585,12 @@ class TarkasViewModel(
 
   fun setAutoOutputCorrection(on: Boolean) = profiles.setAuto(on)
 
+  /** Exports all saved output profiles (EQ + Spatial + headphone correction per device) as JSON. */
+  fun exportOutputProfilesJson(): String = profiles.exportJson()
+
+  /** Imports and merges output profiles from JSON. Returns imported count or -1 on invalid JSON. */
+  fun importOutputProfilesJson(json: String): Int = profiles.importJson(json)
+
   init {
     viewModelScope.launch {
       eqLoaded.await()
@@ -1568,6 +1604,7 @@ class TarkasViewModel(
 
   /** Songs per folder on the device, and which folders are in the library. */
   val deviceFolders: StateFlow<Map<String, Int>> = musicRepository.deviceFolders
+  val trackFolders: StateFlow<Map<String, String>> = musicRepository.trackFolders
   val folderRules: StateFlow<com.example.data.library.FolderRules> = musicRepository.folderRules
 
   fun setFolderIncluded(folder: String, included: Boolean) {
@@ -1609,6 +1646,37 @@ class TarkasViewModel(
   /** Adds a file picked on the device and plays it like any other track of the library. */
   fun addLocalAudio(title: String, artist: String, uriString: String, durationMs: Long) {
     playTrack(musicRepository.addLocalTrack(title, artist, uriString, durationMs))
+  }
+
+  /** Imports an M3U / M3U8 playlist by matching entries against the current library. */
+  fun importPlaylistM3u(name: String, m3uContent: String) {
+    val pool = (musicRepository.tracks.value + savedTracks.value.values).distinctBy { it.id }
+    val matched = com.example.data.library.M3uFormat.parse(m3uContent, pool)
+    if (matched.isEmpty()) {
+      showNotice(Notice(context.getString(com.example.R.string.library_m3u_import_empty)))
+      return
+    }
+    val playlist = libraryRepository.createPlaylist(name.ifBlank { "Playlist" }, matched)
+    showNotice(Notice(context.getString(com.example.R.string.library_m3u_import_done, playlist.name, matched.size)))
+  }
+
+  /** Downloads a free remote track (Jamendo / Audius) to private storage and registers it locally. */
+  fun downloadTrackOffline(track: Track) {
+    val url = track.filePath
+    if (url.isNullOrBlank() || (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true))) {
+      return
+    }
+    showNotice(Notice(context.getString(com.example.R.string.library_offline_downloading, track.title)))
+    viewModelScope.launch {
+      val result = com.example.data.library.OfflineTrackDownloader.download(context, track)
+      result.onSuccess { file ->
+        musicRepository.addLocalTrack(track.title, track.artist, file.absolutePath, track.durationMs)
+        showNotice(Notice(context.getString(com.example.R.string.library_offline_saved, track.title)))
+      }.onFailure { err ->
+        com.example.data.diagnostics.Diagnostics.record("OfflineDownload", "Failed to download ${track.id}", err)
+        showNotice(Notice(context.getString(com.example.R.string.library_offline_failed, track.title)))
+      }
+    }
   }
 
   // ---- Jamendo's popular tracks, on Início ----
@@ -1680,6 +1748,12 @@ class TarkasViewModel(
 
   /** The microphone permission was just granted: the live spectrum can attach now. */
   fun spectrumAllowed() = audioEngineManager.refreshVisualizer()
+
+  /** Enables or pauses the internal DSP RTA according to whether the EQ is on screen. */
+  fun setSpectrumVisible(visible: Boolean) = audioEngineManager.setSpectrumVisible(visible)
+
+  /** Press-and-hold band audition (Solo): isolates [band] in EqDsp; null exits Solo. */
+  fun setSoloBand(band: com.example.data.model.EqBand?) = audioEngineManager.setSoloBand(band)
 
   /** Turns the level meter off and ends its foreground service and screen capture. */
   fun stopSystemAudioCapture() {

@@ -540,7 +540,7 @@ internal fun CarouselCover(
         alpha = slot.alpha * appear.value
         // The shadow is softer and wider at full size, tighter when it steps back, absent while it is
         // still the small cover of the mini player, and only under the middle cover.
-        shadowElevation = if (near >= 1f) 0f else
+        shadowElevation = if (near >= 1f || track?.artworkUrl == null) 0f else
           (Grid.u6 + Grid.u12 * ((s - PlayerTravel.PausedScale) / (1f - PlayerTravel.PausedScale)).coerceIn(0f, 1f)).toPx() * p * (1f - near)
         shape = if (t != null) {
           RoundedCornerShape(PlayerTravel.cornerAt(Grid.u12.toPx(), Grid.u24.toPx(), t.progress, t.scale * s))

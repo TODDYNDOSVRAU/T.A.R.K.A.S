@@ -155,6 +155,8 @@
     <string name="assistant_done_spatial_off">Áudio espacial desligado.</string>
     <string name="assistant_done_volume">Volume ajustado para %1$d%%.</string>
     <string name="assistant_action_unavailable">Não foi possível fazer isso no app agora.</string>
+    <string name="assistant_dsp_applied">Aplicado: **%1$s**. Diga **desfazer** para reverter.</string>
+    <string name="assistant_dsp_ab_loop_done">Loop A-B atualizado.</string>
     <plurals name="assistant_minutes">
         <item quantity="one">%d minuto</item>
         <item quantity="other">%d minutos</item>

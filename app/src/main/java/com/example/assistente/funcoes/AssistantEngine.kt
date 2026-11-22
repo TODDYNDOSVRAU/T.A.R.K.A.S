@@ -134,7 +134,7 @@ class AssistantEngine(
     answerPending(trimmed)?.let { return@withContext it }
 
     // 1. Check for deterministic local commands first
-    val localToolExecution = tryParseLocalTool(trimmed)
+    val localToolExecution = tryParseLocalTool(trimmed, useGeminiIfAvailable)
     if (localToolExecution != null) {
       return@withContext localToolExecution
     }
@@ -160,7 +160,7 @@ class AssistantEngine(
   }
 
   // Parses natural language and direct tool commands
-  private suspend fun tryParseLocalTool(input: String): AssistantMessage? {
+  private suspend fun tryParseLocalTool(input: String, useGeminiIfAvailable: Boolean = true): AssistantMessage? {
     val lower = input.lowercase()
 
     // Command: HELP / AJUDA (Only here does it describe all its functions!)
@@ -179,6 +179,32 @@ class AssistantEngine(
       if (before == null) return reply(context.getString(R.string.assistant_undo_none))
       withContext(callbackContext) { onEqRestore(before) }
       return reply(context.getString(R.string.assistant_undo_done))
+    }
+
+    // DSP, PEQ, Crossfeed, Analog Harmonics, Compander, Limiter & A-B Loop commands (all EQ changes support undo)
+    parseDspCommand(lower)?.let { dspCmd ->
+      if (dspCmd is DspCommand.AbLoop) {
+        val ok = withContext(callbackContext) { actions.toggleAbLoop() }
+        return AssistantMessage(
+          id = UUID.randomUUID().toString(),
+          sender = MessageSender.ASSISTANT,
+          text = context.getString(if (ok) R.string.assistant_dsp_ab_loop_done else R.string.assistant_action_unavailable),
+          toolReport = ToolExecutionReport("ab_loop", emptyMap(), ok, if (ok) "A-B Loop" else "Unavailable")
+        )
+      }
+      val before = audioEngineManager.eqSettings.value
+      val updated = applyDspCommand(before, dspCmd)
+      if (updated != null) {
+        eqBeforeChat = before
+        withContext(callbackContext) { onEqRestore(updated) }
+        val summary = dspCommandSummary(dspCmd)
+        return AssistantMessage(
+          id = UUID.randomUUID().toString(),
+          sender = MessageSender.ASSISTANT,
+          text = context.getString(R.string.assistant_dsp_applied, summary),
+          toolReport = ToolExecutionReport("dsp_control", mapOf("action" to summary), true, summary)
+        )
+      }
     }
 
     // State-changing requests (library, queue, sleep timer, spatial, volume): asked for confirmation first.
@@ -207,6 +233,9 @@ class AssistantEngine(
       val track = musicRepository.currentTrack.value
       if (track != null) {
         val curiosity = curiosityRepository.getCuriosityForTrack(track)
+          ?: if (useGeminiIfAvailable && hasGeminiKey) {
+            curiosityRepository.fetchOrGenerateForTrack(track, BuildConfig.GEMINI_API_KEY)
+          } else null
         // The callbacks touch view-model state and audio effects: they run on the main thread.
         withContext(callbackContext) { onCuriosityUpdated(curiosity) }
 
@@ -602,5 +631,23 @@ class AssistantEngine(
     } catch (e: IOException) {
       throw AssistantFailureException(AssistantFailure.NO_CONNECTION, e)
     }
+  }
+
+  private fun dspCommandSummary(cmd: DspCommand): String = when (cmd) {
+    is DspCommand.Crossfeed -> if (cmd.preset.key == "off") "Crossfeed OFF" else "Crossfeed ${cmd.preset.key.uppercase()}"
+    is DspCommand.EqualLoudness -> if (cmd.enabled) "Equal-Loudness ISO 226 ON" else "Equal-Loudness OFF"
+    is DspCommand.TubeWarmth -> "Tube/Tape ${(cmd.amount * 100).toInt()}%"
+    is DspCommand.SubBass -> "Sub-Bass ${(cmd.amount * 100).toInt()}%"
+    is DspCommand.Compander -> "Compander ${(cmd.amount * 100).toInt()}%"
+    is DspCommand.Limiter -> when {
+      cmd.softClip != null -> if (cmd.softClip) "Soft-Clip ON" else "Soft-Clip OFF"
+      cmd.enabled != null -> if (cmd.enabled) "Limiter ON" else "Limiter OFF"
+      else -> "Limiter"
+    }
+    is DspCommand.PeqBandAdjust -> {
+      val sign = if (cmd.deltaDb >= 0f) "+" else ""
+      "PEQ ${cmd.freqHz.toInt()} Hz ($sign${String.format(java.util.Locale.US, "%.1f", cmd.deltaDb)} dB)"
+    }
+    DspCommand.AbLoop -> "A-B Loop"
   }
 }

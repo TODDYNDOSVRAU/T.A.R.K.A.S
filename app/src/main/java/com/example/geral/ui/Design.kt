@@ -53,6 +53,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import com.example.ui.theme.drawLiquidGlassThumb
+import com.example.ui.theme.liquidChrome
+import com.example.ui.theme.liquidLensPill
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -146,10 +152,10 @@ fun SectionHeader(
 fun GroupHeader(text: String, modifier: Modifier = Modifier) {
   Text(
     text = text,
-    style = GridText.Label,
+    style = GridText.Small.copy(fontWeight = FontWeight.Medium),
     color = MaterialTheme.colorScheme.onSurfaceVariant,
     modifier = modifier
-      .padding(bottom = Grid.u12)
+      .padding(bottom = Grid.u6)
       .gridHeight(min = Grid.u24)
       .padding(start = Grid.margin + Grid.inset, end = Grid.margin + Grid.inset)
       .semantics { heading() }
@@ -412,30 +418,68 @@ fun SwitchRow(
 @Composable
 fun GridSwitch(checked: Boolean, modifier: Modifier = Modifier, enabled: Boolean = true) {
   val colors = MaterialTheme.colorScheme
+  val isLiquid = com.example.ui.theme.LocalSurfaceStyle.current == com.example.ui.theme.SurfaceStyle.LIQUID &&
+    com.example.ui.theme.liquidGlassSupported
+  val isDark = colors.background.luminance() < 0.5f
   val fade = if (enabled) 1f else 0.38f
   val track by animateColorAsState(
-    if (checked) colors.primary.copy(alpha = fade) else colors.onSurface.copy(alpha = 0.2f * fade),
+    if (checked) colors.primary.copy(alpha = (if (isLiquid) 0.78f else 1f) * fade)
+    else colors.onSurface.copy(alpha = (if (isLiquid) 0.18f else 0.2f) * fade),
     tween(200), label = "switchTrack"
   )
   val thumb by animateColorAsState(
     if (checked) colors.onPrimary else colors.onSurface.copy(alpha = fade),
     tween(200), label = "switchThumb"
   )
-  val x by animateDpAsState(if (checked) Grid.u24 + 3.dp else 3.dp, tween(250), label = "switchX")
-  Box(
-    modifier = modifier
-      .size(width = Grid.u48, height = Grid.u24)
-      .clip(Grid.r12)
-      .background(track),
-    contentAlignment = Alignment.CenterStart
-  ) {
-    Box(
-      Modifier
-        .offset(x = x)
-        .size(18.dp)
-        .clip(CircleShape)
-        .background(thumb)
+  val x by animateDpAsState(
+    if (checked) (if (isLiquid) 20.dp else Grid.u24 + 3.dp) else (if (isLiquid) 0.dp else 3.dp),
+    tween(250),
+    label = "switchX"
+  )
+  if (isLiquid) {
+    val surfaceBg = colors.surface
+    val trackBackdrop = rememberLayerBackdrop(
+      onDraw = {
+        drawRect(surfaceBg)
+        drawContent()
+      }
     )
+    // Unclipped outer container so the oblong Liquid Glass pill floats cleanly over the track.
+    Box(
+      modifier = modifier.size(width = Grid.u48, height = Grid.u24),
+      contentAlignment = Alignment.CenterStart
+    ) {
+      Box(
+        modifier = Modifier
+          .matchParentSize()
+          .layerBackdrop(trackBackdrop)
+          .padding(vertical = 2.dp)
+          .clip(Grid.r12)
+          .background(track)
+      )
+      Box(
+        modifier = Modifier
+          .offset(x = x)
+          .size(width = 28.dp, height = 20.dp)
+          .liquidLensPill(trackBackdrop, isDark = isDark, trackAccent = if (checked) colors.primary else null)
+      )
+    }
+  } else {
+    Box(
+      modifier = modifier
+        .size(width = Grid.u48, height = Grid.u24)
+        .clip(Grid.r12)
+        .background(track),
+      contentAlignment = Alignment.CenterStart
+    ) {
+      Box(
+        Modifier
+          .offset(x = x)
+          .size(18.dp)
+          .clip(CircleShape)
+          .background(thumb)
+      )
+    }
   }
 }
 
@@ -533,7 +577,7 @@ private fun ButtonLayout(
       .clip(Grid.r24)
       .background(container)
       .highlightClickable(enabled = enabled, onClick = onClick)
-      .padding(horizontal = Grid.u24),
+      .padding(horizontal = Grid.inset),
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.Center
   ) {
@@ -603,21 +647,38 @@ fun IconAction(
 @Composable
 fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
   val colors = MaterialTheme.colorScheme
+  val isLiquid = com.example.ui.theme.LocalSurfaceStyle.current == com.example.ui.theme.SurfaceStyle.LIQUID &&
+    com.example.ui.theme.liquidGlassSupported
+  // 48 dp touch target with a leaner 36 dp Apple HIG visual pill inside.
   Box(
     modifier = modifier
-      .height(Grid.u48)
-      .clip(Grid.r24)
-      .background(if (selected) colors.onSurface else colors.surfaceContainer)
-      .selectable(selected = selected, role = Role.Tab, onClick = onClick)
-      .padding(horizontal = Grid.u24),
+      .heightIn(min = Grid.u48)
+      .selectable(selected = selected, role = Role.Tab, onClick = onClick),
     contentAlignment = Alignment.Center
   ) {
-    Text(
-      label,
-      style = GridText.Small.copy(fontWeight = FontWeight.Medium),
-      color = if (selected) colors.background else colors.onSurface,
-      maxLines = 1
-    )
+    Box(
+      modifier = Modifier
+        .height(36.dp)
+        .clip(Grid.pill)
+        .then(
+          if (isLiquid) Modifier.liquidChrome(Grid.pill, selected = selected)
+          else Modifier.background(if (selected) colors.onSurface else colors.surfaceContainer)
+        )
+        .padding(horizontal = 16.dp),
+      contentAlignment = Alignment.Center
+    ) {
+      Text(
+        label,
+        style = GridText.Small.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium),
+        color = when {
+          isLiquid && selected -> colors.primary
+          isLiquid -> colors.onSurface
+          selected -> colors.background
+          else -> colors.onSurface
+        },
+        maxLines = 1
+      )
+    }
   }
 }
 
@@ -627,12 +688,17 @@ fun FilterChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: 
  */
 @Composable
 fun SegmentedTabs(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
+  val isLiquid = com.example.ui.theme.LocalSurfaceStyle.current == com.example.ui.theme.SurfaceStyle.LIQUID &&
+    com.example.ui.theme.liquidGlassSupported
   Row(
     modifier = modifier
       .fillMaxWidth()
       .height(Grid.u48)
       .clip(Grid.r24)
-      .background(MaterialTheme.colorScheme.surface)
+      .then(
+        if (isLiquid) Modifier.liquidChrome(Grid.r24, selected = false)
+        else Modifier.background(MaterialTheme.colorScheme.surface)
+      )
       .padding(horizontal = Grid.u6)
       .selectableGroup(),
     content = content
@@ -643,11 +709,20 @@ fun SegmentedTabs(modifier: Modifier = Modifier, content: @Composable RowScope.(
 @Composable
 fun RowScope.Segment(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
   val colors = MaterialTheme.colorScheme
+  val isLiquid = com.example.ui.theme.LocalSurfaceStyle.current == com.example.ui.theme.SurfaceStyle.LIQUID &&
+    com.example.ui.theme.liquidGlassSupported
   val fill by animateColorAsState(
     if (selected) colors.surfaceContainerHigh else colors.surfaceContainerHigh.copy(alpha = 0f),
     tween(200), label = "segmentFill"
   )
-  val text by animateColorAsState(if (selected) colors.onSurface else colors.onSurfaceVariant, tween(200), label = "segmentText")
+  val text by animateColorAsState(
+    when {
+      isLiquid && selected -> colors.primary
+      selected -> colors.onSurface
+      else -> colors.onSurfaceVariant
+    },
+    tween(200), label = "segmentText"
+  )
   Box(
     modifier = modifier
       .weight(1f)
@@ -666,7 +741,11 @@ fun RowScope.Segment(label: String, selected: Boolean, onClick: () -> Unit, modi
       modifier = Modifier
         .fillMaxSize()
         .clip(Grid.r24)
-        .background(fill)
+        .then(
+          if (isLiquid && selected) Modifier.liquidChrome(Grid.r24, selected = true)
+          else if (!isLiquid) Modifier.background(fill)
+          else Modifier
+        )
         .padding(horizontal = Grid.u6),
       contentAlignment = Alignment.Center
     ) {

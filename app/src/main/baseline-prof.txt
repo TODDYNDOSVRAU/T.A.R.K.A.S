@@ -1,11 +1,18 @@
-# Hand-written baseline profile: tells the installer to pre-compile the app and the Compose
-# classes it uses on every launch, so the first frames and the first scroll do not stutter.
-Lcom/example/**;
-HSPLcom/example/**;->**(**)**
-HSPLandroidx/compose/runtime/**;->**(**)**
-HSPLandroidx/compose/ui/**;->**(**)**
-HSPLandroidx/compose/foundation/**;->**(**)**
-HSPLandroidx/compose/animation/**;->**(**)**
-HSPLandroidx/compose/material3/**;->**(**)**
-HSPLandroidx/lifecycle/**;->**(**)**
-HSPLandroidx/activity/**;->**(**)**
+# T.A.R.K.A.S. Baseline Profile — AOT-compiled hot paths for fast cold start, smooth 60/120 Hz UI, and zero-dropout DSP
+HSPLcom/example/MainActivity;->**(**)**
+HSPLcom/example/AppGraph;->**(**)**
+HSPLcom/example/data/audio/dsp/EqDsp;->**(**)**
+HSPLcom/example/data/audio/dsp/BiquadCoefficients;->**(**)**
+HSPLcom/example/data/audio/dsp/ParametricEqAudioProcessor;->**(**)**
+HSPLcom/example/data/audio/dsp/RtaAnalyzer;->**(**)**
+HSPLcom/example/data/audio/dsp/CrossfeedDsp;->**(**)**
+HSPLcom/example/data/audio/dsp/MultibandCompanderDsp;->**(**)**
+HSPLcom/example/data/audio/dsp/AnalogHarmonicsDsp;->**(**)**
+HSPLcom/example/data/audio/dsp/ConvolverDsp;->**(**)**
+HSPLcom/example/data/audio/spatial/SpatialAudioProcessor;->**(**)**
+HSPLcom/example/data/audio/spatial/SpatialEngine;->**(**)**
+HSPLcom/example/data/audio/spatial/UpmixVirtualizer;->**(**)**
+HSPLcom/example/data/audio/spatial/Fft;->**(**)**
+HSPLcom/example/ui/screens/audio/EqGraphKt;->**(**)**
+HSPLcom/example/ui/screens/audio/SpatialStageKt;->**(**)**
+HSPLcom/example/ui/screens/audio/StageScene;->**(**)**

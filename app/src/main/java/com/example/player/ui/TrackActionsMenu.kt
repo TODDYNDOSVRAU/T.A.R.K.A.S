@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.FavoriteBorder
@@ -83,7 +84,9 @@ fun TrackActionsMenu(
   onSleepTimer: (() -> Unit)? = null,
   /** Shown only in the player: "Sobre a faixa" (album, date and genres from MusicBrainz). */
   onAbout: (() -> Unit)? = null,
-  onLyrics: (() -> Unit)? = null
+  onLyrics: (() -> Unit)? = null,
+  /** Shown for free remote tracks (Jamendo / Audius): downloads to private offline storage. */
+  onDownloadOffline: (() -> Unit)? = null
 ) {
   // Saved, so a rotation keeps the sheet (and the playlist step) where the user left it.
   var expanded by rememberSaveable { mutableStateOf(false) }
@@ -174,6 +177,15 @@ fun TrackActionsMenu(
               chevron = false,
               onClick = { close(share) },
               modifier = Modifier.testTag("menu_share")
+            )
+          }
+          if (onDownloadOffline != null && track.onlineSource != null && !track.isLocalFile) {
+            ListRow(
+              title = stringResource(R.string.player_menu_download_offline),
+              icon = Icons.Rounded.Download,
+              chevron = false,
+              onClick = { close(onDownloadOffline) },
+              modifier = Modifier.testTag("menu_download_offline")
             )
           }
           if (onLyrics != null) {

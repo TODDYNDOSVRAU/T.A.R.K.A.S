@@ -17,6 +17,8 @@ interface SettingsPrefs {
   fun saveSystemColors(on: Boolean)
   fun surfaceStyle(): String
   fun saveSurfaceStyle(key: String)
+  fun liquidGlassOpacity(): Float = com.example.ui.theme.DefaultLiquidGlassOpacity
+  fun saveLiquidGlassOpacity(value: Float) {}
   fun reduceMotion(): Boolean
   fun saveReduceMotion(reduce: Boolean)
   fun listAnimation(): String?
@@ -35,6 +37,8 @@ class PreferencesSettings(private val p: PreferencesRepository) : SettingsPrefs 
   override fun saveSystemColors(on: Boolean) = p.saveSystemColors(on)
   override fun surfaceStyle() = p.getSurfaceStyle()
   override fun saveSurfaceStyle(key: String) = p.saveSurfaceStyle(key)
+  override fun liquidGlassOpacity() = p.getLiquidGlassOpacity()
+  override fun saveLiquidGlassOpacity(value: Float) = p.saveLiquidGlassOpacity(value)
   override fun reduceMotion() = p.getReduceMotion()
   override fun saveReduceMotion(reduce: Boolean) = p.saveReduceMotion(reduce)
   override fun listAnimation() = p.getListAnimation()
@@ -59,6 +63,9 @@ class SettingsStore(private val prefs: SettingsPrefs) {
 
   private val _surfaceStyle = MutableStateFlow(SurfaceStyle.fromKey(prefs.surfaceStyle()))
   val surfaceStyle: StateFlow<SurfaceStyle> = _surfaceStyle.asStateFlow()
+
+  private val _liquidGlassOpacity = MutableStateFlow(prefs.liquidGlassOpacity().coerceIn(0f, 1f))
+  val liquidGlassOpacity: StateFlow<Float> = _liquidGlassOpacity.asStateFlow()
 
   private val _reduceMotion = MutableStateFlow(prefs.reduceMotion().also { AppMotion.userReduced = it })
   val reduceMotion: StateFlow<Boolean> = _reduceMotion.asStateFlow()
@@ -89,6 +96,12 @@ class SettingsStore(private val prefs: SettingsPrefs) {
     prefs.saveSurfaceStyle(style.key)
   }
 
+  fun setLiquidGlassOpacity(value: Float) {
+    val clamped = value.coerceIn(0f, 1f)
+    _liquidGlassOpacity.value = clamped
+    prefs.saveLiquidGlassOpacity(clamped)
+  }
+
   fun setReduceMotion(reduce: Boolean) {
     _reduceMotion.value = reduce
     AppMotion.userReduced = reduce
@@ -116,6 +129,7 @@ class SettingsViewModel(private val store: SettingsStore = com.example.AppGraph.
   val themeMode: StateFlow<String> = store.themeMode
   val systemColors: StateFlow<Boolean> = store.systemColors
   val surfaceStyle: StateFlow<SurfaceStyle> = store.surfaceStyle
+  val liquidGlassOpacity: StateFlow<Float> = store.liquidGlassOpacity
   val reduceMotion: StateFlow<Boolean> = store.reduceMotion
   val reduceTransparency: StateFlow<Boolean> = store.reduceTransparency
   val homeMusicFirst: StateFlow<Boolean> = store.homeMusicFirst
@@ -123,6 +137,7 @@ class SettingsViewModel(private val store: SettingsStore = com.example.AppGraph.
   fun setThemeMode(mode: String) = store.setThemeMode(mode)
   fun setSystemColors(on: Boolean) = store.setSystemColors(on)
   fun setSurfaceStyle(style: SurfaceStyle) = store.setSurfaceStyle(style)
+  fun setLiquidGlassOpacity(value: Float) = store.setLiquidGlassOpacity(value)
   fun setReduceMotion(reduce: Boolean) = store.setReduceMotion(reduce)
   fun setReduceTransparency(reduce: Boolean) = store.setReduceTransparency(reduce)
   fun setHomeMusicFirst(on: Boolean) = store.setHomeMusicFirst(on)

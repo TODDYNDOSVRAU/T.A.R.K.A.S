@@ -276,6 +276,9 @@
     <string name="settings_surface_frosted_desc">Blurs what passes behind</string>
     <string name="settings_surface_liquid_desc">Glass that bends the background, uses more GPU</string>
     <string name="settings_surface_liquid_unsupported">Needs Android 13; here it becomes frosted glass</string>
+    <string name="settings_surface_liquid_opacity">Intensity</string>
+    <string name="settings_surface_liquid_transparent">0% Transparent</string>
+    <string name="settings_surface_liquid_opaque">100% Opaque</string>
 
     <!-- UpdateSettings.kt -->
     <string name="settings_update_header">Updates</string>
@@ -429,4 +432,8 @@
     <string name="widget_cd_next">Next</string>
     <string name="player_problem_failed">This track does not play. Try again or pick another.</string>
     <string name="player_problem_offline">No connection. Check the internet and try again.</string>
+    <string name="lyrics_import_lrc">Import .lrc</string>
+    <string name="player_ab_loop_off">A-B</string>
+    <string name="player_ab_loop_pending">A %1$s · Set B</string>
+    <string name="player_ab_loop_active">Loop %1$s – %2$s</string>
 </resources>

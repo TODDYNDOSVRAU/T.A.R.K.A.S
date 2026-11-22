@@ -8,7 +8,16 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,10 +44,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Palette
 import com.example.ui.components.TarkasAlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.unit.dp
+import com.example.ui.theme.drawLiquidGlassThumb
+import com.example.ui.theme.liquidLensPill
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -88,6 +105,7 @@ import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
 import com.example.ui.theme.gridHeight
 import com.example.ui.theme.LocalBarInset
+import com.example.ui.theme.Motion
 import com.example.ui.theme.SurfaceStyle
 import com.example.ui.theme.liquidGlassSupported
 import com.example.ui.theme.rememberReducedMotion
@@ -121,6 +139,8 @@ fun SettingsScreen(
   hasGeminiKey: Boolean = false,
   surfaceStyle: SurfaceStyle = SurfaceStyle.SOLID,
   onSurfaceStyleChange: (SurfaceStyle) -> Unit = {},
+  liquidGlassOpacity: Float = com.example.ui.theme.DefaultLiquidGlassOpacity,
+  onLiquidGlassOpacityChange: (Float) -> Unit = {},
   reduceMotion: Boolean = false,
   onReduceMotionChange: (Boolean) -> Unit = {},
   onListAnimationChange: (com.example.ui.theme.ListAnimation) -> Unit = {},
@@ -174,7 +194,7 @@ fun SettingsScreen(
     when (shown) {
       SettingsPage.MAIN -> MainSettings(
         themeMode, capabilities, onThemeModeChange, curiosityConfig, onOpenCuriositySettings, hasGeminiKey,
-        surfaceStyle, onSurfaceStyleChange, reduceMotion, onReduceMotionChange, onListAnimationChange, reduceTransparency, onReduceTransparencyChange,
+        surfaceStyle, onSurfaceStyleChange, liquidGlassOpacity, onLiquidGlassOpacityChange, reduceMotion, onReduceMotionChange, onListAnimationChange, reduceTransparency, onReduceTransparencyChange,
         waveformBar, onWaveformBarChange,
         homeMusicFirst, onHomeMusicFirstChange,
         isShuffle, repeatMode, onToggleShuffle,
@@ -232,6 +252,8 @@ private fun MainSettings(
   hasGeminiKey: Boolean,
   surfaceStyle: SurfaceStyle,
   onSurfaceStyleChange: (SurfaceStyle) -> Unit,
+  liquidGlassOpacity: Float,
+  onLiquidGlassOpacityChange: (Float) -> Unit,
   reduceMotion: Boolean,
   onReduceMotionChange: (Boolean) -> Unit,
   onListAnimationChange: (ListAnimation) -> Unit,
@@ -359,27 +381,38 @@ private fun MainSettings(
       resources.getString(R.string.settings_floating_bars),
       footer = resources.getString(R.string.settings_floating_bars_footer)
     ) {
-      SurfaceOptionRows(surfaceStyle, onSurfaceStyleChange, tagPrefix = "surface_style_")
+      SurfaceOptionRows(
+        surfaceStyle = surfaceStyle,
+        onSurfaceStyle = onSurfaceStyleChange,
+        tagPrefix = "surface_style_",
+        liquidOpacity = liquidGlassOpacity,
+        onLiquidOpacity = onLiquidGlassOpacityChange
+      )
     }
-    group(
-      SettingsLayer.ADVANCED,
-      resources.getString(R.string.settings_list_animation),
-      footer = resources.getString(R.string.settings_list_animation_footer)
-    ) {
-      Row(
-        modifier = Modifier
-          .horizontalScroll(rememberScrollState())
-          .padding(Grid.inset)
-          .selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(Grid.u6)
-      ) {
-        ListAnimation.entries.forEach { style ->
-          com.example.ui.components.FilterChip(
-            label = stringResource(style.labelRes),
-            selected = AppMotion.listAnimation == style,
-            onClick = { onListAnimationChange(style) },
-            modifier = Modifier.testTag("list_animation_${style.key}")
-          )
+    // Animação das listas: chips Liquid Glass soltos sobre o fundo (sem card externo) para evitar conflito de concentricidade.
+    if (settingsGroupVisible(query, layer, SettingsLayer.ADVANCED, listOf(resources.getString(R.string.settings_list_animation)))) {
+      shownGroups++
+      item {
+        Column(Modifier.padding(top = Grid.u24)) {
+          GroupHeader(resources.getString(R.string.settings_list_animation))
+          androidx.compose.foundation.lazy.LazyRow(
+            modifier = Modifier
+              .fillMaxWidth()
+              .selectableGroup(),
+            contentPadding = PaddingValues(horizontal = Grid.margin),
+            horizontalArrangement = Arrangement.spacedBy(Grid.u6)
+          ) {
+            items(ListAnimation.entries.size) { idx ->
+              val style = ListAnimation.entries[idx]
+              com.example.ui.components.FilterChip(
+                label = stringResource(style.labelRes),
+                selected = AppMotion.listAnimation == style,
+                onClick = { onListAnimationChange(style) },
+                modifier = Modifier.testTag("list_animation_${style.key}")
+              )
+            }
+          }
+          GroupFooter(resources.getString(R.string.settings_list_animation_footer))
         }
       }
     }
@@ -887,8 +920,17 @@ private fun SurfaceStyle.shortDescription(): String = stringResource(
 )
 
 /** The floating-surface style as radio rows; put inside an [InsetGroup]. */
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-internal fun SurfaceOptionRows(surfaceStyle: SurfaceStyle, onSurfaceStyle: (SurfaceStyle) -> Unit, tagPrefix: String) {
+internal fun SurfaceOptionRows(
+  surfaceStyle: SurfaceStyle,
+  onSurfaceStyle: (SurfaceStyle) -> Unit,
+  tagPrefix: String,
+  liquidOpacity: Float? = null,
+  onLiquidOpacity: ((Float) -> Unit)? = null
+) {
+  val reduced = rememberReducedMotion()
+  val colors = MaterialTheme.colorScheme
   Column(Modifier.selectableGroup()) {
     SurfaceStyle.entries.forEachIndexed { i, style ->
       if (i > 0) GroupDivider()
@@ -899,6 +941,95 @@ internal fun SurfaceOptionRows(surfaceStyle: SurfaceStyle, onSurfaceStyle: (Surf
         onClick = { onSurfaceStyle(style) },
         modifier = Modifier.testTag("$tagPrefix${style.key}")
       )
+      if (style == SurfaceStyle.LIQUID && liquidOpacity != null && onLiquidOpacity != null) {
+        AnimatedVisibility(
+          visible = surfaceStyle == SurfaceStyle.LIQUID && liquidGlassSupported,
+          enter = if (reduced) EnterTransition.None else expandVertically(Motion.gel()) + fadeIn(),
+          exit = if (reduced) ExitTransition.None else shrinkVertically(Motion.gelExit()) + fadeOut()
+        ) {
+          Column(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(start = Grid.inset, end = Grid.inset, bottom = Grid.inset)
+          ) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                  onClick = {},
+                  onDoubleClick = { onLiquidOpacity(com.example.ui.theme.DefaultLiquidGlassOpacity) }
+                )
+                .padding(top = Grid.u6),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Text(
+                text = stringResource(R.string.settings_surface_liquid_opacity),
+                style = GridText.Small,
+                color = colors.onSurfaceVariant
+              )
+              Text(
+                text = "${kotlin.math.round(liquidOpacity * 100f).toInt()}%",
+                style = GridText.Small.copy(fontFamily = com.example.ui.theme.JetBrainsMono),
+                color = colors.primary,
+                modifier = Modifier.testTag("liquid_opacity_value")
+              )
+            }
+            val isDarkTheme = colors.background.luminance() < 0.5f
+            val sliderBg = colors.surface
+            val sliderBackdrop = rememberLayerBackdrop(
+              onDraw = {
+                drawRect(sliderBg)
+                drawContent()
+              }
+            )
+            Slider(
+              value = liquidOpacity,
+              onValueChange = onLiquidOpacity,
+              valueRange = 0f..1f,
+              thumb = {
+                Box(
+                  modifier = Modifier
+                    .size(width = 34.dp, height = 22.dp)
+                    .liquidLensPill(sliderBackdrop, isDark = isDarkTheme, trackAccent = colors.primary)
+                )
+              },
+              track = { sliderState ->
+                SliderDefaults.Track(
+                  sliderState = sliderState,
+                  drawStopIndicator = null,
+                  thumbTrackGapSize = 0.dp,
+                  colors = SliderDefaults.colors(
+                    activeTrackColor = colors.primary,
+                    inactiveTrackColor = colors.onSurface.copy(alpha = 0.16f)
+                  ),
+                  modifier = Modifier
+                    .height(Grid.u6)
+                    .layerBackdrop(sliderBackdrop)
+                )
+              },
+              modifier = Modifier
+                .fillMaxWidth()
+                .testTag("liquid_opacity_slider")
+            )
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+              Text(
+                text = stringResource(R.string.settings_surface_liquid_transparent),
+                style = GridText.Small,
+                color = colors.onSurfaceVariant
+              )
+              Text(
+                text = stringResource(R.string.settings_surface_liquid_opaque),
+                style = GridText.Small,
+                color = colors.onSurfaceVariant
+              )
+            }
+          }
+        }
+      }
     }
   }
 }

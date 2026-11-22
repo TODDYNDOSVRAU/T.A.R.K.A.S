@@ -4,18 +4,33 @@ import android.content.Context
 import androidx.annotation.ArrayRes
 import androidx.annotation.StringRes
 import com.example.R
+import com.example.data.assistant.GEMINI_MODEL_URL
+import com.example.data.assistant.geminiReplyText
 import com.example.data.model.Curiosity
 import com.example.data.model.Track
 import com.example.data.model.VerificationStatus
+import com.example.data.net.Http
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
- * The verified curiosities of the built-in tracks. The texts are resources, so they follow the app
- * language (English or Portuguese). A track is recognized by its id, whatever the language.
+ * The verified curiosities of the built-in tracks, plus an on-demand Gemini lookup cached on disk
+ * (`filesDir/curiosities_cache/`) for user tracks when online AI is enabled.
  */
 class CuriosityRepository(context: Context) {
 
-  // Only the Resources are kept, not the Context: this repository lives in a static holder (AppGraph).
+  // Only Resources and filesDir are kept, never an Activity Context.
   private val resources = context.resources
+  private val cacheDir = File(context.applicationContext.filesDir, "curiosities_cache")
 
   private class Entry(
     val trackId: String,
@@ -102,7 +117,93 @@ class CuriosityRepository(context: Context) {
    * in the notification for a track without one: never invent trivia or sources.
    */
   fun getCuriosityForTrack(track: Track): Curiosity? =
-    entries.firstOrNull { it.trackId == track.id }?.let(::build)
+    entries.firstOrNull { it.trackId == track.id }?.let(::build) ?: readCache(track)
 
   fun getAllCuriosities(): List<Curiosity> = entries.map(::build)
+
+  /**
+   * Returns a built-in or cached curiosity if available; otherwise asks Gemini on demand for a
+   * concise factual note about [track] and caches the result on disk so it never repeats the call.
+   * Replies "NONE" from Gemini are discarded (T.A.L. integrity: never invent trivia).
+   */
+  suspend fun fetchOrGenerateForTrack(track: Track, apiKey: String): Curiosity? = withContext(Dispatchers.IO) {
+    getCuriosityForTrack(track)?.let { return@withContext it }
+    if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") return@withContext null
+    if (track.title.isBlank() || track.artist.isBlank()) return@withContext null
+
+    val lang = Locale.getDefault().language.lowercase(Locale.ROOT)
+    val langName = if (lang.startsWith("pt")) "Portuguese" else "English"
+    val prompt = "Give one concise, factual musical trivia note (max 45 words, plain prose, no markdown, no exclamation marks) about the song \"${track.title}\" by ${track.artist}. Reply strictly with NONE if you are not sure of verified facts. Write in $langName."
+    val payload = JSONObject().apply {
+      put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
+      put("generationConfig", JSONObject().put("temperature", 0.2).put("maxOutputTokens", 120))
+    }
+    val req = Request.Builder()
+      .url(GEMINI_MODEL_URL)
+      .header("x-goog-api-key", apiKey)
+      .post(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+      .build()
+
+    val reply = runCatching {
+      Http.client.newCall(req).execute().use { resp ->
+        if (!resp.isSuccessful) return@use null
+        val body = resp.body?.string().orEmpty()
+        geminiReplyText(body)
+      }
+    }.getOrNull()?.trim() ?: return@withContext null
+
+    if (reply.equals("NONE", ignoreCase = true) || reply.length < 15) return@withContext null
+    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+    val curiosity = Curiosity(
+      trackId = track.id,
+      trackTitle = track.title,
+      artist = track.artist,
+      shortTrivia = reply,
+      wordCount = reply.split(Regex("\\s+")).size,
+      documentedFacts = reply,
+      sources = listOf("Gemini"),
+      status = VerificationStatus.HISTORICAL_ANALYSIS,
+      verifiedDate = today
+    )
+    writeCache(track, curiosity)
+    curiosity
+  }
+
+  private fun cacheFile(track: Track): File {
+    val lang = Locale.getDefault().language.lowercase(Locale.ROOT).take(2).ifBlank { "en" }
+    val safeId = track.id.replace(Regex("[^A-Za-z0-9._-]"), "_").take(80)
+    return File(cacheDir, "${safeId}_$lang.json")
+  }
+
+  private fun readCache(track: Track): Curiosity? = runCatching {
+    val f = cacheFile(track)
+    if (!f.exists()) return null
+    val o = JSONObject(f.readText())
+    val trivia = o.optString("trivia").takeIf { it.isNotBlank() } ?: return null
+    Curiosity(
+      trackId = track.id,
+      trackTitle = o.optString("title", track.title),
+      artist = o.optString("artist", track.artist),
+      shortTrivia = trivia,
+      wordCount = trivia.split(Regex("\\s+")).size,
+      documentedFacts = o.optString("facts", trivia),
+      sources = listOf(o.optString("source", "Gemini")),
+      status = VerificationStatus.HISTORICAL_ANALYSIS,
+      verifiedDate = o.optString("date", "")
+    )
+  }.getOrNull()
+
+  private fun writeCache(track: Track, c: Curiosity) {
+    runCatching {
+      cacheDir.mkdirs()
+      val o = JSONObject()
+        .put("title", c.trackTitle)
+        .put("artist", c.artist)
+        .put("trivia", c.shortTrivia)
+        .put("facts", c.documentedFacts)
+        .put("source", c.sources.firstOrNull() ?: "Gemini")
+        .put("date", c.verifiedDate)
+      cacheFile(track).writeText(o.toString())
+    }
+  }
 }

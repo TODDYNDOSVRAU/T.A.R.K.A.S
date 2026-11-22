@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.data.library.AlbumGroup
 import com.example.data.library.ArtistGroup
+import com.example.data.library.FolderGroup
 import com.example.data.library.LibraryGroup
 import com.example.data.library.LibraryGroups
 import com.example.data.model.Track
@@ -65,6 +66,9 @@ internal fun groupSubtitle(group: LibraryGroup, showArtist: Boolean = true): Str
     }
     is ArtistGroup -> if (group.albumCount > 0) {
       parts += pluralStringResource(R.plurals.library_album_count, group.albumCount, group.albumCount)
+    }
+    is FolderGroup -> if (group.fullPath.isNotBlank()) {
+      parts += group.fullPath
     }
     else -> Unit
   }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -22,6 +23,15 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
+import com.example.ui.theme.LocalSurfaceStyle
+import com.example.ui.theme.SurfaceStyle
+import com.example.ui.theme.drawLiquidGlassPillThumb
+import com.example.ui.theme.liquidGlassSupported
+import com.example.ui.theme.liquidLensPill
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -74,6 +84,18 @@ private const val KNOB_TRAVEL = 1.6f
  * [steps] is how many stops a screen reader's adjust gesture walks between the ends.
  * [onHeldChange] reports a finger on the fader, so the caller can enlarge its readout.
  */
+/**
+ * Maps absolute EQ gain intensity (0..1, same for boost and cut) from green through amber to red,
+ * as requested by the owner for the graphic faders.
+ */
+fun eqIntensityColor(normalizedGain: Float): Color {
+  val t = abs(normalizedGain).coerceIn(0f, 1f)
+  val green = Color(0xFF22C55E)
+  val amber = Color(0xFFF59E0B)
+  val red = Color(0xFFEF4444)
+  return if (t <= 0.5f) lerp(green, amber, t * 2f) else lerp(amber, red, (t - 0.5f) * 2f)
+}
+
 @Composable
 fun EqFader(
   value: Float,
@@ -97,6 +119,8 @@ fun EqFader(
   handleColor: androidx.compose.ui.graphics.Color? = null
 ) {
   val colors = MaterialTheme.colorScheme
+  val isLiquid = LocalSurfaceStyle.current == SurfaceStyle.LIQUID && liquidGlassSupported
+  val isDark = colors.background.luminance() < 0.5f
   val current by rememberUpdatedState(value)
   val change by rememberUpdatedState(onChange)
   val held by rememberUpdatedState(onHeldChange)
@@ -109,7 +133,14 @@ fun EqFader(
   val handle = colors.onSurface.copy(alpha = if (enabled) 0.16f else 0.06f).compositeOver(colors.surface)
   val dash = if (enabled) colors.onSurface else colors.onSurface.copy(alpha = 0.38f)
 
-  Canvas(
+  val faderBg = colors.background
+  val faderBackdrop = rememberLayerBackdrop(
+    onDraw = {
+      drawRect(faderBg)
+      drawContent()
+    }
+  )
+  androidx.compose.foundation.layout.BoxWithConstraints(
     modifier = modifier
       .semantics {
         contentDescription = label
@@ -168,38 +199,64 @@ fun EqFader(
             held(false)
           }
         }
-      }
+      },
+    contentAlignment = androidx.compose.ui.Alignment.TopCenter
   ) {
-    val cx = size.width / 2f
-    val handleH = handleHeight.toPx()
-    val handleW = handleWidth.toPx().coerceAtMost(size.width)
-    val top = handleH / 2f
-    val bottom = size.height - handleH / 2f
-    val mid = (top + bottom) / 2f
-    val y = bottom - (value.coerceIn(-1f, 1f) + 1f) / 2f * (bottom - top)
-    val trackW = trackWidth.toPx()
+    val totalH = maxHeight
+    val effHandleW = handleWidth.coerceAtMost(maxWidth)
+    Canvas(
+      modifier = Modifier
+        .fillMaxSize()
+        .then(if (isLiquid && enabled) Modifier.layerBackdrop(faderBackdrop) else Modifier)
+    ) {
+      val cx = size.width / 2f
+      val handleH = handleHeight.toPx()
+      val handleW = handleWidth.toPx().coerceAtMost(size.width)
+      val top = handleH / 2f
+      val bottom = size.height - handleH / 2f
+      val mid = (top + bottom) / 2f
+      val y = bottom - (value.coerceIn(-1f, 1f) + 1f) / 2f * (bottom - top)
+      val trackW = trackWidth.toPx()
 
-    // Dotted marks at +max, 0 dB and -max on both sides of the track, like the rule of a desk.
-    val dot = Grid.hairline.toPx()
-    val gap = Grid.u6.toPx()
-    if (marks) for (markY in floatArrayOf(top, mid, bottom)) {
-      drawCircle(tick, dot, Offset(cx - gap, markY))
-      drawCircle(tick, dot, Offset(cx + gap, markY))
-    }
+      // Dotted marks at +max, 0 dB and -max on both sides of the track, like the rule of a desk.
+      val dot = Grid.hairline.toPx()
+      val gap = Grid.u6.toPx()
+      if (marks) for (markY in floatArrayOf(top, mid, bottom)) {
+        drawCircle(tick, dot, Offset(cx - gap, markY))
+        drawCircle(tick, dot, Offset(cx + gap, markY))
+      }
 
-    drawLine(track, Offset(cx, top), Offset(cx, bottom), strokeWidth = trackW, cap = StrokeCap.Round)
-    if (abs(y - mid) > 0.5f) {
-      drawLine(accent, Offset(cx, mid), Offset(cx, y), strokeWidth = EqSize.lineBold.toPx(), cap = StrokeCap.Round)
+      drawLine(track, Offset(cx, top), Offset(cx, bottom), strokeWidth = trackW, cap = StrokeCap.Round)
+      if (abs(y - mid) > 0.5f) {
+        drawLine(accent, Offset(cx, mid), Offset(cx, y), strokeWidth = EqSize.lineBold.toPx(), cap = StrokeCap.Round)
+      }
+      if (!(isLiquid && enabled)) {
+        val thumbTopLeft = Offset(cx - handleW / 2f, y - handleH / 2f)
+        val thumbSize = Size(handleW, handleH)
+        drawRoundRect(
+          color = handleColor ?: handle,
+          topLeft = thumbTopLeft,
+          size = thumbSize,
+          cornerRadius = CornerRadius(handleW / 2f)
+        )
+        val dashW = handleW * 0.46f
+        if (handleColor == null) drawLine(dash, Offset(cx - dashW / 2f, y), Offset(cx + dashW / 2f, y), strokeWidth = EqSize.lineFine.toPx(), cap = StrokeCap.Round)
+      }
     }
-    // The thumb: a tall pill, solid in the caller's colour or raised with a light dash across it.
-    drawRoundRect(
-      color = handleColor ?: handle,
-      topLeft = Offset(cx - handleW / 2f, y - handleH / 2f),
-      size = Size(handleW, handleH),
-      cornerRadius = CornerRadius(handleW / 2f)
-    )
-    val dashW = handleW * 0.46f
-    if (handleColor == null) drawLine(dash, Offset(cx - dashW / 2f, y), Offset(cx + dashW / 2f, y), strokeWidth = EqSize.lineFine.toPx(), cap = StrokeCap.Round)
+    if (isLiquid && enabled) {
+      val travelDp = (totalH - handleHeight).coerceAtLeast(0.dp)
+      val yOffsetDp = travelDp * (1f - (value.coerceIn(-1f, 1f) + 1f) / 2f)
+      Box(
+        modifier = Modifier
+          .offset(y = yOffsetDp)
+          .size(width = effHandleW, height = handleHeight)
+          .liquidLensPill(
+            backdrop = faderBackdrop,
+            isDark = isDark,
+            trackAccent = if (abs(value) > 0.02f) accent else null
+          )
+      )
+    }
   }
 }
 
@@ -233,6 +290,8 @@ fun EqKnob(
   tint: androidx.compose.ui.graphics.Color? = null
 ) {
   val colors = MaterialTheme.colorScheme
+  val isLiquid = LocalSurfaceStyle.current == SurfaceStyle.LIQUID && liquidGlassSupported
+  val isDark = colors.background.luminance() < 0.5f
   val current by rememberUpdatedState(value)
   val change by rememberUpdatedState(onChange)
   val reset by rememberUpdatedState(defaultValue)
@@ -345,6 +404,24 @@ private fun DrawScope.drawFilterShape(type: FilterType, color: Color) {
       p.moveTo(0f, top)
       p.lineTo(w * 0.45f, top)
       p.cubicTo(w * 0.6f, top, w * 0.7f, top, w * 0.88f, h)
+    }
+    FilterType.NOTCH -> {
+      p.moveTo(0f, top)
+      p.lineTo(w * 0.30f, top)
+      p.cubicTo(w * 0.42f, top, w * 0.44f, base, w * 0.5f, base)
+      p.cubicTo(w * 0.56f, base, w * 0.58f, top, w * 0.70f, top)
+      p.lineTo(w, top)
+    }
+    FilterType.BAND_PASS -> {
+      p.moveTo(w * 0.08f, h)
+      p.cubicTo(w * 0.28f, base, w * 0.38f, top, w * 0.5f, top)
+      p.cubicTo(w * 0.62f, top, w * 0.72f, base, w * 0.92f, h)
+    }
+    FilterType.TILT_SHELF -> {
+      p.moveTo(0f, base)
+      p.lineTo(w * 0.20f, base)
+      p.cubicTo(w * 0.42f, base, w * 0.58f, top, w * 0.80f, top)
+      p.lineTo(w, top)
     }
   }
   drawPath(p, color, style = Stroke(width = EqSize.lineFine.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))

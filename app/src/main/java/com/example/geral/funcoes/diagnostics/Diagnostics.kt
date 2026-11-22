@@ -28,6 +28,7 @@ object Diagnostics {
   fun install(context: Context) {
     if (store != null) return
     val app = context.applicationContext
+    ThermalMonitor.install(app)
     val created = DiagnosticStore(File(app.filesDir, "diagnostics"))
     store = created
     Thread.setDefaultUncaughtExceptionHandler(
@@ -87,6 +88,7 @@ object Diagnostics {
   private fun header(app: Context): String = buildString {
     appendLine("app: ${BuildConfig.APPLICATION_ID} ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) ${BuildConfig.BUILD_TYPE}")
     appendLine("device: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+    appendLine("thermal: ${ThermalMonitor.label()}")
     append("locale: ${Locale.getDefault().toLanguageTag()}")
   }
 

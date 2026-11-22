@@ -92,7 +92,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -265,6 +264,7 @@ class MainActivity : ComponentActivity() {
         ) {
           val reduceMotion by viewModel.reduceMotion.collectAsStateWithLifecycle()
           val surfaceStyle by viewModel.surfaceStyle.collectAsStateWithLifecycle()
+  val liquidGlassOpacity by viewModel.liquidGlassOpacity.collectAsStateWithLifecycle()
           val curiosityConfig by viewModel.curiosityConfig.collectAsStateWithLifecycle()
           val onlyTerms = remember { viewModel.onlyTermsChanged }
           OnboardingScreen(
@@ -344,11 +344,6 @@ fun TarkasAppContent(
   // so a tick does not recompose the whole app.
   val currentPosMs = viewModel.positionMs.collectAsStateWithLifecycle()
   val durationMs = viewModel.durationMs.collectAsStateWithLifecycle()
-  val eqSettings by viewModel.eqSettings.collectAsStateWithLifecycle()
-  val eqPresets by viewModel.eqPresets.collectAsStateWithLifecycle()
-  val activePresetId by viewModel.activePresetId.collectAsStateWithLifecycle()
-  val eqModified by viewModel.eqModified.collectAsStateWithLifecycle()
-  val capabilities by viewModel.audioEngineManager.capabilities.collectAsStateWithLifecycle()
   val activeCuriosity by viewModel.activeCuriosity.collectAsStateWithLifecycle()
   val assistantMessages by viewModel.assistantMessages.collectAsStateWithLifecycle()
   val isAssistantProcessing by viewModel.isAssistantProcessing.collectAsStateWithLifecycle()
@@ -359,12 +354,9 @@ fun TarkasAppContent(
   val openQueueRequest by viewModel.openQueueRequest.collectAsStateWithLifecycle()
   val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
   val surfaceStyle by viewModel.surfaceStyle.collectAsStateWithLifecycle()
+  val liquidGlassOpacity by viewModel.liquidGlassOpacity.collectAsStateWithLifecycle()
   val reduceMotion by viewModel.reduceMotion.collectAsStateWithLifecycle()
-  val deviceSearch by viewModel.deviceSearch.collectAsStateWithLifecycle()
   val reduceTransparency by viewModel.reduceTransparency.collectAsStateWithLifecycle()
-  val systemAudioStatus by viewModel.systemAudioStatus.collectAsStateWithLifecycle()
-  val spectrumBars = viewModel.audioEngineManager.spectrumBars.collectAsStateWithLifecycle()
-  val activeApps by viewModel.activeApps.collectAsStateWithLifecycle()
   val favoriteIds by viewModel.favorites.collectAsStateWithLifecycle()
   val playlists by viewModel.playlists.collectAsStateWithLifecycle()
   val savedTracks by viewModel.savedTracks.collectAsStateWithLifecycle()
@@ -374,8 +366,6 @@ fun TarkasAppContent(
   val favoriteTracks by viewModel.favoriteTracks.collectAsStateWithLifecycle()
 
   val isShowingCuriositySettings by viewModel.isShowingCuriositySettings.collectAsStateWithLifecycle()
-  val eqReach by viewModel.eqReach.collectAsStateWithLifecycle()
-  val globalEqStatus by viewModel.globalEqStatus.collectAsStateWithLifecycle()
   val audiusResults by viewModel.audiusResults.collectAsStateWithLifecycle()
   val audiusSearching by viewModel.audiusSearching.collectAsStateWithLifecycle()
   val jamendo by viewModel.jamendo.collectAsStateWithLifecycle()
@@ -417,8 +407,21 @@ fun TarkasAppContent(
   }
 
   // The mixer (the whole Audio tab) in one place: the tab shows it, and the player opens it in a sheet,
-  // so the sound can be changed without leaving the player.
+  // so the sound can be changed without leaving the player. Audio-only states are collected inside
+  // this composable so EQ fader drags and 30 fps RTA frames never recompose the other tabs or dock.
   val audioContent: @Composable (Modifier, Boolean) -> Unit = { audioModifier, audioPlaying ->
+    val eqSettings by viewModel.eqSettings.collectAsStateWithLifecycle()
+    val eqPresets by viewModel.eqPresets.collectAsStateWithLifecycle()
+    val activePresetId by viewModel.activePresetId.collectAsStateWithLifecycle()
+    val eqModified by viewModel.eqModified.collectAsStateWithLifecycle()
+    val capabilities by viewModel.audioEngineManager.capabilities.collectAsStateWithLifecycle()
+    val deviceSearch by viewModel.deviceSearch.collectAsStateWithLifecycle()
+    val systemAudioStatus by viewModel.systemAudioStatus.collectAsStateWithLifecycle()
+    val spectrumBars = viewModel.audioEngineManager.spectrumBars.collectAsStateWithLifecycle()
+    val rtaFrame = viewModel.audioEngineManager.rtaFrame.collectAsStateWithLifecycle()
+    val activeApps by viewModel.activeApps.collectAsStateWithLifecycle()
+    val eqReach by viewModel.eqReach.collectAsStateWithLifecycle()
+    val globalEqStatus by viewModel.globalEqStatus.collectAsStateWithLifecycle()
     AudioScreen(
       modifier = audioModifier,
       capabilities = capabilities,
@@ -429,6 +432,8 @@ fun TarkasAppContent(
       systemAudioStatus = systemAudioStatus,
       isPlaying = audioPlaying,
       spectrumBars = { spectrumBars.value },
+      rtaFrame = { rtaFrame.value },
+      onSoloBand = { viewModel.setSoloBand(it) },
       activeApps = activeApps,
       onRefreshActiveApps = { viewModel.refreshActiveApps() },
       eqReach = eqReach,
@@ -446,6 +451,8 @@ fun TarkasAppContent(
         suggestionQuery = viewModel.outputSuggestion.collectAsStateWithLifecycle().value?.query
       ),
       onSetAutoOutputCorrection = { viewModel.setAutoOutputCorrection(it) },
+      onExportOutputProfiles = { viewModel.exportOutputProfilesJson() },
+      onImportOutputProfiles = { viewModel.importOutputProfilesJson(it) },
       crossfadeSeconds = viewModel.crossfadeSeconds.collectAsStateWithLifecycle().value,
       onSetCrossfade = { viewModel.setCrossfadeSeconds(it) },
       devicePickerRequest = viewModel.devicePickerRequest.collectAsStateWithLifecycle().value,
@@ -475,6 +482,8 @@ fun TarkasAppContent(
       onCompare = { viewModel.compareWithoutEq(it) },
       loudness = viewModel.loudness.collectAsStateWithLifecycle().value,
       onSetNormalizationMode = { viewModel.setNormalizationMode(it) },
+      onSetTargetLufs = { viewModel.setTargetLufs(it) },
+      audioHealth = viewModel.audioEngineManager.audioHealth.collectAsStateWithLifecycle().value,
       spatialActions = remember {
         com.example.ui.screens.SpatialActions(
           onEnabled = { viewModel.setSpatialEnabled(it) },
@@ -491,6 +500,26 @@ fun TarkasAppContent(
   var showMixer by rememberSaveable { mutableStateOf(false) }
   if (showMixer) {
     MixerSheet(onDismiss = { showMixer = false }) { audioContent(Modifier, isPlaying) }
+  }
+
+  // Only run Android's Visualizer FFT while the EQ screen or mixer sheet is actually visible and the app is in foreground.
+  val spectrumOnScreen = (currentTab == TarkasNavTab.AUDIO && !isShowingCuriositySettings) || showMixer
+  val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+  androidx.compose.runtime.DisposableEffect(lifecycleOwner, spectrumOnScreen) {
+    val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+      when (event) {
+        androidx.lifecycle.Lifecycle.Event.ON_START -> viewModel.setSpectrumVisible(spectrumOnScreen)
+        androidx.lifecycle.Lifecycle.Event.ON_STOP -> viewModel.setSpectrumVisible(false)
+        else -> Unit
+      }
+    }
+    lifecycleOwner.lifecycle.addObserver(observer)
+    val started = lifecycleOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
+    viewModel.setSpectrumVisible(started && spectrumOnScreen)
+    onDispose {
+      lifecycleOwner.lifecycle.removeObserver(observer)
+      viewModel.setSpectrumVisible(false)
+    }
   }
 
   Scaffold(
@@ -514,6 +543,9 @@ fun TarkasAppContent(
     // Liquid glass records the screen content and refracts it; only while that style is on.
     val liquidOn = blurAllowed && surfaceStyle == com.example.ui.theme.SurfaceStyle.LIQUID &&
       com.example.ui.theme.liquidGlassSupported
+    // Haze is only needed when frosted (or fallback) blur is active; running both hazeSource and
+    // layerBackdrop records the whole screen into two offscreen layers every frame.
+    val hazeOn = blurAllowed && !liquidOn
     val pageColor = MaterialTheme.colorScheme.background
     val backdrop = com.kyant.backdrop.backdrops.rememberLayerBackdrop(
       onDraw = {
@@ -565,7 +597,8 @@ fun TarkasAppContent(
     )
     CompositionLocalProvider(
       LocalSurfaceStyle provides surfaceStyle,
-      LocalHazeState provides if (blurAllowed) hazeState else null,
+      com.example.ui.theme.LocalLiquidGlassOpacity provides liquidGlassOpacity,
+      LocalHazeState provides if (hazeOn) hazeState else null,
       com.example.ui.theme.LocalBackdrop provides if (liquidOn) backdrop else null,
       LocalBarInset provides barInset
     ) {
@@ -573,7 +606,7 @@ fun TarkasAppContent(
     Box(
       modifier = Modifier
         .fillMaxSize()
-        .then(if (blurAllowed) Modifier.hazeSource(hazeState) else Modifier)
+        .then(if (hazeOn) Modifier.hazeSource(hazeState) else Modifier)
         .then(if (liquidOn) Modifier.layerBackdrop(backdrop) else Modifier)
         .nestedScroll(navScroll)
         .then(swipeTabs)
@@ -681,6 +714,7 @@ fun TarkasAppContent(
             onAddToQueue = { track -> viewModel.addToQueue(track) },
             onAddToPlaylist = { id, track -> viewModel.addToPlaylist(id, track) },
             onCreatePlaylist = { name, track -> viewModel.createPlaylist(name, track) },
+            onDownloadOffline = { track -> viewModel.downloadTrackOffline(track) },
             audiusResults = audiusResults,
             audiusSearching = audiusSearching,
             audiusOffline = audiusOffline,
@@ -728,6 +762,7 @@ fun TarkasAppContent(
               deviceScanning = viewModel.deviceScanning.collectAsStateWithLifecycle().value,
               hasMusicPermission = viewModel.hasMusicPermission(),
               songsPerFolder = viewModel.deviceFolders.collectAsStateWithLifecycle().value,
+              trackFolders = viewModel.trackFolders.collectAsStateWithLifecycle().value,
               folderRules = viewModel.folderRules.collectAsStateWithLifecycle().value,
               queue = queue,
               currentTrack = currentTrack,
@@ -746,6 +781,7 @@ fun TarkasAppContent(
               },
               onShuffleList = { list -> viewModel.shuffleFrom(list) },
               onCreatePlaylist = { name -> viewModel.createPlaylist(name) },
+              onImportPlaylistM3u = { name, text -> viewModel.importPlaylistM3u(name, text) },
               onAddLocalTrack = { title, artist, uri, dur ->
                 viewModel.addLocalAudio(title, artist, uri, dur)
               },
@@ -809,12 +845,13 @@ fun TarkasAppContent(
           val themeMode by settingsVm.themeMode.collectAsStateWithLifecycle()
           val systemColors by settingsVm.systemColors.collectAsStateWithLifecycle()
           val surfaceStyle by settingsVm.surfaceStyle.collectAsStateWithLifecycle()
+          val liquidGlassOpacity by settingsVm.liquidGlassOpacity.collectAsStateWithLifecycle()
           val reduceMotion by settingsVm.reduceMotion.collectAsStateWithLifecycle()
           val reduceTransparency by settingsVm.reduceTransparency.collectAsStateWithLifecycle()
           val homeMusicFirst by settingsVm.homeMusicFirst.collectAsStateWithLifecycle()
           SettingsScreen(
             themeMode = themeMode,
-            capabilities = capabilities,
+            capabilities = viewModel.audioEngineManager.capabilities.collectAsStateWithLifecycle().value,
             onThemeModeChange = { mode -> settingsVm.setThemeMode(mode) },
             systemColors = systemColors,
             onSystemColorsChange = { settingsVm.setSystemColors(it) },
@@ -823,6 +860,8 @@ fun TarkasAppContent(
             hasGeminiKey = viewModel.assistantEngine.hasGeminiKey,
             surfaceStyle = surfaceStyle,
             onSurfaceStyleChange = { style -> settingsVm.setSurfaceStyle(style) },
+            liquidGlassOpacity = liquidGlassOpacity,
+            onLiquidGlassOpacityChange = { settingsVm.setLiquidGlassOpacity(it) },
             reduceMotion = reduceMotion,
             onReduceMotionChange = { settingsVm.setReduceMotion(it) },
             waveformBar = waveformBar,
@@ -891,7 +930,8 @@ fun TarkasAppContent(
                 sleepTimer = viewModel.sleepTimer.collectAsStateWithLifecycle().value,
                 trackDetails = viewModel.trackDetails.collectAsStateWithLifecycle().value,
                 lyrics = viewModel.lyrics.collectAsStateWithLifecycle().value,
-                problem = viewModel.playbackProblem.collectAsStateWithLifecycle().value
+                problem = viewModel.playbackProblem.collectAsStateWithLifecycle().value,
+                abLoop = viewModel.abLoop.collectAsStateWithLifecycle().value
               ),
               actions = PlayerActions(
                 onTogglePlayPause = { viewModel.togglePlayPause() },
@@ -914,40 +954,19 @@ fun TarkasAppContent(
                 onCancelSleepTimer = { viewModel.cancelSleepTimer() },
                 onLoadTrackDetails = { track -> viewModel.loadTrackDetails(track) },
                 onLoadLyrics = { track -> viewModel.loadLyrics(track) },
-                onRetry = { viewModel.retryPlayback() }
+                onRetry = { viewModel.retryPlayback() },
+                onToggleAbLoop = { viewModel.toggleAbLoop() },
+                onImportLyrics = { track, text -> viewModel.importLyrics(track, text) },
+                onDownloadOffline = { track -> viewModel.downloadTrackOffline(track) }
               )
             )
           }
         }
       }
     }
-      // Fades the content into the page colour behind the floating capsules, so text never runs
-      // legibly under or below them. Drawn outside the blur source, so the glass still sees the content.
-      // Not over the full player: it has no capsules, and its bottom edge is the blurred cover.
-      // Not on pages that hide the capsules (Ajustes): there is nothing to fade behind, and the scrim
-      // would cut the last rows of the list.
-      if (currentTab != TarkasNavTab.MUSIC) {
-        val scrimColor = MaterialTheme.colorScheme.background
-        val scrimAlpha by animateFloatAsState(
-          targetValue = if (barsHidden) 0f else 1f,
-          animationSpec = androidx.compose.animation.core.tween(180),
-          label = "barScrim"
-        )
-        Box(
-          modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .fillMaxWidth()
-            .height(barInset + Grid.u48)
-            .graphicsLayer { alpha = scrimAlpha }
-            .background(
-              Brush.verticalGradient(
-                0f to scrimColor.copy(alpha = 0f),
-                0.35f to scrimColor.copy(alpha = 0.9f),
-                1f to scrimColor.copy(alpha = 0.97f)
-              )
-            )
-        )
-      }
+      val dockWidthClass = com.example.ui.layout.rememberWidthClass()
+      val isTabletDock = dockWidthClass != com.example.ui.layout.WidthClass.COMPACT &&
+        androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp >= 480
       Column(
         modifier = Modifier
           .align(Alignment.BottomCenter)
@@ -956,6 +975,7 @@ fun TarkasAppContent(
           .imePadding()
           .navigationBarsPadding()
           .padding(start = Grid.margin, end = Grid.margin, bottom = Grid.u6),
+        horizontalAlignment = if (isTabletDock) Alignment.CenterHorizontally else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(Grid.u6)
       ) {
        com.example.ui.theme.TarkasDarkOverride(enabled = currentTab == TarkasNavTab.MUSIC) {
@@ -1120,7 +1140,9 @@ fun TarkasAppContent(
         val bars: @Composable (Modifier, Modifier) -> Unit = { miniSlot, navSlot ->
         AnimatedVisibility(
           modifier = miniSlot,
-          visible = currentTab != TarkasNavTab.MUSIC && currentTrack != null && !imeVisible && !barsHidden,
+          visible = currentTab != TarkasNavTab.MUSIC &&
+            currentTab != TarkasNavTab.ASSISTANT &&
+            currentTrack != null && !imeVisible && !barsHidden,
           enter = if (miniFromPlayer || com.example.ui.theme.rememberReducedMotion()) androidx.compose.animation.EnterTransition.None
             else androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220, delayMillis = 60)) +
               androidx.compose.animation.scaleIn(initialScale = 0.94f, animationSpec = com.example.ui.theme.Motion.gel<Float>()),
@@ -1181,7 +1203,17 @@ fun TarkasAppContent(
             horizontalArrangement = Arrangement.spacedBy(Grid.u6),
             verticalAlignment = Alignment.Bottom
           ) { bars(Modifier.weight(1f), Modifier.width(Grid.u384)) }
+        } else if (isTabletDock && dockWidthClass == com.example.ui.layout.WidthClass.EXPANDED) {
+          // Tablet landscape / expanded (>= 840 dp): floating dock centred, mini player + nav bar side by side.
+          Row(
+            horizontalArrangement = Arrangement.spacedBy(Grid.u12),
+            verticalAlignment = Alignment.Bottom
+          ) { bars(Modifier.width(Grid.u384), Modifier.width(Grid.u384)) }
+        } else if (isTabletDock) {
+          // Tablet portrait / medium (600..839 dp): stacked and centred at comfortable reach width.
+          bars(Modifier.width(Grid.u384 + Grid.u96), Modifier.width(Grid.u384))
         } else {
+          // Smartphone (< 600 dp): untouched full-width stacked layout.
           bars(Modifier, Modifier)
         }
        }

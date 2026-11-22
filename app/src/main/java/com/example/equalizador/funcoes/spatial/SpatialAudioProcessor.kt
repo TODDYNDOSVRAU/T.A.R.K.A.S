@@ -49,6 +49,7 @@ class SpatialAudioProcessor(
   private var input = FloatArray(0)
   private var engineOut = FloatArray(0)
   private var output = FloatArray(0)
+  private var shortScratch = ShortArray(0)
 
   // Engine output waiting to be played (a FIFO, interleaved).
   private var fifo = FloatArray(0)
@@ -56,11 +57,12 @@ class SpatialAudioProcessor(
   private var fifoCount = 0
 
   private var engine: SpatialStage? = null
-  /** Channels of the audio coming in: 2, or 6 (5.1, which this processor turns into stereo). */
+  /** Channels of the audio coming in: 2, 6 (5.1), 8 (7.1), or 12 (7.1.4), which this processor turns into stereo. */
   private var inChannels = 2
   private var input6 = FloatArray(0)
-  /** The 7.1 frames the virtualizer takes (a 5.1 file is placed on them, see expand51To71). */
   private var input8 = FloatArray(0)
+  /** The 7.1.4 (12-channel) frames the virtualizer takes (5.1 and 7.1 are placed on ear-level channels 0..7). */
+  private var input12 = FloatArray(0)
   private var running = false
   /** Engine output frames to drop after a start (they come from before it saw any input). */
   private var skipEngine = 0
@@ -74,10 +76,11 @@ class SpatialAudioProcessor(
    * audio is still coming through (a gapless change drains it first), in the previous format.
    */
   override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-    val supported = (inputAudioFormat.channelCount == 2 || inputAudioFormat.channelCount == 6 || inputAudioFormat.channelCount == 8) &&
+    val supported = (inputAudioFormat.channelCount == 2 || inputAudioFormat.channelCount == 6 ||
+      inputAudioFormat.channelCount == 8 || inputAudioFormat.channelCount == 12) &&
       (inputAudioFormat.encoding == C.ENCODING_PCM_16BIT || inputAudioFormat.encoding == C.ENCODING_PCM_FLOAT)
     if (!supported) return AudioProcessor.AudioFormat.NOT_SET // inactive: passed through untouched
-    // 5.1 comes out as stereo (binaural when on, the plain downmix when off); stereo keeps its format.
+    // 5.1/7.1/7.1.4 come out as stereo (binaural when on, the plain downmix when off); stereo keeps its format.
     return AudioProcessor.AudioFormat(inputAudioFormat.sampleRate, 2, inputAudioFormat.encoding)
   }
 
@@ -107,33 +110,65 @@ class SpatialAudioProcessor(
     val bytesPerSample = if (encoding == C.ENCODING_PCM_16BIT) 2 else 4
     val frames = bytes / (bytesPerSample * inChannels)
     ensureCapacity(frames)
+    val totalInSamples = frames * inChannels
+    if (encoding == C.ENCODING_PCM_16BIT && shortScratch.size < maxOf(totalInSamples, frames * 2)) {
+      shortScratch = ShortArray(maxOf(totalInSamples, frames * 2))
+    }
+    val invShort = 1f / 32768f
     if (inChannels == 6) {
       if (encoding == C.ENCODING_PCM_16BIT) {
-        for (i in 0 until frames * 6) input6[i] = inputBuffer.getShort() / 32768f
+        inputBuffer.asShortBuffer().get(shortScratch, 0, totalInSamples)
+        inputBuffer.position(inputBuffer.position() + bytes)
+        for (i in 0 until totalInSamples) input6[i] = shortScratch[i] * invShort
       } else {
-        for (i in 0 until frames * 6) input6[i] = inputBuffer.getFloat()
+        inputBuffer.asFloatBuffer().get(input6, 0, totalInSamples)
+        inputBuffer.position(inputBuffer.position() + bytes)
       }
       // The dry sound (the delay line, and what plays when the effect is off) is the downmix.
       SurroundVirtualizer.downmix(input6, 0, frames, input)
-      SurroundVirtualizer.expand51To71(input6, frames, input8)
+      SurroundVirtualizer.expand51To714(input6, frames, input12)
     } else if (inChannels == 8) {
       if (encoding == C.ENCODING_PCM_16BIT) {
-        for (i in 0 until frames * 8) input8[i] = inputBuffer.getShort() / 32768f
+        inputBuffer.asShortBuffer().get(shortScratch, 0, totalInSamples)
+        inputBuffer.position(inputBuffer.position() + bytes)
+        for (i in 0 until totalInSamples) input8[i] = shortScratch[i] * invShort
       } else {
-        for (i in 0 until frames * 8) input8[i] = inputBuffer.getFloat()
+        inputBuffer.asFloatBuffer().get(input8, 0, totalInSamples)
+        inputBuffer.position(inputBuffer.position() + bytes)
       }
       SurroundVirtualizer.downmix8(input8, 0, frames, input)
+      SurroundVirtualizer.expand71To714(input8, frames, input12)
+    } else if (inChannels == 12) {
+      if (encoding == C.ENCODING_PCM_16BIT) {
+        inputBuffer.asShortBuffer().get(shortScratch, 0, totalInSamples)
+        inputBuffer.position(inputBuffer.position() + bytes)
+        for (i in 0 until totalInSamples) input12[i] = shortScratch[i] * invShort
+      } else {
+        inputBuffer.asFloatBuffer().get(input12, 0, totalInSamples)
+        inputBuffer.position(inputBuffer.position() + bytes)
+      }
+      SurroundVirtualizer.downmix12(input12, 0, frames, input)
     } else if (encoding == C.ENCODING_PCM_16BIT) {
-      for (i in 0 until frames * 2) input[i] = inputBuffer.getShort() / 32768f
+      inputBuffer.asShortBuffer().get(shortScratch, 0, totalInSamples)
+      inputBuffer.position(inputBuffer.position() + bytes)
+      for (i in 0 until totalInSamples) input[i] = shortScratch[i] * invShort
     } else {
-      for (i in 0 until frames * 2) input[i] = inputBuffer.getFloat()
+      inputBuffer.asFloatBuffer().get(input, 0, totalInSamples)
+      inputBuffer.position(inputBuffer.position() + bytes)
     }
     render(frames)
-    val out = replaceOutputBuffer(frames * 2 * bytesPerSample)
+    val outSamples = frames * 2
+    val outBytes = outSamples * bytesPerSample
+    val out = replaceOutputBuffer(outBytes)
     if (encoding == C.ENCODING_PCM_16BIT) {
-      for (i in 0 until frames * 2) out.putShort((output[i] * 32767f).toInt().coerceIn(-32768, 32767).toShort())
+      for (i in 0 until outSamples) {
+        shortScratch[i] = (output[i] * 32767f).toInt().coerceIn(-32768, 32767).toShort()
+      }
+      out.asShortBuffer().put(shortScratch, 0, outSamples)
+      out.position(outBytes)
     } else {
-      for (i in 0 until frames * 2) out.putFloat(output[i])
+      out.asFloatBuffer().put(output, 0, outSamples)
+      out.position(outBytes)
     }
     out.flip()
   }
@@ -185,7 +220,7 @@ class SpatialAudioProcessor(
       }
 
       if (running && e != null) {
-        val w = e.process(if (surround) input8 else input, 0, frames, engineOut)
+        val w = e.process(if (surround) input12 else input, 0, frames, engineOut)
         var from = 0
         if (skipEngine > 0) {
           from = minOf(skipEngine, w)
@@ -253,7 +288,8 @@ class SpatialAudioProcessor(
       engineOut = FloatArray((frames + HOP) * 2)
     }
     if (inChannels == 6 && input6.size < frames * 6) input6 = FloatArray(frames * 6)
-    if (inChannels > 2 && input8.size < frames * 8) input8 = FloatArray(frames * 8)
+    if (inChannels == 8 && input8.size < frames * 8) input8 = FloatArray(frames * 8)
+    if (inChannels > 2 && input12.size < frames * 12) input12 = FloatArray(frames * 12)
     val needRing = DELAY + frames
     if (ringFrames() < needRing) {
       // Keep the frames already in the ring, in order, at the start of the bigger one.
@@ -285,7 +321,8 @@ class SpatialAudioProcessor(
     ensureCapacity(frames)
     input.fill(0f, 0, frames * 2)
     if (inChannels == 6) input6.fill(0f, 0, frames * 6)
-    if (inChannels > 2) input8.fill(0f, 0, frames * 8)
+    if (inChannels == 8) input8.fill(0f, 0, frames * 8)
+    if (inChannels > 2) input12.fill(0f, 0, frames * 12)
     render(frames)
     val bytesPerFrame = if (encoding == C.ENCODING_PCM_16BIT) 4 else 8
     val out = replaceOutputBuffer(frames * bytesPerFrame)
@@ -314,7 +351,7 @@ class SpatialAudioProcessor(
     onFlush()
     engine = null
     encoding = C.ENCODING_INVALID
-    inChannels = 2; input6 = FloatArray(0); input8 = FloatArray(0)
+    inChannels = 2; input6 = FloatArray(0); input8 = FloatArray(0); input12 = FloatArray(0)
     ring = FloatArray(0); input = FloatArray(0); output = FloatArray(0); engineOut = FloatArray(0); fifo = FloatArray(0)
   }
 }

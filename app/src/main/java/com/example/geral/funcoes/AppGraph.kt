@@ -51,6 +51,24 @@ object AppGraph {
     val app = context.applicationContext
     appContext = app
     com.example.data.diagnostics.Diagnostics.install(app)
+    // Configure Coil once with bounded memory (20% heap), 50 MB disk cache, and RGB_565 thumbnails.
+    coil.Coil.setImageLoader {
+      coil.ImageLoader.Builder(app)
+        .memoryCache {
+          coil.memory.MemoryCache.Builder(app)
+            .maxSizePercent(0.20)
+            .build()
+        }
+        .diskCache {
+          coil.disk.DiskCache.Builder()
+            .directory(java.io.File(app.cacheDir, "coil_covers"))
+            .maxSizeBytes(50L * 1024L * 1024L)
+            .build()
+        }
+        .allowRgb565(true)
+        .crossfade(150)
+        .build()
+    }
     musicRepository = MusicRepository(app, lazy { database })
     curiosityRepository = CuriosityRepository(app)
     audioEngineManager = AudioEngineManager(app)

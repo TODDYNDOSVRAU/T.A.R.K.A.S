@@ -15,6 +15,7 @@ import java.nio.ByteBuffer
 class ParametricEqAudioProcessor(private val dsp: EqDsp) : BaseAudioProcessor() {
 
   private var scratch = FloatArray(0)
+  private var shortScratch = ShortArray(0)
   private var encoding = C.ENCODING_INVALID
   private var channels = 2
   private var sampleRate = 0
@@ -37,17 +38,25 @@ class ParametricEqAudioProcessor(private val dsp: EqDsp) : BaseAudioProcessor() 
     if (encoding == C.ENCODING_PCM_16BIT) {
       val samples = bytes / 2
       ensureScratch(samples)
-      for (i in 0 until samples) scratch[i] = inputBuffer.getShort() / 32768f
+      ensureShortScratch(samples)
+      inputBuffer.asShortBuffer().get(shortScratch, 0, samples)
+      inputBuffer.position(inputBuffer.position() + bytes)
+      val invShort = 1f / 32768f
+      for (i in 0 until samples) scratch[i] = shortScratch[i] * invShort
       dsp.process(scratch, samples / channels)
       for (i in 0 until samples) {
-        out.putShort((scratch[i] * 32767f).toInt().coerceIn(-32768, 32767).toShort())
+        shortScratch[i] = (scratch[i] * 32767f).toInt().coerceIn(-32768, 32767).toShort()
       }
+      out.asShortBuffer().put(shortScratch, 0, samples)
+      out.position(bytes)
     } else {
       val samples = bytes / 4
       ensureScratch(samples)
-      for (i in 0 until samples) scratch[i] = inputBuffer.getFloat()
+      inputBuffer.asFloatBuffer().get(scratch, 0, samples)
+      inputBuffer.position(inputBuffer.position() + bytes)
       dsp.process(scratch, samples / channels)
-      for (i in 0 until samples) out.putFloat(scratch[i])
+      out.asFloatBuffer().put(scratch, 0, samples)
+      out.position(bytes)
     }
     out.flip()
   }
@@ -68,11 +77,16 @@ class ParametricEqAudioProcessor(private val dsp: EqDsp) : BaseAudioProcessor() 
 
   override fun onReset() {
     scratch = FloatArray(0)
+    shortScratch = ShortArray(0)
     encoding = C.ENCODING_INVALID
     sampleRate = 0
   }
 
   private fun ensureScratch(samples: Int) {
     if (scratch.size < samples) scratch = FloatArray(samples)
+  }
+
+  private fun ensureShortScratch(samples: Int) {
+    if (shortScratch.size < samples) shortScratch = ShortArray(samples)
   }
 }

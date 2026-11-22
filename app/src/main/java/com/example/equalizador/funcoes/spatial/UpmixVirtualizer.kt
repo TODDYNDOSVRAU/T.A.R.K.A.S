@@ -37,8 +37,15 @@ class UpmixVirtualizer(
   private var intensity = 1.0
   override val currentIntensity: Double get() = intensity
   @Volatile override var liveYaw: Double = 0.0
+  /** Live room-tail level (0 = dry dome, 1 = studio default, up to 2 = hall), updated from any thread. */
+  @Volatile var liveRoomTail: Double = studioRoomTail
 
   private val spectra = UpmixSpectra(params, UpmixTables(sampleRate, params))
+
+  /** Live 7.1.4 overhead height mix (0..1), updated from any thread without rebuilding tables. */
+  var liveHeightMix: Double
+    get() = spectra.liveHeightMix
+    set(value) { spectra.liveHeightMix = value.coerceIn(0.0, 1.0) }
 
   init { require(filters.channels >= spectra.channels) { "filters have ${filters.channels} channels, the upmix makes ${spectra.channels}" } }
   private val fft = Fft(NFFT)
@@ -168,7 +175,7 @@ class UpmixVirtualizer(
       val nowVoice = (centerPow / frontPow).coerceIn(0.0, 1.0)
       voicePresence += (nowVoice - voicePresence) * (if (nowVoice > voicePresence) 0.5 else 0.15)
       val feedWeight = 1.0 - 0.70 * voicePresence
-      val tailScale = studioRoomTail * 0.25
+      val tailScale = liveRoomTail.coerceIn(0.0, 2.0) * 0.25
       for (i in 0 until HOP) {
         val dryMid = 0.5 * (accL[i] + accR[i]) * feedWeight
         hpState += hpCoef * (dryMid - hpState)

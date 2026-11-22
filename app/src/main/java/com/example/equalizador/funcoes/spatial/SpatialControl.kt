@@ -73,6 +73,7 @@ object SpatialControl {
   private val releaseGeneration = java.util.concurrent.atomic.AtomicInteger(0)
   private val hrtfs = mutableMapOf<Int, SphericalHeadHrtf>()
   @Volatile private var preparingRate = 0
+  @Volatile private var lastSampleRate = 0
   /** Engines built for the processor, by sample rate. */
   private val engines = java.util.concurrent.ConcurrentHashMap<Int, SpatialEngine>()
   /** 5.1 virtualizers for the processor, by sample rate (built with the engine, from the same HRTF). */
@@ -100,7 +101,12 @@ object SpatialControl {
       }
     }
     update()
-    if (!enabled) releaseTablesSoon(gen)
+    if (enabled) {
+      val rate = lastSampleRate
+      if (rate > 0 && !engines.containsKey(rate) && preparingRate != rate) prepare(rate)
+    } else {
+      releaseTablesSoon(gen)
+    }
   }
 
   /**
@@ -123,6 +129,24 @@ object SpatialControl {
   fun setIntensity(intensity: Double) {
     userIntensity = intensity.coerceIn(0.0, 1.0)
     update()
+  }
+
+  /** Live 7.1.4 overhead height mix (0..1) and room-tail scale (0..2) for the Cinema 7.1.4 dome. */
+  private val _atmosHeightMix = MutableStateFlow(UpmixParams.ATMOS_714.heightMix.toFloat())
+  val atmosHeightMix: StateFlow<Float> = _atmosHeightMix.asStateFlow()
+  private val _atmosRoomTail = MutableStateFlow(RoomParams.APPROVED_LEVEL.toFloat())
+  val atmosRoomTail: StateFlow<Float> = _atmosRoomTail.asStateFlow()
+
+  fun setAtmosHeightMix(mix: Double) {
+    val clamped = mix.coerceIn(0.0, 1.0)
+    _atmosHeightMix.value = clamped.toFloat()
+    cinemas.values.forEach { it.liveHeightMix = clamped }
+  }
+
+  fun setAtmosRoomTail(tail: Double) {
+    val clamped = tail.coerceIn(0.0, 2.0)
+    _atmosRoomTail.value = clamped.toFloat()
+    cinemas.values.forEach { it.liveRoomTail = clamped }
   }
 
   /** Where the head points, degrees, positive to the left; 0 without head tracking. Stereo scenes only. */
@@ -231,6 +255,7 @@ object SpatialControl {
   }
 
   private fun prepare(sampleRate: Int) {
+    lastSampleRate = sampleRate
     preparingRate = sampleRate
     update()
     worker.execute {
@@ -245,22 +270,24 @@ object SpatialControl {
         engines[sampleRate] = engine
         // Studio filters: KU100 measured HRTF (with L/R symmetry, Gunnarsson phase regularization & Grathwohl notch
         // protection) + ISO 9613-1 air absorption room, with accurateDiffraction fallback for unsupported sample rates.
-        // 5.1/7.1 files and the Cinema upmix play on the same 7.1 room (sides 90°, backs 150°, as the stage draws them).
-        val cinemaFilters = SurroundFilters.studio(sampleRate, hrtf, assetOpener, { Log.w(TAG, it) }, channels = 8)
+        // 5.1/7.1/7.1.4 files and the Cinema upmix play on the same 7.1.4 overhead dome (ear-level + 4 heights at +45°).
+        val cinemaFilters = SurroundFilters.studio(sampleRate, hrtf, assetOpener, { Log.w(TAG, it) }, channels = 12)
         val surround = SurroundVirtualizer(cinemaFilters, headHrtf = hrtf)
         surround.targetIntensity = if (active) 1.0 else 0.0
         surround.liveYaw = headYaw
         surrounds[sampleRate] = surround
-        // The Cinema upmix makes a 7.1 set (back pair included), so it gets its own 8-channel room.
+        // The Cinema upmix makes a 7.1.4 overhead dome (backs + 4 height speakers) on the 12-channel room.
         val cinema = UpmixVirtualizer(
           sampleRate = sampleRate,
           filters = cinemaFilters,
           headHrtf = hrtf,
           studioRoomTail = RoomParams.APPROVED_LEVEL,
-          params = UpmixParams.CINEMA
+          params = UpmixParams.ATMOS_714
         )
         cinema.targetIntensity = cinemaTarget()
         cinema.liveYaw = headYaw
+        cinema.liveHeightMix = _atmosHeightMix.value.toDouble()
+        cinema.liveRoomTail = _atmosRoomTail.value.toDouble()
         cinemas[sampleRate] = cinema
         // Only the rate in use is kept: a library mixing 44.1, 48 and 96 kHz would otherwise hold them all.
         engines.keys.filter { it != sampleRate }.forEach { engines.remove(it) }

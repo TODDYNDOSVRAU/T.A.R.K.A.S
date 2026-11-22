@@ -92,6 +92,7 @@ import com.example.ui.theme.AppText
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
 import com.example.ui.theme.LocalBarInset
+import com.example.ui.theme.liquidChrome
 import com.example.ui.theme.Shapes
 import com.example.ui.theme.rememberReducedMotion
 import kotlinx.coroutines.delay
@@ -257,7 +258,14 @@ fun AssistantScreen(
     ) {
       item {
         Column(Modifier.fillMaxWidth()) {
-          Row(verticalAlignment = Alignment.CenterVertically) {
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .clip(Grid.r12)
+              .background(colors.surfaceContainer)
+              .padding(start = Grid.inset, end = Grid.u6, top = Grid.u6, bottom = Grid.u6),
+            verticalAlignment = Alignment.CenterVertically
+          ) {
             Text(
               stringResource(if (online) R.string.assistant_status_online else R.string.assistant_status_local),
               style = GridText.Small,
@@ -268,11 +276,10 @@ fun AssistantScreen(
             if (!hasGeminiKey) {
               Box(
                 modifier = Modifier
-                  .minimumInteractiveComponentSize()
+                  .heightIn(min = 36.dp)
                   .clip(Shapes.pill)
                   .highlightClickable(onClick = { enableHelpShown = !enableHelpShown })
-                  // Padding on the start only: the text ends on the 24 dp margin like the rows below it.
-                  .padding(start = Grid.u12)
+                  .padding(horizontal = Grid.u12)
                   .testTag("assistant_enable_help"),
                 contentAlignment = Alignment.Center
               ) {
@@ -574,17 +581,20 @@ private fun MessageBubble(message: AssistantMessage, onRetry: (String) -> Unit) 
 @Composable
 private fun Suggestions(suggestions: List<Suggestion>, onSendMessage: (String) -> Unit) {
   val colors = MaterialTheme.colorScheme
+  val isLiquid = com.example.ui.theme.LocalSurfaceStyle.current == com.example.ui.theme.SurfaceStyle.LIQUID &&
+    com.example.ui.theme.liquidGlassSupported
   LazyRow(
-    horizontalArrangement = Arrangement.spacedBy(Grid.u12),
-    contentPadding = PaddingValues(horizontal = Grid.margin),
-    modifier = Modifier.fillMaxWidth()
+    horizontalArrangement = Arrangement.spacedBy(Grid.u6),
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(horizontal = Grid.margin)
   ) {
     items(suggestions) { suggestion ->
       val command = stringResource(suggestion.command)
-      // The 48 dp touch area is the outer box; the visible pill stays small inside it.
+      // The 48 dp touch area is the outer box; the visible pill stays compact (36 dp) like Apple HIG.
       Box(
         modifier = Modifier
-          .minimumInteractiveComponentSize()
+          .heightIn(min = Grid.u48)
           .clip(Shapes.pill)
           .highlightClickable(onClick = { onSendMessage(command) })
           .testTag("assistant_action_${command.take(8)}"),
@@ -592,13 +602,16 @@ private fun Suggestions(suggestions: List<Suggestion>, onSendMessage: (String) -
       ) {
         Box(
           modifier = Modifier
-            .heightIn(min = Grid.u48)
+            .height(36.dp)
             .clip(Shapes.pill)
-            .background(colors.surfaceContainer)
-            .padding(horizontal = Grid.u12, vertical = Grid.u12),
+            .then(
+              if (isLiquid) Modifier.liquidChrome(Shapes.pill, selected = false)
+              else Modifier.background(colors.surfaceContainer)
+            )
+            .padding(horizontal = 16.dp),
           contentAlignment = Alignment.Center
         ) {
-          Text(stringResource(suggestion.label), style = GridText.Body, color = colors.onSurface, maxLines = 1)
+          Text(stringResource(suggestion.label), style = GridText.Small, color = colors.onSurface, maxLines = 1)
         }
       }
     }

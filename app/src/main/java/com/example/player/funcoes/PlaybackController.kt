@@ -115,6 +115,19 @@ class PlaybackController(
   private val _sleepTimer = MutableStateFlow<SleepTimer?>(null)
   val sleepTimer: StateFlow<SleepTimer?> = _sleepTimer.asStateFlow()
 
+  private val _abLoop = MutableStateFlow(AbLoop())
+  /** Active or pending A-B segment loop for the playing track. */
+  val abLoop: StateFlow<AbLoop> = _abLoop.asStateFlow()
+
+  fun toggleAbLoop() {
+    if (musicRepository.currentTrack.value == null) return
+    _abLoop.value = _abLoop.value.nextStep(positionMs.value)
+  }
+
+  fun clearAbLoop() {
+    if (_abLoop.value.startMs != null || _abLoop.value.endMs != null) _abLoop.value = AbLoop()
+  }
+
   private val _notices = MutableSharedFlow<PlaybackNotice>(extraBufferCapacity = 4)
   val notices: SharedFlow<PlaybackNotice> = _notices.asSharedFlow()
 
@@ -205,6 +218,15 @@ class PlaybackController(
         if (isPlaying.value) savePosition()
       }
     }
+    // A-B Loop: wrap back to point A whenever playback crosses point B.
+    scope.launch {
+      positionMs.collect { pos ->
+        val loop = _abLoop.value
+        if (loop.shouldWrap(pos) && isPlaying.value) {
+          audioEngine.seekTo(loop.startMs!!)
+        }
+      }
+    }
   }
 
   // ---- starting tracks ----
@@ -252,6 +274,7 @@ class PlaybackController(
    * how the track playing until now ends.
    */
   private fun playInternal(track: Track, recordHistory: Boolean, reason: EndReason = EndReason.NEW_SELECTION) {
+    clearAbLoop()
     recordEnd(reason)
     if (recordHistory) {
       musicRepository.currentTrack.value?.let { prev ->
@@ -482,6 +505,7 @@ class PlaybackController(
 
   /** The player moved on to the queued track by itself: catch the rest of the state up. */
   private fun onGaplessAdvance(next: PlaybackOrder.Next, track: Track) {
+    clearAbLoop()
     recordEnd(EndReason.NATURAL)
     unrecorded = track
     failuresInARow = 0

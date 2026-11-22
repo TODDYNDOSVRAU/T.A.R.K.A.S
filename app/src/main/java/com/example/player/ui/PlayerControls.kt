@@ -1,8 +1,15 @@
 package com.example.ui.screens.player
 
 import android.content.BroadcastReceiver
-import com.example.ui.theme.GridText
 import com.example.ui.theme.Grid
+import com.example.ui.theme.GridText
+import com.example.ui.theme.LocalSurfaceStyle
+import com.example.ui.theme.SurfaceStyle
+import com.example.ui.theme.drawLiquidGlassThumb
+import com.example.ui.theme.liquidGlassSupported
+import com.example.ui.theme.liquidLensPill
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -25,6 +32,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -196,7 +204,8 @@ internal fun TitleRow(
   onCreatePlaylist: (String, Track) -> Unit,
   onSleepTimer: () -> Unit,
   onAbout: (Track) -> Unit,
-  onLyrics: (Track) -> Unit
+  onLyrics: (Track) -> Unit,
+  onDownloadOffline: (Track) -> Unit = {}
 ) {
   Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
     Column(
@@ -249,7 +258,8 @@ internal fun TitleRow(
         sleepTimerLabel = sleepTimerLabel(sleepTimer),
         onSleepTimer = onSleepTimer,
         onAbout = { onAbout(track) },
-        onLyrics = { onLyrics(track) }
+        onLyrics = { onLyrics(track) },
+        onDownloadOffline = { onDownloadOffline(track) }
       )
     }
   }
@@ -454,6 +464,13 @@ internal fun ScrubBar(
     label = "waveformAlpha"
   )
   val accentColor = MaterialTheme.colorScheme.primary
+  val isLiquid = LocalSurfaceStyle.current == SurfaceStyle.LIQUID && liquidGlassSupported
+  val barBackdrop = rememberLayerBackdrop(
+    onDraw = {
+      drawRect(Color(0xFF1A1A1A))
+      drawContent()
+    }
+  )
   Box(
     modifier = modifier
       .fillMaxWidth()
@@ -500,33 +517,57 @@ internal fun ScrubBar(
             change(last)
           }
         }
-      }
-      .drawBehind {
-        val h = thickness.dp.toPx()
-        val top = (size.height - h) / 2f
-        val r = CornerRadius(h / 2f)
-        val thin = 1f - waveAlpha
-        if (thin > 0f) {
-          drawRoundRect(rail.copy(alpha = rail.alpha * thin), topLeft = Offset(0f, top), size = androidx.compose.ui.geometry.Size(size.width, h), cornerRadius = r)
-          if (shown > 0f) {
-            drawRoundRect(fill.copy(alpha = fill.alpha * thin), topLeft = Offset(0f, top), size = androidx.compose.ui.geometry.Size(size.width * shown, h), cornerRadius = r)
+      },
+    contentAlignment = Alignment.CenterStart
+  ) {
+    Box(
+      modifier = Modifier
+        .matchParentSize()
+        .then(if (isLiquid) Modifier.layerBackdrop(barBackdrop) else Modifier)
+        .drawBehind {
+          val h = thickness.dp.toPx()
+          val top = (size.height - h) / 2f
+          val r = CornerRadius(h / 2f)
+          val thin = 1f - waveAlpha
+          if (thin > 0f) {
+            drawRoundRect(rail.copy(alpha = rail.alpha * thin), topLeft = Offset(0f, top), size = androidx.compose.ui.geometry.Size(size.width, h), cornerRadius = r)
+            if (shown > 0f) {
+              drawRoundRect(fill.copy(alpha = fill.alpha * thin), topLeft = Offset(0f, top), size = androidx.compose.ui.geometry.Size(size.width * shown, h), cornerRadius = r)
+            }
+          }
+          if (waveAlpha > 0f) {
+            with(WaveformBar) {
+              drawBars(
+                amplitudes = bars,
+                fraction = shown,
+                played = accentColor.copy(alpha = waveAlpha),
+                rest = OnPage.copy(alpha = 0.4f * waveAlpha),
+                barPx = barPx,
+                gapPx = gapPx,
+                grow = ((thickness - Grid.u6.value) / Grid.u6.value).coerceIn(0f, 1f)
+              )
+            }
+          }
+          if (!isLiquid) {
+            val thumbR = (if (dragging) 10.dp else 8.5.dp).toPx()
+            val thumbX = (size.width * shown).coerceIn(thumbR, (size.width - thumbR).coerceAtLeast(thumbR))
+            drawCircle(fill, thumbR, Offset(thumbX, size.height / 2f))
           }
         }
-        if (waveAlpha > 0f) {
-          with(WaveformBar) {
-            drawBars(
-              amplitudes = bars,
-              fraction = shown,
-              played = accentColor.copy(alpha = waveAlpha),
-              rest = OnPage.copy(alpha = 0.4f * waveAlpha),
-              barPx = barPx,
-              gapPx = gapPx,
-              grow = ((thickness - Grid.u6.value) / Grid.u6.value).coerceIn(0f, 1f)
-            )
-          }
-        }
-      }
-  )
+    )
+    if (isLiquid && widthPx > 0) {
+      val pillH = if (dragging) 20.dp else 17.dp
+      val pillW = if (dragging) 31.dp else 27.dp
+      val pillWPx = with(LocalDensity.current) { pillW.toPx() }
+      val thumbOffsetX = ((widthPx * shown) - pillWPx / 2f).coerceIn(0f, (widthPx - pillWPx).coerceAtLeast(0f))
+      Box(
+        modifier = Modifier
+          .offset { androidx.compose.ui.unit.IntOffset(kotlin.math.round(thumbOffsetX).toInt(), 0) }
+          .size(width = pillW, height = pillH)
+          .liquidLensPill(barBackdrop, isDark = true, trackAccent = fill)
+      )
+    }
+  }
 }
 
 // ---- volume ----

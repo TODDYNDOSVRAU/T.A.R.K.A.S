@@ -104,6 +104,41 @@ internal fun filterTypeLabel(type: FilterType): String = stringResource(
     FilterType.HIGH_SHELF -> R.string.audio_filter_high_shelf
     FilterType.HIGH_PASS -> R.string.audio_filter_high_pass
     FilterType.LOW_PASS -> R.string.audio_filter_low_pass
+    FilterType.NOTCH -> R.string.audio_filter_notch
+    FilterType.BAND_PASS -> R.string.audio_filter_band_pass
+    FilterType.TILT_SHELF -> R.string.audio_filter_tilt_shelf
+  }
+)
+
+@Composable
+internal fun bandChannelLabel(channel: com.example.data.model.BandChannel): String = stringResource(
+  when (channel) {
+    com.example.data.model.BandChannel.STEREO -> R.string.audio_channel_stereo
+    com.example.data.model.BandChannel.LEFT -> R.string.audio_channel_left
+    com.example.data.model.BandChannel.RIGHT -> R.string.audio_channel_right
+    com.example.data.model.BandChannel.MID -> R.string.audio_channel_mid
+    com.example.data.model.BandChannel.SIDE -> R.string.audio_channel_side
+  }
+)
+
+@Composable
+internal fun rtaModeLabel(mode: com.example.data.model.RtaMode): String = stringResource(
+  when (mode) {
+    com.example.data.model.RtaMode.POST -> R.string.audio_rta_post
+    com.example.data.model.RtaMode.PRE -> R.string.audio_rta_pre
+    com.example.data.model.RtaMode.BOTH -> R.string.audio_rta_both
+    com.example.data.model.RtaMode.OFF -> R.string.audio_rta_off
+  }
+)
+
+@Composable
+internal fun crossfeedPresetLabel(preset: com.example.data.model.CrossfeedPreset): String = stringResource(
+  when (preset) {
+    com.example.data.model.CrossfeedPreset.OFF -> R.string.audio_crossfeed_off
+    com.example.data.model.CrossfeedPreset.BS2B_DEFAULT -> R.string.audio_crossfeed_bs2b
+    com.example.data.model.CrossfeedPreset.BS2B_CMOY -> R.string.audio_crossfeed_cmoy
+    com.example.data.model.CrossfeedPreset.BS2B_JMEIER -> R.string.audio_crossfeed_jmeier
+    com.example.data.model.CrossfeedPreset.CUSTOM -> R.string.audio_crossfeed_custom
   }
 )
 
