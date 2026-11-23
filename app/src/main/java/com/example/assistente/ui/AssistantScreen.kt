@@ -604,6 +604,7 @@ fun AssistantScreen(
       }
 
       // 4) Unified Bottom Input Capsule (Claude / ChatGPT style): [ + ] [ Text Field ] [ Mic ] [ Send ].
+      val btnSize = if (isCompact) 36.dp else 40.dp
       Row(
         modifier = Modifier
           .fillMaxWidth()
@@ -611,14 +612,14 @@ fun AssistantScreen(
           .clip(pillShape)
           .background(colors.surfaceContainer)
           .border(Grid.hairline, colors.onSurface.copy(alpha = 0.12f), pillShape)
-          .padding(horizontal = 6.dp, vertical = 6.dp),
+          .padding(horizontal = 6.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
+        horizontalArrangement = Arrangement.spacedBy(if (isCompact) 2.dp else 4.dp)
       ) {
         // '+' Quick commands toggle button
         Box(
           modifier = Modifier
-            .size(40.dp)
+            .size(btnSize)
             .clip(CircleShape)
             .background(if (showQuickCommands) colors.primary.copy(alpha = 0.16f) else Color.Transparent)
             .highlightClickable(onClick = { showQuickCommands = !showQuickCommands })
@@ -629,22 +630,27 @@ fun AssistantScreen(
             imageVector = if (showQuickCommands) Icons.Rounded.Close else Icons.Rounded.Add,
             contentDescription = stringResource(R.string.assistant_suggestion_help),
             tint = if (showQuickCommands) colors.primary else colors.onSurfaceVariant,
-            modifier = Modifier.size(22.dp)
+            modifier = Modifier.size(20.dp)
           )
         }
 
         // Borderless integrated text field
         val fieldDescription = stringResource(R.string.assistant_composer_description)
+        val fullPlaceholder = stringResource(R.string.assistant_composer_placeholder)
+        val placeholderText = remember(fullPlaceholder, isCompact) {
+          if (!isCompact) fullPlaceholder
+          else fullPlaceholder.substringBefore(" ou ").substringBefore(" or ").trimEnd('.', ' ') + "…"
+        }
         Box(
           modifier = Modifier
             .weight(1f)
-            .heightIn(min = 40.dp)
-            .padding(horizontal = 6.dp, vertical = 8.dp),
+            .heightIn(min = btnSize)
+            .padding(horizontal = 4.dp, vertical = 6.dp),
           contentAlignment = Alignment.CenterStart
         ) {
           if (textInput.isEmpty()) {
             Text(
-              text = stringResource(R.string.assistant_composer_placeholder),
+              text = placeholderText,
               style = GridText.Body,
               color = colors.onSurfaceVariant.copy(alpha = 0.7f),
               maxLines = 1,
@@ -669,7 +675,7 @@ fun AssistantScreen(
         // Mic button
         Box(
           modifier = Modifier
-            .size(40.dp)
+            .size(btnSize)
             .clip(CircleShape)
             .background(if (isListening) colors.primary.copy(alpha = 0.16f) else Color.Transparent)
             .highlightClickable(onClick = ::launchVoiceInput)
@@ -680,14 +686,14 @@ fun AssistantScreen(
             imageVector = Icons.Rounded.Mic,
             contentDescription = stringResource(if (isListening) R.string.assistant_listening else R.string.assistant_mic_idle),
             tint = if (isListening) colors.primary else colors.onSurfaceVariant,
-            modifier = Modifier.size(22.dp)
+            modifier = Modifier.size(20.dp)
           )
         }
 
         // Integrated Send button
         Box(
           modifier = Modifier
-            .size(40.dp)
+            .size(btnSize)
             .clip(CircleShape)
             .background(if (hasInput) colors.primary else colors.onSurface.copy(alpha = 0.08f))
             .highlightClickable(onClick = ::send)

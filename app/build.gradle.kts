@@ -17,8 +17,8 @@ android {
     applicationId = "com.aistudio.tarkas.app"
     minSdk = 24
     targetSdk = 36
-    versionCode = 23
-    versionName = "2.4"
+    versionCode = 24
+    versionName = "2.4.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

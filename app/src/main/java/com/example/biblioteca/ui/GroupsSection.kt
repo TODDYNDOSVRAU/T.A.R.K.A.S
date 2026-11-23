@@ -92,18 +92,21 @@ internal fun GroupsList(
   @StringRes hintRes: Int,
   @StringRes emptyRes: Int,
   ready: Boolean,
-  onOpen: (LibraryGroup) -> Unit
+  onOpen: (LibraryGroup) -> Unit,
+  externalQuery: String? = null,
+  onClearExternalQuery: (() -> Unit)? = null
 ) {
-  var query by rememberSaveable(kind) { mutableStateOf("") }
-  val shown = remember(groups, query) { groups.filter { com.example.data.TextMatch.contains(it.name, query) } }
+  var localQuery by rememberSaveable(kind) { mutableStateOf("") }
+  val activeQuery = externalQuery ?: localQuery
+  val shown = remember(groups, activeQuery) { groups.filter { com.example.data.TextMatch.contains(it.name, activeQuery) } }
   LazyColumn(
     modifier = Modifier.readingColumn().fillMaxHeight(),
     contentPadding = PaddingValues(top = Grid.u6, bottom = LocalBarInset.current + Grid.inset)
   ) {
-    if (groups.isNotEmpty()) item(key = "search") {
+    if (externalQuery == null && groups.isNotEmpty()) item(key = "search") {
       SearchField(
-        value = query,
-        onValueChange = { query = it },
+        value = localQuery,
+        onValueChange = { localQuery = it },
         placeholder = stringResource(hintRes),
         modifier = Modifier
           .padding(horizontal = Grid.margin)
@@ -114,7 +117,10 @@ internal fun GroupsList(
     when {
       groups.isEmpty() -> item(key = "empty") { if (ready) Note(stringResource(emptyRes)) }
       shown.isEmpty() -> item(key = "no_match") {
-        NoMatch(message = stringResource(R.string.library_search_no_group, query.trim()), onClear = { query = "" })
+        NoMatch(
+          message = stringResource(R.string.library_search_no_group, activeQuery.trim()),
+          onClear = { if (externalQuery != null) onClearExternalQuery?.invoke() else localQuery = "" }
+        )
       }
     }
     itemsIndexed(shown, key = { _, g -> g.key }) { index, group ->

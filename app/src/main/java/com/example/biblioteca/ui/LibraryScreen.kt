@@ -576,7 +576,9 @@ fun LibraryScreen(
         hintRes = R.string.library_search_albums_hint,
         emptyRes = R.string.library_albums_empty,
         ready = musicAllowed && !deviceScanning && groups != null,
-        onOpen = { pushGroup(it.key) }
+        onOpen = { pushGroup(it.key) },
+        externalQuery = songQuery,
+        onClearExternalQuery = { songQuery = "" }
       )
 
       LibrarySection.ARTISTS -> GroupsList(
@@ -585,7 +587,9 @@ fun LibraryScreen(
         hintRes = R.string.library_search_artists_hint,
         emptyRes = R.string.library_artists_empty,
         ready = musicAllowed && !deviceScanning && groups != null,
-        onOpen = { pushGroup(it.key) }
+        onOpen = { pushGroup(it.key) },
+        externalQuery = songQuery,
+        onClearExternalQuery = { songQuery = "" }
       )
 
       LibrarySection.GENRES -> GroupsList(
@@ -594,7 +598,9 @@ fun LibraryScreen(
         hintRes = R.string.library_search_genres_hint,
         emptyRes = R.string.library_genres_empty,
         ready = musicAllowed && !deviceScanning && groups != null,
-        onOpen = { pushGroup(it.key) }
+        onOpen = { pushGroup(it.key) },
+        externalQuery = songQuery,
+        onClearExternalQuery = { songQuery = "" }
       )
 
       LibrarySection.FOLDERS -> GroupsList(
@@ -603,63 +609,67 @@ fun LibraryScreen(
         hintRes = R.string.library_search_folders_hint,
         emptyRes = R.string.library_folders_browse_empty,
         ready = musicAllowed && !deviceScanning,
-        onOpen = { pushGroup(it.key) }
+        onOpen = { pushGroup(it.key) },
+        externalQuery = songQuery,
+        onClearExternalQuery = { songQuery = "" }
       )
 
-      LibrarySection.PLAYLISTS -> PlaylistsList(
-        playlists = playlists,
-        byId = byId,
-        onOpen = { openPlaylistId = it.id },
-        onNew = { showNewPlaylist = true },
-        onImportAudio = { audioPickerLauncher.launch(arrayOf("audio/*")) },
-        onImportM3u = { m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "application/vnd.apple.mpegurl", "text/plain", "*/*")) },
-        onAddStream = { showAddStream = true }
-      )
-
-      LibrarySection.FAVORITES -> TrackList(
-        tracks = shownFavorites,
-        currentTrack = currentTrack,
-        isPlaying = isPlaying,
-        onPlay = { track -> onPlayFromList(track, shownFavorites) },
-        onShuffle = { onShuffleList(shownFavorites) },
-        header = {
-          if (favoriteTracks.isNotEmpty()) item(key = "favorite_search") {
-            SearchField(
-              value = favoriteQuery,
-              onValueChange = { favoriteQuery = it },
-              placeholder = stringResource(R.string.library_search_favorites_hint),
-              modifier = Modifier
-                .padding(horizontal = Grid.margin)
-                .padding(top = Grid.u6, bottom = Grid.u6)
-                .testTag("library_search_favorites")
-            )
-          }
-        },
-        empty = {
-          if (favoriteTracks.isNotEmpty()) {
-            NoMatch(
-              message = stringResource(R.string.library_search_empty_favorites, favoriteQuery.trim()),
-              onClear = { favoriteQuery = "" }
-            )
-          } else {
-            EmptyState(
-              icon = Icons.Rounded.FavoriteBorder,
-              title = stringResource(R.string.library_favorites_empty_title),
-              message = stringResource(R.string.library_favorites_empty_message),
-              modifier = Modifier.padding(horizontal = Grid.margin)
-            )
-          }
-        },
-        trailing = { track ->
-          IconAction(
-            icon = Icons.Rounded.Favorite,
-            contentDescription = stringResource(R.string.library_favorite_remove, track.title),
-            onClick = { onToggleFavorite(track) },
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.trailingEdge()
-          )
+      LibrarySection.PLAYLISTS -> {
+        val filteredPlaylists = remember(playlists, songQuery) {
+          if (songQuery.isBlank()) playlists else playlists.filter { com.example.data.TextMatch.contains(it.name, songQuery) }
         }
-      )
+        PlaylistsList(
+          playlists = filteredPlaylists,
+          byId = byId,
+          onOpen = { openPlaylistId = it.id },
+          onNew = { showNewPlaylist = true },
+          onImportAudio = { audioPickerLauncher.launch(arrayOf("audio/*")) },
+          onImportM3u = { m3uImportLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "application/vnd.apple.mpegurl", "text/plain", "*/*")) },
+          onAddStream = { showAddStream = true }
+        )
+      }
+
+      LibrarySection.FAVORITES -> {
+        val filteredFavorites = remember(favoriteTracks, songQuery) {
+          if (songQuery.isBlank()) favoriteTracks else favoriteTracks.filter {
+            com.example.data.TextMatch.contains(it.title, songQuery) ||
+              com.example.data.TextMatch.contains(it.artist, songQuery) ||
+              com.example.data.TextMatch.contains(it.album, songQuery)
+          }
+        }
+        TrackList(
+          tracks = filteredFavorites,
+          currentTrack = currentTrack,
+          isPlaying = isPlaying,
+          onPlay = { track -> onPlayFromList(track, filteredFavorites) },
+          onShuffle = { onShuffleList(filteredFavorites) },
+          header = {},
+          empty = {
+            if (favoriteTracks.isNotEmpty()) {
+              NoMatch(
+                message = stringResource(R.string.library_search_empty_favorites, songQuery.trim()),
+                onClear = { songQuery = "" }
+              )
+            } else {
+              EmptyState(
+                icon = Icons.Rounded.FavoriteBorder,
+                title = stringResource(R.string.library_favorites_empty_title),
+                message = stringResource(R.string.library_favorites_empty_message),
+                modifier = Modifier.padding(horizontal = Grid.margin)
+              )
+            }
+          },
+          trailing = { track ->
+            IconAction(
+              icon = Icons.Rounded.Favorite,
+              contentDescription = stringResource(R.string.library_favorite_remove, track.title),
+              onClick = { onToggleFavorite(track) },
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.trailingEdge()
+            )
+          }
+        )
+      }
 
       LibrarySection.AUTO -> AutoListsOverview(
         lists = autoLists,
@@ -680,7 +690,7 @@ fun LibraryScreen(
     }
   }
 
-  val isTabletSidebar = isTabletConsole || !compact
+  val isTabletSidebar = isTabletConsole || rememberWidthClass() != WidthClass.COMPACT
   if (isTabletSidebar) {
     val colors = MaterialTheme.colorScheme
     val cardShape = SquircleShape(18.dp)
@@ -741,14 +751,12 @@ fun LibraryScreen(
         }
       }
 
-      // Right Main Workspace: Unified Top Bar (in Músicas) + Master-Detail split when an Album/Artist/Playlist/AutoList is open.
+      // Right Main Workspace: Unified Top Search & Sort Bar across ALL sections + Master-Detail split when open.
       Column(
         modifier = Modifier.weight(1f).fillMaxHeight(),
         verticalArrangement = Arrangement.spacedBy(Grid.u6)
       ) {
-        if (section == LibrarySection.SONGS && musicAllowed && (deviceTracks.isNotEmpty() || folderRules.isFiltering)) {
-          SongsSearchAndSortBar(padHorizontal = false)
-        }
+        SongsSearchAndSortBar(padHorizontal = false)
         if (detailId != null && isTabletConsole) {
           Row(
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -851,9 +859,7 @@ fun LibraryScreen(
               )
             }
           }
-          if (section == LibrarySection.SONGS && musicAllowed && (deviceTracks.isNotEmpty() || folderRules.isFiltering)) {
-            SongsSearchAndSortBar(padHorizontal = true)
-          }
+          SongsSearchAndSortBar(padHorizontal = true)
           AnimatedContent(
             targetState = section,
             transitionSpec = { sectionTransition(initialState.ordinal, targetState.ordinal, reduced) },

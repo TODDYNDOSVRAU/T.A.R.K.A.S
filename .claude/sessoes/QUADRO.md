@@ -682,3 +682,21 @@ DONE win-player (visual spec 2026-11-18): player/PlayerTransport.kt, PlayerArt.k
 2026-11-22 17:13 | geral | CLAIM | app/build.gradle.kts | Bump versao para 2.4 (versionCode 23), build assembleRelease assinado, commit/tag/push e publicacao da release v2.4 no GitHub (pedido explicito do dono)
 
 2026-11-22 17:16 | geral | DONE | app/build.gradle.kts | Versao 2.4 (versionCode 23) compilada com assembleRelease assinado (lintVitalRelease 0 erros/warnings, EXIT:0, 7.203.437 bytes, sha256 8ba6c369...). Prosseguindo com commit, tag v2.4, push e gh release create v2.4 conforme pedido explicito do dono.
+
+2026-11-22 18:53 | geral | APARELHO | s23 (192.168.100.6:42103) | capturando todas as telas da v2.4 no Galaxy S23 para auditoria visual e /grill-me
+
+2026-11-22 18:57 | geral | CLAIM | biblioteca/ui/{LibraryScreen,HomeScreen}.kt, equalizador/ui/EqPowerConsole.kt, assistente/ui/AssistantScreen.kt | Ajustes da auditoria no Galaxy S23 (411x891dp): (1) corrigir isTabletSidebar na Biblioteca para WidthClass != COMPACT, (2) compactar EQ vertical no celular para caber 100% acima do MiniPlayer sem cortar 48 kHz, (3) placeholder curto + botoes 36dp na capsula do Assistente no celular, (4) empty state compacto em Suas musicas no Inicio para revelar Em alta no Audius na primeira dobra
+
+2026-11-22 19:08 | geral | DONE | biblioteca/ui/{LibraryScreen,HomeScreen}.kt, equalizador/ui/EqPowerConsole.kt, assistente/ui/AssistantScreen.kt, APARELHO liberado | Auditoria e correcoes verificadas no Galaxy S23 (SM_S911B, 411x891dp, assembleRelease + adb install -r OK, EXIT:0): (1) LibraryScreen isTabletSidebar corrigido para rememberWidthClass() != WidthClass.COMPACT (eliminou sidebar espremida no celular), (2) EqPowerConsole compactado no celular + TopRow com linha de rota em largura total (48 kHz sem corte; 100% do console acima do MiniPlayer na primeira dobra), (3) AssistantScreen capsula com botoes 36dp e placeholder curto 'Peca algo...' sem truncamento, (4) HomeScreen estado vazio de Suas musicas compactado em faixa horizontal. Verificado em s23_fixed_01_inicio.png..s23_fixed_04_assistente.png. Sem commit.
+
+2026-11-22 19:09 | geral | CLAIM | biblioteca/ui/HomeScreen.kt | Limitar previa de Suas musicas na tela inicial a 5 faixas e tornar o cabecalho Suas musicas clicavel (com contador + chevron) para abrir a Biblioteca
+
+2026-11-22 19:16 | geral | DONE | biblioteca/ui/HomeScreen.kt | Previa de Suas musicas na tela inicial limitada a 5 faixas + cabecalho clicavel (Suas musicas + contador total + chevron) levando direto para a Biblioteca (Smartphone, Tablet Retrato e Tablet Horizontal). assembleRelease + adb install -r OK no Galaxy S23 (EXIT:0), verificado em s23_home_preview.png (2209 >) e s23_home_preview_scrolled.png. Sem commit.
+
+2026-11-22 19:19 | geral | CLAIM | biblioteca/ui/{LibraryScreen,GroupsSection}.kt | Unificar barra de pesquisa superior da Biblioteca (identica a de Musicas) para todas as categorias (Albuns, Artistas, Generos, Pastas, Playlists, Favoritos, Automaticas, Fila), removendo campos internos duplicados
+
+2026-11-22 19:24 | geral | DONE | biblioteca/ui/{LibraryScreen,GroupsSection}.kt | Barra de pesquisa superior da Biblioteca unificada para todas as 9 categorias (identica a de Musicas), removendo campos internos duplicados em GroupsList (Albuns, Artistas, Generos, Pastas) e Favoritos, e filtrando cada secao pela mesma busca. assembleRelease + adb install -r OK no Galaxy S23 (EXIT:0). Pendente: captura visual no S23 (tela bloqueada na lockscreen durante screencap). Sem commit.
+
+2026-11-22 22:55 | geral | CLAIM | app/build.gradle.kts | Bump versao para 2.4.1 (versionCode 24), assembleRelease assinado, commit/tag/push e publicacao da release v2.4.1 no GitHub (confirmado pelo dono)
+
+2026-11-22 22:58 | geral | DONE | app/build.gradle.kts | Versao 2.4.1 (versionCode 24) compilada com assembleRelease assinado (lintVitalRelease 0 erros/warnings, EXIT:0). Publicando commit, tag v2.4.1 e release v2.4.1 no GitHub conforme confirmacao do dono.

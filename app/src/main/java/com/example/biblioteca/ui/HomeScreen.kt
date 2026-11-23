@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -263,7 +264,11 @@ fun HomeScreen(
             contentPadding = PaddingValues(top = Grid.u6, bottom = Grid.u12)
           ) {
             item(key = "mine_header") {
-              SectionHeader(stringResource(R.string.home_mine_header), modifier = Modifier.padding(top = Grid.u6, bottom = Grid.u6))
+              MineSectionHeader(
+                totalCount = myTracks.size,
+                onOpenLibrary = onOpenLibrary,
+                modifier = Modifier.padding(top = Grid.u6, bottom = Grid.u6)
+              )
             }
             if (myTracks.isEmpty()) {
               item(key = "mine_empty") {
@@ -277,7 +282,7 @@ fun HomeScreen(
                 )
               }
             }
-            songs(myTracks, "mine", "lib_track", showSource = true, stagger = true, onClick = onPlayTrack)
+            songs(myTracks.take(5), "mine", "lib_track", showSource = true, stagger = true, onClick = onPlayTrack)
             if (demoTracks.isNotEmpty()) {
               item(key = "demo_header") {
                 DemoToggle(
@@ -724,7 +729,8 @@ fun HomeScreen(
         }
       }
 
-      val mineHasBottomContent = myTracks.isNotEmpty() || demoTracks.isNotEmpty()
+      val previewMyTracks = myTracks.take(5)
+      val mineHasBottomContent = previewMyTracks.isNotEmpty() || myTracks.isEmpty() || demoTracks.isNotEmpty()
       item(key = "mine_header") {
         Box(
           modifier = Modifier
@@ -733,31 +739,74 @@ fun HomeScreen(
             .clip(if (mineHasBottomContent) cardTopShape else cardShape)
             .background(colors.surfaceContainer)
         ) {
-          SectionHeader(stringResource(R.string.home_mine_header), modifier = Modifier.padding(top = Grid.u12, bottom = Grid.u6))
+          MineSectionHeader(
+            totalCount = myTracks.size,
+            onOpenLibrary = onOpenLibrary,
+            modifier = Modifier.padding(top = Grid.u12, bottom = Grid.u6)
+          )
         }
       }
       if (myTracks.isEmpty()) {
         item(key = "mine_empty") {
-          Box(
+          Row(
             modifier = Modifier
               .padding(horizontal = Grid.margin)
               .fillMaxWidth()
               .clip(if (demoTracks.isEmpty()) cardBottomShape else androidx.compose.ui.graphics.RectangleShape)
               .background(colors.surfaceContainer)
-              .padding(bottom = Grid.u12)
+              .padding(start = Grid.margin, end = Grid.margin, top = Grid.u6, bottom = Grid.u12)
+              .testTag("home_empty"),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Grid.u12)
           ) {
-            EmptyState(
-              icon = Icons.Rounded.LibraryMusic,
-              title = stringResource(R.string.home_mine_empty_title),
-              message = stringResource(R.string.home_mine_empty_message),
-              actionLabel = stringResource(R.string.home_mine_empty_action),
-              onAction = onOpenLibrary,
-              modifier = Modifier.padding(horizontal = Grid.margin).testTag("home_empty")
-            )
+            Box(
+              modifier = Modifier
+                .size(40.dp)
+                .clip(SquircleShape(12.dp))
+                .background(colors.onSurface.copy(alpha = 0.06f)),
+              contentAlignment = Alignment.Center
+            ) {
+              Icon(
+                imageVector = Icons.Rounded.LibraryMusic,
+                contentDescription = null,
+                tint = colors.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+              )
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+              Text(
+                text = stringResource(R.string.home_mine_empty_title),
+                style = GridText.Body,
+                color = colors.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
+              Text(
+                text = stringResource(R.string.home_mine_empty_message),
+                style = GridText.Small,
+                color = colors.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+              )
+            }
+            Box(
+              modifier = Modifier
+                .clip(com.example.ui.theme.Shapes.pill)
+                .background(colors.primary.copy(alpha = 0.14f))
+                .highlightClickable(onClick = onOpenLibrary)
+                .padding(horizontal = Grid.u12, vertical = 8.dp)
+            ) {
+              Text(
+                text = stringResource(R.string.home_mine_empty_action),
+                style = GridText.Small,
+                color = colors.primary,
+                maxLines = 1
+              )
+            }
           }
         }
       }
-      cardSongs(myTracks, "mine", "lib_track", showSource = true, stagger = true, roundLastBottom = demoTracks.isEmpty(), onClick = onPlayTrack)
+      cardSongs(previewMyTracks, "mine", "lib_track", showSource = true, stagger = true, roundLastBottom = demoTracks.isEmpty(), onClick = onPlayTrack)
 
       // The short synthesized tracks, folded away under one row inside the same virtualised card.
       if (demoTracks.isNotEmpty()) {
@@ -1043,5 +1092,45 @@ private fun TrendingSkeleton() {
         Box(Modifier.width(Grid.u48 + Grid.u24).height(Grid.u12).clip(Grid.r6).background(fill))
       }
     }
+  }
+}
+
+/** Clickable "Suas músicas" section header: shows total track count + chevron and opens the Library tab. */
+@Composable
+private fun MineSectionHeader(
+  totalCount: Int,
+  onOpenLibrary: () -> Unit,
+  modifier: Modifier = Modifier
+) {
+  val colors = MaterialTheme.colorScheme
+  Row(
+    modifier = modifier
+      .fillMaxWidth()
+      .clip(Grid.r12)
+      .highlightClickable(onClick = onOpenLibrary)
+      .padding(horizontal = Grid.margin, vertical = Grid.u6)
+      .testTag("home_mine_header_link"),
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    Text(
+      text = stringResource(R.string.home_mine_header),
+      style = GridText.Title,
+      color = colors.onSurface,
+      modifier = Modifier.weight(1f)
+    )
+    if (totalCount > 0) {
+      Text(
+        text = totalCount.toString(),
+        style = GridText.Small,
+        color = colors.onSurfaceVariant,
+        modifier = Modifier.padding(end = 2.dp)
+      )
+    }
+    Icon(
+      imageVector = Icons.Rounded.ChevronRight,
+      contentDescription = stringResource(R.string.home_mine_empty_action),
+      tint = colors.primary,
+      modifier = Modifier.size(22.dp)
+    )
   }
 }

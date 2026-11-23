@@ -352,14 +352,14 @@ internal fun EqPowerConsole(
         }
       }
     } else {
-      val portraitCurve = Grid.u192
-      val bandHeight = (pageHeight - FIXED_HEIGHT - Grid.u24).coerceIn(BANDS_MIN, BANDS_MAX)
+      val portraitCurve = if (pageHeight < 680.dp) 156.dp else Grid.u192
+      val bandHeight = (pageHeight - portraitCurve - 256.dp).coerceIn(164.dp, 212.dp)
       Column(
         modifier = Modifier
           .fillMaxSize()
           .verticalScroll(rememberScrollState())
           .padding(start = Grid.margin, end = Grid.margin, bottom = Grid.u12 + barInset),
-        verticalArrangement = Arrangement.spacedBy(Grid.u12)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
       ) {
         // Compact Studio Console Header Card (Title/Power + Presets)
         Column(
@@ -368,8 +368,8 @@ internal fun EqPowerConsole(
             .clip(cardShape)
             .background(colors.surfaceContainer)
             .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
-            .padding(Grid.u12),
-          verticalArrangement = Arrangement.spacedBy(Grid.u6)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+          verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
           top()
           presets()
@@ -383,8 +383,8 @@ internal fun EqPowerConsole(
             .clip(cardShape)
             .background(colors.surfaceContainer)
             .border(Grid.hairline, colors.onSurface.copy(alpha = 0.08f), cardShape)
-            .padding(Grid.u12),
-          verticalArrangement = Arrangement.spacedBy(Grid.u6)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+          verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
           dock(Modifier.fillMaxWidth())
           path()
@@ -671,46 +671,47 @@ private fun OutputProtectionRackBlock(
 @Composable
 private fun TopRow(capabilities: AudioCapabilities, settings: EqSettings, compare: CompareState, onSetEnabled: (Boolean) -> Unit) {
   val colors = MaterialTheme.colorScheme
-  Row(modifier = Modifier.fillMaxWidth().heightIn(min = Grid.u48), verticalAlignment = Alignment.CenterVertically) {
-    Column(modifier = Modifier.weight(1f)) {
+  Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Row(modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp), verticalAlignment = Alignment.CenterVertically) {
       Text(
         stringResource(R.string.audio_switch_equalizer),
         style = EqType.Title,
         color = colors.onSurface,
-        maxLines = 1
+        maxLines = 1,
+        modifier = Modifier.weight(1f)
       )
-      if (compare.comparing) {
+      PowerPill(settings.enabled, compare, onSetEnabled)
+    }
+    if (compare.comparing) {
+      Text(
+        stringResource(R.string.audio_compare_banner),
+        style = EqType.Mono,
+        color = colors.primary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.testTag("eq_compare_banner")
+      )
+    } else {
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+          modifier = Modifier
+            .size(Grid.u6)
+            .clip(CircleShape)
+            .background(if (settings.enabled) colors.primary else colors.onSurface.copy(alpha = 0.38f))
+        )
+        Spacer(Modifier.width(Grid.u6))
+        val rate = formatSampleRate(capabilities.sampleRateHz)
+        val outputLine = stringResource(R.string.audio_output_line, capabilities.activeRouteName, rate)
         Text(
-          stringResource(R.string.audio_compare_banner),
+          capabilities.activeRouteName + " · " + rate,
           style = EqType.Mono,
-          color = colors.primary,
+          color = colors.onSurfaceVariant,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
-          modifier = Modifier.testTag("eq_compare_banner")
+          modifier = Modifier.semantics { contentDescription = outputLine }
         )
-      } else {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Box(
-            modifier = Modifier
-              .size(Grid.u6)
-              .clip(CircleShape)
-              .background(if (settings.enabled) colors.primary else colors.onSurface.copy(alpha = 0.38f))
-          )
-          Spacer(Modifier.width(Grid.u6))
-          val rate = formatSampleRate(capabilities.sampleRateHz)
-          val outputLine = stringResource(R.string.audio_output_line, capabilities.activeRouteName, rate)
-          Text(
-            capabilities.activeRouteName + " · " + rate,
-            style = EqType.Mono,
-            color = colors.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.semantics { contentDescription = outputLine }
-          )
-        }
       }
     }
-    PowerPill(settings.enabled, compare, onSetEnabled)
   }
 }
 
