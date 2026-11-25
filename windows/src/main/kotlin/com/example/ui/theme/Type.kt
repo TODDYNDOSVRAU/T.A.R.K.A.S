@@ -48,7 +48,7 @@ object AppText {
 
 /** The three text sizes of the T.A.L. grid: 24, 18 and 12 sp (line heights are multiples of 6). */
 object GridText {
-  val Title = style(24, 30, FontWeight.SemiBold, -0.02f, { SpaceGrotesk })
+  val Title = style(28, 34, FontWeight.Bold, -0.025f, { SpaceGrotesk })
   val Body = style(18, 24, FontWeight.Normal)
   val BodyStrong = style(18, 24, FontWeight.SemiBold)
   val Small = style(12, 18, FontWeight.Normal)

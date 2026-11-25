@@ -21,6 +21,12 @@ val sharedMain = listOf(
   "com/example/equalizador/funcoes/dsp/EqActivity.kt",
   "com/example/equalizador/funcoes/dsp/EqDsp.kt",
   "com/example/equalizador/funcoes/dsp/EqTextFormat.kt",
+  "com/example/equalizador/funcoes/dsp/AnalogHarmonicsDsp.kt",
+  "com/example/equalizador/funcoes/dsp/ConvolverDsp.kt",
+  "com/example/equalizador/funcoes/dsp/CrossfeedDsp.kt",
+  "com/example/equalizador/funcoes/dsp/EqualLoudnessDsp.kt",
+  "com/example/equalizador/funcoes/dsp/MultibandCompanderDsp.kt",
+  "com/example/equalizador/funcoes/dsp/RtaAnalyzer.kt",
   "com/example/equalizador/funcoes/spatial/AcousticPhysics.kt",
   "com/example/equalizador/funcoes/spatial/Fft.kt",
   "com/example/equalizador/funcoes/spatial/HeadPose.kt",
@@ -164,7 +170,7 @@ compose.desktop {
       modules("java.instrument", "java.net.http", "jdk.unsupported", "jdk.crypto.ec", "java.sql", "java.naming")
       targetFormats(TargetFormat.Msi, TargetFormat.Exe)
       packageName = "TARKAS"
-      packageVersion = "2.1.0"
+      packageVersion = "2.1.3"
       vendor = "Totally Accurate Labs"
       description = "Totally Accurate Real-Time Kind of Audio System"
       windows {

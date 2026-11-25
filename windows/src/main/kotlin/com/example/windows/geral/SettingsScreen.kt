@@ -30,6 +30,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import com.example.ui.theme.Grid
+import com.example.ui.theme.LocalBarInset
+import com.example.ui.theme.SquircleShape
+import com.example.ui.theme.studioCard
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.example.ui.theme.GridText
 import com.example.ui.theme.ThemeMode
 import com.example.ui.viewmodel.SettingsSubPage
@@ -95,45 +107,62 @@ fun SettingsScreen(state: TarkasState, svc: GeralServices) {
   // A category with nothing at the current layer is hidden from the list, so every entry leads somewhere.
   val cats = Cat.entries.filter { k -> groups.any { it.cat == k && it.layer.ordinal <= layer.ordinal } }
   if (cat !in cats && cats.isNotEmpty()) cat = cats.first()
-  androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
+  val shown = visibleRows(groups, { Triple(it.keywords, it.layer, it.cat) }, query, layer, cat)
+  SettingsLayout(
+    cats = cats, cat = cat, onCat = { query = ""; cat = it }, query = query, onQuery = { query = it },
+    layer = layer, onLayer = { geral.setLayer(it) }, empty = shown.isEmpty()
+  ) { shown.forEach { it.content() } }
+}
+
+/** Sidebar (250 dp) + content card, NOVA UI. Stateless so it can be tested without [TarkasState]. */
+@Composable
+internal fun SettingsLayout(
+  cats: List<Cat>, cat: Cat, onCat: (Cat) -> Unit, query: String, onQuery: (String) -> Unit,
+  layer: SettingsLayer, onLayer: (SettingsLayer) -> Unit, empty: Boolean, content: @Composable () -> Unit
+) {
+  val c = MaterialTheme.colorScheme
+  androidx.compose.foundation.layout.Row(
+    Modifier.fillMaxSize().padding(start = Grid.margin, end = Grid.margin, top = Grid.u12, bottom = LocalBarInset.current + Grid.u12),
+    horizontalArrangement = Arrangement.spacedBy(Grid.u12)
+  ) {
     Column(
-      Modifier.width(Grid.u192 + Grid.u96).fillMaxHeight().padding(Grid.margin),
+      Modifier.testTag("settings_sidebar").width(SidebarWidth).fillMaxHeight().studioCard().padding(Grid.u6),
       verticalArrangement = Arrangement.spacedBy(Grid.u6)
     ) {
-      SearchField(query, { query = it }, tr(Res.string.settings_search_hint))
-      Box(Modifier.height(Grid.u6))
+      SearchField(query, onQuery, tr(Res.string.settings_search_hint))
       cats.forEach { k ->
         val sel = query.isBlank() && k == cat
+        val hover = remember { MutableInteractionSource() }
+        val hovered by hover.collectIsHoveredAsState()
+        val bg = when { sel -> c.primary.copy(alpha = 0.16f); hovered -> c.onSurface.copy(alpha = 0.04f); else -> Color.Transparent }
         Box(
-          Modifier.fillMaxWidth().height(Grid.u48).clip(Grid.r12)
-            .background(if (sel) c.surfaceContainerHigh else c.background)
-            .clickable { query = ""; cat = k }
-            .padding(horizontal = Grid.u12),
+          Modifier.testTag("settings_cat_" + k.name).fillMaxWidth().height(ItemHeight).clip(SquircleShape(Grid.u12)).background(bg)
+            .hoverable(hover).pointerHoverIcon(PointerIcon.Hand).clickable { onCat(k) }.padding(horizontal = Grid.u12),
           contentAlignment = Alignment.CenterStart
-        ) { Text(w(k.pt, k.en), style = if (sel) GridText.BodyStrong else GridText.Body, color = if (sel) c.onSurface else c.onSurfaceVariant, maxLines = 1) }
+        ) { Text(w(k.pt, k.en), style = GridText.Small.copy(fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal), color = if (sel) c.primary else c.onSurfaceVariant, maxLines = 1) }
       }
     }
-    VerticalDivider(color = c.outlineVariant)
     val scroll = rememberScrollState()
     Column(
-      // Rows are capped at 768 dp and aligned left, like Windows Settings; the window width goes to the category list and the page, not to margins.
-      Modifier.weight(1f).fillMaxHeight().verticalScroll(scroll).padding(Grid.margin).widthIn(max = Grid.u384 * 2),
+      Modifier.testTag("settings_content").weight(1f).fillMaxHeight().studioCard().verticalScroll(scroll).padding(Grid.margin),
       verticalArrangement = Arrangement.spacedBy(Grid.u12)
     ) {
       androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Grid.u12)) {
         Text(if (query.isBlank()) w(cat.pt, cat.en) else "“${query.trim()}”", style = GridText.Title, color = c.onSurface, modifier = Modifier.weight(1f))
         SegmentedTabs {
-          Segment(tr(Res.string.settings_layer_essential), layer == SettingsLayer.ESSENTIAL, { geral.setLayer(SettingsLayer.ESSENTIAL) })
-          Segment(tr(Res.string.settings_layer_advanced), layer == SettingsLayer.ADVANCED, { geral.setLayer(SettingsLayer.ADVANCED) })
-          Segment(tr(Res.string.settings_layer_engineering), layer == SettingsLayer.ENGINEERING, { geral.setLayer(SettingsLayer.ENGINEERING) })
+          Segment(tr(Res.string.settings_layer_essential), layer == SettingsLayer.ESSENTIAL, { onLayer(SettingsLayer.ESSENTIAL) })
+          Segment(tr(Res.string.settings_layer_advanced), layer == SettingsLayer.ADVANCED, { onLayer(SettingsLayer.ADVANCED) })
+          Segment(tr(Res.string.settings_layer_engineering), layer == SettingsLayer.ENGINEERING, { onLayer(SettingsLayer.ENGINEERING) })
         }
       }
-      val shown = visibleRows(groups, { Triple(it.keywords, it.layer, it.cat) }, query, layer, cat)
-      if (shown.isEmpty()) Text(tr(Res.string.settings_search_empty), style = GridText.Body, color = c.onSurfaceVariant)
-      shown.forEach { it.content() }
+      if (empty) Text(tr(Res.string.settings_search_empty), style = GridText.Body, color = c.onSurfaceVariant)
+      content()
     }
   }
 }
+
+private val SidebarWidth = 250.dp // NOVA UI: Ajustes sidebar
+private val ItemHeight = 42.dp
 
 @Composable
 private fun settingsGroups(state: TarkasState, svc: GeralServices): List<Row> {

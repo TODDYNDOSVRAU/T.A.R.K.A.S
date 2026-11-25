@@ -30,6 +30,11 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.foundation.border
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.unit.dp
+import com.example.ui.theme.LocalBarInset
+import com.example.ui.theme.Shapes
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -123,27 +128,24 @@ fun TarkasShell(state: TarkasState, back: BackDispatcher, lifecycle: AppLifecycl
       val side by SidePane.current.collectAsState()
       BoxWithConstraints(Modifier.fillMaxSize()) {
         Backdrop()
-        val compact = maxWidth < CollapseWidth
-        Column(Modifier.fillMaxSize()) {
-          Row(Modifier.fillMaxWidth().weight(1f)) {
-            SideNav(state, tab, compact)
-            VerticalDivider(color = c.outlineVariant)
+        val hasDock = Panels.transport != null
+        val barInset = if (hasDock) Grid.u96 + Grid.u6 else 0.dp
+        CompositionLocalProvider(LocalBarInset provides barInset) {
+          Row(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxHeight().weight(1f)) {
               TopBar(state, tab)
-              HorizontalDivider(color = c.outlineVariant)
               Box(Modifier.fillMaxSize()) {
-                val panel = Panels.slots[tab]
-                if (panel != null) panel.Show(state) else Pending(tab)
+                Box(Modifier.fillMaxSize().padding(bottom = barInset)) {
+                  val panel = Panels.slots[tab]
+                  if (panel != null) panel.Show(state) else Pending(tab)
+                }
                 Panels.overlay?.Show(state)
+                Dock(state, tab, Modifier.align(Alignment.BottomCenter).padding(bottom = Grid.u6))
               }
             }
             AnimatedVisibility(side != null, enter = expandHorizontally(tween(200)), exit = shrinkHorizontally(tween(150))) {
               side?.let { SidePaneView(it) }
             }
-          }
-          Panels.transport?.let { t ->
-            HorizontalDivider(color = c.outlineVariant)
-            Box(Modifier.fillMaxWidth().height(Grid.u96).background(glass())) { t.Show(state) }
           }
         }
         ToastHost(state.toaster)
@@ -271,5 +273,33 @@ private fun Pending(tab: TarkasNavTab) {
   val c = MaterialTheme.colorScheme
   Box(Modifier.fillMaxSize().padding(Grid.margin), contentAlignment = Alignment.Center) {
     Text(stringResource(tab.label), style = GridText.Body, color = c.onSurfaceVariant)
+  }
+}
+
+/** Floating dock, bottom centre: transport (mini player) and the nav pill side by side, 384 dp each, gap 12. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun Dock(state: TarkasState, current: TarkasNavTab, modifier: Modifier) {
+  val c = MaterialTheme.colorScheme
+  Row(modifier, horizontalArrangement = Arrangement.spacedBy(Grid.u12), verticalAlignment = Alignment.Bottom) {
+    Panels.transport?.let { t ->
+      Box(Modifier.width(Grid.u384).height(Grid.u96).clip(Shapes.pill).background(glass()).border(Grid.hairline, c.onSurface.copy(alpha = 0.08f), Shapes.pill)) { t.Show(state) }
+    }
+    Row(
+      Modifier.width(Grid.u384).height(Grid.u48).clip(Shapes.pill).background(glass()).border(Grid.hairline, c.onSurface.copy(alpha = 0.08f), Shapes.pill),
+      horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically
+    ) {
+      NavOrder.forEachIndexed { i, tab ->
+        val label = stringResource(tab.label)
+        TooltipArea(tooltip = { Tooltip("$label  Ctrl+${i + 1}") }) {
+          val on = tab == current
+          Box(
+            Modifier.size(Grid.u48).clip(Shapes.pill).background(if (on) c.primary.copy(alpha = 0.16f) else Color.Transparent)
+              .clickable { SidePane.close(); state.selectTab(tab) },
+            contentAlignment = Alignment.Center
+          ) { Icon(tab.icon(), contentDescription = label, tint = if (on) c.primary else c.onSurfaceVariant, modifier = Modifier.size(Grid.u24)) }
+        }
+      }
+    }
   }
 }
