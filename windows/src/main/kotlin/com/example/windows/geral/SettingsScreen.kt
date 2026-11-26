@@ -147,12 +147,27 @@ internal fun SettingsLayout(
       Modifier.testTag("settings_content").weight(1f).fillMaxHeight().studioCard().verticalScroll(scroll).padding(Grid.margin),
       verticalArrangement = Arrangement.spacedBy(Grid.u12)
     ) {
-      androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Grid.u12)) {
-        Text(if (query.isBlank()) w(cat.pt, cat.en) else "“${query.trim()}”", style = GridText.Title, color = c.onSurface, modifier = Modifier.weight(1f))
-        SegmentedTabs {
+      // Header: title + the three layers. The tabs have a fixed width (they used to fill the row, which left the title
+      // ~0 dp wide and broke it letter by letter); when the pane is too narrow for both, the tabs go under the title.
+      val title = if (query.isBlank()) w(cat.pt, cat.en) else "“${query.trim()}”"
+      val tabs: @Composable (Modifier) -> Unit = { m ->
+        SegmentedTabs(m) {
           Segment(tr(Res.string.settings_layer_essential), layer == SettingsLayer.ESSENTIAL, { onLayer(SettingsLayer.ESSENTIAL) })
           Segment(tr(Res.string.settings_layer_advanced), layer == SettingsLayer.ADVANCED, { onLayer(SettingsLayer.ADVANCED) })
           Segment(tr(Res.string.settings_layer_engineering), layer == SettingsLayer.ENGINEERING, { onLayer(SettingsLayer.ENGINEERING) })
+        }
+      }
+      androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+        if (maxWidth >= HeaderSplit) {
+          androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Grid.u12)) {
+            Text(title, style = GridText.Title, color = c.onSurface, maxLines = 2, modifier = Modifier.weight(1f).testTag("settings_title"))
+            tabs(Modifier.width(TabsWidth))
+          }
+        } else {
+          Column(verticalArrangement = Arrangement.spacedBy(Grid.u12)) {
+            Text(title, style = GridText.Title, color = c.onSurface, maxLines = 2, modifier = Modifier.testTag("settings_title"))
+            tabs(Modifier.fillMaxWidth())
+          }
         }
       }
       if (empty) Text(tr(Res.string.settings_search_empty), style = GridText.Body, color = c.onSurfaceVariant)
@@ -163,6 +178,8 @@ internal fun SettingsLayout(
 
 private val SidebarWidth = 250.dp // NOVA UI: Ajustes sidebar
 private val ItemHeight = 42.dp
+private val TabsWidth = Grid.u384 // three segments of 128 dp
+private val HeaderSplit = Grid.u384 + Grid.u192 // title keeps at least 192 dp next to the tabs
 
 @Composable
 private fun settingsGroups(state: TarkasState, svc: GeralServices): List<Row> {

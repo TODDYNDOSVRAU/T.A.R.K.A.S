@@ -97,7 +97,11 @@ class PlayerController(
   /** Plays [track]; [list] (when given) becomes the playback context, with a fresh shuffle order. */
   fun play(track: Track, list: List<Track>? = null) {
     failures = 0
-    if (list != null) update { it.copy(list = list, shuffleOrder = emptyList()) }
+    when {
+      list != null -> update { it.copy(list = list, shuffleOrder = emptyList()) }
+      // A track outside the current context becomes its own: Next must not jump into an unrelated list.
+      _ui.value.list.none { it.id == track.id } -> update { it.copy(list = listOf(track), shuffleOrder = emptyList()) }
+    }
     start(track, pushHistory = true)
   }
 
@@ -156,9 +160,13 @@ class PlayerController(
     start(t, pushHistory = false)
   }
 
-  fun seekTo(ms: Long) = out.seek(SeekMath.clamp(ms, out.state.value.durationMs))
+  /** The length seeks are measured against: the engine's once the file is open, the library's while it loads. */
+  private fun lengthMs(): Long = out.state.value.durationMs.takeIf { it > 0 } ?: _ui.value.current?.durationMs ?: 0L
+
+  fun seekTo(ms: Long) { if (_ui.value.current != null) out.seek(SeekMath.clamp(ms, lengthMs())) }
   fun seekBy(deltaMs: Long) = seekTo(out.state.value.positionMs + deltaMs)
-  fun seekFraction(f: Float) = seekTo(SeekMath.fromFraction(f, out.state.value.durationMs))
+  /** A fraction of a track whose length is unknown means nothing: it is ignored, never a jump to 0:00. */
+  fun seekFraction(f: Float) { val d = lengthMs(); if (d > 0) seekTo(SeekMath.fromFraction(f, d)) }
 
   // Order -------------------------------------------------------------------------------------------
 
@@ -352,6 +360,7 @@ class PlayerController(
 
 /** Seek arithmetic: positions are clamped to the track and a fraction of the bar is a fraction of its length. */
 object SeekMath {
+  const val WheelStepMs = 5000L
   fun clamp(ms: Long, durationMs: Long): Long = if (durationMs > 0) ms.coerceIn(0, durationMs) else ms.coerceAtLeast(0)
   fun fromFraction(f: Float, durationMs: Long): Long = (f.coerceIn(0f, 1f).toDouble() * durationMs).toLong()
   fun toFraction(ms: Long, durationMs: Long): Float = if (durationMs <= 0) 0f else (ms.toFloat() / durationMs).coerceIn(0f, 1f)

@@ -86,7 +86,7 @@ fun ListRow(
       Text(title, style = GridText.Body, color = if (destructive) c.error else c.onSurface)
       if (subtitle != null) Text(subtitle, style = GridText.Small, color = c.onSurfaceVariant)
     }
-    if (value != null) Text(value, style = GridText.Body, color = c.onSurfaceVariant)
+    if (value != null) Text(value, style = GridText.Body, color = c.onSurfaceVariant, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = Grid.u192))
     if (chevron && onClick != null) Text("›", style = GridText.Title, color = c.onSurfaceVariant)
   }
 }
@@ -158,7 +158,7 @@ fun androidx.compose.foundation.layout.RowScope.Segment(label: String, selected:
       .selectable(selected = selected, role = Role.Tab, onClick = onClick),
     contentAlignment = Alignment.Center
   ) {
-    Text(label, style = if (selected) GridText.BodyStrong else GridText.Body, color = if (selected) c.primary else c.onSurfaceVariant, textAlign = TextAlign.Center)
+    Text(label, style = if (selected) GridText.BodyStrong else GridText.Body, color = if (selected) c.primary else c.onSurfaceVariant, textAlign = TextAlign.Center, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
   }
 }
 

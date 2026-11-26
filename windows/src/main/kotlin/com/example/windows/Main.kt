@@ -54,13 +54,14 @@ fun main(args: Array<String>) = application {
       Command.Previous -> pc.previous()
       is Command.Seek -> pc.seekBy(cmd.deltaMs)
       is Command.Volume -> pc.volumeBy(cmd.delta)
-      Command.Search -> ShellSearch.request()
+      // Ctrl+F: the Biblioteca keeps its own field; everywhere else the search of the dock opens.
+      Command.Search -> if (state.currentTab.value == com.example.ui.viewmodel.TarkasNavTab.LIBRARY) ShellSearch.request() else ShellSearch.openDock()
       is Command.Go -> { SidePane.close(); state.selectTab(cmd.tab) }
       Command.Queue -> Panels.toggleQueue?.invoke() ?: return false
       Command.Lyrics -> Panels.toggleLyrics?.invoke() ?: return false
       Command.ToggleEq -> state.setEqEnabled(!state.eqSettings.value.enabled)
       // Esc: the open popup (back stack) first, then the side pane, then the route.
-      Command.Back -> return back.dispatch() || Panels.closeOverlay?.invoke() == true || SidePane.close() || state.goBack()
+      Command.Back -> return back.dispatch() || Panels.closeOverlay?.invoke() == true || SidePane.close() || ShellSearch.close() || state.goBack()
     }
     return true
   }
@@ -69,11 +70,13 @@ fun main(args: Array<String>) = application {
     visible = visible,
     onCloseRequest = { if (trayOn && closeToTray) { WindowMemory.save(state.settings, windowState); visible = false } else quit() },
     title = "T.A.R.K.A.S.",
+    icon = remember { com.example.windows.shell.AppIcon.painter() },
     state = windowState,
     onPreviewKeyEvent = { e -> Shortcuts.global(e)?.let(::run) ?: false },
     onKeyEvent = { e -> Shortcuts.unhandled(e)?.let(::run) ?: false },
   ) {
     val win = window
+    com.example.windows.shell.WindowChromeEffect(win, state.themeMode.collectAsState().value)
     remember {
       win.minimumSize = java.awt.Dimension(WindowMemory.MinSize.width.value.toInt(), WindowMemory.MinSize.height.value.toInt())
       PlayerHost.register(Panels.slots) // win-player

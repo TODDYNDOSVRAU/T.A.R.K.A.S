@@ -99,4 +99,12 @@ class TableLogicTest {
     assertEquals(1, plan.ignored)
     dir.deleteRecursively(); loose.delete(); other.delete()
   }
+
+  @Test fun narrowTableHidesAlbumAndPlaysAndKeepsATitle() {
+    val w = TableLogic.defaultWidths()
+    val narrow = TableLogic.fitTo(w, 440)
+    assertEquals(0, narrow[Col.ALBUM]); assertEquals(0, narrow[Col.PLAYS])
+    assertTrue(TableLogic.titleWidth(narrow, 440) >= Col.TITLE.minDp)
+    assertEquals(w, TableLogic.fitTo(w, 1200))
+  }
 }

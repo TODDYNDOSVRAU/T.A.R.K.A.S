@@ -35,6 +35,8 @@ data class TransportState(
   val sleepActive: Boolean = false,
   val peaks: ByteArray? = null,
   val error: String? = null,
+  /** The file is being opened: the play button shows progress, not "paused", and the bars wait. */
+  val loading: Boolean = false,
 ) {
   val fraction: Float get() = SeekMath.toFraction(positionMs, durationMs)
 }
@@ -49,9 +51,11 @@ data class QueueUndo(val before: List<Track>, val removed: List<Track>)
 class PlayerHooks(val controller: PlayerController, scope: CoroutineScope, peaks: StateFlow<ByteArray?>) {
   val state: StateFlow<TransportState> = combine(controller.ui, controller.engine, peaks) { ui, eng, p ->
     TransportState(
-      track = ui.current, playing = eng.playing, positionMs = eng.positionMs, durationMs = eng.durationMs,
+      track = ui.current, playing = eng.playing, positionMs = eng.positionMs,
+      // While the file opens the engine does not know the length yet: the library's number stands in, so the total never reads 0:00.
+      durationMs = eng.durationMs.takeIf { it > 0 } ?: ui.current?.durationMs ?: 0L,
       volume = ui.volume, shuffle = ui.shuffle, repeat = ui.repeat, queueSize = ui.queue.size,
-      sleepActive = ui.sleepEndsAtMs != null || ui.sleepAtEndOfTrack, peaks = p, error = eng.error,
+      sleepActive = ui.sleepEndsAtMs != null || ui.sleepAtEndOfTrack, peaks = p, error = eng.error, loading = eng.loading,
     )
   }.stateIn(scope, SharingStarted.Eagerly, TransportState())
 
@@ -173,16 +177,57 @@ class TrackAssets(private val scope: CoroutineScope, private val waves: Waveform
   private var job: Job? = null
   private var loadedId: String? = null
 
+  /**
+   * Follows the playing track from anywhere in the app (PlayerHost collects the track, not a screen), so the
+   * bottom bar has its cover whatever tab is open. A late result of a previous track is dropped.
+   */
   fun follow(track: Track?) {
     if (track?.id == loadedId) return
     loadedId = track?.id
     _peaks.value = null; _lyrics.value = null; _art.value = null
     job?.cancel()
-    val f = track?.filePath?.let(::File) ?: return
+    if (track == null) return
+    val id = track.id
+    val file = track.filePath?.let(::File)
     job = scope.launch(Dispatchers.IO) {
-      _art.value = CoverArt.load(f)
-      _lyrics.value = LyricsLoader.load(f)
-      _peaks.value = waves.load(track.id, f)
+      val bmp = when (val picked = CoverSource.pick(track)) {
+        is CoverSource.Remote -> com.example.windows.biblioteca.CoverLoader.load(picked.url) ?: file?.let { CoverArt.load(it) }
+        is CoverSource.Local -> CoverArt.load(picked.file)
+        CoverSource.None -> null
+      }
+      if (loadedId == id) _art.value = bmp
+      if (file == null) return@launch
+      val ly = LyricsLoader.load(file)
+      if (loadedId == id) _lyrics.value = ly
+      val pk = waves.load(id, file)
+      if (loadedId == id) _peaks.value = pk
     }
+  }
+}
+
+/** Which picture belongs to a track: the catalogue/library address when it has one, else the file's own cover. */
+object CoverSource {
+  sealed interface Pick
+  data class Remote(val url: String) : Pick
+  data class Local(val file: File) : Pick
+  data object None : Pick
+
+  fun pick(t: Track): Pick {
+    val u = t.artworkUrl?.takeIf { it.isNotBlank() }
+    if (u != null) return Remote(u)
+    val f = t.filePath?.let(::File)
+    return if (f != null) Local(f) else None
+  }
+}
+
+/** Direction of the vertical motion when the track changes: +1 next (content rises), -1 previous, 0 none. */
+object TrackMotion {
+  fun direction(oldIndex: Int, newIndex: Int, size: Int): Int = when {
+    oldIndex == newIndex -> 0
+    oldIndex < 0 || newIndex < 0 -> 1
+    size > 1 && oldIndex == size - 1 && newIndex == 0 -> 1
+    size > 1 && oldIndex == 0 && newIndex == size - 1 -> -1
+    newIndex > oldIndex -> 1
+    else -> -1
   }
 }

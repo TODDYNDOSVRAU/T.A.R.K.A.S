@@ -16,6 +16,8 @@ data class PlayerState(
   val positionMs: Long = 0,
   val durationMs: Long = 0,
   val error: String? = null,
+  /** True from the call to play until the file is open and sound starts: shown as loading, never as paused. */
+  val loading: Boolean = false,
 )
 
 /**
@@ -72,24 +74,37 @@ class DesktopPlayer(private val chunkFrames: Int = 512) : AudioOut {
     stopRequested = false
     this.paused = paused
     nextFile = null
-    _state.value = PlayerState(file = file, playing = false, positionMs = startMs)
+    // A seek asked for the previous track must not leak into this one.
+    seekToMs = -1
+    _state.value = PlayerState(file = file, playing = false, positionMs = startMs, loading = true)
     worker = Thread({ run(file, startMs) }, "tarkas-audio").apply { priority = Thread.MAX_PRIORITY; isDaemon = true; start() }
   }
 
   override fun armNext(file: File?, fadeMs: Int) { this.fadeMs = fadeMs; nextFile = file }
-  override fun pause() { if (worker != null && !paused) togglePause() }
-  override fun resume() { if (worker != null && paused) togglePause() }
+
+  /** True while a worker thread is running: after a natural end or an error the thread is gone but [worker] is still set. */
+  private fun alive() = worker?.isAlive == true
+
+  override fun pause() { if (alive() && !paused) togglePause() }
+  override fun resume() { if (alive() && paused) togglePause() }
 
   override fun togglePause() {
-    if (worker == null) { _state.value.file?.let(::play); return }
+    if (!alive()) { _state.value.file?.let(::play); return }
     paused = !paused
     _state.value = _state.value.copy(playing = !paused)
     synchronized(lock) { lock.notifyAll() }
   }
 
+  /**
+   * The requested position is published at once, so the bars and the Previous button see it without waiting for
+   * the worker to reopen the file. With no worker (the track ended) the file starts again from there.
+   */
   override fun seek(ms: Long) {
     val max = _state.value.durationMs
-    seekToMs = if (max > 0) ms.coerceIn(0, max) else ms.coerceAtLeast(0)
+    val target = if (max > 0) ms.coerceIn(0, max) else ms.coerceAtLeast(0)
+    if (!alive()) { _state.value.file?.let { play(it, target, false) }; return }
+    seekToMs = target
+    _state.value = _state.value.copy(positionMs = target)
     synchronized(lock) { lock.notifyAll() }
   }
 
@@ -119,7 +134,7 @@ class DesktopPlayer(private val chunkFrames: Int = 512) : AudioOut {
       val durationMs = if (totalFrames > 0) totalFrames * 1000 / rate else 0
       line = openLine(fmt).apply { open(fmt, chunkFrames * 4 * frameBytes); start() }
       var framesDone = skip(src, startMs, fmt.sampleRate, activeDsp)
-      _state.value = _state.value.copy(playing = !paused, durationMs = durationMs, positionMs = framesDone * 1000 / rate, error = null)
+      _state.value = _state.value.copy(playing = !paused, durationMs = durationMs, positionMs = if (seekToMs >= 0) seekToMs else framesDone * 1000 / rate, error = null, loading = false)
       val out = ByteArray(chunkFrames * frameBytes)
       val inBuf = ByteArray(chunkFrames * frameBytes)
       var fadeFrames = 0L
@@ -186,12 +201,18 @@ class DesktopPlayer(private val chunkFrames: Int = 512) : AudioOut {
         PcmMix.gain(out, bytesOut, volume)
         line.write(out, 0, bytesOut)
         framesDone += n / frameBytes
-        _state.value = _state.value.copy(positionMs = framesDone * 1000 / rate)
+        // What is audible is what was written minus what still waits in the line's buffer; a seek asked
+        // meanwhile keeps its published position until the worker applies it (no flicker back).
+        if (seekToMs < 0) {
+          val buffered = ((line.bufferSize - line.available()) / frameBytes).coerceAtLeast(0)
+          _state.value = _state.value.copy(positionMs = (framesDone - buffered).coerceAtLeast(0) * 1000 / rate)
+        }
       }
       if (!stopRequested) line.drain()
-      _state.value = _state.value.copy(playing = false)
+      _state.value = if (natural && !stopRequested && _state.value.durationMs > 0) _state.value.copy(playing = false, positionMs = _state.value.durationMs)
+      else _state.value.copy(playing = false)
     } catch (e: Exception) {
-      _state.value = _state.value.copy(playing = false, error = e.message ?: e.javaClass.simpleName)
+      _state.value = _state.value.copy(playing = false, loading = false, error = e.message ?: e.javaClass.simpleName)
     } finally {
       line?.close()
       src?.close()

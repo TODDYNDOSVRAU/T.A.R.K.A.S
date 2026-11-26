@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -47,6 +48,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import com.example.data.audio.loudness.LoudnessUi
 import com.example.data.audio.loudness.NormalizationMode
@@ -238,7 +241,9 @@ fun AudioScreen(
           spatialActions = spatialActions,
           onCompare = onCompare
         )
-        AudioPage.ADVANCED -> EqAdvancedPage(
+        // A reading column: the groups keep a readable width and sit centred, so a wide window does not
+        // stretch every row (title far left, switch far right) across the whole screen.
+        AudioPage.ADVANCED -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) { EqAdvancedPage(
           capabilities = capabilities,
           eqSettings = eqSettings,
           onUpdateEq = onUpdateEq,
@@ -251,8 +256,9 @@ fun AudioScreen(
           outputs = outputs,
           onSelectOutput = onSelectOutput,
           spatialOn = spatial.enabled,
-          onBack = { page = AudioPage.MAIN }
-        )
+          onBack = { page = AudioPage.MAIN },
+          modifier = Modifier.widthIn(max = ADVANCED_MAX_WIDTH)
+        ) }
       }
     }
    }
@@ -271,7 +277,10 @@ fun AudioScreen(
           onPickPreset = { onSelectPreset(it); closePane() },
           onPickDevice = { entry -> onApplyDevice(entry) { closePane() } },
           onClearDevice = onClearDevice,
-          initialTab = if (open == AudioPane.CORRECTION) PresetTab.CORRECTION else PresetTab.EQ
+          initialTab = if (open == AudioPane.CORRECTION) PresetTab.CORRECTION else PresetTab.EQ,
+          // A tall window gives the list its height (up to what is left under the pane's header); a short one scrolls it.
+          listMax = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
+            .minus(Grid.u96 * 3).coerceAtLeast(EqSize.presetListMax)
         )
         AudioPane.SETTINGS -> EqSettingsSheet(
           settings = eqSettings,

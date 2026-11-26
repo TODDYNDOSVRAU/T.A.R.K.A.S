@@ -123,6 +123,7 @@ import com.example.data.model.EqBand
 import com.example.data.model.EqPreset
 import com.example.data.model.EqSettings
 import com.example.ui.theme.Grid
+import com.example.ui.theme.LocalBarInset
 import kotlin.math.roundToInt
 
 /**
@@ -163,12 +164,12 @@ internal fun EqPowerConsole(
   fun presets() = PresetRow(eqSettings, activePreset, eqModified, presetActions, onOpenSettings, onOpenAdvanced, onOpenSpatial, onUpdateEq)
 
   @Composable
-  fun curve(height: Dp = Grid.u192) = EqGraph(
+  fun curve(m: Modifier) = EqGraph(
     settings = eqSettings,
     selectedBand = if (mode == EqMode.PARAMETRIC) bandIndex else -1,
     spectrumBars = spectrumBars,
     isPlaying = isPlaying,
-    modifier = Modifier.fillMaxWidth().height(height).testTag("audio_spectrum_graph_card")
+    modifier = m.testTag("audio_spectrum_graph_card")
   )
 
   @Composable
@@ -182,6 +183,39 @@ internal fun EqPowerConsole(
 
   BoxWithConstraints(modifier = modifier) {
     val pageHeight = maxHeight
+    val pageWidth = maxWidth
+    if (maxWidth >= TABLET_MIN_WIDTH && pageHeight >= TABLET_MIN_HEIGHT) {
+      Column(
+        modifier = Modifier.fillMaxSize().padding(start = Grid.margin, end = Grid.margin, bottom = LocalBarInset.current + Grid.u12),
+        verticalArrangement = Arrangement.spacedBy(Grid.u12)
+      ) {
+        TabletTopBar(
+          capabilities, eqSettings, activePreset, eqModified, mode, spatial, compare, presetActions,
+          onSetEnabled, onUpdateEq, onOpenSettings, onOpenAdvanced, onOpenSpatial,
+          twoRows = pageWidth < TOP_BAR_ONE_ROW_MIN
+        )
+        Row(modifier = Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Grid.u12)) {
+          Column(modifier = Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(Grid.u12)) {
+            if (mode == EqMode.GRAPHIC) {
+              Box(Modifier.weight(0.46f).fillMaxWidth()) { curve(Modifier.fillMaxSize()) }
+              bands(Modifier.weight(0.54f).fillMaxWidth())
+            } else {
+              Box(Modifier.weight(1f).fillMaxWidth()) { curve(Modifier.fillMaxSize()) }
+              // The tiles take the rows they need at this width (96 dp pieces, 12 dp apart, "+" included)
+              // and the curve keeps the rest, instead of a fixed strip that leaves empty rows under them.
+              val leftWidth = pageWidth - Grid.margin * 2 - RACK_WIDTH - Grid.u12
+              val perRow = ((leftWidth + Grid.u12) / (Grid.u96 + Grid.u12)).toInt().coerceAtLeast(1)
+              val tileRows = (eqSettings.bands.size + 1 + perRow - 1) / perRow
+              val tilesHeight = (Grid.u48 * tileRows + Grid.u12 * (tileRows - 1) + Grid.u12)
+                .coerceIn(Grid.u48 + Grid.u12, Grid.u192 + Grid.u12)
+              bands(Modifier.fillMaxWidth().height(tilesHeight))
+            }
+          }
+          TabletToneRack(eqSettings, capabilities, compare, onUpdateEq, onOpenAdvanced)
+        }
+      }
+      return@BoxWithConstraints
+    }
     if (maxWidth > maxHeight && maxWidth >= SIDE_MIN_WIDTH) {
       Row(
         modifier = Modifier.fillMaxSize().padding(horizontal = Grid.margin),
@@ -196,7 +230,7 @@ internal fun EqPowerConsole(
             modifier = Modifier.fillMaxWidth().height(maxOf(pageHeight, curveHeight + Grid.u12 + BANDS_MIN)),
             verticalArrangement = Arrangement.spacedBy(Grid.u12)
           ) {
-            curve(curveHeight)
+            curve(Modifier.fillMaxWidth().height(curveHeight))
             bands(Modifier.weight(1f).fillMaxWidth())
           }
         }
@@ -224,7 +258,7 @@ internal fun EqPowerConsole(
     ) {
       top()
       presets()
-      curve()
+      curve(Modifier.fillMaxWidth().height(Grid.u192))
       bands(Modifier.fillMaxWidth().height(bandHeight))
       dock(Modifier.fillMaxWidth())
       path()
@@ -234,6 +268,8 @@ internal fun EqPowerConsole(
 
 // Side by side needs the 384 dp control column and as much again for the curve.
 private val SIDE_MIN_WIDTH = Grid.u384 * 2
+// The tablet top bar fits one row from here; narrower, it takes two.
+private val TOP_BAR_ONE_ROW_MIN = Grid.u384 * 3
 // Two value lines, a fader with 120 dp of travel under its 48 dp thumb, and two frequency lines. The band
 // area is the block that flexes; where the window is shorter than that, the page scrolls.
 private val BANDS_MIN = Grid.u192 + Grid.u48
@@ -587,7 +623,7 @@ private fun ModeSegments(parametric: Boolean, width: androidx.compose.ui.unit.Dp
  * warning) is written under the bar, the last thing on the page, so a note never moves a control.
  */
 @Composable
-private fun PathBar(settings: EqSettings, capabilities: AudioCapabilities, compare: CompareState) {
+internal fun PathBar(settings: EqSettings, capabilities: AudioCapabilities, compare: CompareState, showCompare: Boolean = true) {
   val colors = MaterialTheme.colorScheme
   val headroom = EqDsp.totalPreampDb(settings, rememberSpatialStage())
   val lowered = settings.enabled && headroom < -0.05f
@@ -630,7 +666,7 @@ private fun PathBar(settings: EqSettings, capabilities: AudioCapabilities, compa
         Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(fill).clip(Grid.r6).background(fillColor))
       }
       Spacer(Modifier.width(Grid.u12))
-      CompareButton(settings.enabled, compare)
+      if (showCompare) CompareButton(settings.enabled, compare)
     }
     OutputStageNotes(settings, compare.comparing)
     if (settings.device != null && onSpeaker) {
@@ -641,7 +677,7 @@ private fun PathBar(settings: EqSettings, capabilities: AudioCapabilities, compa
 
 /** Hold: without EQ until the finger lifts. Tap (under 400 ms): without EQ until the next tap. A screen reader toggles it. */
 @Composable
-private fun CompareButton(enabled: Boolean, compare: CompareState) {
+internal fun CompareButton(enabled: Boolean, compare: CompareState) {
   val colors = MaterialTheme.colorScheme
   var pressed by remember { mutableStateOf(false) }
   val scale by animateFloatAsState(if (pressed) 0.96f else 1f, tween(150), label = "comparePress")
@@ -768,5 +804,57 @@ private fun OverflowMenu(
       item(stringResource(Res.string.audio_settings_title), "eq_open_settings", onOpenSettings)
       item(stringResource(Res.string.audio_menu_advanced), "eq_open_advanced", onOpenAdvanced)
     }
+  }
+}
+
+/** One row on a wide window: route and power, preset 144, Correction 96, menu 48, the view switch 192, Spatial, Compare. */
+@Composable
+private fun TabletTopBar(
+  capabilities: AudioCapabilities,
+  settings: EqSettings,
+  preset: EqPreset?,
+  modified: Boolean,
+  mode: EqMode,
+  spatial: SpatialUi,
+  compare: CompareState,
+  actions: PresetActions,
+  onSetEnabled: (Boolean) -> Unit,
+  onUpdateEq: ((EqSettings) -> EqSettings) -> Unit,
+  onOpenSettings: () -> Unit,
+  onOpenAdvanced: () -> Unit,
+  onOpenSpatial: (() -> Unit)?,
+  twoRows: Boolean
+) {
+  if (twoRows) {
+    // Under 1152 dp the one row (route and power, preset 312, view and Spatial 348, Compare 96) squeezes the
+    // title: the route and power take the first row with Compare, the preset and the dock the second.
+    Column(modifier = Modifier.fillMaxWidth().testTag("eq_tablet_top_bar"), verticalArrangement = Arrangement.spacedBy(Grid.u12)) {
+      Row(horizontalArrangement = Arrangement.spacedBy(Grid.u12), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f)) { TopRow(capabilities, settings, compare, onSetEnabled) }
+        CompareButton(settings.enabled, compare)
+      }
+      Row(horizontalArrangement = Arrangement.spacedBy(Grid.u12), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.width(Grid.u192 + Grid.u96 + Grid.u24)) {
+          PresetRow(settings, preset, modified, actions, onOpenSettings, onOpenAdvanced, onOpenSpatial, onUpdateEq)
+        }
+        Dock(mode, spatial, onOpenSpatial, onUpdateEq, Modifier.weight(1f))
+      }
+    }
+    return
+  }
+  Row(
+    // No intrinsic height: PresetRow measures with constraints (a SubcomposeLayout), which intrinsics cannot ask.
+    modifier = Modifier.fillMaxWidth().heightIn(min = Grid.u48).testTag("eq_tablet_top_bar"),
+    horizontalArrangement = Arrangement.spacedBy(Grid.u12),
+    verticalAlignment = Alignment.CenterVertically
+  ) {
+    Box(Modifier.weight(1f)) { TopRow(capabilities, settings, compare, onSetEnabled) }
+    Box(Modifier.width(Grid.u192 + Grid.u96 + Grid.u24)) {
+      PresetRow(settings, preset, modified, actions, onOpenSettings, onOpenAdvanced, onOpenSpatial, onUpdateEq)
+    }
+    Box(Modifier.width(Grid.u192 + Grid.u96 + Grid.u48 + Grid.u12)) {
+      Dock(mode, spatial, onOpenSpatial, onUpdateEq, Modifier.fillMaxWidth())
+    }
+    CompareButton(settings.enabled, compare)
   }
 }

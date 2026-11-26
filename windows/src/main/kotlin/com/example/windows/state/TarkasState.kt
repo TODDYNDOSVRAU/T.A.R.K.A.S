@@ -30,13 +30,22 @@ import kotlinx.coroutines.runBlocking
  */
 class SettingsStore(private val db: AppDatabase, private val scope: CoroutineScope) {
   private val cache = HashMap<String, String>()
+  /** Writes that did not reach the database since start (shown by tests; the value stays in memory). */
+  @Volatile var failures = 0
+    private set
   private fun k(s: String, key: String) = "$s\u0000$key"
 
   fun load() = runBlocking { db.settings().all().forEach { cache[k(it.scope, it.key)] = it.value } }
   fun get(scope: String, key: String): String? = cache[k(scope, key)]
   fun put(scope: String, key: String, value: String) {
     cache[k(scope, key)] = value
-    this.scope.launch { db.settings().put(SettingEntity(scope, key, value)) }
+    // The value is already live in memory. A write that fails (the database closed at exit, a locked file) is
+    // reported and dropped, never thrown into the scope, where it would end the app or a test that has moved on.
+    this.scope.launch {
+      try { db.settings().put(SettingEntity(scope, key, value)) }
+      catch (e: kotlinx.coroutines.CancellationException) { throw e }
+      catch (e: Exception) { failures++; System.err.println("T.A.R.K.A.S.: setting $scope/$key was not saved: ${e.message}") }
+    }
   }
 }
 

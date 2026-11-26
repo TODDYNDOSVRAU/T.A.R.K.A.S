@@ -63,6 +63,10 @@ object HomeData {
     return out.distinctBy { it.id }.take(limit)
   }
 
+  /** The entry the page opens with: the first mix of the library, else the first album; null when there is nothing to feature. */
+  fun featured(mixes: List<HomeEntry>, albums: List<HomeEntry>): HomeEntry? =
+    (mixes.firstOrNull { it.tracks.isNotEmpty() } ?: albums.firstOrNull { it.tracks.isNotEmpty() })
+
   /** Albums found among [tracks] (a catalogue's songs): the tracks that share an album and artist, in first-seen order. Songs without an album are left out. */
   fun albums(tracks: List<Track>, limit: Int = 12): List<HomeEntry> =
     tracks.filter { it.album.isNotBlank() }.groupBy { it.album.trim().lowercase() + "|" + it.artist.trim().lowercase() }.values

@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Shuffle
@@ -26,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -40,10 +44,19 @@ import com.example.data.model.Track
 import com.example.data.playback.LibrarySearch
 import com.example.ui.components.IconAction
 import com.example.ui.components.PrimaryButton
+import com.example.ui.components.TonalButton
+import androidx.compose.material.icons.filled.LibraryMusic
 import com.example.ui.components.SearchField
 import com.example.ui.components.TextAction
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
+import com.example.ui.theme.studioCard
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import com.example.windows.res.*
 import com.example.windows.shell.ShellSearch
 import java.awt.Toolkit
@@ -58,6 +71,7 @@ private const val SETTINGS = "window"
 private const val KEY_SORT = "library.sort"
 private const val KEY_COLS = "library.cols"
 private const val UNDO_MS = 8000L
+private val SIDEBAR = 210.dp
 
 /** One thing the user can take back: what happened and how to reverse it. */
 private class Undo(val label: String, val restore: () -> Unit)
@@ -215,8 +229,15 @@ fun LibraryScreen(lib: BibliotecaState, modifier: Modifier = Modifier) {
   BoxWithConstraints(
     modifier.explorerDrop(onFiles).onGloballyPositioned { origin = it.positionInWindow() }
   ) {
-    val showDetails = maxWidth >= Grid.u192 * 4
-    Row(Modifier.fillMaxSize()) {
+    val collection = source is Source.PlaylistOf || source is Source.Auto || source is Source.Group
+    val showDetails = maxWidth >= Grid.u192 * 4 && collection && chosen.isNotEmpty()
+    Row(
+      Modifier.fillMaxSize().padding(Grid.u12).onPreviewKeyEvent { e ->
+        val back = e.key == Key.Backspace || (e.isAltPressed && e.key == Key.DirectionLeft)
+        if (e.type == KeyEventType.KeyDown && back && showDetails && query.isEmpty()) { selection = Selection(); true } else false
+      },
+      horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(Grid.u12)
+    ) {
       SourcesPane(
         sourceData, source, ::go, expanded, { k -> expanded = if (k in expanded) expanded - k else expanded + k }, hub,
         onNewPlaylist = { newPlaylist = true }, onRename = { renaming = it },
@@ -225,20 +246,21 @@ fun LibraryScreen(lib: BibliotecaState, modifier: Modifier = Modifier) {
           store.deletePlaylist(p.id)
           undo = Undo(lt("Playlist “${p.name}” deleted", "Playlist “${p.name}” excluída")) { store.createPlaylist(p.name, tracksOf) }
         },
-        modifier = Modifier.width(Grid.u192)
+        modifier = Modifier.width(SIDEBAR).fillMaxHeight().studioCard()
       )
-      Box(Modifier.width(Grid.u6 / 6).fillMaxHeight().background(colors.outlineVariant))
-      Column(Modifier.weight(1f).fillMaxHeight()) {
+      Column(Modifier.weight(if (showDetails) 0.42f else 1f).fillMaxHeight().studioCard()) {
         (source as? Source.PlaylistOf)?.let { s -> PlaylistHeader(playlists.firstOrNull { it.id == s.id }?.name.orEmpty(), base, lib) }
         if (source == Source.Folders) FoldersPane(lib, Modifier.weight(1f))
         else {
           Row(Modifier.fillMaxWidth().padding(horizontal = Grid.u12), verticalAlignment = Alignment.CenterVertically) {
             SearchField(
-              query, { query = it; selection = Selection() }, tr(Res.string.library_search_songs_hint),
+              query, { query = it; selection = Selection() }, if (showDetails) lt("Search songs", "Buscar músicas") else tr(Res.string.library_search_songs_hint),
               Modifier.weight(1f).focusRequester(searchFocus).padding(vertical = Grid.u6)
             )
             IconAction(Icons.Filled.PlayArrow, tr(Res.string.library_play), { actions.playAll(tracks) })
             IconAction(Icons.Filled.Shuffle, tr(Res.string.library_shuffle), { actions.playAll(tracks.shuffled()) })
+            IconAction(Icons.Filled.CreateNewFolder, lt("Add music folder", "Adicionar pasta de músicas"), { chooseFolder(lib) })
+            IconAction(Icons.Filled.FileOpen, lt("Add audio files", "Adicionar arquivos de áudio"), { chooseFiles(onFiles) })
             IconAction(Icons.Filled.Refresh, tr(Res.string.library_refresh), { lib.rescan() })
           }
           if (scanning) Text(
@@ -246,7 +268,7 @@ fun LibraryScreen(lib: BibliotecaState, modifier: Modifier = Modifier) {
             modifier = Modifier.padding(horizontal = Grid.u12)
           )
           when {
-            tracks.isEmpty() -> Box(Modifier.weight(1f).fillMaxWidth()) { Empty(lib, source, query, everScanned, library.isEmpty()) }
+            tracks.isEmpty() -> Box(Modifier.weight(1f).fillMaxWidth()) { Empty(lib, source, query, everScanned, library.isEmpty(), { chooseFiles(onFiles) }, Modifier.fillMaxSize()) }
             else -> TrackTable(
               tracks, selection, { selection = it }, sort,
               { c -> sort = sort?.click(c) ?: SortSpec(c, c != Col.PLAYS) },
@@ -266,8 +288,7 @@ fun LibraryScreen(lib: BibliotecaState, modifier: Modifier = Modifier) {
         }
       }
       if (showDetails) {
-        Box(Modifier.width(Grid.u6 / 6).fillMaxHeight().background(colors.outlineVariant))
-        DetailsPane(chosen, stats, Modifier.width(Grid.u192))
+        DetailsPane(chosen, stats, Modifier.weight(0.58f).fillMaxHeight().studioCard())
       }
     }
     DragChip(hub, origin)
@@ -289,16 +310,35 @@ fun LibraryScreen(lib: BibliotecaState, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun Empty(lib: BibliotecaState, source: Source, query: String, everScanned: Boolean, libraryEmpty: Boolean) {
+private fun Empty(lib: BibliotecaState, source: Source, query: String, everScanned: Boolean, libraryEmpty: Boolean, onAddFiles: () -> Unit, modifier: Modifier = Modifier) {
+  val roots by lib.roots.collectAsState()
   when {
-    query.isNotBlank() -> EmptyState(tr(Res.string.library_search_empty_title), trNow(Res.string.library_search_empty_songs, query))
-    source == Source.All && !everScanned && libraryEmpty -> EmptyState(tr(Res.string.library_loading_songs), "")
-    source == Source.All -> EmptyState(tr(Res.string.library_empty_songs_title), tr(Res.string.library_empty_songs_message)) {
-      PrimaryButton(tr(Res.string.library_import_audio), { chooseFolder(lib) })
+    query.isNotBlank() -> EmptyState(tr(Res.string.library_search_empty_title), trNow(Res.string.library_search_empty_songs, query), modifier)
+    source == Source.All && !everScanned && libraryEmpty -> EmptyState(tr(Res.string.library_loading_songs), "", modifier)
+    source == Source.All -> if (roots.isEmpty()) EmptyState(
+      lt("Your library is empty", "Sua biblioteca está vazia"),
+      lt("Add a folder from this computer, or drop audio files and folders anywhere in this window.", "Adicione uma pasta deste computador ou solte arquivos e pastas de áudio em qualquer lugar desta janela."),
+      modifier, Icons.Filled.LibraryMusic
+    ) {
+      Row(horizontalArrangement = Arrangement.spacedBy(Grid.u12)) {
+        PrimaryButton(lt("Add music folder…", "Adicionar pasta de músicas…"), { chooseFolder(lib) })
+        TonalButton(lt("Add audio files…", "Adicionar arquivos de áudio…"), onAddFiles)
+      }
     }
-    source == Source.Favorites -> EmptyState(tr(Res.string.library_favorites_empty_title), tr(Res.string.library_favorites_empty_message))
-    source is Source.PlaylistOf -> EmptyState(tr(Res.string.library_playlist_empty_title), tr(Res.string.library_playlist_empty_message))
-    source is Source.Auto -> EmptyState(autoEmptyTitle(source.list), autoEmptyMessage(source.list))
-    else -> EmptyState(tr(Res.string.library_empty_songs_title), tr(Res.string.library_tracks_none))
+    else EmptyState(
+      lt("No songs in your folders", "Nenhuma música nas suas pastas"),
+      lt("${roots.size} folders are scanned and none has audio files the folder rules allow. Add another folder or scan again.", "${roots.size} pastas são verificadas e nenhuma tem arquivos de áudio permitidos pelas regras. Adicione outra pasta ou verifique de novo."),
+      modifier, Icons.Filled.LibraryMusic
+    ) {
+      Row(horizontalArrangement = Arrangement.spacedBy(Grid.u12)) {
+        PrimaryButton(lt("Add music folder…", "Adicionar pasta de músicas…"), { chooseFolder(lib) })
+        TonalButton(lt("Add audio files…", "Adicionar arquivos de áudio…"), onAddFiles)
+        TonalButton(tr(Res.string.library_refresh), { lib.rescan() })
+      }
+    }
+    source == Source.Favorites -> EmptyState(tr(Res.string.library_favorites_empty_title), tr(Res.string.library_favorites_empty_message), modifier)
+    source is Source.PlaylistOf -> EmptyState(tr(Res.string.library_playlist_empty_title), tr(Res.string.library_playlist_empty_message), modifier)
+    source is Source.Auto -> EmptyState(autoEmptyTitle(source.list), autoEmptyMessage(source.list), modifier)
+    else -> EmptyState(tr(Res.string.library_empty_songs_title), tr(Res.string.library_tracks_none), modifier)
   }
 }

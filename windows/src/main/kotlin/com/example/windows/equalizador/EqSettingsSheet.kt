@@ -132,7 +132,7 @@ internal fun EqSettingsSheet(
 
 /** A tone control: name, minus, the knob, plus, and the value. The buttons are the alternative to turning the knob. */
 @Composable
-private fun ToneRow(label: String, db: Float, enabled: Boolean, tag: String, onChange: (Float) -> Unit) {
+internal fun ToneRow(label: String, db: Float, enabled: Boolean, tag: String, onChange: (Float) -> Unit) {
   val colors = MaterialTheme.colorScheme
   val range = EqSettings.TONE_RANGE_DB
   Row(modifier = Modifier.fillMaxWidth().height(Grid.u48), verticalAlignment = Alignment.CenterVertically) {

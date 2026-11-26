@@ -3,6 +3,20 @@ package com.example.windows.player
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.platform.testTag
+import com.example.windows.res.player_common_pause
+import com.example.windows.res.player_common_play
 import com.example.windows.shell.PanelContent
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -84,16 +98,16 @@ fun TransportBar(state: TarkasState) {
   }
   Row(Modifier.fillMaxSize().padding(horizontal = Grid.margin), verticalAlignment = Alignment.CenterVertically) {
     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Grid.u12)) {
-      val tint = t.track?.let { Color(it.colorHex or 0xFF000000) } ?: cs.primary
-      val a = art
-      val openPanel = Modifier.size(Grid.u48).clip(Grid.r6).clickable(enabled = t.track != null) { ExpandedPlayer.show() }
-      if (a != null) Image(a, t.track?.title, openPanel, contentScale = ContentScale.Crop, filterQuality = androidx.compose.ui.graphics.FilterQuality.High)
-      else Box(openPanel.background(tint.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
-        Icon(Icons.Filled.MusicNote, null, Modifier.size(Grid.icon), tint = cs.onPrimary)
-      }
-      Column(Modifier.weight(1f)) {
-        Text(t.track?.title ?: tr(Res.string.player_screen_nothing_playing), style = GridText.BodyStrong, color = cs.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(t.track?.artist.orEmpty(), style = GridText.Small, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      val ui by hooks.controller.ui.collectAsState()
+      val dir = trackDirection(ui, t.track?.id)
+      TrackSwap(Shown(t.track, art), dir, Modifier.weight(1f).height(Grid.u48)) { s ->
+        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Grid.u12)) {
+          BarCover(s, Modifier.size(Grid.u48).clip(Grid.r6).clickable(enabled = s.track != null) { ExpandedPlayer.toggle() })
+          Column(Modifier.weight(1f)) {
+            Text(s.track?.title ?: tr(Res.string.player_screen_nothing_playing), style = GridText.BodyStrong, color = cs.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(s.track?.artist.orEmpty(), style = GridText.Small, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          }
+        }
       }
       val lib = com.example.windows.biblioteca.BibliotecaHost.state(state)
       val favs by lib.store.favorites.collectAsState()
@@ -107,11 +121,11 @@ fun TransportBar(state: TarkasState) {
       Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(hooks::prev, Modifier.size(Grid.u48)) { Icon(Icons.Filled.SkipPrevious, tr(Res.string.player_screen_previous), tint = cs.onSurface) }
         IconButton(hooks::toggle, Modifier.size(Grid.u48), enabled = t.track != null) {
-          Icon(if (t.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, null, Modifier.size(Grid.icon), tint = cs.primary)
+          PlayGlyph(t.playing, t.loading, cs.primary)
         }
         IconButton(hooks::next, Modifier.size(Grid.u48)) { Icon(Icons.Filled.SkipNext, tr(Res.string.player_screen_next), tint = cs.onSurface) }
       }
-      ThinProgress(t.fraction, t.durationMs > 0, hooks::seekFraction, Modifier.fillMaxWidth())
+      ThinProgress(t.fraction, t.durationMs > 0, hooks::seekFraction, Modifier.fillMaxWidth().testTag("bar_progress"), live = false)
     }
     Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
       Icon(Icons.Filled.VolumeUp, null, Modifier.size(Grid.icon), tint = cs.onSurfaceVariant)
@@ -126,19 +140,73 @@ fun TransportBar(state: TarkasState) {
   }
 }
 
-/** A thin line with a fill; a tap or drag sets the value. The hit area is 24 dp tall around the 6 dp line. */
+/**
+ * A thin line with a fill; a tap sets the value and a drag moves it. The hit area is 24 dp tall around the 6 dp
+ * line, a 12 dp knob marks the position while the pointer is over it or dragging.
+ *
+ * With [live] false (the seek line) a drag only scrubs: the fill and [onScrub] follow the pointer and [onSet]
+ * is called once, on release, so the engine reopens the file once and not on every pixel. The volume line keeps
+ * [live] true: each move sets the level.
+ */
 @Composable
-private fun ThinProgress(value: Float, enabled: Boolean, onSet: (Float) -> Unit, modifier: Modifier) {
+internal fun ThinProgress(
+  value: Float, enabled: Boolean, onSet: (Float) -> Unit, modifier: Modifier,
+  live: Boolean = true, onScrub: (Float?) -> Unit = {},
+) {
   val cs = MaterialTheme.colorScheme
+  val src = remember { MutableInteractionSource() }
+  val hovered by src.collectIsHoveredAsState()
+  var scrub by remember { mutableStateOf<Float?>(null) }
+  val shown = (scrub ?: value).coerceIn(0f, 1f)
+  fun frac(x: Float, w: Int) = if (w <= 0) 0f else (x / w).coerceIn(0f, 1f)
   BoxWithConstraints(
-    modifier.height(Grid.u24).pointerInput(enabled) {
-      if (enabled) detectTapGestures { o -> onSet((o.x / size.width).coerceIn(0f, 1f)) }
-    }.pointerInput(enabled) {
-      if (enabled) detectDragGestures { ch, _ -> onSet((ch.position.x / size.width).coerceIn(0f, 1f)) }
-    },
+    modifier.height(Grid.u24).hoverable(src).then(if (enabled) Modifier.pointerHoverIcon(PointerIcon.Hand) else Modifier)
+      .pointerInput(enabled) {
+        if (enabled) detectTapGestures { o -> onSet(frac(o.x, size.width)) }
+      }.pointerInput(enabled, live) {
+        if (enabled) detectDragGestures(
+          onDragStart = { o -> val f = frac(o.x, size.width); scrub = f; onScrub(f); if (live) onSet(f) },
+          onDrag = { ch, _ -> val f = frac(ch.position.x, size.width); scrub = f; onScrub(f); if (live) onSet(f) },
+          onDragEnd = { val f = scrub; scrub = null; onScrub(null); if (!live && f != null) onSet(f) },
+          onDragCancel = { scrub = null; onScrub(null) },
+        )
+      },
     contentAlignment = Alignment.CenterStart,
   ) {
     Box(Modifier.fillMaxWidth().height(Grid.u6).clip(Grid.r6).background(cs.onSurface.copy(alpha = 0.2f)))
-    Box(Modifier.width(maxWidth * value.coerceIn(0f, 1f)).height(Grid.u6).clip(Grid.r6).background(cs.primary))
+    Box(Modifier.width(maxWidth * shown).height(Grid.u6).clip(Grid.r6).background(cs.primary))
+    if (enabled && (hovered || scrub != null)) {
+      Box(Modifier.offset(x = (maxWidth - Grid.u12) * shown).size(Grid.u12).clip(CircleShape).background(cs.primary).testTag("progress_knob"))
+    }
+  }
+}
+
+/**
+ * The play/pause glyph of a transport button. While the file opens it is a progress ring: the state is
+ * "loading", which is neither playing nor paused.
+ */
+@Composable
+internal fun PlayGlyph(playing: Boolean, loading: Boolean, tint: Color, modifier: Modifier = Modifier.size(Grid.icon)) {
+  if (loading) {
+    CircularProgressIndicator(modifier.testTag("play_loading"), color = tint, strokeWidth = Grid.u6 / 3)
+  } else {
+    Icon(
+      if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+      tr(if (playing) Res.string.player_common_pause else Res.string.player_common_play), modifier, tint = tint,
+    )
+  }
+}
+
+/** The 48 dp cover of the bar: the track's own picture, or its colour and a note only while there is none. */
+@Composable
+internal fun BarCover(s: Shown, modifier: Modifier) {
+  val cs = MaterialTheme.colorScheme
+  val a = s.art
+  if (a != null) Image(a, s.track?.title, modifier, contentScale = ContentScale.Crop, filterQuality = androidx.compose.ui.graphics.FilterQuality.High)
+  else {
+    val tint = s.track?.let { Color(it.colorHex or 0xFF000000) } ?: cs.primary
+    Box(modifier.background(tint.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
+      Icon(Icons.Filled.MusicNote, null, Modifier.size(Grid.icon), tint = cs.onPrimary)
+    }
   }
 }

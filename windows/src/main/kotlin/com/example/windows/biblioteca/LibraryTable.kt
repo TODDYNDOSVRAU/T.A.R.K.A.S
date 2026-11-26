@@ -201,8 +201,11 @@ fun TrackTable(
   val scope = androidx.compose.runtime.rememberCoroutineScope()
   fun reveal(index: Int) { scope.launch { scrollIntoView(list, index) } }
 
+  androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
+  // A narrow pane (master-detail) cannot hold the dragged widths plus a readable title: shrink them for drawing only.
+  val shown = remember(widths, maxWidth) { TableLogic.fitTo(widths, maxWidth.value.toInt() - 24) }
   Column(
-    modifier
+    Modifier.fillMaxSize()
       .focusRequester(focus)
       .focusable()
       .onKeyEvent { e ->
@@ -235,12 +238,12 @@ fun TrackTable(
         }
       }
   ) {
-    TableHeader(sort, onSort, widths, onWidths)
+    TableHeader(sort, onSort, shown) { nw -> onWidths(widths + nw.filterValues { it > 0 }) }
     Box(Modifier.fillMaxWidth().height(Grid.u6 / 6).background(colors.outlineVariant))
     BoxedRows(tracks, list) { index, track ->
       val selected = track.id in selection.ids
       TableRow(
-        index, track, selected, track.id == playingId, track.id in favorites, plays[track.id] ?: 0, widths,
+        index, track, selected, track.id == playingId, track.id in favorites, plays[track.id] ?: 0, shown,
         onClick = { ctrl, shift -> focus.requestFocus(); onSelection(selection.click(index, rowIds, ctrl, shift)) },
         onContext = { onSelection(selection.context(index, rowIds)) },
         onDouble = { actions.play(track) },
@@ -252,6 +255,7 @@ fun TrackTable(
         hub = hub, actions = actions
       )
     }
+  }
   }
 }
 
@@ -303,6 +307,7 @@ private fun TableHeader(sort: SortSpec?, onSort: (Col) -> Unit, widths: Map<Col,
   Row(Modifier.fillMaxWidth().height(Grid.u24).padding(horizontal = Grid.u12), verticalAlignment = Alignment.CenterVertically) {
     for (c in Col.entries) {
       val width = widths[c]
+      if (width == 0) continue
       val cell = if (width == null) Modifier.weight(1f) else Modifier.width(width.dp)
       Row(cell.fillMaxHeight(), verticalAlignment = Alignment.CenterVertically) {
         Row(
@@ -408,6 +413,7 @@ private fun TableRow(
 
 @Composable
 private fun cell(c: Col, widths: Map<Col, Int>, text: String, end: Boolean = false) {
+  if (widths[c] == 0) return
   Text(
     text, style = if (end) GridText.Label else GridText.Small, color = MaterialTheme.colorScheme.onSurfaceVariant,
     maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = if (end) TextAlign.End else TextAlign.Start,

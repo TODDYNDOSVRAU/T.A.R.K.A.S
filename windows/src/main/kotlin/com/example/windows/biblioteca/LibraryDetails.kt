@@ -24,7 +24,7 @@ import java.util.Date
 @Composable
 fun DetailsPane(selected: List<Track>, stats: Map<String, TrackStats>, modifier: Modifier = Modifier) {
   val colors = MaterialTheme.colorScheme
-  Column(modifier.fillMaxHeight().background(colors.surface).verticalScroll(rememberScrollState()).padding(Grid.u12)) {
+  Column(modifier.fillMaxHeight().verticalScroll(rememberScrollState()).padding(Grid.u12)) {
     when {
       selected.isEmpty() -> Text(
         lt("Select a track to see its details.", "Selecione uma faixa para ver os detalhes."),

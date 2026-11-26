@@ -3,6 +3,7 @@ package com.example.windows.biblioteca
 import com.example.data.model.Playlist
 import com.example.data.model.Track
 import com.example.data.playback.TrackStats
+import com.example.ui.theme.Grid
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -49,6 +50,23 @@ class HomeDataTest {
     assertEquals(2, al.size)
     assertEquals(listOf("1", "3"), al[0].tracks.map { it.id })
     assertEquals(HomeEntry.Kind.ALBUM, al[0].kind)
+  }
+
+  @Test fun featuredIsTheFirstMixThenTheFirstAlbumThenNothing() {
+    val album = HomeData.albums(listOf(on("1", "X"))).first()
+    val mix = HomeEntry("a:x", "Mix", "1", on("2", ""), listOf(on("2", "")), HomeEntry.Kind.AUTO)
+    val hollow = HomeEntry("a:y", "Empty", "0", null, emptyList(), HomeEntry.Kind.AUTO)
+    assertEquals("a:x", HomeData.featured(listOf(hollow, mix), listOf(album))?.id)
+    assertEquals(album.id, HomeData.featured(listOf(hollow), listOf(album))?.id)
+    assertEquals(null, HomeData.featured(emptyList(), emptyList()))
+  }
+
+  @Test fun queueColumnIsHiddenWhenNarrowAndGrowsWithTheWindow() {
+    val narrow = queueWidth(Grid.u192 * 3)
+    val laptop = queueWidth(Grid.u192 * 5 + Grid.u96)
+    val wide = queueWidth(Grid.u192 * 9)
+    assertEquals(0f, narrow.value, 0f)
+    assertTrue(laptop > narrow && wide > laptop)
   }
 }
 

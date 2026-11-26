@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="ad_rack_tone_gain">Tom e ganho</string>
+  <string name="ad_rack_output_protection">Saída e proteção</string>
+</resources>

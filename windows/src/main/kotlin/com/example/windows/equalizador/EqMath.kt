@@ -10,6 +10,9 @@ import com.example.windows.res.audio_filter_high_shelf
 import com.example.windows.res.audio_filter_low_pass
 import com.example.windows.res.audio_filter_low_shelf
 import com.example.windows.res.audio_filter_peak
+import com.example.windows.res.audio_filter_notch
+import com.example.windows.res.audio_filter_band_pass
+import com.example.windows.res.audio_filter_tilt_shelf
 import com.example.windows.res.audio_usage_assistant
 import com.example.windows.res.audio_usage_game
 import com.example.windows.res.audio_usage_media
@@ -121,6 +124,9 @@ internal fun filterTypeLabel(type: FilterType): String = stringResource(
     FilterType.HIGH_SHELF -> Res.string.audio_filter_high_shelf
     FilterType.HIGH_PASS -> Res.string.audio_filter_high_pass
     FilterType.LOW_PASS -> Res.string.audio_filter_low_pass
+    FilterType.NOTCH -> Res.string.audio_filter_notch
+    FilterType.BAND_PASS -> Res.string.audio_filter_band_pass
+    FilterType.TILT_SHELF -> Res.string.audio_filter_tilt_shelf
   }
 )
 

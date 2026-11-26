@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="ad_rack_tone_gain">Tone and gain</string>
+  <string name="ad_rack_output_protection">Output and protection</string>
+</resources>

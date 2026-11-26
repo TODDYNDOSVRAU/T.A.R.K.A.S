@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="shell_search">Buscar</string>
+  <string name="shell_search_close">Fechar busca</string>
+  <string name="shell_pages">Páginas</string>
+</resources>

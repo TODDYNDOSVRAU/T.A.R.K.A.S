@@ -44,6 +44,17 @@ fun chooseFolder(lib: BibliotecaState) {
   }
 }
 
+/** Opens the system chooser for audio files (and folders); [onPicked] gets what was chosen, the same as a drop on the window. */
+fun chooseFiles(onPicked: (List<java.io.File>) -> Unit) {
+  SwingUtilities.invokeLater {
+    val chooser = JFileChooser().apply {
+      fileSelectionMode = JFileChooser.FILES_AND_DIRECTORIES
+      isMultiSelectionEnabled = true
+    }
+    if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) onPicked(chooser.selectedFiles.toList())
+  }
+}
+
 /** Asks for a playlist name. [onDone] gets the text as typed; the store trims it and supplies a default when empty. */
 @Composable
 fun NamePlaylistDialog(title: String, initial: String, confirm: String, onDismiss: () -> Unit, onDone: (String) -> Unit) {

@@ -349,6 +349,24 @@ private fun DrawScope.drawFilterShape(type: FilterType, color: Color) {
       p.lineTo(w * 0.45f, top)
       p.cubicTo(w * 0.6f, top, w * 0.7f, top, w * 0.88f, h)
     }
+    FilterType.NOTCH -> {
+      p.moveTo(0f, top)
+      p.lineTo(w * 0.30f, top)
+      p.cubicTo(w * 0.42f, top, w * 0.44f, base, w * 0.5f, base)
+      p.cubicTo(w * 0.56f, base, w * 0.58f, top, w * 0.70f, top)
+      p.lineTo(w, top)
+    }
+    FilterType.BAND_PASS -> {
+      p.moveTo(w * 0.08f, h)
+      p.cubicTo(w * 0.28f, base, w * 0.38f, top, w * 0.5f, top)
+      p.cubicTo(w * 0.62f, top, w * 0.72f, base, w * 0.92f, h)
+    }
+    FilterType.TILT_SHELF -> {
+      p.moveTo(0f, base)
+      p.lineTo(w * 0.20f, base)
+      p.cubicTo(w * 0.42f, base, w * 0.58f, top, w * 0.80f, top)
+      p.lineTo(w, top)
+    }
   }
   drawPath(p, color, style = Stroke(width = EqSize.lineFine.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
 }

@@ -55,6 +55,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -167,6 +170,7 @@ object PlayerHost {
     h = PlayerHooks(ctl, scope, assets.peaks)
     scope.launch { combine(h!!.state.map { it.track }.distinctUntilChanged(), assets.art) { t, art -> t to art }.collect { (t, art) ->
       ShellBackdrop.set(art, t?.let { Color(it.colorHex or 0xFF000000) }) } }
+    scope.launch { h!!.state.map { it.track }.distinctUntilChanged().collect { assets.follow(it) } }
     ctl.restore()
     keys = MediaKeys(ctl).also(MediaKeys::start)
     return ctl
@@ -192,7 +196,9 @@ object PlayerHost {
   /** Registers the now-playing screen in the shell slot of the Player tab. */
   fun register(slots: MutableMap<TarkasNavTab, PanelContent>) {
     slots[TarkasNavTab.MUSIC] = PanelContent { s -> PlayerScreen(hooks(s), assets(s)) }
-    Panels.transport = PanelContent { s -> TransportBar(s) }
+    Panels.transport = PanelContent { s -> MiniPlayer(s) }
+    Panels.sidePlayer = SidePlayerPanel
+    Panels.queueStack = QueueStackPanel
   }
 
   /** The content of the shell's side pane for [kind]: queue, lyrics or track details. */
@@ -228,6 +234,8 @@ fun PlayerScreen(hooks: PlayerHooks, assets: TrackAssets) {
   BoxWithConstraints(Modifier.fillMaxSize()) {
     val wide = maxWidth >= WIDE
     val tall = maxHeight >= Grid.u384 + Grid.u192 + Grid.u48
+    // Drop one size step when the window is short, so the controls never fall off the bottom.
+    val short = maxHeight < Grid.u384 + Grid.u96
     Row(Modifier.fillMaxSize()) {
       Column(Modifier.weight(1f).fillMaxHeight().padding(horizontal = Grid.margin, vertical = Grid.u24), verticalArrangement = Arrangement.spacedBy(Grid.u12)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
@@ -240,7 +248,8 @@ fun PlayerScreen(hooks: PlayerHooks, assets: TrackAssets) {
           IconButton({ PlayerHost.paneToggler?.invoke(PlayerPane.DETAILS) }, Modifier.size(Grid.u48)) { Icon(Icons.Filled.Info, tr(Res.string.pd_pane_details), tint = if (sidePane?.id == PlayerPane.DETAILS.name) cs.primary else cs.onSurfaceVariant) }
           IconButton({ PlayerHost.paneToggler?.invoke(PlayerPane.QUEUE) }, Modifier.size(Grid.u48)) { Icon(Icons.Filled.QueueMusic, tr(Res.string.player_screen_queue), tint = if (sidePane?.id == PlayerPane.QUEUE.name) cs.primary else cs.onSurfaceVariant) }
         }
-        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Grid.u24)) {
+        // The middle band takes the room that is left; what is in it sits in the middle of it, not stuck to the top.
+        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Grid.u24), verticalAlignment = Alignment.CenterVertically) {
           if (wide) {
             Column(Modifier.width(Grid.u384), verticalArrangement = Arrangement.spacedBy(Grid.u12)) {
               Cover(t.track, tint, art, if (tall) Grid.u384 else Grid.u192)
@@ -248,17 +257,11 @@ fun PlayerScreen(hooks: PlayerHooks, assets: TrackAssets) {
             }
             LyricsView(lyrics, t, hooks, Modifier.weight(1f).fillMaxHeight())
           } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(Grid.u24), verticalAlignment = Alignment.Top) {
-              Cover(t.track, tint, art, Grid.u192)
-              Column(Modifier.weight(1f)) { TrackInfo(t, ui.problem?.toString()) }
-            }
+            Cover(t.track, tint, art, if (short) Grid.u96 else Grid.u192)
+            Column(Modifier.weight(1f)) { TrackInfo(t, ui.problem?.toString()) }
           }
         }
-        WaveformSeek(t.peaks, t.fraction, t.durationMs > 0, hooks::seekFraction, Modifier.fillMaxWidth().height(Grid.u96))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-          Text(SeekMath.label(t.positionMs), style = GridText.Label, color = cs.onSurfaceVariant)
-          Text(SeekMath.label(t.durationMs), style = GridText.Label, color = cs.onSurfaceVariant)
-        }
+        SeekSection(hooks, t, Grid.u96, Modifier.fillMaxWidth())
         Controls(hooks, t)
       }
     }
@@ -298,12 +301,30 @@ internal fun Controls(hooks: PlayerHooks, t: TransportState) {
     }
     IconButton(hooks::prev, Modifier.size(Grid.u48)) { Icon(Icons.Filled.SkipPrevious, tr(Res.string.player_screen_previous), tint = cs.onBackground) }
     IconButton(hooks::toggle, Modifier.size(Grid.u96, Grid.u48), enabled = t.track != null) {
-      Icon(if (t.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, null, tint = cs.primary, modifier = Modifier.size(Grid.icon))
+      PlayGlyph(t.playing, t.loading, cs.primary)
     }
     IconButton(hooks::next, Modifier.size(Grid.u48)) { Icon(Icons.Filled.SkipNext, tr(Res.string.player_screen_next), tint = cs.onBackground) }
     IconButton(hooks::cycleRepeat, Modifier.size(Grid.u48)) {
       Icon(if (t.repeat == RepeatMode.ONE) Icons.Filled.RepeatOne else Icons.Filled.Repeat, tr(Res.string.player_screen_repeat),
         tint = if (t.repeat == RepeatMode.OFF) cs.onSurfaceVariant else cs.primary)
+    }
+  }
+}
+
+/**
+ * The waveform with its two times. While the pointer drags, the elapsed time follows the pointer (what the
+ * release will do); the engine is asked once, on release.
+ */
+@Composable
+internal fun SeekSection(hooks: PlayerHooks, t: TransportState, waveHeight: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier, waveModifier: Modifier = Modifier) {
+  val cs = MaterialTheme.colorScheme
+  var scrub by remember { mutableStateOf<Float?>(null) }
+  val shownMs = scrub?.let { SeekMath.fromFraction(it, t.durationMs) } ?: t.positionMs
+  Column(modifier) {
+    WaveformSeek(t.peaks, t.fraction, t.durationMs > 0, hooks::seekFraction, Modifier.fillMaxWidth().height(waveHeight).then(waveModifier), onScrub = { scrub = it })
+    Row(Modifier.fillMaxWidth().padding(top = Grid.u6), horizontalArrangement = Arrangement.SpaceBetween) {
+      Text(SeekMath.label(shownMs), style = GridText.Label, color = if (scrub != null) cs.primary else cs.onSurfaceVariant, modifier = Modifier.testTag("seek_elapsed"))
+      Text(SeekMath.label(t.durationMs), style = GridText.Label, color = cs.onSurfaceVariant, modifier = Modifier.testTag("seek_total"))
     }
   }
 }
@@ -315,21 +336,26 @@ internal fun Controls(hooks: PlayerHooks, t: TransportState) {
  * on release. With no shape yet a flat line is drawn, never a made-up one.
  */
 @Composable
-fun WaveformSeek(peaks: ByteArray?, fraction: Float, enabled: Boolean, onSeek: (Float) -> Unit, modifier: Modifier = Modifier) {
+fun WaveformSeek(
+  peaks: ByteArray?, fraction: Float, enabled: Boolean, onSeek: (Float) -> Unit, modifier: Modifier = Modifier,
+  onScrub: (Float?) -> Unit = {},
+) {
   val cs = MaterialTheme.colorScheme
   var scrub by remember { mutableStateOf<Float?>(null) }
   val shown = scrub ?: fraction
+  fun frac(x: Float, w: Int) = if (w <= 0) 0f else (x / w).coerceIn(0f, 1f)
   Canvas(
     modifier
+      .then(if (enabled) Modifier.pointerHoverIcon(PointerIcon.Hand) else Modifier)
       .pointerInput(enabled) {
-        if (enabled) detectTapGestures { onSeek((it.x / size.width).coerceIn(0f, 1f)) }
+        if (enabled) detectTapGestures { onSeek(frac(it.x, size.width)) }
       }
       .pointerInput(enabled) {
         if (enabled) detectDragGestures(
-          onDragStart = { scrub = (it.x / size.width).coerceIn(0f, 1f) },
-          onDrag = { ch, _ -> scrub = (ch.position.x / size.width).coerceIn(0f, 1f) },
-          onDragEnd = { scrub?.let(onSeek); scrub = null },
-          onDragCancel = { scrub = null },
+          onDragStart = { val f = frac(it.x, size.width); scrub = f; onScrub(f) },
+          onDrag = { ch, _ -> val f = frac(ch.position.x, size.width); scrub = f; onScrub(f) },
+          onDragEnd = { val f = scrub; scrub = null; onScrub(null); if (f != null) onSeek(f) },
+          onDragCancel = { scrub = null; onScrub(null) },
         )
       }
   ) {
@@ -350,6 +376,8 @@ fun WaveformSeek(peaks: ByteArray?, fraction: Float, enabled: Boolean, onSeek: (
       val played = (i + 0.5f) / n <= shown
       drawRect(if (played) cs.primary else cs.onSurfaceVariant.copy(alpha = 0.45f), Offset(x, mid - h / 2), Size(bar, h))
     }
+    // The playhead: a hairline over the bars at the position, so "where am I" does not depend on colour alone.
+    if (enabled) drawRect(cs.onSurface, Offset((size.width * shown - Grid.hairline.toPx() / 2).coerceIn(0f, size.width), 0f), Size(Grid.hairline.toPx(), size.height))
   }
 }
 

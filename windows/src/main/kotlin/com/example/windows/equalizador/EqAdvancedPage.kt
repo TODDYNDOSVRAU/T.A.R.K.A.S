@@ -139,6 +139,9 @@ import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
+/** Widest the advanced page grows: two phone columns of 384 dp (docs/WINDOWS-NOVA-UI.md). */
+internal val ADVANCED_MAX_WIDTH = Grid.u384 * 2
+
 /**
  * The technical controls behind "Ajustes avançados": how far the equalizer reaches, the tone
  * corners, the output stage, the apps playing now and the system level meter.
@@ -157,13 +160,14 @@ internal fun EqAdvancedPage(
   onSetAutoOutputCorrection: (Boolean) -> Unit = {},
   outputs: OutputsUi = OutputsUi(),
   onSelectOutput: (String?) -> Unit = {},
-  onBack: () -> Unit
+  onBack: () -> Unit,
+  modifier: Modifier = Modifier
 ) {
   val reduced = rememberReducedMotion()
 
   val colors = MaterialTheme.colorScheme
   LazyColumn(
-    modifier = Modifier.fillMaxSize(),
+    modifier = modifier.fillMaxSize(),
     contentPadding = PaddingValues(bottom = LocalBarInset.current + Grid.u24)
   ) {
     item {

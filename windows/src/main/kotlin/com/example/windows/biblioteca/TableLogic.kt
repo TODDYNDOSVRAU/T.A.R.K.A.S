@@ -73,6 +73,15 @@ object TableLogic {
     return out
   }
 
+  /** Below [NARROW_DP] the album and plays columns are hidden (width 0), then the rest is fitted: a master pane keeps a readable title. */
+  fun fitTo(widths: Map<Col, Int>, totalDp: Int): Map<Col, Int> {
+    val t = totalDp.coerceAtLeast(0)
+    if (t >= NARROW_DP) return fit(widths, t)
+    return fit(widths - Col.ALBUM - Col.PLAYS, t) + (Col.ALBUM to 0) + (Col.PLAYS to 0)
+  }
+
+  const val NARROW_DP = 560
+
   fun encodeWidths(w: Map<Col, Int>) = w.entries.joinToString(",") { it.key.key + "=" + it.value }
 
   fun decodeWidths(s: String?): Map<Col, Int> {

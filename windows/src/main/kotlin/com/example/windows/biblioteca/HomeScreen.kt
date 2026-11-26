@@ -1,69 +1,44 @@
 package com.example.windows.biblioteca
 
-import androidx.compose.foundation.ContextMenuArea
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.filled.NewReleases
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.util.VelocityTracker
-import com.example.ui.theme.CoverCarousel
-import kotlin.math.abs
+import androidx.compose.foundation.ContextMenuArea
+import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.hoverable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridScope
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items as rowItems
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material3.Icon
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.onPointerEvent
-import androidx.compose.ui.platform.LocalDensity
-import com.example.windows.shell.glass
-import kotlinx.coroutines.launch
-import androidx.compose.foundation.ContextMenuItem
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyGridScope
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -72,24 +47,44 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isShiftPressed
+import androidx.compose.ui.input.pointer.onPointerEvent
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.example.data.library.AutoList
-import com.example.data.library.AutoLists
 import com.example.data.model.Track
 import com.example.data.playback.LibrarySearch
-import com.example.ui.components.SearchField
 import com.example.ui.components.TextAction
+import com.example.ui.components.TonalButton
+import com.example.ui.components.PrimaryButton
 import com.example.ui.components.highlightClickable
+import com.example.ui.theme.CoverCarousel
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
+import com.example.ui.theme.studioCard
+import com.example.ui.viewmodel.TarkasNavTab
 import com.example.windows.res.*
-import com.example.windows.shell.ShellSearch
+import com.example.windows.shell.glass
+import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** What an online list is doing: shown as tiles, or why it is not. */
 private sealed interface Online {
@@ -110,33 +105,29 @@ private suspend fun fetchOnline(block: suspend () -> List<Track>): Online = try 
 }
 
 private const val TILES = 12
+
 /**
- * The Início tab: shortcuts in a 4x2 grid, shelves that scroll sideways ("Feito para você", "Novos lançamentos",
- * albums from the free catalogues, what played just now) and, when the window is wide enough, a right panel with the
- * current song and what is known about its artist. Search answers over the library and both catalogues.
+ * The Início tab, a page of discovery: a featured card, then carousels that scroll sideways (what is playing and what
+ * played just now, mixes made from the library, albums, the free catalogues). Importing and managing local music
+ * lives in Biblioteca. The search field lives in the shell's dock: [query] is what it holds, and a non-blank query
+ * swaps the page for results over the library and both catalogues.
+ *
+ * [queueStack] is the player's stack of queue cards. It gets a column at the lower right, beside the page and never
+ * over it, and only when the window is wide enough.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
-fun HomeScreen(lib: BibliotecaState, modifier: Modifier = Modifier) {
-  var query by remember { mutableStateOf("") }
-  var debounced by remember { mutableStateOf("") }
-  LaunchedEffect(query) { delay(350); debounced = query.trim() }
-  val searchFocus = remember { FocusRequester() }
-  LaunchedEffect(Unit) { ShellSearch.requests.collect { if (it > 0) runCatching { searchFocus.requestFocus() } } }
+fun HomeScreen(lib: BibliotecaState, modifier: Modifier = Modifier, query: String = "", queueStack: (@Composable () -> Unit)? = null) {
+  val debounced by produceDebounced(query)
 
   val library by lib.library.collectAsState()
   val stats by lib.store.stats.collectAsState()
-  val favorites by lib.store.favorites.collectAsState()
-  val playlists by lib.store.playlists.collectAsState()
   val ui by lib.player.ui.collectAsState()
-  val favLabel = tr(Res.string.library_section_favorites)
-  val dial = remember(library, favorites, playlists, stats, favLabel) {
-    HomeData.speedDial(library, favorites.toSet(), playlists, stats, favLabel) { trPluralNow(Res.plurals.library_track_count, it, it) }
-  }
   val mixes = remember(library, stats) {
     HomeData.mixes(library, stats, { autoName0(it) }) { trPluralNow(Res.plurals.library_track_count, it, it) }
   }
   val listening = remember(ui.current, ui.history) { HomeData.listening(ui.current, ui.history) }
+  val libraryAlbums = remember(library) { HomeData.albums(library.distinctBy { it.id }) }
 
   var found by remember { mutableStateOf<Online?>(null) }
   var foundJamendo by remember { mutableStateOf<Online?>(null) }
@@ -162,93 +153,125 @@ fun HomeScreen(lib: BibliotecaState, modifier: Modifier = Modifier) {
     HomeData.interleave(a, j)
   }
   val albums = remember(fresh) { HomeData.albums(fresh) }
+  val featured = remember(mixes, libraryAlbums, albums) { HomeData.featured(mixes, libraryAlbums + albums) }
   var showAll by remember { mutableStateOf(setOf<String>()) }
   fun toggle(k: String) { showAll = if (k in showAll) showAll - k else showAll + k }
 
   BoxWithConstraints(modifier.fillMaxSize()) {
-    val panel = maxWidth >= Grid.u384 * 2 && debounced.isBlank()
+    val stackWidth = queueWidth(maxWidth)
     Row(Modifier.fillMaxSize()) {
-      Column(Modifier.weight(1f).fillMaxHeight()) {
-        SearchField(
-          query, { query = it }, tr(Res.string.home_search_placeholder),
-          Modifier.fillMaxWidth().padding(horizontal = Grid.margin, vertical = Grid.u12).focusRequester(searchFocus)
-        )
-        if (debounced.isNotBlank()) {
-          LazyVerticalGrid(
-            GridCells.Adaptive(Grid.u96 + Grid.u24), Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = Grid.margin, vertical = Grid.u12),
-            horizontalArrangement = Arrangement.spacedBy(Grid.u12), verticalArrangement = Arrangement.spacedBy(Grid.u12)
-          ) {
-            val mine = LibrarySearch.filter(library, debounced).take(TILES * 2)
-            header(trNow(Res.string.home_search_library_header))
-            if (mine.isEmpty()) note(trNow(Res.string.home_search_library_empty)) else tiles(lib, mine, "m")
-            header("Audius"); online(lib, found, "fa") {}
-            header("Jamendo"); online(lib, foundJamendo, "fj") {}
-          }
-        } else {
-          Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Grid.margin, vertical = Grid.u12)) {
-            Text(greeting(), style = GridText.Title, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(bottom = Grid.u12))
-            if (dial.isEmpty()) Empty(lt("Favourites, playlists and the songs you play most will show up here.", "Favoritos, playlists e as músicas mais tocadas aparecem aqui."))
-            else dial.take(SHORTCUTS).chunked(SHORTCUT_COLUMNS).forEach { line ->
-              Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Grid.u12)) {
-                line.forEach { DialRow(lib, it, Modifier.weight(1f)) }
-                repeat(SHORTCUT_COLUMNS - line.size) { Box(Modifier.weight(1f)) }
-              }
-            }
+      if (debounced.isNotBlank()) {
+        LazyVerticalGrid(
+          GridCells.Adaptive(Grid.u96 + Grid.u24), Modifier.weight(1f).fillMaxHeight(),
+          contentPadding = PaddingValues(horizontal = Grid.margin, vertical = Grid.u12),
+          horizontalArrangement = Arrangement.spacedBy(Grid.u12), verticalArrangement = Arrangement.spacedBy(Grid.u12)
+        ) {
+          val mine = LibrarySearch.filter(library, debounced).take(TILES * 2)
+          header(trNow(Res.string.home_search_library_header))
+          if (mine.isEmpty()) note(trNow(Res.string.home_search_library_empty)) else tiles(lib, mine, "m")
+          header("Audius"); online(lib, found, "fa") {}
+          header("Jamendo"); online(lib, foundJamendo, "fj") {}
+        }
+      } else {
+        Column(
+          Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())
+            .padding(start = Grid.margin, end = if (stackWidth > 0.dp) Grid.u12 else Grid.margin, top = Grid.u12, bottom = Grid.u24)
+        ) {
+          Text(greeting(), style = GridText.Title, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(bottom = Grid.u12))
+          if (library.isEmpty()) EmptyHint(lib)
+          featured?.let { Hero(lib, it) }
+          ui.current?.let { AboutCard(it, library) }
 
-            Shelf(lt("Listening right now", "Ouvindo agora"), Icons.Filled.Headphones, "now", "now" in showAll, listening.size > 1, ::toggle)
-            if (listening.isEmpty()) Empty(lt("Nothing has played yet.", "Nada foi tocado ainda."))
-            else Cards(listening, "now" in showAll, { it.id }) { t -> TrackCard(lib, t, listening) }
+          Rail(lt("Continue listening", "Continuar ouvindo"), "now", listening, { it.id }, "now" in showAll, ::toggle) { t -> TrackCard(lib, t, listening) }
+          val picks = mixes.filter { it.id != featured?.id }
+          Rail(lt("Made for you", "Feito para você"), "mix", picks, { it.id }, "mix" in showAll, ::toggle) { e -> EntryCard(lib, e) }
+          val mine = libraryAlbums.filter { it.id != featured?.id }
+          Rail(lt("Your albums", "Seus álbuns"), "lib", mine, { it.id }, "lib" in showAll, ::toggle) { e -> EntryCard(lib, e) }
+          val again = mixes.firstOrNull { it.id == "a:" + AutoList.RECENTLY_PLAYED.name }?.tracks.orEmpty().take(TILES)
+          Rail(lt("Listen again", "Voltar a ouvir"), "again", again, { it.id }, "again" in showAll, ::toggle) { t -> TrackCard(lib, t, again) }
+          val recommended = albums.filter { it.id != featured?.id }
+          Rail(lt("Recommended albums", "Álbuns recomendados"), "alb", recommended, { it.id }, "alb" in showAll, ::toggle) { e -> EntryCard(lib, e) }
 
-            val again = mixes.firstOrNull { it.id == "a:RECENTLY_PLAYED" }?.tracks.orEmpty().take(TILES)
-            if (again.isNotEmpty()) {
-              Shelf(lt("Listen again", "Voltar a ouvir"), Icons.Filled.Shuffle, "again", "again" in showAll, again.size > 1, ::toggle)
-              Cards(again, "again" in showAll, { it.id }) { t -> TrackCard(lib, t, again) }
-            }
-
-            Shelf(lt("Made for you", "Feito para você"), Icons.Filled.Shuffle, "mix", "mix" in showAll, mixes.size > 1, ::toggle)
-            if (mixes.isEmpty()) Empty(lt("Play some songs and your mixes will be built here.", "Toque algumas músicas e seus mixes serão montados aqui."))
-            else Cards(mixes, "mix" in showAll, { it.id }) { e ->
-              Card(e.cover, e.title, e.subtitle, entryMenu(lib, e)) { e.tracks.firstOrNull()?.let { lib.play(it, e.tracks) } }
-            }
-
-            Shelf(lt("New releases", "Novos lançamentos"), Icons.Filled.NewReleases, "new", "new" in showAll, fresh.size > 1, ::toggle)
-            OnlineState(trendA, trendJ, fresh.isEmpty()) { reload++ }
-            if (fresh.isNotEmpty()) Cards(fresh, "new" in showAll, { it.id }) { t -> TrackCard(lib, t, fresh) }
-
-            if (albums.isNotEmpty()) {
-              Shelf(lt("Albums", "Álbuns"), Icons.Filled.Album, "alb", "alb" in showAll, albums.size > 1, ::toggle)
-              Cards(albums, "alb" in showAll, { it.id }) { e ->
-                Card(e.cover, e.title, e.subtitle, entryMenu(lib, e)) { e.tracks.firstOrNull()?.let { lib.play(it, e.tracks) } }
-              }
-            }
-
-            if (library.isEmpty()) {
-              EmptyState(tr(Res.string.home_mine_empty_title), tr(Res.string.home_mine_empty_message)) {
-                TextAction(tr(Res.string.home_mine_empty_action), { chooseFolder(lib) })
-              }
-            }
-          }
+          Shelf(lt("Free catalogues", "Catálogos gratuitos"), "new", "new" in showAll, fresh.size > 1, ::toggle)
+          OnlineState(trendA, trendJ, fresh.isEmpty()) { reload++ }
+          // The albums rail above already shows these covers; this one lists the other songs.
+          val albumCovers = recommended.mapNotNull { it.cover?.id }.toSet()
+          val others = fresh.filter { it.id !in albumCovers }.ifEmpty { fresh }
+          if (others.isNotEmpty()) Cards(others, "new" in showAll, { it.id }) { t -> TrackCard(lib, t, others) }
         }
       }
-      if (panel) NowPanel(lib, ui.current, library, Modifier.width(Grid.u192 + Grid.u96).fillMaxHeight())
+      if (queueStack != null && stackWidth > 0.dp) {
+        Box(Modifier.width(stackWidth).fillMaxHeight().padding(end = Grid.margin, top = Grid.u12, bottom = Grid.u12), contentAlignment = Alignment.BottomEnd) {
+          Box(Modifier.fillMaxWidth().heightIn(max = stackWidth * 5 / 4)) { queueStack() }
+        }
+      }
     }
   }
 }
 
-private const val SHORTCUTS = 6
-private const val SHORTCUT_COLUMNS = 3
+/** The query as the page should act on it: trimmed, and only after the typing paused for 350 ms. */
+@Composable
+private fun produceDebounced(query: String) = androidx.compose.runtime.produceState("", query) {
+  if (query.isBlank()) value = "" else { delay(350); value = query.trim() }
+}
+
+/** The width of the queue column at the lower right: none when the window is narrow, 216 dp on laptops, 288 dp on wide screens. */
+internal fun queueWidth(page: androidx.compose.ui.unit.Dp): androidx.compose.ui.unit.Dp = when {
+  page >= Grid.u192 * 9 -> Grid.u192 + Grid.u96
+  page >= Grid.u192 * 5 + Grid.u96 -> Grid.u192 + Grid.u24
+  else -> 0.dp
+}
 
 /** The title of a shelf with "Mostrar tudo" at its end, which spreads the cards over the page instead of one row. */
 @Composable
-private fun Shelf(title: String, icon: ImageVector, key: String, open: Boolean, more: Boolean, toggle: (String) -> Unit) {
+private fun Shelf(title: String, key: String, open: Boolean, more: Boolean, toggle: (String) -> Unit) {
   Row(Modifier.fillMaxWidth().padding(top = Grid.u24, bottom = Grid.u12), verticalAlignment = Alignment.CenterVertically) {
-    Icon(icon, null, Modifier.size(Grid.u24), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-    Text(
-      title, style = GridText.BodyStrong, color = MaterialTheme.colorScheme.onSurface,
-      modifier = Modifier.padding(start = Grid.u12).weight(1f)
-    )
+    Text(title, style = GridText.BodyStrong, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
     if (more) TextAction(if (open) lt("Show less", "Mostrar menos") else lt("Show all", "Mostrar tudo"), { toggle(key) })
+  }
+}
+
+/** A titled carousel; nothing at all when there is nothing to show, so the page never keeps an empty block. */
+@Composable
+private fun <T> Rail(title: String, key: String, all: List<T>, id: (T) -> Any, open: Boolean, toggle: (String) -> Unit, card: @Composable (T) -> Unit) {
+  if (all.isEmpty()) return
+  Shelf(title, key, open, all.size > 1, toggle)
+  Cards(all, open, id, card)
+}
+
+/** The featured entry: a 192 dp cover, what it is, and the two ways to play it. */
+@Composable
+private fun Hero(lib: BibliotecaState, e: HomeEntry) {
+  val colors = MaterialTheme.colorScheme
+  Row(
+    Modifier.fillMaxWidth().padding(top = Grid.u12).studioCard().padding(Grid.u12),
+    horizontalArrangement = Arrangement.spacedBy(Grid.u24), verticalAlignment = Alignment.CenterVertically
+  ) {
+    Box(Modifier.size(Grid.u192).clip(RoundedCornerShape(Grid.u12))) { e.cover?.let { TrackArtwork(it, Grid.u192) } }
+    Column(Modifier.weight(1f)) {
+      Text(lt("Featured", "Em destaque"), style = GridText.Label, color = colors.primary)
+      Text(e.title, style = GridText.Title, color = colors.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = Grid.u6))
+      Text(e.subtitle, style = GridText.Body, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+      Row(Modifier.padding(top = Grid.u24), horizontalArrangement = Arrangement.spacedBy(Grid.u12)) {
+        PrimaryButton(lt("Play", "Tocar"), { e.tracks.firstOrNull()?.let { lib.play(it, e.tracks) } }, icon = Icons.Filled.PlayArrow)
+        TonalButton(lt("Shuffle", "Aleatório"), { e.tracks.shuffled().let { s -> s.firstOrNull()?.let { lib.play(it, s) } } }, icon = Icons.Filled.Shuffle)
+      }
+    }
+  }
+}
+
+/** With no local music yet, the way in: importing happens in Biblioteca. */
+@Composable
+private fun EmptyHint(lib: BibliotecaState) {
+  Row(
+    Modifier.fillMaxWidth().studioCard().padding(Grid.u12),
+    horizontalArrangement = Arrangement.spacedBy(Grid.u12), verticalAlignment = Alignment.CenterVertically
+  ) {
+    Text(
+      lt("Your own music is not here yet. Add a folder or files in Biblioteca; the free catalogues below work meanwhile.", "Sua própria música ainda não está aqui. Adicione uma pasta ou arquivos na Biblioteca; os catálogos gratuitos abaixo funcionam enquanto isso."),
+      style = GridText.Small, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f)
+    )
+    TonalButton(lt("Open Biblioteca", "Abrir Biblioteca"), { lib.app.selectTab(TarkasNavTab.LIBRARY) })
   }
 }
 
@@ -275,7 +298,8 @@ private fun OnlineState(a: Online, j: Online, empty: Boolean, retry: () -> Unit)
  */
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun <T> Cards(items: List<T>, open: Boolean, key: (T) -> Any, card: @Composable (T) -> Unit) {
+private fun <T> Cards(all: List<T>, open: Boolean, key: (T) -> Any, card: @Composable (T) -> Unit) {
+  val items = remember(all) { all.distinctBy(key) }
   if (open) {
     FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Grid.u12), verticalArrangement = Arrangement.spacedBy(Grid.u12)) {
       items.forEach { card(it) }
@@ -288,10 +312,7 @@ private fun <T> Cards(items: List<T>, open: Boolean, key: (T) -> Any, card: @Com
   LazyRow(
     state = state, horizontalArrangement = Arrangement.spacedBy(Grid.u12),
     modifier = Modifier.focusable()
-      .onPointerEvent(PointerEventType.Scroll) { ev ->
-        val d = ev.changes.first().scrollDelta
-        scope.launch { state.scrollBy((if (d.x != 0f) d.x else d.y) * step / 3) }
-      }
+      .sidewaysScroll(state, scope, step)
       .onKeyEvent {
         if (it.type != KeyEventType.KeyDown) false
         else when (it.key) {
@@ -321,6 +342,27 @@ private fun <T> Cards(items: List<T>, open: Boolean, key: (T) -> Any, card: @Com
   }
 }
 
+/**
+ * Wheel and touchpad scrolling for a row inside a page that scrolls up and down. Each event goes to one axis only, the
+ * dominant one: mostly sideways (or vertical with Shift held) moves the row and is consumed; anything else is left
+ * untouched so the page scrolls. The row never moves vertically and never takes the page's vertical scroll.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+internal fun Modifier.sidewaysScroll(state: LazyListState, scope: CoroutineScope, step: Float): Modifier =
+  onPointerEvent(PointerEventType.Scroll) { ev ->
+    val d = ev.changes.firstOrNull()?.scrollDelta ?: return@onPointerEvent
+    val delta = sidewaysDelta(d.x, d.y, ev.keyboardModifiers.isShiftPressed) ?: return@onPointerEvent
+    ev.changes.forEach { it.consume() }
+    scope.launch { state.scrollBy(delta * step / 3) }
+  }
+
+/** The sideways part of a scroll movement ([dx], [dy]), or null when it belongs to the page's vertical scroll. */
+internal fun sidewaysDelta(dx: Float, dy: Float, shift: Boolean): Float? = when {
+  abs(dx) > abs(dy) -> dx
+  shift && dy != 0f -> dy
+  else -> null
+}
+
 /** Motion: 150 to 300 ms with deceleration (T.A.L. identity). */
 private const val DRAG_MS = 300
 
@@ -337,6 +379,10 @@ private fun Card(cover: Track?, title: String, subtitle: String, menu: List<Cont
   }
 }
 
+@Composable
+private fun EntryCard(lib: BibliotecaState, e: HomeEntry) =
+  Card(e.cover, e.title, e.subtitle, entryMenu(lib, e)) { e.tracks.firstOrNull()?.let { lib.play(it, e.tracks) } }
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TrackCard(lib: BibliotecaState, t: Track, context: List<Track>) {
@@ -349,37 +395,22 @@ private fun TrackCard(lib: BibliotecaState, t: Track, context: List<Track>) {
 }
 
 /**
- * The right panel: the song playing and what MusicBrainz knows about it. Online songs are looked up on their own;
- * for the user's own files the lookup waits for a click, because it sends the title and artist to the network.
+ * What is known about the artist of the song playing (the player on the left already shows the cover and title).
+ * Online songs are looked up on their own; for the user's own files the lookup waits for a click, because it sends
+ * the title and artist to the network.
  */
 @Composable
-private fun NowPanel(lib: BibliotecaState, current: Track?, library: List<Track>, modifier: Modifier) {
+private fun AboutCard(current: Track, library: List<Track>) {
   val colors = MaterialTheme.colorScheme
-  var info by remember(current?.id) { mutableStateOf<RecordingInfo?>(null) }
-  var state by remember(current?.id) { mutableStateOf(if (current?.onlineSource != null) "loading" else "idle") }
-  LaunchedEffect(current?.id, state) {
-    if (current == null || state != "loading") return@LaunchedEffect
+  var info by remember(current.id) { mutableStateOf<RecordingInfo?>(null) }
+  var state by remember(current.id) { mutableStateOf(if (current.onlineSource != null) "loading" else "idle") }
+  LaunchedEffect(current.id, state) {
+    if (state != "loading") return@LaunchedEffect
     info = runCatching { MusicBrainzCatalog.lookup(current.title, current.artist) }.getOrNull()
     state = if (info != null) "done" else "none"
   }
-  Column(
-    modifier.padding(end = Grid.margin, top = Grid.u12, bottom = Grid.u12).background(glass(), RoundedCornerShape(Grid.u12))
-      .verticalScroll(rememberScrollState()).padding(Grid.u12)
-  ) {
-    if (current == null) {
-      Text(lt("Now playing", "Tocando agora"), style = GridText.BodyStrong, color = colors.onSurface)
-      Text(
-        lt("Start a song and its details show up here.", "Toque uma música e os detalhes aparecem aqui."),
-        style = GridText.Small, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = Grid.u6)
-      )
-      return@Column
-    }
-    Box(Modifier.size(Grid.u192).clip(RoundedCornerShape(Grid.u12)).align(Alignment.CenterHorizontally)) { TrackArtwork(current, Grid.u192) }
-    Text(current.title, style = GridText.BodyStrong, color = colors.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = Grid.u12))
-    Text(current.artist, style = GridText.Body, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    if (current.album.isNotBlank()) Text(current.album, style = GridText.Small, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-
-    Text(lt("About the artist", "Sobre o artista"), style = GridText.BodyStrong, color = colors.onSurface, modifier = Modifier.padding(top = Grid.u24))
+  Column(Modifier.fillMaxWidth().padding(top = Grid.u12).studioCard().padding(Grid.u12)) {
+    Text(lt("About ${current.artist}", "Sobre ${current.artist}"), style = GridText.BodyStrong, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
     val own = library.count { it.artist.equals(current.artist, ignoreCase = true) }
     if (own > 0) Text(trPluralNow(Res.plurals.library_track_count, own, own), style = GridText.Small, color = colors.onSurfaceVariant)
     val facts = info
@@ -398,76 +429,9 @@ private fun NowPanel(lib: BibliotecaState, current: Track?, library: List<Track>
 }
 
 @Composable
-private fun Section(title: String, icon: ImageVector) {
-  Row(Modifier.padding(top = Grid.u24, bottom = Grid.u12), verticalAlignment = Alignment.CenterVertically) {
-    Icon(icon, null, Modifier.size(Grid.u24), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-    Text(title, style = GridText.BodyStrong, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(start = Grid.u12))
-  }
-}
-
-@Composable
 private fun Empty(text: String) {
   Box(Modifier.fillMaxWidth().background(glass(), RoundedCornerShape(Grid.u12)).padding(Grid.u12)) {
     Text(text, style = GridText.Small, color = MaterialTheme.colorScheme.onSurfaceVariant)
-  }
-}
-
-/** A speed-dial row: 48 dp cover, title and subtitle; a rounded tile shows on hover. Click plays, right-click opens the menu. */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun DialRow(lib: BibliotecaState, e: HomeEntry, modifier: Modifier) {
-  val source = remember { MutableInteractionSource() }
-  val hovered by source.collectIsHoveredAsState()
-  val colors = MaterialTheme.colorScheme
-  val tile = glass()
-  ContextMenuArea(items = { entryMenu(lib, e) }) {
-    Row(
-      modifier.padding(bottom = Grid.u12).hoverable(source)
-        .background(if (hovered) tile else Color.Transparent, RoundedCornerShape(Grid.u12))
-        .highlightClickable(onClick = { e.tracks.firstOrNull()?.let { lib.play(it, e.tracks) } }).padding(Grid.u6),
-      verticalAlignment = Alignment.CenterVertically
-    ) {
-      Box(Modifier.size(Grid.u48).clip(RoundedCornerShape(Grid.u6))) { e.cover?.let { TrackArtwork(it, Grid.u48) } }
-      Column(Modifier.padding(start = Grid.u12)) {
-        Text(e.title, style = GridText.Body, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(e.subtitle, style = GridText.Small, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-      }
-    }
-  }
-}
-
-/** The Daily Mixes row: 192 dp covers that scroll with the wheel and the Left/Right keys. */
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
-@Composable
-private fun MixRow(lib: BibliotecaState, mixes: List<HomeEntry>) {
-  val state = rememberLazyListState()
-  val scope = rememberCoroutineScope()
-  val step = with(LocalDensity.current) { (Grid.u192 + Grid.u12).toPx() }
-  LazyRow(
-    state = state, horizontalArrangement = Arrangement.spacedBy(Grid.u12),
-    modifier = Modifier.focusable()
-      .onPointerEvent(PointerEventType.Scroll) { ev ->
-        val d = ev.changes.first().scrollDelta
-        scope.launch { state.scrollBy((if (d.x != 0f) d.x else d.y) * step / 3) }
-      }
-      .onKeyEvent {
-        if (it.type != KeyEventType.KeyDown) false
-        else when (it.key) {
-          Key.DirectionRight -> { scope.launch { state.animateScrollBy(step) }; true }
-          Key.DirectionLeft -> { scope.launch { state.animateScrollBy(-step) }; true }
-          else -> false
-        }
-      }
-  ) {
-    rowItems(mixes, key = { it.id }) { e ->
-      ContextMenuArea(items = { entryMenu(lib, e) }) {
-        Column(Modifier.width(Grid.u192).highlightClickable(onClick = { e.tracks.firstOrNull()?.let { lib.play(it, e.tracks) } })) {
-          Box(Modifier.size(Grid.u192).clip(RoundedCornerShape(Grid.u12))) { e.cover?.let { TrackArtwork(it, Grid.u192) } }
-          Text(e.title, style = GridText.Body, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = Grid.u6))
-          Text(e.subtitle, style = GridText.Small, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-        }
-      }
-    }
   }
 }
 
@@ -498,7 +462,8 @@ private fun LazyGridScope.note(text: String) {
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 private fun LazyGridScope.tiles(lib: BibliotecaState, list: List<Track>, tag: String) {
-  items(list, key = { "$tag:" + it.id }) { Tile(lib, it, list) }
+  // A catalogue can repeat an id; a repeated key in a lazy list crashes the app, so each id shows once.
+  items(list.distinctBy { it.id }, key = { "$tag:" + it.id }) { Tile(lib, it, list) }
 }
 
 private fun LazyGridScope.online(lib: BibliotecaState, state: Online?, tag: String, onRetry: () -> Unit) {
@@ -511,14 +476,6 @@ private fun LazyGridScope.online(lib: BibliotecaState, state: Online?, tag: Stri
     }
     Online.NoKey -> note(trNow(Res.string.home_jamendo_missing_key))
     is Online.Done -> if (state.tracks.isEmpty()) note(trNow(Res.string.home_catalog_empty)) else tiles(lib, state.tracks.take(TILES), tag)
-  }
-}
-
-@Composable
-private fun Figure(value: String, label: String) {
-  Column {
-    Text(value, style = GridText.Title, color = MaterialTheme.colorScheme.onSurface)
-    Text(label, style = GridText.Label, color = MaterialTheme.colorScheme.onSurfaceVariant)
   }
 }
 

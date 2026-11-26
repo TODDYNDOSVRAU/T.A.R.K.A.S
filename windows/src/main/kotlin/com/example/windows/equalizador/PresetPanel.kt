@@ -85,6 +85,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.example.data.audio.dsp.EqDsp
@@ -141,7 +142,9 @@ internal fun PresetPanel(
   onPickDevice: (AutoEqEntry) -> Unit,
   onClearDevice: () -> Unit,
   modifier: Modifier = Modifier,
-  initialTab: PresetTab = PresetTab.EQ
+  initialTab: PresetTab = PresetTab.EQ,
+  /** Tallest the lists grow before they scroll; the desktop pane passes what its window leaves. */
+  listMax: Dp = EqSize.presetListMax
 ) {
   var tab by rememberSaveable { mutableStateOf(initialTab) }
   Column(modifier = modifier.fillMaxWidth().testTag("eq_preset_panel")) {
@@ -151,7 +154,7 @@ internal fun PresetPanel(
     CompositionLocalProvider(LocalOverscrollFactory provides null) {
       Box(modifier = Modifier.nestedScroll(keepLeftoverScroll)) {
       when (tab) {
-        PresetTab.EQ -> EqTab(presets, activePresetId, onPickPreset)
+        PresetTab.EQ -> EqTab(presets, activePresetId, onPickPreset, listMax)
         PresetTab.CORRECTION -> CorrectionTab(
           device = device,
           deviceOutput = deviceOutput,
@@ -160,7 +163,8 @@ internal fun PresetPanel(
           onSearchDevices = onSearchDevices,
           onRetryDevices = onRetryDevices,
           onPickDevice = onPickDevice,
-          onClearDevice = onClearDevice
+          onClearDevice = onClearDevice,
+          listMax = listMax
         )
       }
       }
@@ -210,7 +214,7 @@ private fun TabSwitch(selected: PresetTab, onSelect: (PresetTab) -> Unit) {
 
 /** The user's presets and the built-in ones, with a search that filters them by name. */
 @Composable
-private fun EqTab(presets: List<EqPreset>, activePresetId: String, onPickPreset: (EqPreset) -> Unit) {
+private fun EqTab(presets: List<EqPreset>, activePresetId: String, onPickPreset: (EqPreset) -> Unit, listMax: Dp) {
   val colors = MaterialTheme.colorScheme
   var filter by rememberSaveable { mutableStateOf(PresetFilter.ALL) }
   var query by rememberSaveable { mutableStateOf("") }
@@ -238,7 +242,7 @@ private fun EqTab(presets: List<EqPreset>, activePresetId: String, onPickPreset:
       }
     }
     LazyColumn(
-      modifier = Modifier.fillMaxWidth().heightIn(max = EqSize.presetListMax),
+      modifier = Modifier.fillMaxWidth().heightIn(max = listMax),
       contentPadding = PaddingValues(bottom = Grid.u24 + navBar)
     ) {
       val nothing = (!showMine || mine.isEmpty()) && (!showBuiltIn || builtIn.isEmpty())
@@ -287,7 +291,8 @@ private fun CorrectionTab(
   onSearchDevices: (String, String?) -> Unit,
   onRetryDevices: () -> Unit,
   onPickDevice: (AutoEqEntry) -> Unit,
-  onClearDevice: () -> Unit
+  onClearDevice: () -> Unit,
+  listMax: Dp
 ) {
   val colors = MaterialTheme.colorScheme
   val query = deviceSearch.query
@@ -378,7 +383,7 @@ private fun CorrectionTab(
     // The list can hold thousands of fones: its rows do not animate their place, so a new search or a
     // status line appearing above them moves them at once instead of springing them all.
     LazyColumn(
-      modifier = Modifier.fillMaxWidth().heightIn(max = EqSize.presetListMax),
+      modifier = Modifier.fillMaxWidth().heightIn(max = listMax),
       contentPadding = PaddingValues(bottom = Grid.u24 + navBar)
     ) {
       val nothing = !deviceSearch.loading && deviceSearch.error == null && fones.isEmpty()

@@ -45,16 +45,16 @@ object SapiVoice : Voice {
   override fun listen(): ListenResult = Sapi.listen()
 }
 
-internal fun failureText(texts: AssistantTexts, failure: AssistantFailure): String = texts.text(
-  when (failure) {
-    AssistantFailure.NO_CONNECTION -> Res.string.assistant_error_no_connection
-    AssistantFailure.KEY_REFUSED -> Res.string.assistant_error_key_refused
-    AssistantFailure.QUOTA -> Res.string.assistant_error_quota
-    AssistantFailure.CUT_OFF -> Res.string.assistant_error_cut_off
-    AssistantFailure.NO_REPLY -> Res.string.assistant_error_no_reply
-    AssistantFailure.SERVER -> Res.string.assistant_error_server
-  }
-)
+internal fun failureResource(failure: AssistantFailure): StringResource = when (failure) {
+  AssistantFailure.NO_CONNECTION -> Res.string.assistant_error_no_connection
+  AssistantFailure.KEY_REFUSED -> Res.string.assistant_error_key_refused
+  AssistantFailure.QUOTA -> Res.string.assistant_error_quota
+  AssistantFailure.CUT_OFF -> Res.string.assistant_error_cut_off
+  AssistantFailure.NO_REPLY -> Res.string.assistant_error_no_reply
+  AssistantFailure.SERVER -> Res.string.assistant_error_server
+}
+
+internal fun failureText(texts: AssistantTexts, failure: AssistantFailure): String = texts.text(failureResource(failure))
 
 /**
  * State of the Assistente tab and of the curiosity settings page. It takes [TarkasState] for the settings table

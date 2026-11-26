@@ -11,6 +11,10 @@ import com.example.windows.audio.DesktopPlayer
 import com.example.windows.state.TarkasState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -26,7 +30,9 @@ class AudioStateTest {
   private val dir = java.nio.file.Files.createTempDirectory("tarkas-audio").toFile()
   private val db = AppDatabase.inMemory()
   private val player = DesktopPlayer()
-  private val state = TarkasState(player, db)
+  // Settings are written on this scope; the teardown waits for those writes before the database closes.
+  private val stateScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+  private val state = TarkasState(player, db, scope = stateScope)
 
   private fun audio() = AudioState(
     state, AutoEqRepository(dir), CoroutineScope(Dispatchers.Unconfined),
@@ -36,6 +42,14 @@ class AudioStateTest {
   @After fun close() {
     SpatialControl.configure(false, SpatialControl.preset, 1.0)
     SpatialControl.onActiveChanged = null
+    runBlocking {
+      val job = stateScope.coroutineContext[Job]!!
+      job.children.filter { it.isActive && it.isCompleted.not() }.toList().forEach { child ->
+        // Long-lived collectors never finish; the one-shot writes do. Give them a moment, then cancel.
+        kotlinx.coroutines.withTimeoutOrNull(500) { child.join() } ?: child.cancelAndJoin()
+      }
+      job.cancelAndJoin()
+    }
     db.close(); dir.deleteRecursively()
   }
 

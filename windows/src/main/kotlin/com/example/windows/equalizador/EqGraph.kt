@@ -38,6 +38,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.inset
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import com.example.data.audio.dsp.EqDsp
 import com.example.data.model.EqSettings
@@ -147,6 +149,7 @@ internal fun EqGraph(
     }
   }
   val curveDescription = tr(Res.string.audio_curve_card_description, summary)
+  val measurer = rememberTextMeasurer()
   val shape = Grid.r12
   Column(
     modifier = modifier
@@ -170,6 +173,12 @@ internal fun EqGraph(
           listOf(250f, 2000f).forEach { f ->
             val x = freqToX(f) * w
             drawLine(grid, Offset(x, 0f), Offset(x, h), 1f)
+          }
+          // Each gain line says what it is, just above it at the left edge: +12 +6 0 -6 -12 dB.
+          val labelStyle = EqType.Mono.copy(color = label)
+          listOf(12f, 6f, 0f, -6f, -12f).forEach { db ->
+            val text = measurer.measure(formatDb(db), labelStyle, maxLines = 1)
+            drawText(text, topLeft = Offset(Grid.u6.toPx(), dbToY(db, h) - text.size.height - Grid.hairline.toPx()))
           }
 
           // Live spectrum behind the curve (nothing while nothing plays)
@@ -243,18 +252,6 @@ internal fun EqGraph(
           }
         }
       }
-      Text(
-        "+${GRAPH_DB_RANGE.toInt()}",
-        style = EqType.Mono,
-        color = label,
-        modifier = Modifier.align(Alignment.TopStart).offset(x = Grid.inset, y = Grid.u6 / 2)
-      )
-      Text(
-        "0",
-        style = EqType.Mono,
-        color = label,
-        modifier = Modifier.align(Alignment.CenterStart).offset(x = Grid.inset, y = -Grid.u12)
-      )
     }
     // The axis row: 31 / 250 / 2k / 16k, each centred on its x in the plot, except the two ends: the
     // first starts at the 12 dp inset and the last ends at the right inset, so neither leaves the card.

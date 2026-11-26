@@ -2,7 +2,13 @@ package com.example.windows.assistente
 
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.pressKey
@@ -35,5 +41,23 @@ class AssistantScreenUiTest {
     onNodeWithTag("siri_text_input").performTextInput("two")
     onNodeWithTag("siri_text_input").performKeyInput { pressKey(Key.Enter) }
     assertEquals(listOf("one\ntwo"), sent)
+  }
+
+  @Test fun emptyStateShowsFourCardsAndTheCapsule() = runComposeUiTest {
+    setContent(host(mutableListOf()))
+    onNodeWithTag("assistant_empty_cards").assertExists()
+    onAllNodes(SemanticsMatcher("card") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("assistant_card_") == true })
+      .assertCountEquals(4)
+    onNodeWithTag("assistant_quick_button").assertExists()
+    onNodeWithTag("siri_voice_orb").assertExists()
+    onNodeWithTag("siri_send_button").assertExists()
+  }
+
+  @Test fun statusPillOpensTheControlsPanel() = runComposeUiTest {
+    setContent(host(mutableListOf()))
+    onAllNodesWithTag("assistant_status_panel").assertCountEquals(0)
+    onNodeWithTag("assistant_status_pill").performClick()
+    onNodeWithTag("assistant_status_panel").assertExists()
+    onNodeWithTag("assistant_curiosity_toggle").assertExists()
   }
 }

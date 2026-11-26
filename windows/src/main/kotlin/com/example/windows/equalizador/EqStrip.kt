@@ -130,6 +130,9 @@ private const val GAIN_STEPS = 29
 /** Height of the value line above the faders and of one label row under them. */
 private val LINE = Grid.u24 - Grid.u6
 
+/** Neighbouring graphic bands closer than this share two staggered label rows. */
+private val STAGGER_BELOW = Grid.u48 - Grid.u6 / 2
+
 /** Press feedback: the control sinks to 0.96 in 150 ms and comes back the same way. */
 @Composable
 internal fun Modifier.pressScale(source: MutableInteractionSource): Modifier {
@@ -361,10 +364,15 @@ private fun GraphicBands(settings: EqSettings, onBandGain: (Int, Float) -> Unit)
   var entry by remember { mutableIntStateOf(-1) }
   BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
     val plot = maxWidth - Grid.inset * 2
-    val faderHeight = maxHeight - LINE * 4
+    // Two staggered rows of value and frequency only where neighbouring columns are too close for
+    // one row (about 44 dp for "-12.5"); a wide window gets one row each, so the fader grows.
+    val xs = settings.bands.map { plot * freqToX(it.freqHz) }.sortedBy { it.value }
+    val staggered = xs.zipWithNext().any { (a, b) -> b - a < STAGGER_BELOW }
+    val rows = if (staggered) 2 else 1
+    val faderHeight = maxHeight - LINE * 2 * rows
     val zeroLine = colors.onSurface.copy(alpha = 0.24f)
     Canvas(modifier = Modifier.fillMaxSize()) {
-      val y = LINE.toPx() * 2 + faderHeight.toPx() / 2f
+      val y = LINE.toPx() * rows + faderHeight.toPx() / 2f
       drawLine(
         color = zeroLine,
         start = Offset(Grid.inset.toPx(), y),
@@ -384,8 +392,11 @@ private fun GraphicBands(settings: EqSettings, onBandGain: (Int, Float) -> Unit)
           .stagger(i),
         horizontalAlignment = Alignment.CenterHorizontally
       ) {
-        // Even bands keep the row next to the fader, above and below; odd ones the outer row.
-        Spacer(Modifier.height(if (i % 2 == 0) LINE else 0.dp))
+        // Staggered: even bands keep the row next to the fader, above and below; odd ones the outer row.
+        val near = !staggered || i % 2 == 0
+        val outerNear = if (staggered && near) LINE else 0.dp
+        val outerFar = if (staggered && !near) LINE else 0.dp
+        Spacer(Modifier.height(outerNear))
         Box(modifier = Modifier.height(LINE).wrapContentWidth(unbounded = true), contentAlignment = Alignment.Center) {
           if (usesGain) {
             Text(
@@ -401,7 +412,7 @@ private fun GraphicBands(settings: EqSettings, onBandGain: (Int, Float) -> Unit)
             )
           }
         }
-        Spacer(Modifier.height(if (i % 2 == 0) 0.dp else LINE))
+        Spacer(Modifier.height(outerFar))
         EqFader(
           value = band.gainDb / EqBand.MAX_GAIN,
           onChange = { v -> onBandGain(i, snap(v * EqBand.MAX_GAIN)) },
@@ -422,7 +433,7 @@ private fun GraphicBands(settings: EqSettings, onBandGain: (Int, Float) -> Unit)
           },
           modifier = Modifier.weight(1f).fillMaxWidth().testTag("vertical_fader_band_$i")
         )
-        Spacer(Modifier.height(if (i % 2 == 0) 0.dp else LINE))
+        Spacer(Modifier.height(outerFar))
         Text(
           formatHz(band.freqHz),
           style = EqType.Mono,
@@ -434,7 +445,7 @@ private fun GraphicBands(settings: EqSettings, onBandGain: (Int, Float) -> Unit)
             .wrapContentWidth(unbounded = true)
             .clickable(enabled = usesGain && settings.enabled, onClickLabel = stringResource(Res.string.audio_enter_value)) { entry = i }
         )
-        Spacer(Modifier.height(if (i % 2 == 0) LINE else 0.dp))
+        Spacer(Modifier.height(outerNear))
       }
     }
   }

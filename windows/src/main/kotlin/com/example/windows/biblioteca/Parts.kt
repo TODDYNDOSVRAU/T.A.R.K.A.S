@@ -170,12 +170,13 @@ fun MenuEntry(label: String, onClick: () -> Unit, dismiss: () -> Unit) {
 
 /** A title and a sentence where a list would be, and an optional action under them. */
 @Composable
-fun EmptyState(title: String, message: String, modifier: Modifier = Modifier, action: @Composable (() -> Unit)? = null) {
+fun EmptyState(title: String, message: String, modifier: Modifier = Modifier, icon: androidx.compose.ui.graphics.vector.ImageVector? = null, action: @Composable (() -> Unit)? = null) {
   Column(
     modifier.fillMaxWidth().padding(horizontal = Grid.margin, vertical = Grid.u48),
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(Grid.u12)
+    verticalArrangement = Arrangement.spacedBy(Grid.u12, Alignment.CenterVertically)
   ) {
+    icon?.let { Icon(it, null, Modifier.size(Grid.u48), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
     Text(title, style = GridText.BodyStrong, color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
     Text(message, style = GridText.Small, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
     action?.invoke()

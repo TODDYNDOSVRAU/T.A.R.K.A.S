@@ -24,4 +24,16 @@ class DesktopStepTest {
     assertEquals(2f / 30f, stepSize(-1f, 1f, 29, 0.05f), 1e-6f)
     assertEquals(0.05f, stepSize(0f, 1f, 0, 0.05f), 0f)
   }
+
+  @Test fun limitsAreDetectedPerDirection() {
+    assertEquals(true, atLimit(1f, 1, -1f, 1f))
+    assertEquals(false, atLimit(1f, -1, -1f, 1f))
+    assertEquals(true, atLimit(-1f, -1, -1f, 1f))
+  }
+
+  @Test fun fineStepIsAFifthOfTheStep() {
+    val coarse = steppedValue(0f, 1, 0.5f, -1f, 1f)
+    val fine = steppedValue(0f, 1, 0.5f / FINE_DIVISOR, -1f, 1f)
+    assertEquals(coarse / FINE_DIVISOR, fine, 1e-5f)
+  }
 }
