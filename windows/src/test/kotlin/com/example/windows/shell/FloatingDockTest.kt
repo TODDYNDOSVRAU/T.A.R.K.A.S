@@ -52,7 +52,7 @@ class DockEngineTest {
 
 @OptIn(ExperimentalTestApi::class)
 class FloatingDockUiTest {
-  @Before @After fun clean() { ShellSearch.close(); SidePane.close() }
+  @Before @After fun clean() { ShellSearch.close(); SidePane.close(); ShellIsland.reset() }
 
   private class Host {
     var tab by mutableStateOf(TarkasNavTab.HOME)
@@ -65,9 +65,39 @@ class FloatingDockUiTest {
     }
   }
 
+  private fun androidx.compose.ui.test.ComposeUiTest.openIsland() { onNodeWithTag("island_pill").performClick(); waitForIdle() }
+
+  @Test fun atRestTheIslandIsThePillWithTheCurrentPage() = runComposeUiTest {
+    val h = Host()
+    h.tab = TarkasNavTab.AUDIO
+    setContent { h.Content() }
+    onNodeWithTag("island_pill").assertExists()
+    onNodeWithTag("dock_home").assertDoesNotExist()
+    val pill = onNodeWithTag("island_pill").getBoundsInRoot()
+    assertEquals(192f, (pill.right - pill.left).value, 0.5f)
+    assertEquals(48f, (pill.bottom - pill.top).value, 0.5f)
+    val desc = onNodeWithTag("island_pill").fetchSemanticsNode().config.getOrNull(SemanticsProperties.ContentDescription)
+    assertTrue(desc != null && desc.single().contains(":"))
+    assertEquals(IslandState.COMPACT, ShellIsland.state.value)
+  }
+
+  @Test fun openingAndPressingOutsideCloses() = runComposeUiTest {
+    val h = Host()
+    setContent { h.Content(reduce = true) }
+    openIsland()
+    assertEquals(IslandState.NAVIGATION, ShellIsland.state.value)
+    onNodeWithTag("dock_home").assertExists()
+    ShellIsland.press(androidx.compose.ui.geometry.Offset(5000f, 5000f))
+    waitForIdle()
+    assertEquals(IslandState.COMPACT, ShellIsland.state.value)
+    onNodeWithTag("island_pill").assertExists()
+    onNodeWithTag("dock_home").assertDoesNotExist()
+  }
+
   @Test fun everyRealPageIsInTheDockAndTheCurrentOneIsSelected() = runComposeUiTest {
     val h = Host()
     setContent { h.Content() }
+    openIsland()
     for (t in NavOrder) onNodeWithTag("dock_${t.name.lowercase()}").assertExists()
     onNodeWithTag("dock_search").assertExists()
     onNodeWithTag("dock_home").assertIsSelected()
@@ -76,13 +106,18 @@ class FloatingDockUiTest {
     assertTrue(desc != null && desc.single().isNotBlank())
   }
 
-  @Test fun clickingAPageNavigatesAndMovesTheDot() = runComposeUiTest {
+  @Test fun clickingAPageNavigatesAndTheIslandCompacts() = runComposeUiTest {
     val h = Host()
     setContent { h.Content(reduce = true) }
+    openIsland()
     onNodeWithTag("dock_library").performClick()
+    waitForIdle()
+    assertEquals(IslandState.COMPACT, ShellIsland.state.value)
+    openIsland()
     onNodeWithTag("dock_settings").performClick()
     waitForIdle()
     assertEquals(listOf(TarkasNavTab.LIBRARY, TarkasNavTab.SETTINGS), h.selected)
+    openIsland()
     onNodeWithTag("dock_settings").assertIsSelected()
     onNodeWithTag("dock_home").assertIsNotSelected()
   }
@@ -90,6 +125,7 @@ class FloatingDockUiTest {
   @Test fun searchOpensTypesAndCloses() = runComposeUiTest {
     val h = Host()
     setContent { h.Content() }
+    openIsland()
     onNodeWithTag("dock_search_field").assertDoesNotExist()
     onNodeWithTag("dock_search").performClick()
     waitForIdle()
@@ -98,12 +134,19 @@ class FloatingDockUiTest {
     waitForIdle()
     assertEquals("ana", ShellSearch.query.value)
     assertTrue(h.typed > 0)
+    assertEquals(IslandState.SEARCH, ShellIsland.state.value)
+    // The results live outside the island: a press on them keeps the field and the query.
+    ShellIsland.press(androidx.compose.ui.geometry.Offset(5000f, 5000f))
+    waitForIdle()
+    assertEquals(IslandState.SEARCH, ShellIsland.state.value)
+    assertEquals("ana", ShellSearch.query.value)
     onNodeWithTag("dock_search_close").performClick()
     waitForIdle()
     assertFalse(ShellSearch.isOpen.value)
     assertEquals("", ShellSearch.query.value)
     onNodeWithTag("dock_search_field").assertDoesNotExist()
     onNodeWithTag("dock_search").assertExists()
+    assertEquals(IslandState.NAVIGATION, ShellIsland.state.value)   // closing the search goes back one layer
   }
 
   @Test fun ctrlFFromOutsideOpensTheField() = runComposeUiTest {
@@ -117,6 +160,8 @@ class FloatingDockUiTest {
   @Test fun mouseOverMagnifiesAndLeavingRestores() = runComposeUiTest {
     val h = Host()
     setContent { h.Content() }
+    ShellIsland.send(IslandEvent.OPEN)                                // opened without the mouse, so it starts away
+    waitForIdle()
     val rest = onNodeWithTag("floating_dock").getBoundsInRoot()
     assertEquals(60f, (rest.bottom - rest.top).value, 0.5f)          // 6 + 48 + 6
     assertEquals(624f, (rest.right - rest.left).value, 0.5f)
@@ -127,8 +172,11 @@ class FloatingDockUiTest {
     assertEquals(624f, (over.right - over.left).value, 0.5f)          // width never changes
     onNodeWithTag("floating_dock").performMouseInput { moveTo(androidx.compose.ui.geometry.Offset(1f, 1000f)) }
     waitForIdle()
-    val back = onNodeWithTag("floating_dock").getBoundsInRoot()
-    assertEquals(60f, (back.bottom - back.top).value, 0.5f)
+    // Leaving the island: the tiles go back to rest and, after the grace, the island compacts to the pill.
+    mainClock.advanceTimeBy(1000)
+    waitForIdle()
+    assertEquals(IslandState.COMPACT, ShellIsland.state.value)
+    onNodeWithTag("island_pill").assertExists()
   }
 
   @Test fun compactDockShowsTheCurrentPageAndOpensTheMenu() = runComposeUiTest {
@@ -156,5 +204,40 @@ class FloatingDockUiTest {
     onNodeWithTag("dock_search_field").performTextInput("rock")
     waitForIdle()
     assertEquals("rock", ShellSearch.query.value)
+  }
+}
+
+class IslandMachineTest {
+  private fun IslandState.then(vararg e: IslandEvent) = e.fold(this) { s, x -> IslandMachine.next(s, x) }
+
+  @Test fun escClosesLayerByLayer() {
+    val s = IslandState.COMPACT.then(IslandEvent.OPEN, IslandEvent.SEARCH_OPENED)
+    assertEquals(IslandState.SEARCH, s)
+    assertEquals(IslandState.NAVIGATION, s.then(IslandEvent.SEARCH_CLOSED))                    // first Esc
+    assertEquals(IslandState.COMPACT, s.then(IslandEvent.SEARCH_CLOSED, IslandEvent.ESCAPE))   // second Esc
+    assertEquals(IslandState.COMPACT, IslandState.COMPACT.then(IslandEvent.ESCAPE))
+  }
+
+  @Test fun pageChangeCompactsUnlessTyping() {
+    assertEquals(IslandState.COMPACT, IslandState.NAVIGATION.then(IslandEvent.NAVIGATED))
+    assertEquals(IslandState.SEARCH, IslandState.SEARCH.then(IslandEvent.NAVIGATED))
+  }
+
+  @Test fun outsideAndLeaveKeepATypedSearch() {
+    assertEquals(IslandState.COMPACT, IslandState.NAVIGATION.then(IslandEvent.OUTSIDE))
+    assertEquals(IslandState.COMPACT, IslandState.SEARCH.then(IslandEvent.OUTSIDE))
+    assertEquals(IslandState.SEARCH, IslandState.SEARCH.then(IslandEvent.OUTSIDE_TYPED))
+    assertEquals(IslandState.SEARCH, IslandState.SEARCH.then(IslandEvent.LEAVE))
+    assertEquals(IslandState.COMPACT, IslandState.NAVIGATION.then(IslandEvent.LEAVE))
+  }
+
+  @Test fun ctrlFOpensTheSearchFromAnyState() {
+    for (s in IslandState.entries) assertEquals(IslandState.SEARCH, s.then(IslandEvent.SEARCH_OPENED))
+  }
+
+  @Test fun toggleIsTheNarrowListAndNeverShutsTheSearch() {
+    assertEquals(IslandState.NAVIGATION, IslandState.COMPACT.then(IslandEvent.TOGGLE))
+    assertEquals(IslandState.COMPACT, IslandState.NAVIGATION.then(IslandEvent.TOGGLE))
+    assertEquals(IslandState.SEARCH, IslandState.SEARCH.then(IslandEvent.TOGGLE))
   }
 }

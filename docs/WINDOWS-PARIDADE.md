@@ -206,6 +206,22 @@ Capturas só da janela em `.claude/sessoes/win-biblioteca-evidencias/` (48 PNG: 
 
 Comando: `TAL_EVIDENCE=C:/dev/tarkas/.claude/sessoes/win-biblioteca-evidencias bash .claude/sessoes/gradle.sh win-biblioteca -p windows -q test --tests 'com.example.windows.biblioteca.*'` exit 0; 10 classes, 44 testes, 0 falhas, 0 erros (BibliotecaEvidenceTest 3, HomeDataTest 8). Contraste >= 4.5 em todas as capturas. Janela real e `createDistributable` não rodados por esta sessão.
 
+### Home retoque: movimento (win-biblioteca, 2026-11-26)
+
+Todo movimento e so de GPU (`graphicsLayer`, nunca tamanho nem padding); com `reduceMotion` ligado vira corte seco.
+
+| Item | Status |
+|---|---|
+| Cartao: hover 1,04 com elevacao tonal da capa, press 0,96, mola criticamente amortecida (rigidez 439); anel de foco so por teclado | feito no codigo; regras puras testadas (`cardScale`); sensacao com ponteiro real **pendente** (teste nao move o mouse) |
+| Capa entra com fade de 200 ms (so quando chega depois do cartao) | feito no codigo (`TrackArtwork`); visto apenas o estado final nas capturas |
+| Skeletons no lugar de Carregando, so apos 300 ms, mesma geometria do cartao, pulso 0,6 a 1,0 em 900 ms | feito: `skeletonShows` testado e `skeletonCardIsAsBigAsACard` mede largura e altura iguais ao cartao; pulso visto em janela real **pendente** |
+| Setas e arrasto do carrossel pela mesma mola, mantendo a velocidade se outra tecla chega no meio | feito no codigo (`SpringScroller`, `springVelocity` testado); movimento em janela real **pendente** |
+| Pagina em LazyColumn (um item por secao) | feito, capturas dos 4 tamanhos x 2 temas sem mudanca de layout |
+| Densidade: destaque + ate 4 carrosseis antes da prateleira; Ouvir de novo some quando repete Continuar ouvindo; AboutCard abaixo da prateleira | feito (`railsToShow` testado) |
+| Destaque com crossfade de 300 ms e botao Tocar com o mesmo hover | feito no codigo; troca de destaque em janela real **pendente** |
+
+Comando: `TAL_EVIDENCE=C:/dev/tarkas/.claude/sessoes/win-biblioteca-evidencias bash .claude/sessoes/gradle.sh win-biblioteca -p windows -q test --tests 'com.example.windows.biblioteca.*'` exit 0; 11 classes, 53 testes, 0 falhas, 0 erros (HomeMotionTest 9, HomeDataTest 8, BibliotecaEvidenceTest 3). Quadros por segundo e peso do desfoque nao foram medidos por esta sessao.
+
 ### Assistente NOVA UI (win-assistente, 2026-11-24)
 
 | Item | Windows implementation | Status |

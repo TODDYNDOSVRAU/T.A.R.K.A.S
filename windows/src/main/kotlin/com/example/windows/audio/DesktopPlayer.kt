@@ -25,6 +25,11 @@ data class PlayerState(
  * (Java Sound → DirectSound/WASAPI shared mode). One worker thread owns the decoder and the line.
  */
 class DesktopPlayer(private val chunkFrames: Int = 512) : AudioOut {
+  companion object {
+    /** The playing position is published when it moved this much (100 ms is under one pixel of a 384 dp bar for a track over 40 s). */
+    const val PositionStepMs = 100L
+  }
+
   val dsp = EqDsp()
   /** win-audio: EQ + Spatial + loudness, run by the pipeline on the same float frames. */
   val chain = com.example.windows.equalizador.AudioChain(dsp)
@@ -134,7 +139,10 @@ class DesktopPlayer(private val chunkFrames: Int = 512) : AudioOut {
       val durationMs = if (totalFrames > 0) totalFrames * 1000 / rate else 0
       line = openLine(fmt).apply { open(fmt, chunkFrames * 4 * frameBytes); start() }
       var framesDone = skip(src, startMs, fmt.sampleRate, activeDsp)
-      _state.value = _state.value.copy(playing = !paused, durationMs = durationMs, positionMs = if (seekToMs >= 0) seekToMs else framesDone * 1000 / rate, error = null, loading = false)
+      val firstMs = if (seekToMs >= 0) seekToMs else framesDone * 1000 / rate
+      _state.value = _state.value.copy(playing = !paused, durationMs = durationMs, positionMs = firstMs, error = null, loading = false)
+      // The position is republished only when it moved PositionStepMs, so the UI is not recomposed once per chunk.
+      var lastPubMs = firstMs
       val out = ByteArray(chunkFrames * frameBytes)
       val inBuf = ByteArray(chunkFrames * frameBytes)
       var fadeFrames = 0L
@@ -148,7 +156,8 @@ class DesktopPlayer(private val chunkFrames: Int = 512) : AudioOut {
           xsrc?.close(); xsrc = null; fadeDone = 0
           src = active.open(file)
           framesDone = skip(src!!, target, fmt.sampleRate, activeDsp)
-          _state.value = _state.value.copy(positionMs = framesDone * 1000 / rate)
+          lastPubMs = framesDone * 1000 / rate
+          _state.value = _state.value.copy(positionMs = lastPubMs)
         }
         if (paused) {
           line.stop()
@@ -188,9 +197,10 @@ class DesktopPlayer(private val chunkFrames: Int = 512) : AudioOut {
             framesDone = fadeDone
             fadeDone = 0
             crossfaded = true
+            lastPubMs = framesDone * 1000 / rate
             _state.value = _state.value.copy(
               file = file, durationMs = if (totalFrames > 0) totalFrames * 1000 / rate else 0,
-              positionMs = framesDone * 1000 / rate
+              positionMs = lastPubMs
             )
             val cb = onEnded
             if (cb != null) Thread({ cb(true) }, "tarkas-advance").apply { isDaemon = true; start() }
@@ -205,7 +215,11 @@ class DesktopPlayer(private val chunkFrames: Int = 512) : AudioOut {
         // meanwhile keeps its published position until the worker applies it (no flicker back).
         if (seekToMs < 0) {
           val buffered = ((line.bufferSize - line.available()) / frameBytes).coerceAtLeast(0)
-          _state.value = _state.value.copy(positionMs = (framesDone - buffered).coerceAtLeast(0) * 1000 / rate)
+          val heardMs = (framesDone - buffered).coerceAtLeast(0) * 1000 / rate
+          if (kotlin.math.abs(heardMs - lastPubMs) >= PositionStepMs) {
+            lastPubMs = heardMs
+            _state.value = _state.value.copy(positionMs = heardMs)
+          }
         }
       }
       if (!stopRequested) line.drain()

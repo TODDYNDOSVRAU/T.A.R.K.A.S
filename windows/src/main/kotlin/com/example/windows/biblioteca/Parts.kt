@@ -26,6 +26,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -84,12 +88,22 @@ object CoverLoader {
   }
 }
 
+/** True where a cover that arrives late fades in (200 ms) instead of popping in. Off by default and under reduced motion. */
+internal val LocalCoverFade = staticCompositionLocalOf { false }
+
+/** How long a cover takes to fade in once it has loaded. */
+internal const val COVER_FADE_MS = 200
+
 /** A square cover with rounded corners, or the track's colour as a gradient with a note when there is none. */
 @Composable
 fun TrackArtwork(track: Track, size: Dp, modifier: Modifier = Modifier) {
   val url = track.artworkUrl
   var image by remember(url) { mutableStateOf(url?.let { CoverLoader.cached(it) }) }
   LaunchedEffect(url) { if (url != null && image == null) image = CoverLoader.load(url) }
+  // A cover already in the cache is shown at once; only one that arrives while the card is on screen fades in.
+  val fade = LocalCoverFade.current
+  val alpha = remember(url, fade) { Animatable(if (fade && url != null && image == null) 0f else 1f) }
+  LaunchedEffect(image) { if (image != null && alpha.value < 1f) alpha.animateTo(1f, tween(COVER_FADE_MS)) }
   val shape = Grid.r6
   val base = Color(track.colorHex.toInt())
   Box(
@@ -100,7 +114,7 @@ fun TrackArtwork(track: Track, size: Dp, modifier: Modifier = Modifier) {
     contentAlignment = Alignment.Center
   ) {
     val bmp = image
-    if (bmp != null) Image(bmp, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop, filterQuality = androidx.compose.ui.graphics.FilterQuality.High)
+    if (bmp != null) Image(bmp, null, Modifier.fillMaxSize().graphicsLayer { this.alpha = alpha.value }, contentScale = ContentScale.Crop, filterQuality = androidx.compose.ui.graphics.FilterQuality.High)
     else Icon(Icons.Filled.MusicNote, null, Modifier.size(Grid.icon), tint = Color.White.copy(alpha = 0.9f))
   }
 }

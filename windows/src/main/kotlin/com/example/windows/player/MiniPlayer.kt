@@ -97,7 +97,8 @@ internal fun PlayerShellWiring(hooks: PlayerHooks, assets: TrackAssets) {
 @Composable
 internal fun MiniPlayerBody(hooks: PlayerHooks, assets: TrackAssets, modifier: Modifier = Modifier) {
   val cs = MaterialTheme.colorScheme
-  val t by hooks.state.collectAsState()
+  // No position here: the clock is read in PositionProgress only.
+  val t by hooks.steady.collectAsState()
   val art by assets.art.collectAsState()
   val ui by hooks.controller.ui.collectAsState()
   val src = remember { MutableInteractionSource() }
@@ -125,6 +126,6 @@ internal fun MiniPlayerBody(hooks: PlayerHooks, assets: TrackAssets, modifier: M
       }
       if (MiniMath.showSkip(hovered)) IconButton(hooks::next, Modifier.size(Grid.u48).testTag("mini_next")) { Icon(Icons.Filled.SkipNext, tr(Res.string.player_screen_next), tint = cs.onSurface) }
     }
-    ThinProgress(t.fraction, t.durationMs > 0, hooks::seekFraction, Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = Grid.u48).padding(bottom = Grid.u12).testTag("mini_progress"), live = false)
+    PositionProgress(hooks, Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = Grid.u48).padding(bottom = Grid.u12).testTag("mini_progress"))
   }
 }

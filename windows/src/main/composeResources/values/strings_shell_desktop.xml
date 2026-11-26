@@ -3,4 +3,5 @@
   <string name="shell_search">Search</string>
   <string name="shell_search_close">Close search</string>
   <string name="shell_pages">Pages</string>
+  <string name="shell_island_open">Open navigation</string>
 </resources>

@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
@@ -58,6 +60,14 @@ class PlayerHooks(val controller: PlayerController, scope: CoroutineScope, peaks
       sleepActive = ui.sleepEndsAtMs != null || ui.sleepAtEndOfTrack, peaks = p, error = eng.error, loading = eng.loading,
     )
   }.stateIn(scope, SharingStarted.Eagerly, TransportState())
+
+  /**
+   * [state] with the position held at 0: it changes on track, play state, volume and the rest, not while the clock ticks.
+   * Screens read this for their body and read [state] only in the leaf that draws the position ([PositionProgress]),
+   * so the clock recomposes that leaf alone.
+   */
+  val steady: StateFlow<TransportState> = state.map { it.copy(positionMs = 0) }.distinctUntilChanged()
+    .stateIn(scope, SharingStarted.Eagerly, state.value.copy(positionMs = 0))
 
   /** Side pane asked for by the player (Ctrl+Q, Ctrl+L, details). Null means closed. */
   private val _pane = MutableStateFlow<PlayerPane?>(null)

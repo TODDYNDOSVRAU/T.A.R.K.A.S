@@ -79,7 +79,8 @@ fun TransportBar(state: TarkasState) {
   val hooks = PlayerHost.hooks(state)
   val assets = PlayerHost.assets(state)
   val cs = MaterialTheme.colorScheme
-  val t by hooks.state.collectAsState()
+  // No position here: the clock is read in PositionProgress only.
+  val t by hooks.steady.collectAsState()
   val art by assets.art.collectAsState()
   val side by SidePane.current.collectAsState()
   val titles = mapOf(
@@ -125,7 +126,7 @@ fun TransportBar(state: TarkasState) {
         }
         IconButton(hooks::next, Modifier.size(Grid.u48)) { Icon(Icons.Filled.SkipNext, tr(Res.string.player_screen_next), tint = cs.onSurface) }
       }
-      ThinProgress(t.fraction, t.durationMs > 0, hooks::seekFraction, Modifier.fillMaxWidth().testTag("bar_progress"), live = false)
+      PositionProgress(hooks, Modifier.fillMaxWidth().testTag("bar_progress"))
     }
     Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
       Icon(Icons.Filled.VolumeUp, null, Modifier.size(Grid.icon), tint = cs.onSurfaceVariant)

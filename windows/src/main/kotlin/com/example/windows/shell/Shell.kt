@@ -38,6 +38,13 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -148,7 +155,20 @@ fun TarkasShell(state: TarkasState, back: BackDispatcher, lifecycle: AppLifecycl
       val tab by state.currentTab.collectAsState()
       val side by SidePane.current.collectAsState()
       val reduce by state.reduceMotion.collectAsState()
-      BoxWithConstraints(Modifier.fillMaxSize()) {
+      var origin by remember { mutableStateOf(Offset.Zero) }
+      BoxWithConstraints(
+        Modifier.fillMaxSize()
+          .onGloballyPositioned { origin = it.positionInWindow() }
+          .pointerInput(Unit) {
+            // Every press, seen before anyone handles it and never consumed: a press outside the island closes it.
+            awaitPointerEventScope {
+              while (true) {
+                val e = awaitPointerEvent(PointerEventPass.Initial)
+                if (e.type == PointerEventType.Press) e.changes.firstOrNull()?.let { ShellIsland.press(origin + it.position) }
+              }
+            }
+          },
+      ) {
         Backdrop()
         val winW = maxWidth
         val player = Panels.sidePlayer

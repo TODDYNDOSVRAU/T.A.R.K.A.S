@@ -74,12 +74,11 @@ fun SidePlayer(state: TarkasState, modifier: Modifier = Modifier) {
 @Composable
 internal fun SidePlayerBody(hooks: PlayerHooks, assets: TrackAssets, modifier: Modifier = Modifier) {
   val cs = MaterialTheme.colorScheme
-  val t by hooks.state.collectAsState()
+  // No position here: the clock is read in PositionSeekLine only.
+  val t by hooks.steady.collectAsState()
   val ui by hooks.controller.ui.collectAsState()
   val art by assets.art.collectAsState()
   val dir = trackDirection(ui, t.track?.id)
-  var scrub by remember { mutableStateOf<Float?>(null) }
-  val shownMs = scrub?.let { SeekMath.fromFraction(it, t.durationMs) } ?: t.positionMs
   val src = remember { MutableInteractionSource() }
   BoxWithConstraints(modifier.fillMaxSize().testTag("side_player")) {
     val cover = SidePlayerMath.coverDp(maxWidth.value, maxHeight.value)
@@ -120,14 +119,7 @@ internal fun SidePlayerBody(hooks: PlayerHooks, assets: TrackAssets, modifier: M
         }
       }
       Spacer(Modifier.height(Grid.u12))
-      ThinProgress(
-        t.fraction, t.durationMs > 0, hooks::seekFraction, Modifier.fillMaxWidth().testTag("side_progress"),
-        live = false, onScrub = { scrub = it },
-      )
-      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(SeekMath.label(shownMs), style = GridText.Label, color = if (scrub != null) cs.primary else cs.onSurfaceVariant, modifier = Modifier.testTag("side_elapsed"))
-        Text(SeekMath.label(t.durationMs), style = GridText.Label, color = cs.onSurfaceVariant, modifier = Modifier.testTag("side_total"))
-      }
+      PositionSeekLine(hooks)
       Spacer(Modifier.height(Grid.u6))
       Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
         IconButton(hooks::prev, Modifier.size(Grid.u48).testTag("side_prev"), enabled = t.track != null) {

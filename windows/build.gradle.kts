@@ -170,7 +170,7 @@ compose.desktop {
       modules("java.instrument", "java.net.http", "jdk.unsupported", "jdk.crypto.ec", "java.sql", "java.naming")
       targetFormats(TargetFormat.Msi, TargetFormat.Exe)
       packageName = "TARKAS"
-      packageVersion = "2.1.5"
+      packageVersion = "2.1.6"
       vendor = "Totally Accurate Labs"
       description = "Totally Accurate Real-Time Kind of Audio System"
       windows {
