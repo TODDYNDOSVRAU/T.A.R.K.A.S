@@ -7,16 +7,22 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -25,10 +31,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
+import com.example.windows.res.Res
+import com.example.windows.res.settings_search_clear
+import com.example.windows.res.tr
 
 // Desktop twins of the building blocks in geral/ui/CommonComponents.kt, on the T.A.L. grid (48 dp rows,
 // 12 dp inset, 24 dp margin) and on MaterialTheme.colorScheme only.
@@ -179,15 +189,26 @@ fun SubPageHeader(title: String, backLabel: String, onBack: () -> Unit, modifier
 @Composable
 fun SearchField(value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier) {
   val c = MaterialTheme.colorScheme
-  Box(
-    modifier.fillMaxWidth().height(Grid.u48).clip(Grid.r12).background(c.surfaceContainer).padding(horizontal = Grid.inset),
-    contentAlignment = Alignment.CenterStart
+  // Same reading as the Biblioteca's search: a magnifier at the start, and a clear button once there is text.
+  Row(
+    modifier.fillMaxWidth().height(Grid.u48).clip(Grid.r12).background(c.surfaceContainer).padding(start = Grid.inset),
+    verticalAlignment = Alignment.CenterVertically
   ) {
-    if (value.isEmpty()) Text(placeholder, style = GridText.Body, color = c.onSurfaceVariant)
-    BasicTextField(
-      value = value, onValueChange = onValueChange, singleLine = true,
-      textStyle = GridText.Body.copy(color = c.onSurface), cursorBrush = SolidColor(c.primary),
-      modifier = Modifier.fillMaxWidth()
-    )
+    Icon(Icons.Rounded.Search, null, Modifier.size(Grid.u24), tint = c.onSurfaceVariant)
+    Spacer(Modifier.width(Grid.u12))
+    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+      if (value.isEmpty()) Text(placeholder, style = GridText.Body, color = c.onSurfaceVariant, maxLines = 1)
+      BasicTextField(
+        value = value, onValueChange = onValueChange, singleLine = true,
+        textStyle = GridText.Body.copy(color = c.onSurface), cursorBrush = SolidColor(c.primary),
+        modifier = Modifier.fillMaxWidth().testTag("settings_search_input")
+      )
+    }
+    if (value.isNotEmpty()) Box(
+      Modifier.size(Grid.u48).clickable(role = Role.Button, onClickLabel = tr(Res.string.settings_search_clear)) { onValueChange("") }
+        .testTag("settings_search_clear"),
+      contentAlignment = Alignment.Center
+    ) { Icon(Icons.Rounded.Close, tr(Res.string.settings_search_clear), Modifier.size(Grid.u24), tint = c.onSurfaceVariant) }
+    else Spacer(Modifier.width(Grid.inset))
   }
 }

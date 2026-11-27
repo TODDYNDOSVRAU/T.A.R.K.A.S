@@ -218,6 +218,7 @@ class AudioState(
   /** null = the Windows default. Takes effect when the next track opens its line. */
   fun selectOutput(name: String?) {
     selectedOutput.value = name
+    AudioHost.publishOutput(name)
     player.outputMixer = name
     settings.put(G, K_OUTPUT, name ?: "")
     refreshOutputs()

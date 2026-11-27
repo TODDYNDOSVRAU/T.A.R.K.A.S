@@ -43,7 +43,7 @@ fun DetailsPane(selected: List<Track>, stats: Map<String, TrackStats>, modifier:
           t.title, style = GridText.BodyStrong, color = colors.onSurface, maxLines = 3, overflow = TextOverflow.Ellipsis,
           modifier = Modifier.padding(top = Grid.u12)
         )
-        Text(t.artist, style = GridText.Small, color = colors.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(t.artistLabel(), style = GridText.Small, color = colors.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Fact(lt("Album", "Álbum"), t.album)
         Fact(lt("Genre", "Gênero"), t.genre)
         Fact(lt("Year", "Ano"), t.era)

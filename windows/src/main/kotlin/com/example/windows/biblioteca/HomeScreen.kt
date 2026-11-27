@@ -108,7 +108,7 @@ import com.example.ui.theme.GridText
 import com.example.ui.theme.studioCard
 import com.example.ui.viewmodel.TarkasNavTab
 import com.example.windows.res.*
-import com.example.windows.shell.glass
+import com.example.windows.shell.LocalCornerInsets
 import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -138,8 +138,9 @@ private const val TILES = 12
 /**
  * The Início tab, a page of discovery: a featured card, then carousels that scroll sideways (what is playing and what
  * played just now, mixes made from the library, albums, the free catalogues). Importing and managing local music
- * lives in Biblioteca. The search field lives in the shell's dock: [query] is what it holds, and a non-blank query
- * swaps the page for results over the library and both catalogues.
+ * lives in Biblioteca. The greeting is the shell's top title (see [BibliotecaHost]). Search lives in Biblioteca now
+ * (Ctrl+F), so the shell passes no [query]; a non-blank one still swaps the page for results over the library and
+ * both catalogues, which is how the online results will be reused there.
  *
  * [queueStack] is the player's stack of queue cards. It gets a column at the lower right, beside the page and never
  * over it, and only when the window is wide enough.
@@ -190,6 +191,7 @@ fun HomeScreen(lib: BibliotecaState, modifier: Modifier = Modifier, query: Strin
   CompositionLocalProvider(LocalSnap provides reduce, LocalCoverFade provides !reduce) {
   BoxWithConstraints(modifier.fillMaxSize()) {
     val stackWidth = queueWidth(maxWidth)
+    val pageWidth = maxWidth - stackWidth
     Row(Modifier.fillMaxSize()) {
       if (debounced.isNotBlank()) {
         LazyVerticalGrid(
@@ -204,7 +206,10 @@ fun HomeScreen(lib: BibliotecaState, modifier: Modifier = Modifier, query: Strin
           header("Jamendo"); online(lib, foundJamendo, "fj") {}
         }
       } else {
-        val stackEnd = if (stackWidth > 0.dp) Grid.u12 else Grid.margin
+        // The player's corner (bottom left) takes a lane from the left edge: wide windows centre the column in the free
+        // margin, medium ones start the lower sections after the lane, narrow ones have no card to step around.
+        val lanes = HomeLayout.lanes(pageWidth,LocalCornerInsets.current, end = if (stackWidth > 0.dp) Grid.u12 else Grid.margin)
+        val lowerPad = Modifier.padding(start = lanes.lowerExtra)
         // Which carousels show: empty ones and ones that only repeat the one before are skipped, and four at most.
         val picks = mixes.filter { it.id != featured?.id }
         val mine = libraryAlbums.filter { it.id != featured?.id }
@@ -220,24 +225,25 @@ fun HomeScreen(lib: BibliotecaState, modifier: Modifier = Modifier, query: Strin
         }
         LazyColumn(
           Modifier.weight(1f).fillMaxHeight(),
-          contentPadding = PaddingValues(start = Grid.margin, end = stackEnd, top = Grid.u12, bottom = Grid.u24)
+          contentPadding = PaddingValues(start = lanes.start, end = lanes.end, top = Grid.u12, bottom = Grid.u24)
         ) {
-          item(key = "greeting") {
-            Text(greeting(), style = GridText.Title, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(bottom = Grid.u12))
-          }
+          // The greeting lives in the shell's top band (BibliotecaHost registers it as the page title).
           if (library.isEmpty()) item(key = "empty") { EmptyHint(lib) }
           featured?.let { f -> item(key = "hero") { Hero(lib, f) } }
-          for (rail in plan) item(key = rail) {
-            when (rail) {
-              "now" -> Rail(lt("Continue listening", "Continuar ouvindo"), "now", listening, { it.id }, "now" in showAll, ::toggle) { t -> TrackCard(lib, t, listening) }
-              "mix" -> Rail(lt("Made for you", "Feito para você"), "mix", picks, { it.id }, "mix" in showAll, ::toggle) { e -> EntryCard(lib, e) }
-              "lib" -> Rail(lt("Your albums", "Seus álbuns"), "lib", mine, { it.id }, "lib" in showAll, ::toggle) { e -> EntryCard(lib, e) }
-              "again" -> Rail(lt("Listen again", "Voltar a ouvir"), "again", again, { it.id }, "again" in showAll, ::toggle) { t -> TrackCard(lib, t, again) }
-              "alb" -> Rail(lt("Recommended albums", "Álbuns recomendados"), "alb", recommended, { it.id }, "alb" in showAll, ::toggle) { e -> EntryCard(lib, e) }
+          // The last carousel and what follows it are the ones that end up beside the player's art card.
+          for ((i, rail) in plan.withIndex()) item(key = rail) {
+            Column(if (i >= plan.lastIndex) lowerPad.testTag("home-lower") else Modifier) {
+              when (rail) {
+                "now" -> Rail(lt("Continue listening", "Continuar ouvindo"), "now", listening, { it.id }, "now" in showAll, ::toggle) { t -> TrackCard(lib, t, listening) }
+                "mix" -> Rail(lt("Made for you", "Feito para você"), "mix", picks, { it.id }, "mix" in showAll, ::toggle) { e -> EntryCard(lib, e) }
+                "lib" -> Rail(lt("Your albums", "Seus álbuns"), "lib", mine, { it.id }, "lib" in showAll, ::toggle) { e -> EntryCard(lib, e) }
+                "again" -> Rail(lt("Listen again", "Voltar a ouvir"), "again", again, { it.id }, "again" in showAll, ::toggle) { t -> TrackCard(lib, t, again) }
+                "alb" -> Rail(lt("Recommended albums", "Álbuns recomendados"), "alb", recommended, { it.id }, "alb" in showAll, ::toggle) { e -> EntryCard(lib, e) }
+              }
             }
           }
           item(key = "new") {
-            Column {
+            Column(lowerPad.testTag("home-lower")) {
               Shelf(lt("Free catalogues", "Catálogos gratuitos"), "new", "new" in showAll, fresh.size > 1, ::toggle)
               OnlineState(trendA, trendJ, fresh.isEmpty()) { reload++ }
               // The albums rail above, when it is shown, already has these covers; this one lists the other songs.
@@ -246,7 +252,7 @@ fun HomeScreen(lib: BibliotecaState, modifier: Modifier = Modifier, query: Strin
               if (others.isNotEmpty()) Cards(others, "new" in showAll, { it.id }) { t -> TrackCard(lib, t, others) }
             }
           }
-          ui.current?.let { c -> item(key = "about") { AboutCard(c, library) } }
+          ui.current?.let { c -> item(key = "about") { Box(lowerPad.testTag("home-lower")) { AboutCard(c, library) } } }
         }
       }
       if (queueStack != null && stackWidth > 0.dp) {
@@ -640,7 +646,7 @@ private fun TrackCard(lib: BibliotecaState, t: Track, context: List<Track>) {
     ContextMenuItem(lt("Play next", "Tocar em seguida")) { lib.playNext(t) },
     ContextMenuItem(lt("Add to queue", "Adicionar à fila")) { lib.addToQueue(t) }
   )
-  Card(t, t.title, t.artist, menu) { lib.play(t, context) }
+  Card(t, t.title, t.artistLabel(), menu) { lib.play(t, context) }
 }
 
 /**
@@ -659,7 +665,7 @@ private fun AboutCard(current: Track, library: List<Track>) {
     state = if (info != null) "done" else "none"
   }
   Column(Modifier.fillMaxWidth().padding(top = Grid.u12).studioCard().padding(Grid.u12)) {
-    Text(lt("About ${current.artist}", "Sobre ${current.artist}"), style = GridText.BodyStrong, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Text(lt("About ${current.artistLabel()}", "Sobre ${current.artistLabel()}"), style = GridText.BodyStrong, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
     val own = library.count { it.artist.equals(current.artist, ignoreCase = true) }
     if (own > 0) Text(trPluralNow(Res.plurals.library_track_count, own, own), style = GridText.Small, color = colors.onSurfaceVariant)
     val facts = info
@@ -679,7 +685,8 @@ private fun AboutCard(current: Track, library: List<Track>) {
 
 @Composable
 private fun Empty(text: String) {
-  Box(Modifier.fillMaxWidth().background(glass(), RoundedCornerShape(Grid.u12)).padding(Grid.u12)) {
+  // An opaque card, like the hint and the featured entry: glass() is translucent now, and this is a message to read.
+  Box(Modifier.fillMaxWidth().studioCard().padding(Grid.u12)) {
     Text(text, style = GridText.Small, color = MaterialTheme.colorScheme.onSurfaceVariant)
   }
 }
@@ -742,13 +749,13 @@ private fun Tile(lib: BibliotecaState, t: Track, context: List<Track>) {
     Column(Modifier.highlightClickable(onClick = { lib.play(t, context) })) {
       TrackArtwork(t, Grid.u96)
       Text(t.title, style = GridText.Small, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface)
-      Text(t.artist, style = GridText.Small, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      Text(t.artistLabel(), style = GridText.Small, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
   }
 }
 
-/** "Bom dia, name" by the local hour; the name is the Windows account's. */
-internal fun greeting(hour: Int = java.time.LocalTime.now().hour, name: String = System.getProperty("user.name").orEmpty()): String {
+/** "Bom dia, name" by the local hour; [name] is the app's `displayName` (nickname, else the Windows account's), empty for none. */
+internal fun greeting(hour: Int = java.time.LocalTime.now().hour, name: String = ""): String {
   val en = when { hour < 5 -> "Good evening"; hour < 12 -> "Good morning"; hour < 18 -> "Good afternoon"; else -> "Good evening" }
   val pt = when { hour < 5 -> "Boa noite"; hour < 12 -> "Bom dia"; hour < 18 -> "Boa tarde"; else -> "Boa noite" }
   val base = lt(en, pt)

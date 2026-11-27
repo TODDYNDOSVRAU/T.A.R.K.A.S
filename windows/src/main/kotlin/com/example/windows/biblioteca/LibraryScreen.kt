@@ -1,6 +1,8 @@
 package com.example.windows.biblioteca
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.FileOpen
@@ -27,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -50,7 +54,9 @@ import com.example.ui.components.SearchField
 import com.example.ui.components.TextAction
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
-import com.example.ui.theme.studioCard
+import com.example.ui.theme.LocalBarInset
+import com.example.ui.theme.SquircleShape
+import com.example.windows.shell.LocalCornerInsets
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
@@ -71,7 +77,25 @@ private const val SETTINGS = "window"
 private const val KEY_SORT = "library.sort"
 private const val KEY_COLS = "library.cols"
 private const val UNDO_MS = 8000L
+
+/**
+ * Which `ShellSearch.requests` this page already answered. It lives outside the composition on purpose: the page is
+ * composed again each time the tab opens, and a request answered on an earlier visit must not steal the focus again.
+ */
+internal object SearchFocusLedger {
+  @Volatile private var handled = 0
+
+  /** True once for each new request count above what was answered; false for a count already seen or zero. */
+  @Synchronized fun take(requests: Int): Boolean = if (requests > handled) { handled = requests; true } else false
+
+  /** Tests only: forget what was answered. */
+  @Synchronized fun reset(to: Int = 0) { handled = to }
+}
 private val SIDEBAR = 210.dp
+
+/** Test tags of the page's two cards (LibraryPageLayoutTest measures them). */
+internal const val TAG_SOURCES = "library-sources"
+internal const val TAG_MAIN = "library-main"
 
 /** One thing the user can take back: what happened and how to reverse it. */
 private class Undo(val label: String, val restore: () -> Unit)
@@ -168,7 +192,7 @@ fun LibraryScreen(lib: BibliotecaState, modifier: Modifier = Modifier) {
     addToPlaylist = ::addToPlaylist,
     reveal = { t -> TableLogic.fileOf(t)?.let(::revealInExplorer) },
     copyInfo = { list ->
-      Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(list.joinToString("\n") { "${it.artist} - ${it.title}" }), null)
+      Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(list.joinToString("\n") { "${it.artistLabel()} - ${it.title}" }), null)
     },
     toggleFavorite = { t -> store.toggleFavorite(t) },
     remove = when (val s = source) {
@@ -218,7 +242,13 @@ fun LibraryScreen(lib: BibliotecaState, modifier: Modifier = Modifier) {
     }
   }
 
-  LaunchedEffect(Unit) { ShellSearch.requests.collect { if (it > 0) runCatching { searchFocus.requestFocus() } } }
+  // Each Ctrl+F (ShellSearch.requests + 1) focuses the field once. The collector sees the current value first, so the
+  // ledger remembers what was already answered across visits to this page; one frame lets the field attach.
+  LaunchedEffect(Unit) {
+    ShellSearch.requests.collect { n ->
+      if (SearchFocusLedger.take(n)) { withFrameNanos { }; runCatching { searchFocus.requestFocus() } }
+    }
+  }
   LaunchedEffect(undo) { if (undo != null) { delay(UNDO_MS); undo = null } }
   LaunchedEffect(sort) { settings.put(SETTINGS, KEY_SORT, sort?.encode().orEmpty()) }
   LaunchedEffect(widths) { settings.put(SETTINGS, KEY_COLS, TableLogic.encodeWidths(widths)) }
@@ -232,7 +262,8 @@ fun LibraryScreen(lib: BibliotecaState, modifier: Modifier = Modifier) {
     val collection = source is Source.PlaylistOf || source is Source.Auto || source is Source.Group
     val showDetails = maxWidth >= Grid.u192 * 4 && collection && chosen.isNotEmpty()
     Row(
-      Modifier.fillMaxSize().padding(Grid.u12).onPreviewKeyEvent { e ->
+      // 24 dp side margin (the title column of every page), 12 dp above and between the cards.
+      Modifier.fillMaxSize().padding(start = Grid.margin, end = Grid.margin, top = Grid.u12, bottom = Grid.u12).onPreviewKeyEvent { e ->
         val back = e.key == Key.Backspace || (e.isAltPressed && e.key == Key.DirectionLeft)
         if (e.type == KeyEventType.KeyDown && back && showDetails && query.isEmpty()) { selection = Selection(); true } else false
       },
@@ -246,9 +277,9 @@ fun LibraryScreen(lib: BibliotecaState, modifier: Modifier = Modifier) {
           store.deletePlaylist(p.id)
           undo = Undo(lt("Playlist “${p.name}” deleted", "Playlist “${p.name}” excluída")) { store.createPlaylist(p.name, tracksOf) }
         },
-        modifier = Modifier.width(SIDEBAR).fillMaxHeight().studioCard()
+        modifier = Modifier.width(SIDEBAR).fillMaxHeight().glassCard().testTag(TAG_SOURCES)
       )
-      Column(Modifier.weight(if (showDetails) 0.42f else 1f).fillMaxHeight().studioCard()) {
+      Column(Modifier.weight(if (showDetails) 0.42f else 1f).fillMaxHeight().glassCard().testTag(TAG_MAIN)) {
         (source as? Source.PlaylistOf)?.let { s -> PlaylistHeader(playlists.firstOrNull { it.id == s.id }?.name.orEmpty(), base, lib) }
         if (source == Source.Folders) FoldersPane(lib, Modifier.weight(1f))
         else {
@@ -268,7 +299,7 @@ fun LibraryScreen(lib: BibliotecaState, modifier: Modifier = Modifier) {
             modifier = Modifier.padding(horizontal = Grid.u12)
           )
           when {
-            tracks.isEmpty() -> Box(Modifier.weight(1f).fillMaxWidth()) { Empty(lib, source, query, everScanned, library.isEmpty(), { chooseFiles(onFiles) }, Modifier.fillMaxSize()) }
+            tracks.isEmpty() -> Box(Modifier.weight(1f).fillMaxWidth().padding(bottom = LocalBarInset.current)) { Empty(lib, source, query, everScanned, library.isEmpty(), { chooseFiles(onFiles) }, Modifier.fillMaxSize()) }
             else -> TrackTable(
               tracks, selection, { selection = it }, sort,
               { c -> sort = sort?.click(c) ?: SortSpec(c, c != Col.PLAYS) },
@@ -276,19 +307,23 @@ fun LibraryScreen(lib: BibliotecaState, modifier: Modifier = Modifier) {
               playlists.map { it.id to it.name }, actions, hub, Modifier.weight(1f).fillMaxWidth(), tableFocus
             )
           }
-          undo?.let { u ->
-            Row(
-              Modifier.fillMaxWidth().background(colors.surfaceVariant).padding(horizontal = Grid.u12),
-              verticalAlignment = Alignment.CenterVertically
-            ) {
-              Text(u.label, style = GridText.Small, color = colors.onSurface, modifier = Modifier.weight(1f))
-              TextAction(lt("Undo", "Desfazer"), { u.restore(); undo = null })
-            }
-          }
         }
       }
       if (showDetails) {
-        DetailsPane(chosen, stats, Modifier.weight(0.58f).fillMaxHeight().studioCard())
+        DetailsPane(chosen, stats, Modifier.weight(0.58f).fillMaxHeight().glassCard())
+      }
+    }
+    // The undo bar floats at the bottom-right, after the corner player's lane: at the bottom of the card it sat under the pill.
+    undo?.let { u ->
+      Row(
+        Modifier.align(Alignment.BottomEnd)
+          .padding(start = LocalCornerInsets.current.lane, end = Grid.margin, bottom = Grid.u12)
+          .widthIn(max = Grid.u384)
+          .clip(SquircleShape(Grid.u12)).background(colors.surfaceVariant).padding(start = Grid.u12),
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Text(u.label, style = GridText.Small, color = colors.onSurface, modifier = Modifier.weight(1f, fill = false))
+        TextAction(lt("Undo", "Desfazer"), { u.restore(); undo = null })
       }
     }
     DragChip(hub, origin)

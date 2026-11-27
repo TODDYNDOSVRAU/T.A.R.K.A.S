@@ -5,6 +5,7 @@ import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -30,6 +32,9 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.example.data.library.AlbumGroup
 import com.example.data.library.AutoList
@@ -38,6 +43,7 @@ import com.example.data.model.Playlist
 import com.example.ui.components.highlightClickable
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
+import com.example.ui.theme.LocalBarInset
 import com.example.windows.res.*
 
 enum class GroupKind { ALBUMS, ARTISTS, GENRES }
@@ -106,7 +112,8 @@ fun SourcesPane(
   modifier: Modifier = Modifier
 ) {
   val colors = MaterialTheme.colorScheme
-  LazyColumn(modifier.fillMaxHeight()) {
+  // The corner player floats over the bottom-left of the page: the last row must be able to scroll clear of it.
+  LazyColumn(modifier.fillMaxHeight(), contentPadding = PaddingValues(bottom = LocalBarInset.current)) {
     item(key = "all") { SourceRow(tr(Res.string.library_section_songs), data.songs, selected == Source.All, { onSelect(Source.All) }) }
     item(key = "fav") { SourceRow(tr(Res.string.library_section_favorites), data.favorites, selected == Source.Favorites, { onSelect(Source.Favorites) }) }
     item(key = "queue") {
@@ -116,9 +123,8 @@ fun SourcesPane(
       )
     }
     item(key = "h-playlists") {
-      Row(Modifier.fillMaxWidth().height(Grid.u24).padding(start = Grid.u12), verticalAlignment = Alignment.CenterVertically) {
-        Text(tr(Res.string.library_section_playlists), style = GridText.Label, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
-        Box(Modifier.width(Grid.u24).fillMaxHeight().highlightClickable(onClick = onNewPlaylist), contentAlignment = Alignment.Center) {
+      Header(tr(Res.string.library_section_playlists), data.playlists.size) {
+        Box(Modifier.fillMaxSize().highlightClickable(onClick = onNewPlaylist), contentAlignment = Alignment.Center) {
           Icon(Icons.Filled.Add, tr(Res.string.library_new_playlist), Modifier.width(Grid.u12).height(Grid.u12), tint = colors.onSurfaceVariant)
         }
       }
@@ -144,27 +150,22 @@ fun SourcesPane(
       val groups = when (kind) { GroupKind.ALBUMS -> data.albums; GroupKind.ARTISTS -> data.artists; GroupKind.GENRES -> data.genres }
       val open = kind in expanded
       item(key = "h-" + kind.name) {
-        Row(
-          Modifier.fillMaxWidth().height(Grid.u24).then(if (groups.isEmpty()) Modifier else Modifier.highlightClickable(onClick = { onExpand(kind) })).padding(start = Grid.u12),
-          verticalAlignment = Alignment.CenterVertically
+        Header(
+          when (kind) {
+            GroupKind.ALBUMS -> tr(Res.string.library_section_albums)
+            GroupKind.ARTISTS -> tr(Res.string.library_section_artists)
+            GroupKind.GENRES -> tr(Res.string.library_section_genres)
+          },
+          groups.size,
+          if (groups.isEmpty()) Modifier else Modifier.highlightClickable(onClick = { onExpand(kind) })
         ) {
-          Text(
-            when (kind) {
-              GroupKind.ALBUMS -> tr(Res.string.library_section_albums)
-              GroupKind.ARTISTS -> tr(Res.string.library_section_artists)
-              GroupKind.GENRES -> tr(Res.string.library_section_genres)
-            },
-            style = GridText.Label, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f)
-          )
-          Text(groups.size.toString(), style = GridText.Label, color = colors.onSurfaceVariant)
-          if (groups.isEmpty()) Spacer(Modifier.width(Grid.u24)) else Icon(
-            if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null,
-            Modifier.padding(horizontal = Grid.u6).width(Grid.u12).height(Grid.u12), tint = colors.onSurfaceVariant
-          )
+          if (groups.isNotEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Icon(if (open) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, Modifier.width(Grid.u12).height(Grid.u12), tint = colors.onSurfaceVariant)
+          }
         }
       }
       if (open) items(groups, key = { kind.name + ":" + it.key }) { g ->
-        SourceRow(g.name, g.tracks.size, selected == Source.Group(kind, g.key), { onSelect(Source.Group(kind, g.key)) }, indent = true)
+        SourceRow(if (kind == GroupKind.ARTISTS) displayArtist(g.name) else g.name, g.tracks.size, selected == Source.Group(kind, g.key), { onSelect(Source.Group(kind, g.key)) }, indent = true)
       }
     }
     item(key = "folders") {
@@ -173,10 +174,34 @@ fun SourcesPane(
   }
 }
 
+/** Width of the column every row ends in: the optional action (the +, the chevron) sits in it, so the counts line up. */
+internal val SourcesTrailing = Grid.u24
+
+/** Test tag of every count in the pane (LibraryPageLayoutTest checks they end at one x). */
+internal const val TAG_COUNT = "source-count"
+
+/** The count of a row or header: JetBrains Mono (tabular), right-aligned, so every row ends at the same x. */
 @Composable
-private fun Header(text: String) {
-  Box(Modifier.fillMaxWidth().height(Grid.u24).padding(start = Grid.u12), contentAlignment = Alignment.CenterStart) {
-    Text(text, style = GridText.Label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun CountText(count: Int) {
+  Text(
+    count.toString(), style = GridText.Label, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    textAlign = TextAlign.End, modifier = Modifier.widthIn(min = Grid.u24).padding(start = Grid.u6).testTag(TAG_COUNT)
+  )
+}
+
+/**
+ * A section title of the sources pane: Inter like the rows under it (gray, semibold), the count of what it holds in the
+ * shared count column and [trailing] (the + or the chevron) in the shared 24 dp column after it.
+ */
+@Composable
+private fun Header(text: String, count: Int? = null, modifier: Modifier = Modifier, trailing: @Composable () -> Unit = {}) {
+  Row(Modifier.fillMaxWidth().height(Grid.u24).then(modifier).padding(start = Grid.u12), verticalAlignment = Alignment.CenterVertically) {
+    Text(
+      text, style = GridText.Small.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurfaceVariant,
+      maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+    )
+    if (count != null) CountText(count)
+    Box(Modifier.width(SourcesTrailing).fillMaxHeight()) { trailing() }
   }
 }
 
@@ -206,16 +231,17 @@ private fun SourceRow(
       .background(if (selected) colors.primary.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent)
       .pointerHoverIcon(PointerIcon.Hand)
       .highlightClickable(onClick = onClick)
-      .padding(start = if (indent) Grid.u24 else Grid.u12, end = Grid.u12),
+      .padding(start = if (indent) Grid.u24 else Grid.u12),
     verticalAlignment = Alignment.CenterVertically
   ) {
     Text(
       label, style = GridText.Small.copy(fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else null), color = if (selected) legibleOn(colors.primary, colors.primary.copy(alpha = 0.16f).compositeOver(colors.surfaceContainer), colors.onSurface) else colors.onSurface,
       maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
     )
-    if (count != null) Text(count.toString(), style = GridText.Label, color = colors.onSurfaceVariant, modifier = Modifier.padding(start = Grid.u6))
+    if (count != null) CountText(count)
+    Spacer(Modifier.width(SourcesTrailing))
   }
 }
 
 /** The AlbumGroup artist line shown with an album in a title, when the album has one artist. */
-fun LibraryGroup.byline(): String? = (this as? AlbumGroup)?.artist
+fun LibraryGroup.byline(): String? = (this as? AlbumGroup)?.artist?.let(::displayArtist)

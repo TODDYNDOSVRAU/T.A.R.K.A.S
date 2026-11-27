@@ -123,7 +123,7 @@ import com.example.data.model.EqBand
 import com.example.data.model.EqPreset
 import com.example.data.model.EqSettings
 import com.example.ui.theme.Grid
-import com.example.ui.theme.LocalBarInset
+import com.example.ui.theme.studioCard
 import kotlin.math.roundToInt
 
 /**
@@ -186,7 +186,7 @@ internal fun EqPowerConsole(
     val pageWidth = maxWidth
     if (maxWidth >= TABLET_MIN_WIDTH && pageHeight >= TABLET_MIN_HEIGHT) {
       Column(
-        modifier = Modifier.fillMaxSize().padding(start = Grid.margin, end = Grid.margin, bottom = LocalBarInset.current + Grid.u12),
+        modifier = Modifier.fillMaxSize().padding(start = Grid.margin, end = Grid.margin, bottom = Grid.u12),
         verticalArrangement = Arrangement.spacedBy(Grid.u12)
       ) {
         TabletTopBar(
@@ -198,7 +198,7 @@ internal fun EqPowerConsole(
           Column(modifier = Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(Grid.u12)) {
             if (mode == EqMode.GRAPHIC) {
               Box(Modifier.weight(0.46f).fillMaxWidth()) { curve(Modifier.fillMaxSize()) }
-              bands(Modifier.weight(0.54f).fillMaxWidth())
+              bands(Modifier.weight(0.54f).fillMaxWidth().studioCard().padding(vertical = Grid.u12))
             } else {
               Box(Modifier.weight(1f).fillMaxWidth()) { curve(Modifier.fillMaxSize()) }
               // The tiles take the rows they need at this width (96 dp pieces, 12 dp apart, "+" included)
@@ -269,7 +269,7 @@ internal fun EqPowerConsole(
 // Side by side needs the 384 dp control column and as much again for the curve.
 private val SIDE_MIN_WIDTH = Grid.u384 * 2
 // The tablet top bar fits one row from here; narrower, it takes two.
-private val TOP_BAR_ONE_ROW_MIN = Grid.u384 * 3
+private val TOP_BAR_ONE_ROW_MIN = Grid.u384 * 3 + Grid.u192
 // Two value lines, a fader with 120 dp of travel under its 48 dp thumb, and two frequency lines. The band
 // area is the block that flexes; where the window is shorter than that, the page scrolls.
 private val BANDS_MIN = Grid.u192 + Grid.u48

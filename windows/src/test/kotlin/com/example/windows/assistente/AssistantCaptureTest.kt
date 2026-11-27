@@ -25,7 +25,12 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.unit.dp
+import com.example.ui.theme.LocalBarInset
+import com.example.windows.shell.CornerInsets
+import com.example.windows.shell.LocalCornerInsets
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
 import com.example.windows.res.*
@@ -237,6 +242,53 @@ class AssistantCaptureTest {
         assertTrue("$failure has a text", text.isNotBlank())
         assertTrue("$failure is not the generic reply", text != ResourceTexts.text(Res.string.assistant_not_understood))
         onNodeWithText(text.take(30), substring = true).assertIsDisplayed()
+      }
+    }
+  }
+
+  @Test fun cardsDoNotRepeatTheTitleAsTheSubtitle() = runDesktopComposeUiTest(width = 1366, height = 768) {
+    show("dark", emptyList())
+    waitForIdle()
+    val cards = onAllNodes(SemanticsMatcher("card") {
+      (it.config.getOrNull(SemanticsProperties.TestTag) ?: "").startsWith("assistant_card_")
+    }).fetchSemanticsNodes()
+    assertEquals(4, cards.size)
+    for (card in cards) {
+      val texts = card.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text.lowercase() }
+      assertEquals("a card never repeats its title: $texts", texts.size, texts.distinct().size)
+      assertTrue("every card keeps its title: $texts", texts.isNotEmpty())
+    }
+  }
+
+  /** The mini-player floats at the bottom-left (432 dp lane, 120 dp high). Nothing of the page may sit under it. */
+  @Test fun inputAndSidebarStayClearOfTheCornerPlayerAtTheFourSizes() {
+    val lane = 432.dp; val bar = 120.dp
+    for ((w, h) in sizes) for (theme in themes) runDesktopComposeUiTest(width = w, height = h) {
+      setContent {
+        CompositionLocalProvider(LocalCornerInsets provides CornerInsets(lane, bar, false), LocalBarInset provides bar) {
+          TarkasTheme(themeMode = theme) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+              AssistantScreen(
+                messages = emptyList(), isProcessing = false, hasGeminiKey = true, onlineAi = true, isListening = false,
+                voiceError = null, activeTimers = emptyList(), playback = AssistantPlayback.NONE, reduced = true,
+                onSend = {}, onMic = {}, onCancelTimer = {}, onRetry = {}, onSetOnlineAi = {}, onClear = {},
+                onSaveKey = { true }, onClearKey = {}
+              )
+            }
+          }
+        }
+      }
+      waitForIdle()
+      val label = "${w}x$h $theme"
+      val cornerTop = h.toFloat() - bar.value
+      val capsule = onNodeWithTag("assistant_capsule").getUnclippedBoundsInRoot()
+      val underCorner = capsule.left.value < lane.value && capsule.bottom.value > cornerTop
+      assertTrue("$label: the input ($capsule) sits under the corner player (x<${lane.value}, y>$cornerTop)", !underCorner)
+      if (w >= 840) {
+        val pane = onNodeWithTag("assistant_history_pane").getUnclippedBoundsInRoot()
+        assertEquals("$label: the sidebar starts at the 24 dp margin", 24f, pane.left.value, 0.5f)
+        assertTrue("$label: the sidebar ends above the corner player (${pane.bottom.value} > $cornerTop)", pane.bottom.value <= cornerTop)
+        assertTrue("$label: the sidebar is a card, not flush with the top", pane.top.value > 0f)
       }
     }
   }

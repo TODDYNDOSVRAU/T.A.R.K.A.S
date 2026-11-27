@@ -94,7 +94,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.ui.theme.LocalBarInset
 import com.example.ui.theme.WidthClass
+import com.example.windows.shell.LocalCornerInsets
 import com.example.ui.theme.studioCard
 import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Shape
@@ -189,7 +191,10 @@ fun AssistantPanel(state: AssistenteState, playback: AssistantPlayback, reducedM
       modifier = Modifier.weight(1f)
     )
     if (sidePane) {
-      Box(Modifier.width(Grid.u384).fillMaxHeight().background(MaterialTheme.colorScheme.surface).testTag("assistant_side_pane")) {
+      Box(
+        Modifier.padding(end = Grid.margin, top = Grid.u12, bottom = LocalBarInset.current + Grid.u12)
+          .width(Grid.u384).fillMaxHeight().studioCard().testTag("assistant_side_pane")
+      ) {
         CuriositySettingsScreen(state, onBack = { sidePane = false })
       }
     }
@@ -259,10 +264,15 @@ fun AssistantScreen(
   BoxWithConstraints(modifier.fillMaxSize()) {
     val width = WidthClass.of(maxWidth)
     val compact = width == WidthClass.COMPACT
+    // The mini-player floats over the bottom-left corner. When the input would start under it, the chat column
+    // stops above it (the pages' LocalBarInset rule); wide windows, where the column starts after the lane, keep the full height.
+    val leftPane = if (width == WidthClass.EXPANDED) HistoryLeft else 0.dp
+    val rest = maxWidth - leftPane
+    val inputLeft = leftPane + (rest - minOf(rest, ChatMaxWidth)) / 2 + Grid.margin
+    val lift = if (inputLeft < LocalCornerInsets.current.lane) LocalBarInset.current else 0.dp
     Row(Modifier.fillMaxSize()) {
       if (width == WidthClass.EXPANDED) {
         HistoryPane(messages) { index -> jumpScope.launch { listState.scrollToItem(index) } }
-        Box(Modifier.width(Grid.u6 / 6).fillMaxHeight().background(colors.outlineVariant))
       }
       Column(Modifier.weight(1f).fillMaxHeight()) {
         TopBar(
@@ -272,7 +282,7 @@ fun AssistantScreen(
         )
         Column(
           Modifier.weight(1f).widthIn(max = ChatMaxWidth).fillMaxWidth().align(Alignment.CenterHorizontally)
-            .testTag("assistant_chat_column").padding(horizontal = Grid.margin)
+            .testTag("assistant_chat_column").padding(start = Grid.margin, end = Grid.margin, bottom = lift)
         ) {
           Box(
             Modifier.size(Grid.u6).semantics {
@@ -312,6 +322,8 @@ fun AssistantScreen(
 }
 
 private val ChatMaxWidth = 760.dp
+/** Where the chat region starts when the history card is shown: 24 margin + 192 card + 12 gap. */
+private val HistoryLeft = Grid.margin + Grid.u192 + Grid.u12
 private val CapsuleButton = 40.dp
 private val CapsuleButtonCompact = 36.dp
 
@@ -389,7 +401,10 @@ private fun TopBar(
 private fun HistoryPane(messages: List<AssistantMessage>, onJump: (Int) -> Unit) {
   val colors = MaterialTheme.colorScheme
   val asked = remember(messages) { messages.withIndex().filter { it.value.sender == MessageSender.USER } }
-  Column(Modifier.width(Grid.u192).fillMaxHeight().background(colors.surface).padding(Grid.u12).testTag("assistant_history_pane")) {
+  Column(
+    Modifier.padding(start = Grid.margin, top = Grid.u12, end = Grid.u12, bottom = LocalBarInset.current + Grid.u12)
+      .width(Grid.u192).fillMaxHeight().studioCard().testTag("assistant_history_pane").padding(Grid.u12)
+  ) {
     Text(KeyTexts.historyTitle, style = GridText.BodyStrong, color = colors.onSurface)
     LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(vertical = Grid.u6)) {
       if (asked.isEmpty()) {
@@ -429,7 +444,11 @@ private fun EmptyState(cards: List<Suggestion>, compact: Boolean, onSend: (Strin
                 .testTag("assistant_card_${command.take(8)}")
             ) {
               Text(stringResource(card.label), style = GridText.BodyStrong, color = colors.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-              Text(command, style = GridText.Small, color = colors.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+              val label = stringResource(card.label)
+              // The sent request is the subtitle only when it says more than the title does (not "Repetir / repetir").
+              if (!command.equals(label, ignoreCase = true)) {
+                Text(command, style = GridText.Small, color = colors.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+              }
             }
           }
           repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }

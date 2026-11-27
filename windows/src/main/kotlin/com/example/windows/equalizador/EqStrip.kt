@@ -146,11 +146,11 @@ internal fun Modifier.pressScale(source: MutableInteractionSource): Modifier {
 
 /** Fades and lifts an item in with a delay of [index] steps, so a view arrives as a cascade. */
 @Composable
-private fun Modifier.stagger(index: Int, stepMs: Int = 16): Modifier {
+private fun Modifier.stagger(index: Int, stepMs: Int = 8): Modifier {
   val reduced = rememberReducedMotion()
   val progress = remember { Animatable(if (reduced) 1f else 0f) }
   LaunchedEffect(Unit) {
-    if (!reduced) progress.animateTo(1f, tween(260, delayMillis = index.coerceAtMost(15) * stepMs))
+    if (!reduced) progress.animateTo(1f, tween(180, delayMillis = index.coerceAtMost(15) * stepMs))
   }
   return this.graphicsLayer {
     alpha = progress.value
@@ -363,7 +363,7 @@ private fun GraphicBands(settings: EqSettings, onBandGain: (Int, Float) -> Unit)
   var held by remember { mutableIntStateOf(-1) }
   var entry by remember { mutableIntStateOf(-1) }
   BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-    val plot = maxWidth - Grid.inset * 2
+    val plot = maxWidth - PLOT_INSET * 2
     // Two staggered rows of value and frequency only where neighbouring columns are too close for
     // one row (about 44 dp for "-12.5"); a wide window gets one row each, so the fader grows.
     val xs = settings.bands.map { plot * freqToX(it.freqHz) }.sortedBy { it.value }
@@ -375,15 +375,15 @@ private fun GraphicBands(settings: EqSettings, onBandGain: (Int, Float) -> Unit)
       val y = LINE.toPx() * rows + faderHeight.toPx() / 2f
       drawLine(
         color = zeroLine,
-        start = Offset(Grid.inset.toPx(), y),
-        end = Offset(size.width - Grid.inset.toPx(), y),
+        start = Offset(PLOT_INSET.toPx(), y),
+        end = Offset(size.width - PLOT_INSET.toPx(), y),
         strokeWidth = Grid.hairline.toPx(),
         pathEffect = PathEffect.dashPathEffect(floatArrayOf(Grid.u6.toPx(), Grid.u6.toPx()))
       )
     }
     settings.bands.forEachIndexed { i, band ->
       val usesGain = band.type.usesGain
-      val centre = Grid.inset + plot * freqToX(band.freqHz)
+      val centre = PLOT_INSET + plot * freqToX(band.freqHz)
       Column(
         modifier = Modifier
           .offset(x = centre - Grid.u6 * 1.5f)

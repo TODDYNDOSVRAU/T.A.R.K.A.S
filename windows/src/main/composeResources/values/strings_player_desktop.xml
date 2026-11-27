@@ -5,6 +5,9 @@
   <string name="pd_play_now">Play now</string>
   <string name="pd_queue_removed">Removed from the queue: %1$s</string>
   <string name="pd_lyrics_loading">Reading lyrics</string>
+  <string name="pd_lyrics_idle">The lyrics show up here once a song is playing.</string>
+  <string name="pd_empty_message">Pick a song from the Library or open an audio file. It shows up here with its lyrics and waveform.</string>
+  <string name="pd_empty_action">Open Library</string>
   <string name="pd_details_title">Title</string>
   <string name="pd_details_file">File</string>
   <string name="pd_details_artist">Artist</string>

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import com.example.ui.theme.studioCard
@@ -89,6 +90,9 @@ object ExpandMath {
   const val RightMinDp = 192 + 24 + 24 * 2
 
   /** The largest cover of the grid chain (384, 192, 96) that fits both the height and the width; nothing overlaps or is cut. */
+  /** The stack of queue cards (192 wide) goes beside the queue list only when that list keeps at least 192 of its own. */
+  fun stackFits(cardWidthDp: Float): Boolean = cardWidthDp >= 192f * 2
+
   fun coverDp(heightDp: Float, widthDp: Float): Int =
     listOf(384, 192, 96).firstOrNull { heightDp >= it + FixedHeightDp && widthDp >= it + RightMinDp } ?: 96
 }
@@ -97,7 +101,7 @@ private val Decelerate = CubicBezierEasing(0f, 0f, 0.2f, 1f)
 
 /** Full-area now-playing panel: big cover with controls on the left, Fila / Letras tabs on the right. */
 @Composable
-fun ExpandedPlayerPanel(hooks: PlayerHooks, assets: TrackAssets) {
+fun ExpandedPlayerPanel(hooks: PlayerHooks, assets: TrackAssets, reduced: Boolean = false) {
   val open by ExpandedPlayer.open.collectAsState()
   val p = remember { Animatable(0f) }
   LaunchedEffect(open) { p.animateTo(if (open) 1f else 0f, tween(if (open) ExpandMath.OpenMs else ExpandMath.CloseMs, easing = Decelerate)) { ExpandedPlayer.progress = value } }
@@ -109,6 +113,7 @@ fun ExpandedPlayerPanel(hooks: PlayerHooks, assets: TrackAssets) {
   val t by hooks.state.collectAsState()
   val ui by hooks.controller.ui.collectAsState()
   val lyrics by assets.lyrics.collectAsState()
+  val lyricsReady by assets.lyricsReady.collectAsState()
   val art by assets.art.collectAsState()
   val tab by ExpandedPlayer.tab.collectAsState()
   val tint = t.track?.let { Color(it.colorHex or 0xFF000000) } ?: cs.primary
@@ -160,8 +165,18 @@ fun ExpandedPlayerPanel(hooks: PlayerHooks, assets: TrackAssets) {
               )
             }
           }
-          if (tab == PlayerPane.LYRICS) LyricsView(lyrics, t, hooks, Modifier.weight(1f).fillMaxWidth())
-          else Box(Modifier.weight(1f).fillMaxWidth()) { QueuePane(hooks) }
+          if (tab == PlayerPane.LYRICS) LyricsView(lyrics, lyricsReady, t, hooks, Modifier.weight(1f).fillMaxWidth())
+          else BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            // D6: the stack of queue cards lives here, beside the queue, when the card is wide enough for both (192 + 192).
+            val withStack = ExpandMath.stackFits(maxWidth.value)
+            Row(Modifier.fillMaxSize()) {
+              Box(Modifier.weight(1f).fillMaxHeight()) { QueuePane(hooks) }
+              if (withStack) Box(
+                Modifier.width(Grid.u192).fillMaxHeight().testTag("exp_queue_stack").padding(end = Grid.u12, bottom = Grid.u12),
+                contentAlignment = Alignment.TopCenter,
+              ) { Box(Modifier.fillMaxWidth().heightIn(max = Grid.u192 * 5 / 4)) { QueueCardStackBody(hooks, assets, reduced) } }
+            }
+          }
         }
       }
     }

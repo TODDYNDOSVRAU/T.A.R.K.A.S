@@ -14,7 +14,9 @@ class TagInfo(
   val trackNumber: Int = 0,
   val discNumber: Int = 0,
   val durationMs: Long = 0L,
-  val hasCover: Boolean = false
+  val hasCover: Boolean = false,
+  /** The file's own tag says the content is explicit (ID3 `TXXX:ITUNESADVISORY`/`EXPLICIT`, Vorbis `ITUNESADVISORY`/`EXPLICIT`); false when it says nothing. */
+  val explicit: Boolean = false
 )
 
 /**
@@ -36,6 +38,31 @@ object TagReader {
   } catch (_: Exception) {
     TagInfo()
   }
+
+  /**
+   * True only when the file's own tag marks it explicit. Reads just the tag blocks (no duration, no picture), so a
+   * list can ask for the rows it shows. A file with no such tag, or one that cannot be read, is false: the badge is
+   * never guessed.
+   */
+  fun isExplicit(file: File): Boolean = try {
+    when (file.extension.lowercase()) {
+      "mp3" -> RandomAccessFile(file, "r").use { f -> id3Frames(f)?.let { id3Explicit(it) } ?: false }
+      "flac" -> RandomAccessFile(file, "r").use { readFlac(it, false)?.first?.explicit ?: false }
+      else -> false
+    }
+  } catch (_: Exception) {
+    false
+  }
+
+  private val EXPLICIT_KEYS = setOf("ITUNESADVISORY", "EXPLICIT", "RTNG", "PARENTAL_ADVISORY")
+  private val EXPLICIT_VALUES = setOf("1", "4", "true", "yes", "y", "explicit", "e")
+
+  /**
+   * Whether a tag [key] with [value] marks explicit content: iTunes advisory 1 or 4 (2 is "clean", 0 is none), or a
+   * plain EXPLICIT/PARENTAL ADVISORY flag. Keys compare case-insensitively, spaces as underscores.
+   */
+  fun explicitTag(key: String, value: String): Boolean =
+    key.trim().uppercase().replace(' ', '_') in EXPLICIT_KEYS && value.trim().lowercase() in EXPLICIT_VALUES
 
   /** The embedded cover (JPEG or PNG bytes), or null. */
   fun cover(file: File): ByteArray? = try {
@@ -99,10 +126,11 @@ object TagReader {
   private fun readId3(f: RandomAccessFile, file: File): TagInfo {
     val fr = id3Frames(f)
     var title = ""; var artist = ""; var album = ""; var genre = ""
-    var year = 0; var track = 0; var disc = 0; var cover = false
+    var year = 0; var track = 0; var disc = 0; var cover = false; var explicit = false
     if (fr != null) {
       forEachFrame(fr) { id, data ->
         when (id) {
+          "TXXX", "TXX" -> txxx(data)?.let { (k, v) -> if (explicitTag(k, v)) explicit = true }
           "TIT2", "TT2" -> title = text(data)
           "TPE1", "TP1" -> artist = text(data)
           "TALB", "TAL" -> album = text(data)
@@ -115,7 +143,47 @@ object TagReader {
         true
       }
     }
-    return TagInfo(title, artist, album, genre, year, track, disc, mp3Duration(file), cover)
+    return TagInfo(title, artist, album, genre, year, track, disc, mp3Duration(file), cover, explicit)
+  }
+
+  private fun id3Explicit(fr: Frames): Boolean {
+    var hit = false
+    forEachFrame(fr) { id, data ->
+      if (id == "TXXX" || id == "TXX") txxx(data)?.let { (k, v) -> if (explicitTag(k, v)) hit = true }
+      !hit
+    }
+    return hit
+  }
+
+  /** TXXX: encoding, description (ends with 0, or 00 00 in UTF-16), value. Gives description to value. */
+  private fun txxx(d: ByteArray): Pair<String, String>? {
+    if (d.size < 2) return null
+    val enc = d[0].toInt()
+    val wide = enc == 1 || enc == 2
+    var p = 1
+    while (p < d.size) {
+      if (wide) { if (p + 1 < d.size && d[p].toInt() == 0 && d[p + 1].toInt() == 0) break else p += 2 }
+      else { if (d[p].toInt() == 0) break else p++ }
+    }
+    if (p >= d.size) return null
+    return decode(d, 1, p, enc) to decode(d, p + if (wide) 2 else 1, d.size, enc)
+  }
+
+  /** The bytes [from, to) of an ID3 text field in encoding [enc] (0 Latin-1, 1 UTF-16 with BOM, 2 UTF-16BE, 3 UTF-8). */
+  private fun decode(d: ByteArray, from: Int, to: Int, enc: Int): String {
+    if (from >= to) return ""
+    var start = from
+    val cs: Charset = when (enc) {
+      1 -> when {
+        to - from >= 2 && d[from] == 0xFF.toByte() && d[from + 1] == 0xFE.toByte() -> { start += 2; Charsets.UTF_16LE }
+        to - from >= 2 && d[from] == 0xFE.toByte() && d[from + 1] == 0xFF.toByte() -> { start += 2; Charsets.UTF_16BE }
+        else -> Charsets.UTF_16LE
+      }
+      2 -> Charsets.UTF_16BE
+      3 -> Charsets.UTF_8
+      else -> Charsets.ISO_8859_1
+    }
+    return String(d, start, to - start, cs).substringBefore('\u0000').trim()
   }
 
   private fun id3Cover(f: RandomAccessFile): ByteArray? {
@@ -268,7 +336,8 @@ object TagReader {
       genre = tags["GENRE"].orEmpty(),
       year = (tags["DATE"] ?: tags["YEAR"]).orEmpty().take(4).toIntOrNull() ?: 0,
       trackNumber = number(tags["TRACKNUMBER"].orEmpty()), discNumber = number(tags["DISCNUMBER"].orEmpty()),
-      durationMs = duration, hasCover = hasCover
+      durationMs = duration, hasCover = hasCover,
+      explicit = tags.any { (k, v) -> explicitTag(k, v) }
     )
     return info to cover
   }

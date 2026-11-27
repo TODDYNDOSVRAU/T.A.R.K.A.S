@@ -2,10 +2,11 @@ package com.example.windows.shell
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposeImageBitmap
+import androidx.compose.ui.graphics.luminance
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Owner rule (2026-11-18): the cover backdrop sits under a veil that keeps text contrast ≥ 4.5:1 on any cover. */
+/** Owner rules (2026-11-18, D7 2026-11-27): marble and cover keep text contrast at AA on their worst pixel. */
 class BackdropTest {
   private val black = Color(0xFF080808); private val white = Color(0xFFF2F2F0)
   private val grayDark = Color(0xFF8C8C8C); private val grayLight = Color(0xFF6B6B6B)
@@ -20,7 +21,54 @@ class BackdropTest {
     assertTrue(ShellBackdrop.worstContrast(grayLight, white) >= 3.0)
   }
 
-  /** 2.1.6 lag fix: the backdrop is baked once, small and already soft, instead of a live full-window blur. */
+  private val paper = Color(0xFFE9E9E7); private val grayPaper = Color(0xFF616160)
+  private fun lum(argb: Int) = Color(argb).luminance()
+  private fun baked(dark: Boolean): IntArray {
+    val m = ShellBackdrop.marble(dark); val px = IntArray(m.width * m.height); m.readPixels(px); return px
+  }
+
+  /** D7: the marble alone keeps primary and secondary text at AA (4.5:1) on its most extreme pixel, blurred or not. */
+  @Test fun darkMarbleKeepsAaOnItsBrightestPixel() {
+    for (px in listOf(ShellBackdrop.marblePixels(true), baked(true))) {
+      val top = Color(px.maxBy(::lum))
+      assertTrue("white ${ShellBackdrop.contrast(white, top)}", ShellBackdrop.contrast(white, top) >= 4.5)
+      assertTrue("gray ${ShellBackdrop.contrast(grayDark, top)}", ShellBackdrop.contrast(grayDark, top) >= 4.5)
+      // A pure white cover on top keeps the same thresholds as before the marble.
+      assertTrue(ShellBackdrop.worstContrast(white, black, top) >= 4.5)
+      assertTrue("gray+cover ${ShellBackdrop.worstContrast(grayDark, black, top)}", ShellBackdrop.worstContrast(grayDark, black, top) >= 3.0)
+    }
+  }
+
+  @Test fun lightMarbleKeepsAaOnItsDarkestPixel() {
+    for (px in listOf(ShellBackdrop.marblePixels(false), baked(false))) {
+      val low = Color(px.minBy(::lum))
+      assertTrue(ShellBackdrop.contrast(black, low) >= 4.5)
+      assertTrue("gray ${ShellBackdrop.contrast(grayPaper, low)}", ShellBackdrop.contrast(grayPaper, low) >= 4.5)
+      assertTrue(ShellBackdrop.worstContrast(black, paper, low) >= 4.5)
+      assertTrue("gray+cover ${ShellBackdrop.worstContrast(grayPaper, paper, low)}", ShellBackdrop.worstContrast(grayPaper, paper, low) >= 3.0)
+    }
+  }
+
+  /** It is a marble, not a flat fill: luminance varies, and the hue leans green/teal (G and B above R). */
+  @Test fun marbleHasVeinsAndATealHue() {
+    for (dark in listOf(true, false)) {
+      val px = ShellBackdrop.marblePixels(dark)
+      val ls = px.map(::lum)
+      val spread = ls.max() - ls.min()
+      assertTrue("spread $spread dark=$dark", spread > if (dark) 0.008f else 0.05f)
+      val r = px.sumOf { it shr 16 and 0xFF }; val g = px.sumOf { it shr 8 and 0xFF }; val b = px.sumOf { it and 0xFF }
+      assertTrue("rgb $r $g $b dark=$dark", g > r && b > r)
+    }
+  }
+
+  @Test fun marbleIsDeterministicAndSixteenByTen() {
+    org.junit.Assert.assertArrayEquals(ShellBackdrop.marblePixels(true), ShellBackdrop.marblePixels(true))
+    val m = ShellBackdrop.marble(true)
+    org.junit.Assert.assertEquals(192, m.width); org.junit.Assert.assertEquals(120, m.height)
+    org.junit.Assert.assertSame(m, ShellBackdrop.marble(true))   // baked once per process
+  }
+
+  /** 2.1.6 lag fix:the backdrop is baked once, small and already soft, instead of a live full-window blur. */
   @Test fun softenBakesASmallBlurredCopyKeepingAspect() {
     val w = 640; val h = 320
     val bmp = org.jetbrains.skia.Bitmap().apply { allocN32Pixels(w, h) }

@@ -182,6 +182,9 @@ class TrackAssets(private val scope: CoroutineScope, private val waves: Waveform
   val peaks: StateFlow<ByteArray?> = _peaks.asStateFlow()
   private val _lyrics = MutableStateFlow<Lyrics?>(null)
   val lyrics: StateFlow<Lyrics?> = _lyrics.asStateFlow()
+  private val _lyricsReady = MutableStateFlow(false)
+  /** True once the lyrics of the current track were looked for (found or not): `null` lyrics before that mean "still reading". */
+  val lyricsReady: StateFlow<Boolean> = _lyricsReady.asStateFlow()
   private val _art = MutableStateFlow<androidx.compose.ui.graphics.ImageBitmap?>(null)
   val art: StateFlow<androidx.compose.ui.graphics.ImageBitmap?> = _art.asStateFlow()
   private var job: Job? = null
@@ -194,23 +197,28 @@ class TrackAssets(private val scope: CoroutineScope, private val waves: Waveform
   fun follow(track: Track?) {
     if (track?.id == loadedId) return
     loadedId = track?.id
-    _peaks.value = null; _lyrics.value = null; _art.value = null
+    _peaks.value = null; _lyrics.value = null; _art.value = null; _lyricsReady.value = false
     job?.cancel()
     if (track == null) return
     val id = track.id
     val file = track.filePath?.let(::File)
     job = scope.launch(Dispatchers.IO) {
-      val bmp = when (val picked = CoverSource.pick(track)) {
-        is CoverSource.Remote -> com.example.windows.biblioteca.CoverLoader.load(picked.url) ?: file?.let { CoverArt.load(it) }
-        is CoverSource.Local -> CoverArt.load(picked.file)
-        CoverSource.None -> null
+      try {
+        val bmp = when (val picked = CoverSource.pick(track)) {
+          is CoverSource.Remote -> com.example.windows.biblioteca.CoverLoader.load(picked.url) ?: file?.let { CoverArt.load(it) }
+          is CoverSource.Local -> CoverArt.load(picked.file)
+          CoverSource.None -> null
+        }
+        if (loadedId == id) _art.value = bmp
+        if (file == null) return@launch
+        val ly = LyricsLoader.load(file)
+        if (loadedId == id) { _lyrics.value = ly; _lyricsReady.value = true }
+        val pk = waves.load(id, file)
+        if (loadedId == id) _peaks.value = pk
+      } finally {
+        // A failed cover or waveform must not leave "reading lyrics" on screen for good; a cancelled job (another track) does not touch the flag.
+        if (loadedId == id) _lyricsReady.value = true
       }
-      if (loadedId == id) _art.value = bmp
-      if (file == null) return@launch
-      val ly = LyricsLoader.load(file)
-      if (loadedId == id) _lyrics.value = ly
-      val pk = waves.load(id, file)
-      if (loadedId == id) _peaks.value = pk
     }
   }
 }

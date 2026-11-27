@@ -120,7 +120,17 @@ fun TrackArtwork(track: Track, size: Dp, modifier: Modifier = Modifier) {
 }
 
 /** The two lines under a title in a row: artist and album, or the artist alone. */
-fun Track.subtitle(): String = listOf(artist, album).filter { it.isNotBlank() }.joinToString(" · ")
+fun Track.subtitle(): String = listOf(artistLabel(), album).filter { it.isNotBlank() }.joinToString(" · ")
+
+/**
+ * [artist] as shown to the person. The scanner stores [LibraryScanner.UNKNOWN_ARTIST] (an English key that grouping and
+ * sorting rely on) for a file without an artist tag; the screens translate it here, at display time only.
+ */
+fun displayArtist(artist: String): String =
+  if (artist == LibraryScanner.UNKNOWN_ARTIST) lt("Unknown artist", "Artista desconhecido") else artist
+
+/** The artist of this track as shown to the person (see [displayArtist]). */
+fun Track.artistLabel(): String = displayArtist(artist)
 
 fun formatDuration(ms: Long): String {
   if (ms <= 0) return ""
@@ -150,10 +160,14 @@ fun TrackRow(
   ) {
     TrackArtwork(track, Grid.u48)
     Column(Modifier.weight(1f).padding(horizontal = Grid.inset)) {
-      Text(
-        track.title, style = GridText.Body, maxLines = 1, overflow = TextOverflow.Ellipsis,
-        color = if (playing) colors.primary else colors.onSurface
-      )
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+          track.title, style = GridText.Body, maxLines = 1, overflow = TextOverflow.Ellipsis,
+          color = if (playing) colors.primary else colors.onSurface,
+          modifier = Modifier.weight(1f, fill = false)
+        )
+        ExplicitMark(track, Modifier.padding(start = Grid.u6))
+      }
       Text(
         track.subtitle(), style = GridText.Small, maxLines = 1, overflow = TextOverflow.Ellipsis,
         color = colors.onSurfaceVariant

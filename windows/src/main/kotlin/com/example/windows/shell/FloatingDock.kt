@@ -1,6 +1,8 @@
 package com.example.windows.shell
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -10,23 +12,23 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -46,8 +48,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -55,10 +55,8 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
@@ -71,7 +69,6 @@ import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -79,6 +76,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -92,10 +90,7 @@ import com.example.ui.theme.GridText
 import com.example.ui.viewmodel.TarkasNavTab
 import com.example.windows.base.BackHandler
 import com.example.windows.res.Res
-import com.example.windows.res.home_search_placeholder
 import com.example.windows.res.shell_pages
-import com.example.windows.res.shell_search
-import com.example.windows.res.shell_search_close
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.geometry.Rect
@@ -119,85 +114,83 @@ import kotlin.math.max
 /**
  * Motor of the Floating Dock, ported from the React component the owner supplied (2026-11-25). The original maps the
  * pointer's distance to each icon, [-150, 0, 150] px, to a tile of [40, 80, 40] px through a spring (mass 0.1,
- * stiffness 150, damping 12). Here the tile rests at 48 dp (the T.A.L. touch target) and keeps the same 2x peak, so
- * the reach scales by the same 48/40. All values are dp.
+ * stiffness 150, damping 12). Here each page rests in a 48 dp slot (the T.A.L. touch target) and keeps the same 2x
+ * peak, so the reach scales by the same 48/40. Slots touch: the spacing is the circle's own inset (0.75 of the slot),
+ * so the capsule is 48 tall at rest, on the 2x chain, and every circle is concentric with its round ends. All dp.
  */
 object DockEngine {
   const val REST = 48f
   const val MAX = 96f
   const val REACH = 180f
-  const val GAP = 6f
-  const val PAD = 6f
-  /** Search field width when the dock is open (wide and compact). */
-  const val FIELD = 288f
-  const val COMPACT_FIELD = 192f
+  /** Visible circle and icon as parts of the slot: 36 and 24 at rest, 72 and 48 at the peak. */
+  const val CIRCLE = 0.75f
+  const val ICON = 0.5f
   /** The original spring for unit mass: ratio = c / (2 sqrt(k m)), stiffness = k / m. */
   const val DAMPING_RATIO = 1.549f
   const val STIFFNESS = 1500f
 
-  /** Tile size for a pointer [distance] dp from the tile's rest centre. */
+  /** Slot size for a pointer [distance] dp from the slot's rest centre. */
   fun target(distance: Float): Float {
     val d = abs(distance)
     return if (d >= REACH) REST else MAX - (MAX - REST) * d / REACH
   }
 
-  fun restWidth(n: Int) = n * REST + (n - 1) * GAP + 2 * PAD
-  /** Centre of tile [i] at rest, measured from the capsule's left edge. */
-  fun restCentre(i: Int) = PAD + i * (REST + GAP) + REST / 2
+  fun restWidth(n: Int) = n * REST
+  /** Centre of slot [i] at rest, measured from the capsule's left edge. */
+  fun restCentre(i: Int) = i * REST + REST / 2
 
-  /** Largest total growth of [n] tiles. The sum of tents peaks with the pointer on a tile centre. */
+  /** Largest total growth of [n] slots. The sum of tents peaks with the pointer on a slot centre. */
   fun maxGrowth(n: Int): Float = (0 until n).maxOf { k ->
     var s = 0f
     for (i in 0 until n) s += target(restCentre(i) - restCentre(k)) - REST
     s
   }
 
-  /** Width the dock reserves, so neither magnification nor the open search field ever moves the layout around it. */
-  fun reservedWidth(n: Int) = restWidth(n) + max(maxGrowth(n), FIELD - REST)
+  /** Width the dock reserves, so magnification never moves the layout around it. */
+  fun reservedWidth(n: Int) = restWidth(n) + maxGrowth(n)
+
+  /**
+   * Entry delay of slot [i] of [n] when the island opens: the shape leads by [LEAD_MS], then the icons follow from the
+   * centre outwards, [STEP_MS] apart.
+   */
+  fun enterDelay(i: Int, n: Int): Long = LEAD_MS + abs(2 * i - (n - 1)) / 2 * STEP_MS
+
+  const val LEAD_MS = 60L
+  const val STEP_MS = 24L
+  const val ENTER_MS = 200
+  const val EXIT_MS = 150
 }
 
-/** Pages in the dock, in the Ctrl+1..6 order, then search. */
-private val DockCount = NavOrder.size + 1
-
 /**
- * States of the Dynamic Island (owner's spec, 2026-11-25). There is no music state: the side player already shows the
- * track, cover and controls on every page, and a second copy at the top would only repeat it.
+ * Pages in the island, in the Ctrl+1..6 order. Ajustes is not one of them: it has its own button at the top right
+ * (owner D2, 2026-11-27), and the search lives in the Biblioteca (D1).
  */
-enum class IslandState { COMPACT, NAVIGATION, SEARCH }
+internal val DockPages = NavOrder - TarkasNavTab.SETTINGS
+
+/** States of the Dynamic Island (owner's spec, 2026-11-25; search left it on 2026-11-27). */
+enum class IslandState { COMPACT, NAVIGATION }
 
 enum class IslandEvent {
   /** Click, Enter or Space on the compact pill, or the mouse resting on it. */
   OPEN,
   /** The narrow toggle: opens or closes the page list. */
   TOGGLE,
-  /** Esc while the pages are shown. Esc while typing closes the search first, through [SEARCH_CLOSED]. */
+  /** Esc while the pages are shown. */
   ESCAPE,
   /** The mouse left the island. */
   LEAVE,
-  /** A press outside the island while nothing is typed in the search. */
+  /** A press outside the island. */
   OUTSIDE,
-  /** A press outside the island while the search holds a query: its results live outside, so the island stays. */
-  OUTSIDE_TYPED,
   /** The page changed. */
   NAVIGATED,
-  /** The search field opened (search tile or Ctrl+F). */
-  SEARCH_OPENED,
-  /** The search field closed (Esc, its close button, or losing focus while empty). */
-  SEARCH_CLOSED,
 }
 
 /** The whole state machine, pure so the tests read it without a window. Unknown pairs keep the state. */
 object IslandMachine {
   fun next(s: IslandState, e: IslandEvent): IslandState = when (e) {
     IslandEvent.OPEN -> if (s == IslandState.COMPACT) IslandState.NAVIGATION else s
-    IslandEvent.TOGGLE -> when (s) { IslandState.COMPACT -> IslandState.NAVIGATION; IslandState.NAVIGATION -> IslandState.COMPACT; else -> s }
-    IslandEvent.ESCAPE, IslandEvent.LEAVE -> if (s == IslandState.NAVIGATION) IslandState.COMPACT else s
-    IslandEvent.OUTSIDE -> IslandState.COMPACT
-    IslandEvent.OUTSIDE_TYPED -> if (s == IslandState.NAVIGATION) IslandState.COMPACT else s
-    // Typing in the search moves to Home: that page change must not shut the field the user is typing in.
-    IslandEvent.NAVIGATED -> if (s == IslandState.SEARCH) s else IslandState.COMPACT
-    IslandEvent.SEARCH_OPENED -> IslandState.SEARCH
-    IslandEvent.SEARCH_CLOSED -> if (s == IslandState.SEARCH) IslandState.NAVIGATION else s
+    IslandEvent.TOGGLE -> if (s == IslandState.COMPACT) IslandState.NAVIGATION else IslandState.COMPACT
+    IslandEvent.ESCAPE, IslandEvent.LEAVE, IslandEvent.OUTSIDE, IslandEvent.NAVIGATED -> IslandState.COMPACT
   }
 }
 
@@ -214,10 +207,7 @@ object ShellIsland {
   /** Called by the shell for every press, in window px. */
   fun press(at: Offset) {
     if (_state.value == IslandState.COMPACT || bounds.contains(at) || menuBounds.contains(at)) return
-    val typed = ShellSearch.query.value.isNotEmpty()
-    val was = _state.value
-    send(if (typed) IslandEvent.OUTSIDE_TYPED else IslandEvent.OUTSIDE)
-    if (was == IslandState.SEARCH && _state.value == IslandState.COMPACT) ShellSearch.close()
+    send(IslandEvent.OUTSIDE)
   }
 
   internal fun reset() { _state.value = IslandState.COMPACT; bounds = Rect.Zero; menuBounds = Rect.Zero }
@@ -226,76 +216,75 @@ object ShellIsland {
 /** Compact pill: 192 x 48, the current page's icon and name. */
 private const val PILL_W = 192f
 private const val PILL_H = 48f
-/** The open capsule at rest: 384 x 60 (7 tiles of 48, gaps and padding of 6). */
-private val CAPSULE_W = DockEngine.restWidth(NavOrder.size + 1)
-private const val CAPSULE_H = 2 * DockEngine.PAD + DockEngine.REST
+/** Where the pill's icon centre sits, from the pill's left edge: padding 12 plus half the 24 dp icon. */
+private const val PILL_ICON_X = 24f
+/** The open capsule at rest: 240 x 48 (5 slots of 48), the same height as the pill, so the morph only widens. */
+private val CAPSULE_W = DockEngine.restWidth(DockPages.size)
 /** Mouse dwell before the pill opens, and grace after it leaves before the island closes. */
 private const val HOVER_OPEN_MS = 120L
 private const val LEAVE_CLOSE_MS = 400L
-/** Critically damped, settling in 0.30 s: k = (2 pi / 0.30)^2. */
+/** k = (2 pi / 0.30)^2, with a light bounce (zeta 0.8, owner 2026-11-26): about 1.5 % past the target, then back. */
 private const val ISLAND_STIFFNESS = 438.65f
+private const val ISLAND_DAMPING = 0.8f
+/** Share of the morph in which the pill's own content fades out, so the shape leads and nothing doubles. */
+private const val PILL_FADE = 0.25f
 
 /**
- * The single navigation of the desktop app: a Dynamic Island at the top centre. At rest it is a black pill with the
- * current page; click, Enter, Space or resting the mouse on it opens the capsule with the six real pages and the
- * search (magnification, tooltips and shortcuts as before). Esc closes layer by layer, a press outside or a page
- * change closes it, and focus goes back to the pill. When [compact], the narrow toggle plus page list.
+ * What the collapsed island shows while music plays (owner D3, 2026-11-27): five bars cut from the track's real
+ * waveform at the play position, the output in use and a live dot. The player registers [peaks] and the audio area
+ * [output]; until they do, the bars stay flat and no output icon is drawn. Nothing here is invented.
+ */
+object IslandActivity {
+  /** The current track's waveform (0..255 per bucket over the whole track); null while it loads or with no track. */
+  var peaks: StateFlow<ByteArray?>? by mutableStateOf(null)
+  /** Icon of the output the sound goes to (headphones, speaker, Bluetooth); null until the audio area registers it. */
+  var output: StateFlow<ImageVector?>? by mutableStateOf(null)
+
+  const val BARS = 5
+  /** Height of a bar with no waveform: a quarter, so the row reads as idle, never as a fake meter. */
+  const val FLAT = 0.25f
+
+  /**
+   * Fills [out] with [BARS] heights in [FLAT]..1: the waveform buckets centred on [fraction] of the track. Buckets
+   * outside the track (its first and last moments) and missing peaks give [FLAT].
+   */
+  fun bars(peaks: ByteArray?, fraction: Float, out: FloatArray) {
+    if (peaks == null || peaks.isEmpty() || fraction.isNaN()) { out.fill(FLAT, 0, BARS); return }
+    val centre = (fraction.coerceIn(0f, 1f) * (peaks.size - 1)).toInt()
+    for (i in 0 until BARS) {
+      val k = centre + i - BARS / 2
+      out[i] = if (k in peaks.indices) max(FLAT, (peaks[k].toInt() and 0xFF) / 255f) else FLAT
+    }
+  }
+
+  internal fun reset() { peaks = null; output = null }
+}
+
+/**
+ * The single navigation of the desktop app: a Dynamic Island at the top centre of the window. At rest it is a black
+ * pill with the current page, or the music activity while a track plays; click, Enter, Space or resting the mouse on
+ * it opens the capsule with the five pages (magnification, tooltips and shortcuts as before). Esc, a press outside or
+ * a page change closes it, and focus goes back to the pill. When [compact], the narrow toggle plus page list.
+ * [fraction] (play position over duration) is read only while drawing the bars, so playback never recomposes it.
  */
 @Composable
 fun FloatingDock(
   current: TarkasNavTab,
   onSelect: (TarkasNavTab) -> Unit,
-  onTyped: () -> Unit,
   reduceMotion: Boolean,
   compact: Boolean,
   modifier: Modifier = Modifier,
+  playing: Boolean = false,
+  fraction: () -> Float = { 0f },
 ) {
   // The island is black in both themes, so it reads the dark scheme: white text and Ice accent on #080808.
   MaterialTheme(colorScheme = TarkasDarkColorScheme, typography = MaterialTheme.typography, shapes = MaterialTheme.shapes) {
-    IslandBody(current, onSelect, onTyped, reduceMotion, compact, modifier)
+    var lastTab by remember { mutableStateOf(current) }
+    LaunchedEffect(current) { if (current != lastTab) { lastTab = current; ShellIsland.send(IslandEvent.NAVIGATED) } }
+    val bounded = modifier.onGloballyPositioned { ShellIsland.bounds = it.boundsInWindow() }
+    if (compact) CompactDock(current, onSelect, reduceMotion, bounded)
+    else WideIsland(current, onSelect, reduceMotion, playing, fraction, bounded)
   }
-}
-
-@Composable
-private fun IslandBody(
-  current: TarkasNavTab,
-  onSelect: (TarkasNavTab) -> Unit,
-  onTyped: () -> Unit,
-  reduceMotion: Boolean,
-  compact: Boolean,
-  modifier: Modifier,
-) {
-  LaunchedEffect(Unit) {
-    ShellSearch.isOpen.collect { ShellIsland.send(if (it) IslandEvent.SEARCH_OPENED else IslandEvent.SEARCH_CLOSED) }
-  }
-  var lastTab by remember { mutableStateOf(current) }
-  LaunchedEffect(current) { if (current != lastTab) { lastTab = current; ShellIsland.send(IslandEvent.NAVIGATED) } }
-  val bounded = modifier.onGloballyPositioned { ShellIsland.bounds = it.boundsInWindow() }
-  val open by ShellSearch.isOpen.collectAsState()
-  val query by ShellSearch.query.collectAsState()
-  val focusTick by ShellSearch.focusRequests.collectAsState()
-  val fieldFocus = remember { FocusRequester() }
-  val tileFocus = remember { FocusRequester() }
-  var fieldFocused by remember { mutableStateOf(false) }
-
-  BackHandler(open) { ShellSearch.close() }
-  LaunchedEffect(open, focusTick) {
-    if (open) { withFrameNanos { }; runCatching { fieldFocus.requestFocus() } }
-  }
-  LaunchedEffect(open) {
-    // Esc while typing: focus goes back to the search tile instead of being lost.
-    if (!open && fieldFocused) { fieldFocused = false; withFrameNanos { }; runCatching { tileFocus.requestFocus() } }
-  }
-  val field: @Composable (Float, () -> Float) -> Unit = { width, reveal ->
-    DockSearchField(
-      width = width, reveal = reveal, query = query, requester = fieldFocus,
-      onQuery = { ShellSearch.setQuery(it); if (it.isNotBlank()) onTyped() },
-      onFocus = { has -> if (has) fieldFocused = true else if (fieldFocused) { fieldFocused = false; if (ShellSearch.query.value.isEmpty()) ShellSearch.close() } },
-    )
-  }
-  val searchTitle = stringResource(Res.string.shell_search)
-  if (compact) CompactDock(current, onSelect, reduceMotion, open, searchTitle, tileFocus, field, bounded)
-  else WideIsland(current, onSelect, reduceMotion, open, searchTitle, tileFocus, field, bounded)
 }
 
 /**
@@ -304,8 +293,8 @@ private fun IslandBody(
  */
 @Composable
 private fun WideIsland(
-  current: TarkasNavTab, onSelect: (TarkasNavTab) -> Unit, reduce: Boolean, open: Boolean, searchTitle: String,
-  tileFocus: FocusRequester, field: @Composable (Float, () -> Float) -> Unit, modifier: Modifier,
+  current: TarkasNavTab, onSelect: (TarkasNavTab) -> Unit, reduce: Boolean, playing: Boolean, fraction: () -> Float,
+  modifier: Modifier,
 ) {
   val state by ShellIsland.state.collectAsState()
   val expanded = state != IslandState.COMPACT
@@ -320,7 +309,7 @@ private fun WideIsland(
 
   LaunchedEffect(expanded, reduce) {
     val t = if (expanded) 1f else 0f
-    if (reduce) p.snapTo(t) else p.animateTo(t, spring(dampingRatio = 1f, stiffness = ISLAND_STIFFNESS, visibilityThreshold = 0.001f))
+    if (reduce) p.snapTo(t) else p.animateTo(t, spring(dampingRatio = ISLAND_DAMPING, stiffness = ISLAND_STIFFNESS, visibilityThreshold = 0.001f))
   }
   LaunchedEffect(state) {
     when {
@@ -328,8 +317,8 @@ private fun WideIsland(
       state == IslandState.COMPACT && byKeyboard -> { byKeyboard = false; withFrameNanos { }; runCatching { pillFocus.requestFocus() } }
     }
   }
-  // Second Esc (the search closes on the first one): back to the pill, focus with it.
-  BackHandler(state == IslandState.NAVIGATION && !open) { byKeyboard = true; ShellIsland.send(IslandEvent.ESCAPE) }
+  // Esc: back to the pill, focus with it.
+  BackHandler(state == IslandState.NAVIGATION) { byKeyboard = true; ShellIsland.send(IslandEvent.ESCAPE) }
 
   val openFromKeys = { byKeyboard = true; ShellIsland.send(IslandEvent.OPEN) }
   Box(
@@ -357,25 +346,17 @@ private fun WideIsland(
     contentAlignment = Alignment.TopCenter,
   ) {
     if (expanded || showCapsule) {
-      WideDock(
-        current, onSelect, reduce, open, searchTitle, tileFocus, pageFocus, field,
-        Modifier.graphicsLayer {
-          val v = p.value
-          alpha = v.coerceIn(0f, 1f)
-          scaleX = lerp(PILL_W / CAPSULE_W, 1f, v)
-          scaleY = lerp(PILL_H / CAPSULE_H, 1f, v)
-          transformOrigin = TransformOrigin(0.5f, 0f)
-        },
-      )
+      WideDock(current, onSelect, reduce, pageFocus, expanded, morph = { p.value }, Modifier)
     }
     if (!expanded || showPill) {
       IslandPill(
-        current, pillFocus, onKeys = openFromKeys,
+        current, playing, fraction, pillFocus, onKeys = openFromKeys,
         modifier = Modifier.graphicsLayer {
+          // The pill hands its shape to the dock's capsule and fades in the first quarter; under 0 (the closing bounce,
+          // about 1.5 % at zeta 0.8) it narrows a little and settles, the same small bounce the capsule has when it opens.
           val v = p.value
-          alpha = (1f - v).coerceIn(0f, 1f)
-          scaleX = lerp(1f, CAPSULE_W / PILL_W, v)
-          scaleY = lerp(1f, CAPSULE_H / PILL_H, v)
+          alpha = (1f - v / PILL_FADE).coerceIn(0f, 1f)
+          if (v < 0f) scaleX = lerp(1f, CAPSULE_W / PILL_W, v)
           transformOrigin = TransformOrigin(0.5f, 0f)
         },
       ) { byKeyboard = false; ShellIsland.send(IslandEvent.OPEN) }
@@ -383,9 +364,15 @@ private fun WideIsland(
   }
 }
 
-/** The island at rest: a black pill with where you are. Its accessible name says what it does. */
+/**
+ * The island at rest: a black pill with where you are or, while a track plays, its activity. Its accessible name
+ * always says what it does and which page is shown.
+ */
 @Composable
-private fun IslandPill(current: TarkasNavTab, focus: FocusRequester, onKeys: () -> Unit, modifier: Modifier, onClick: () -> Unit) {
+private fun IslandPill(
+  current: TarkasNavTab, playing: Boolean, fraction: () -> Float, focus: FocusRequester, onKeys: () -> Unit,
+  modifier: Modifier, onClick: () -> Unit,
+) {
   val c = MaterialTheme.colorScheme
   val src = remember { MutableInteractionSource() }
   val focused by src.collectIsFocusedAsState()
@@ -405,75 +392,122 @@ private fun IslandPill(current: TarkasNavTab, focus: FocusRequester, onKeys: () 
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(Grid.u12),
   ) {
-    Icon(current.icon(), contentDescription = null, tint = c.primary, modifier = Modifier.size(Grid.u24))
-    Text(page, style = GridText.BodyStrong, color = c.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    if (playing) IslandActivityRow(fraction)
+    else {
+      Icon(current.icon(), contentDescription = null, tint = c.primary, modifier = Modifier.size(Grid.u24))
+      Text(page, style = GridText.BodyStrong, color = c.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
   }
+}
+
+/**
+ * The music activity in the pill: the output icon (24, when known), five 6 dp bars filling the rest of the row (24
+ * tall) and a 6 dp live dot. The bars are drawn in drawBehind from the waveform at the play position, so playback only
+ * redraws them, never recomposes.
+ */
+@Composable
+private fun RowScope.IslandActivityRow(fraction: () -> Float) {
+  val c = MaterialTheme.colorScheme
+  val peaks = IslandActivity.peaks?.collectAsState()
+  val output = IslandActivity.output?.collectAsState()?.value
+  val bars = remember { FloatArray(IslandActivity.BARS) }
+  val bar = c.primary
+  // Output at the leading edge, the meter and the live dot at the trailing one (Apple's island reads the same way).
+  // With no output known the meter sits in the middle instead of next to an empty slot.
+  if (output != null) Icon(output, contentDescription = null, tint = c.onSurface, modifier = Modifier.size(Grid.u24).testTag("island_output"))
+  Spacer(Modifier.weight(1f))
+  Box(
+    Modifier.width(Grid.u48).height(Grid.u24).testTag("island_activity").drawBehind {
+      IslandActivity.bars(peaks?.value, fraction(), bars)
+      val n = IslandActivity.BARS
+      val w = Grid.u6.toPx()
+      val gap = (size.width - n * w) / (n - 1)   // 4.5 dp: five 6 dp bars in one 48 dp block
+      for (i in 0 until n) {
+        val h = bars[i] * size.height
+        drawRoundRect(bar, Offset(i * (w + gap), (size.height - h) / 2), Size(w, h), CornerRadius(w / 2))
+      }
+    },
+  )
+  Box(Modifier.size(Grid.u6).clip(CircleShape).background(c.primary).testTag("island_live"))
+  if (output == null) Spacer(Modifier.weight(1f))
 }
 
 @Composable
 private fun WideDock(
-  current: TarkasNavTab, onSelect: (TarkasNavTab) -> Unit, reduce: Boolean, open: Boolean, searchTitle: String,
-  tileFocus: FocusRequester, pageFocus: FocusRequester, field: @Composable (Float, () -> Float) -> Unit, modifier: Modifier,
+  current: TarkasNavTab, onSelect: (TarkasNavTab) -> Unit, reduce: Boolean, pageFocus: FocusRequester,
+  expanded: Boolean, morph: () -> Float, modifier: Modifier,
 ) {
   val c = MaterialTheme.colorScheme
-  val n = DockCount
+  val n = DockPages.size
   val sizes = remember { List(n) { Animatable(DockEngine.REST) } }
   val targets = remember { List(n) { mutableFloatStateOf(DockEngine.REST) } }
-  val fieldW = remember { Animatable(DockEngine.REST) }
+  /** Entry of each slot, 0 (gone) to 1 (in place): read only in the layers, so the cascade never re-lays out. */
+  val enter = remember { List(n) { Animatable(if (reduce) 1f else 0f) } }
   val widths = remember { FloatArray(n) }      // px, written while placing, read by the pointer handler
   val centres = remember { FloatArray(n) }
   var hovering by remember { mutableStateOf(false) }
   var hoverTip by remember { mutableIntStateOf(-1) }
   var focusTip by remember { mutableIntStateOf(-1) }
-  val shown = if (focusTip >= 0) focusTip else if (open) -1 else hoverTip
+  val shown = if (focusTip >= 0) focusTip else hoverTip
   var lastTip by remember { mutableIntStateOf(-1) }
   if (shown >= 0) lastTip = shown
   val tipAlpha by animateFloatAsState(if (shown >= 0) 1f else 0f, tween(200, easing = LinearOutSlowInEasing))
   val fill = c.background
-  val px = LocalDensity.current.density
   val rim = c.onSurface.copy(alpha = 0.12f)
+  // -1 on Ajustes, which has no slot: every icon then enters from the centre and none flies from the pill.
+  val currentIndex = DockPages.indexOf(current)
 
   LaunchedEffect(Unit) {
     val spec = spring(DockEngine.DAMPING_RATIO, DockEngine.STIFFNESS, 0.01f)
     for (i in 0 until n) launch { snapshotFlow { targets[i].floatValue }.collectLatest { sizes[i].animateTo(it, spec) } }
   }
-  LaunchedEffect(open, reduce) {
-    if (open) targets.forEach { it.floatValue = DockEngine.REST }
-    val t = if (open) DockEngine.FIELD else DockEngine.REST
-    if (reduce) fieldW.snapTo(t) else fieldW.animateTo(t, tween(250, easing = FastOutSlowInEasing))
+  LaunchedEffect(expanded, reduce) {
+    if (reduce) { enter.forEach { it.snapTo(if (expanded) 1f else 0f) }; return@LaunchedEffect }
+    if (expanded) {
+      for (i in 0 until n) launch {
+        // The current page is the pill's icon flying to its slot; the others follow the shape from the centre out.
+        if (i == currentIndex) enter[i].animateTo(1f, tween(250, easing = FastOutSlowInEasing))
+        else enter[i].animateTo(1f, tween(DockEngine.ENTER_MS, delayMillis = DockEngine.enterDelay(i, n).toInt(), easing = LinearOutSlowInEasing))
+      }
+    } else {
+      // Closing: every icon leaves at once and faster than the shape, so the capsule never shrinks over them.
+      enter.forEach { launch { it.animateTo(0f, tween(DockEngine.EXIT_MS, easing = FastOutLinearInEasing)) } }
+    }
   }
   val updReduce by rememberUpdatedState(reduce)
-  val updOpen by rememberUpdatedState(open)
 
-  val labels = NavOrder.map { stringResource(it.label) }
-  val tipText = when {
-    lastTip in NavOrder.indices -> "${labels[lastTip]}  Ctrl+${lastTip + 1}"
-    lastTip == n - 1 -> "$searchTitle  Ctrl+F"
-    else -> ""
+  val labels = DockPages.map { stringResource(it.label) }
+  // The shortcut is the page's place in the full Ctrl+1..6 order, so it stays the same with Ajustes out of the dock.
+  val tipText = if (lastTip in DockPages.indices) "${labels[lastTip]}  Ctrl+${NavOrder.indexOf(DockPages[lastTip]) + 1}" else ""
+
+  fun slot(i: Int): Float = sizes[i].value
+
+  /** Capsule height in dp: the tallest slot, so a grown circle never leaves the island and stays concentric. */
+  fun tall(): Float {
+    var t = DockEngine.REST
+    for (s in sizes) t = max(t, s.value)
+    return t
   }
-
-  /** Slot width in dp: the search slot follows the field while it opens or closes. */
-  fun slot(i: Int): Float =
-    if (i == n - 1 && fieldW.value > DockEngine.REST + 0.5f) fieldW.value else sizes[i].value
 
   Layout(
     content = {
-      NavOrder.forEachIndexed { i, tab ->
-        DockTile(labels[i], tab.icon(), tab == current, { focusTip = if (it) i else if (focusTip == i) -1 else focusTip }, Modifier.then(if (tab == current) Modifier.focusRequester(pageFocus) else Modifier).testTag("dock_${tab.name.lowercase()}")) {
+      DockPages.forEachIndexed { i, tab ->
+        val here = tab == current
+        // Keyboard entry lands on the current page or, on Ajustes (no slot), on the first one.
+        val takesFocus = here || (currentIndex < 0 && i == 0)
+        DockTile(
+          labels[i], tab.icon(), here, { focusTip = if (it) i else if (focusTip == i) -1 else focusTip },
+          Modifier.then(if (takesFocus) Modifier.focusRequester(pageFocus) else Modifier).testTag("dock_${tab.name.lowercase()}"),
+          slot = Grid.u96, appear = if (here) { { enter[i].value } } else { { 1f } },
+        ) {
           SidePane.close(); onSelect(tab)
         }
-      }
-      if (open) field(DockEngine.FIELD) { fieldW.value * px }
-      else DockTile(searchTitle, Icons.Outlined.Search, false, { focusTip = if (it) n - 1 else if (focusTip == n - 1) -1 else focusTip }, Modifier.focusRequester(tileFocus).testTag("dock_search")) {
-        ShellSearch.openDock()
       }
       Tooltip(tipText)
     },
     modifier = modifier
       .testTag("floating_dock")
       .pointerInput(Unit) {
-        val padPx = DockEngine.PAD.dp.toPx()
-        val capsuleH = (2 * DockEngine.PAD + DockEngine.REST).dp.toPx()
         fun reset() {
           hovering = false; hoverTip = -1
           targets.forEach { it.floatValue = DockEngine.REST }
@@ -489,11 +523,12 @@ private fun WideDock(
             var k = 0
             for (i in 1 until n) if (abs(p.x - centres[i]) < abs(p.x - centres[k])) k = i
             val onTile = abs(p.x - centres[k]) <= widths[k] / 2
-            val inside = p.y <= capsuleH || (onTile && p.y <= padPx + widths[k])
-            if (!inside) { reset(); continue }
+            val tallPx = tall().dp.toPx()
+            if (p.y > tallPx) { reset(); continue }
             hovering = true
-            hoverTip = if (onTile && p.y >= padPx) k else -1
-            if (!updReduce && !updOpen) {
+            val top = (tallPx - widths[k]) / 2
+            hoverTip = if (onTile && p.y >= top && p.y <= top + widths[k]) k else -1
+            if (!updReduce) {
               val xDp = p.x / density
               val start = (size.width / density - DockEngine.restWidth(n)) / 2
               for (i in 0 until n) targets[i].floatValue = DockEngine.target(xDp - start - DockEngine.restCentre(i))
@@ -502,121 +537,119 @@ private fun WideDock(
         }
       }
       .drawBehind {
-        // Capsule: same arithmetic as the placement below, read here so it redraws without a layout pass.
-        var total = 2 * DockEngine.PAD + (n - 1) * DockEngine.GAP
+        // The one shape of the island, from the pill (morph 0) to the capsule (1). Read here, so it redraws without a
+        // layout pass; past 1 the spring's bounce widens it a little beyond the slots, then it settles.
+        val v = morph()
+        var total = 0f
         for (i in 0 until n) total += slot(i)
-        val w = total.dp.toPx()
-        val h = (2 * DockEngine.PAD + DockEngine.REST).dp.toPx()
+        val w = lerp(PILL_W, total, v).dp.toPx()
+        val h = lerp(PILL_H, tall(), v).dp.toPx()
         val r = CornerRadius(h / 2)
         val tl = Offset((size.width - w) / 2, 0f)
         drawRoundRect(fill, tl, Size(w, h), r)
         drawRoundRect(rim, tl, Size(w, h), r, style = Stroke(Grid.hairline.toPx()))
       },
   ) { measurables, _ ->
-    val rest = DockEngine.REST.dp.roundToPx()
-    val pad = DockEngine.PAD.dp.roundToPx()
-    val gap = DockEngine.GAP.dp.toPx()
+    val big = DockEngine.MAX.dp.roundToPx()
     val width = DockEngine.reservedWidth(n).dp.roundToPx()
-    val height = (2 * DockEngine.PAD + if (hovering) DockEngine.MAX else DockEngine.REST).dp.roundToPx()
-    val tiles = measurables.subList(0, n).mapIndexed { i, m ->
-      if (i == n - 1 && open) m.measure(Constraints.fixed(DockEngine.FIELD.dp.roundToPx(), rest)) else m.measure(Constraints.fixed(rest, rest))
-    }
+    val height = (if (hovering) DockEngine.MAX else DockEngine.REST).dp.roundToPx()
+    // Tiles are drawn at the 96 dp peak and shrunk by their layer, so the icon is rasterised at the largest size it
+    // reaches: magnifying only ever scales it down, never blurs it up.
+    val tiles = measurables.subList(0, n).map { it.measure(Constraints.fixed(big, big)) }
     val tip = measurables[n].measure(Constraints())
+    val pillIconX = width / 2f - (PILL_W / 2 - PILL_ICON_X).dp.toPx()
+    val tipGap = Grid.u6.toPx()
     layout(width, height) {
-      var total = 2 * pad + (n - 1) * gap
+      val tallPx = tall().dp.toPx()
+      var total = 0f
       for (i in 0 until n) { widths[i] = slot(i).dp.toPx(); total += widths[i] }
-      var x = (width - total) / 2 + pad
+      var x = (width - total) / 2
       for (i in 0 until n) {
         val w = widths[i]
-        centres[i] = x + w / 2
-        if (i == n - 1 && open) tiles[i].place(x.toInt(), pad)
-        else {
-          val s = w / rest
-          tiles[i].placeWithLayer((centres[i] - rest / 2f).toInt(), pad) {
-            scaleX = s; scaleY = s; transformOrigin = TransformOrigin(0.5f, 0f)
+        val cx = x + w / 2
+        centres[i] = cx
+        val s = w / big
+        tiles[i].placeWithLayer((cx - big / 2f).toInt(), ((tallPx - w) / 2).toInt()) {
+          val e = enter[i].value
+          transformOrigin = TransformOrigin(0.5f, 0f)
+          if (i == currentIndex) {
+            scaleX = s; scaleY = s
+            translationX = (1f - e) * (pillIconX - cx)
+          } else {
+            val q = lerp(0.5f, 1f, e)
+            scaleX = s * q; scaleY = s * q
+            translationY = (1f - q) * w / 2          // grow about the slot's centre, not its top
+            alpha = e
           }
         }
-        x += w + gap
+        x += w
       }
       val k = lastTip
       if (k in 0 until n) {
         val tx = (centres[k] - tip.width / 2f).toInt().coerceIn(0, (width - tip.width).coerceAtLeast(0))
-        val ty = (pad + widths[k] + gap).toInt()
-        val lift = 10.dp.toPx()
-        tip.placeWithLayer(tx, ty) { alpha = tipAlpha; translationY = -(1f - tipAlpha) * lift }
+        val ty = (tallPx + tipGap).toInt()
+        tip.placeWithLayer(tx, ty) { alpha = tipAlpha; translationY = -(1f - tipAlpha) * tipGap }
       }
     }
   }
 }
 
-/** One page of the dock: 48 dp circle, 24 dp icon, a dot when it is the current page, a primary ring on focus. */
+/**
+ * One page of the dock, drawn for a [slot]: a circle of 0.75 of it, an icon of half of it, a dot when it is the current
+ * page, a primary ring on focus. The wide dock draws it at the 96 dp peak and its layer shrinks it, so the vector stays
+ * sharp while it grows; the narrow one draws it at 48. Pressing shrinks the circle to 0.96, hovering lifts its fill one
+ * step; both run in the draw and layer phases only. [appear] fades the fill and dot of the tile that flies in.
+ */
 @Composable
-private fun DockTile(title: String, icon: ImageVector, active: Boolean, onFocus: (Boolean) -> Unit, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun DockTile(
+  title: String, icon: ImageVector, active: Boolean, onFocus: (Boolean) -> Unit, modifier: Modifier = Modifier,
+  slot: Dp = Grid.u48, appear: () -> Float = { 1f }, onClick: () -> Unit,
+) {
   val c = MaterialTheme.colorScheme
   val src = remember { MutableInteractionSource() }
   val focused by src.collectIsFocusedAsState()
+  val hovered by src.collectIsHoveredAsState()
+  val pressed by src.collectIsPressedAsState()
+  val hover by animateFloatAsState(if (hovered) 1f else 0f, tween(150, easing = LinearOutSlowInEasing))
+  val pressSpec: AnimationSpec<Float> =
+    if (pressed) tween(100, easing = FastOutSlowInEasing) else spring(ISLAND_DAMPING, ISLAND_STIFFNESS)
+  val press by animateFloatAsState(if (pressed) 0.96f else 1f, pressSpec)
+  val ring = (Grid.hairline + Grid.hairline) * (slot / Grid.u48)
+  val fillColor = if (active) c.primary else c.onSurface
+  val ringColor = c.primary
   Box(
-    modifier.size(Grid.u48).clip(CircleShape)
-      .background(if (active) c.primary.copy(alpha = 0.16f) else c.onSurface.copy(alpha = 0.06f))
-      .then(if (focused) Modifier.border(Grid.hairline + Grid.hairline, c.primary, CircleShape) else Modifier)
+    modifier.size(slot)
       .onFocusChanged { onFocus(it.isFocused) }
-      .clickable(interactionSource = src, indication = LocalIndication.current, role = Role.Tab, onClick = onClick)
+      .hoverable(src)
+      .clickable(interactionSource = src, indication = null, role = Role.Tab, onClick = onClick)
       .semantics { contentDescription = title; selected = active },
     contentAlignment = Alignment.Center,
   ) {
-    Icon(icon, contentDescription = null, tint = if (active) c.primary else c.onSurfaceVariant, modifier = Modifier.size(Grid.u24))
-    if (active) Box(Modifier.align(Alignment.BottomCenter).padding(bottom = Grid.u6).size(Grid.u6).clip(CircleShape).background(c.primary))
-  }
-}
-
-/** The real search field, inside the dock. [reveal] (px) clips it while it opens, so the slot grows without a re-layout. */
-@Composable
-private fun DockSearchField(
-  width: Float, reveal: () -> Float, query: String, requester: FocusRequester,
-  onQuery: (String) -> Unit, onFocus: (Boolean) -> Unit,
-) {
-  val c = MaterialTheme.colorScheme
-  val focus = LocalFocusManager.current
-  val placeholder = stringResource(Res.string.home_search_placeholder)
-  val closeLabel = stringResource(Res.string.shell_search_close)
-  Row(
-    Modifier.width(width.dp).height(Grid.u48)
-      .drawWithContent { clipRect(right = reveal()) { this@drawWithContent.drawContent() } }
-      .clip(CircleShape).background(c.onSurface.copy(alpha = 0.06f)).padding(start = Grid.u12),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Icon(Icons.Outlined.Search, contentDescription = null, tint = c.primary, modifier = Modifier.size(Grid.u24))
-    Spacer(Modifier.width(Grid.u12))
-    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-      if (query.isEmpty()) Text(placeholder, style = GridText.Body, color = c.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-      BasicTextField(
-        value = query, onValueChange = onQuery, singleLine = true,
-        textStyle = GridText.Body.copy(color = c.onSurface), cursorBrush = SolidColor(c.primary),
-        modifier = Modifier.fillMaxWidth().focusRequester(requester).onFocusChanged { onFocus(it.isFocused) }
-          .onPreviewKeyEvent { e ->
-            // Enter or Down: from the field to the results below it.
-            if (e.type == KeyEventType.KeyDown && (e.key == Key.Enter || e.key == Key.NumPadEnter || e.key == Key.DirectionDown)) {
-              focus.moveFocus(FocusDirection.Down); true
-            } else false
+    Box(
+      Modifier.size(slot * DockEngine.CIRCLE)
+        .graphicsLayer { scaleX = press; scaleY = press }
+        .drawBehind {
+          val base = if (active) 0.16f else 0.06f + 0.06f * hover
+          drawCircle(fillColor.copy(alpha = base * appear()))
+          if (focused) {
+            val r = ring.toPx()
+            drawCircle(ringColor, radius = size.minDimension / 2 - r / 2, style = Stroke(r))
           }
-          .testTag("dock_search_field")
-          .semantics { contentDescription = placeholder },
+        },
+      contentAlignment = Alignment.Center,
+    ) {
+      Icon(icon, contentDescription = null, tint = if (active) c.primary else c.onSurfaceVariant, modifier = Modifier.size(slot * DockEngine.ICON))
+      if (active) Box(
+        Modifier.align(Alignment.BottomCenter).padding(bottom = slot / 16).size(slot / 8)
+          .graphicsLayer { alpha = appear() }.clip(CircleShape).background(c.primary),
       )
     }
-    Box(
-      Modifier.size(Grid.u48).clip(CircleShape).clickable(role = Role.Button) { ShellSearch.close() }.testTag("dock_search_close")
-        .semantics { contentDescription = closeLabel },
-      contentAlignment = Alignment.Center,
-    ) { Icon(Icons.Outlined.Close, contentDescription = null, tint = c.onSurfaceVariant, modifier = Modifier.size(Grid.u24)) }
   }
 }
 
-/** Narrow window: the current page as a toggle that opens the pages below it, plus search. */
+/** Narrow window: the current page as a toggle that opens the five pages below it. */
 @Composable
-private fun CompactDock(
-  current: TarkasNavTab, onSelect: (TarkasNavTab) -> Unit, reduce: Boolean, open: Boolean, searchTitle: String,
-  tileFocus: FocusRequester, field: @Composable (Float, () -> Float) -> Unit, modifier: Modifier,
-) {
+private fun CompactDock(current: TarkasNavTab, onSelect: (TarkasNavTab) -> Unit, reduce: Boolean, modifier: Modifier) {
   val c = MaterialTheme.colorScheme
   val island by ShellIsland.state.collectAsState()
   val menu = island == IslandState.NAVIGATION
@@ -626,9 +659,9 @@ private fun CompactDock(
   if (!menu) ShellIsland.menuBounds = Rect.Zero
   BackHandler(menu) { dismiss() }
   Row(
-    modifier.testTag("floating_dock").clip(CircleShape).background(c.background).border(Grid.hairline, c.onSurface.copy(alpha = 0.12f), CircleShape)
-      .padding(Grid.u6),
-    horizontalArrangement = Arrangement.spacedBy(Grid.u6), verticalAlignment = Alignment.CenterVertically,
+    // 48 dp tall, like the pill: each 48 dp slot draws its own 36 dp circle, so the margin to the edge is built in.
+    modifier.testTag("floating_dock").clip(CircleShape).background(c.background).border(Grid.hairline, c.onSurface.copy(alpha = 0.12f), CircleShape),
+    verticalAlignment = Alignment.CenterVertically,
   ) {
     Box {
       DockTile("$pagesTitle: ${stringResource(current.label)}", current.icon(), true, {}, Modifier.focusRequester(toggleFocus).testTag("dock_toggle")) { ShellIsland.send(IslandEvent.TOGGLE) }
@@ -641,9 +674,10 @@ private fun CompactDock(
               .padding(Grid.u6).testTag("dock_menu"),
             verticalArrangement = Arrangement.spacedBy(Grid.u6),
           ) {
-            NavOrder.forEachIndexed { i, tab ->
+            DockPages.forEachIndexed { i, tab ->
               val a = remember { Animatable(if (reduce) 1f else 0f) }
-              LaunchedEffect(Unit) { if (!reduce) { delay(i * 50L); a.animateTo(1f, tween(200, easing = LinearOutSlowInEasing)) } }
+              // The cascade runs on the frame clock (tween delay), never a real delay, so a test scene never blocks.
+              LaunchedEffect(Unit) { if (!reduce) a.animateTo(1f, tween(200, delayMillis = i * 50, easing = LinearOutSlowInEasing)) }
               val on = tab == current
               val label = stringResource(tab.label)
               Row(
@@ -658,15 +692,13 @@ private fun CompactDock(
               ) {
                 Icon(tab.icon(), contentDescription = null, tint = if (on) c.primary else c.onSurfaceVariant, modifier = Modifier.size(Grid.u24))
                 Text(label, style = if (on) GridText.BodyStrong else GridText.Body, color = c.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Text("Ctrl+${i + 1}", style = GridText.Small, color = c.onSurfaceVariant)
+                Text("Ctrl+${NavOrder.indexOf(tab) + 1}", style = GridText.Small, color = c.onSurfaceVariant)
               }
             }
           }
         }
       }
     }
-    if (open) field(DockEngine.COMPACT_FIELD) { Float.MAX_VALUE }
-    else DockTile(searchTitle, Icons.Outlined.Search, false, {}, Modifier.focusRequester(tileFocus).testTag("dock_search")) { ShellSearch.openDock() }
   }
 }
 

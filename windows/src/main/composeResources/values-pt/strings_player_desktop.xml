@@ -5,6 +5,9 @@
   <string name="pd_play_now">Tocar agora</string>
   <string name="pd_queue_removed">Removida da fila: %1$s</string>
   <string name="pd_lyrics_loading">Lendo a letra</string>
+  <string name="pd_lyrics_idle">A letra aparece aqui quando uma música estiver tocando.</string>
+  <string name="pd_empty_message">Escolha uma música na Biblioteca ou abra um arquivo de áudio. Ela aparece aqui com a letra e a forma de onda.</string>
+  <string name="pd_empty_action">Abrir Biblioteca</string>
   <string name="pd_details_title">Título</string>
   <string name="pd_details_file">Arquivo</string>
   <string name="pd_details_artist">Artista</string>

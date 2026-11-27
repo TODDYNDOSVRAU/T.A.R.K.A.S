@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
+import com.example.windows.biblioteca.displayArtist
 import com.example.windows.res.Res
 import com.example.windows.res.player_screen_next
 import com.example.windows.res.player_screen_nothing_playing
@@ -111,7 +112,7 @@ internal fun SidePlayerBody(hooks: PlayerHooks, assets: TrackAssets, modifier: M
             // A playback problem takes the artist's line: the fixed height never changes.
             val problem = ui.problem?.toString() ?: t.error
             Text(
-              problem ?: sh.track?.artist.orEmpty(),
+              problem ?: displayArtist(sh.track?.artist.orEmpty()),
               style = GridText.Small, color = if (problem != null) cs.primary else cs.onSurfaceVariant,
               maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("side_artist"),
             )

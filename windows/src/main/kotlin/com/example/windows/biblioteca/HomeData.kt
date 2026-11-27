@@ -35,7 +35,7 @@ object HomeData {
       if (t.isNotEmpty()) out += HomeEntry("p:" + p.id, p.name, countLabel(t.size), t.first(), t, HomeEntry.Kind.PLAYLIST)
     }
     for (t in AutoLists.build(AutoList.MOST_PLAYED, library, stats, TOP_TRACKS)) {
-      out += HomeEntry("t:" + t.id, t.title, t.artist, t, listOf(t), HomeEntry.Kind.TRACK)
+      out += HomeEntry("t:" + t.id, t.title, t.artistLabel(), t, listOf(t), HomeEntry.Kind.TRACK)
     }
     return out.take(SPEED_DIAL_MAX)
   }
@@ -126,6 +126,6 @@ object HomeData {
     tracks.filter { it.album.isNotBlank() }.groupBy { it.album.trim().lowercase() + "|" + it.artist.trim().lowercase() }.values
       .take(limit).map { g ->
         val first = g.first()
-        HomeEntry("al:" + first.album + "|" + first.artist, first.album, first.artist, first, g, HomeEntry.Kind.ALBUM)
+        HomeEntry("al:" + first.album + "|" + first.artist, first.album, first.artistLabel(), first, g, HomeEntry.Kind.ALBUM)
       }
 }

@@ -100,6 +100,18 @@ class TarkasState(
   val reduceMotion: StateFlow<Boolean> = _reduceMotion.asStateFlow()
   fun setReduceMotion(on: Boolean) { _reduceMotion.value = on; settings.put(GLOBAL, KEY_REDUCE_MOTION, on.toString()) }
 
+  // Nickname (D8, 2026-11-27): optional; empty falls back to the Windows user name in [displayName].
+  private val _nickname = MutableStateFlow(cleanNickname(settings.get(GLOBAL, KEY_NICKNAME) ?: ""))
+  val nickname: StateFlow<String> = _nickname.asStateFlow()
+  fun setNickname(raw: String) {
+    val v = cleanNickname(raw)
+    if (v == _nickname.value) return
+    _nickname.value = v; settings.put(GLOBAL, KEY_NICKNAME, v)
+  }
+  /** The name the Início greeting uses: the nickname, else the Windows user name, else "" (greeting without a name). */
+  val displayName: StateFlow<String> = _nickname.map { greetingName(it, System.getProperty("user.name")) }
+    .stateIn(scope, SharingStarted.Eagerly, greetingName(_nickname.value, System.getProperty("user.name")))
+
   // Playback (wired to DesktopPlayer)
   val playerState: StateFlow<PlayerState> = player.state
   val isPlaying: StateFlow<Boolean> = player.state.map { it.playing }.stateIn(scope, SharingStarted.Eagerly, false)
@@ -132,5 +144,18 @@ class TarkasState(
     const val KEY_NAV = "nav_stack"
     const val KEY_THEME = "theme_mode"
     const val KEY_REDUCE_MOTION = "reduce_motion"
+    const val KEY_NICKNAME = "nickname"
+    const val NICKNAME_MAX = 24
+
+    /** Control characters out, runs of spaces folded to one, trimmed, at most [NICKNAME_MAX] characters. */
+    fun cleanNickname(raw: String): String =
+      raw.filterNot { it.isISOControl() }.replace(Regex("\\s+"), " ").trim().take(NICKNAME_MAX).trimEnd()
+
+    /** Nickname first; otherwise the account name with its first letter in upper case ("todyn" reads "Todyn"). */
+    fun greetingName(nickname: String, systemUser: String?): String {
+      cleanNickname(nickname).takeIf { it.isNotEmpty() }?.let { return it }
+      val user = cleanNickname(systemUser ?: "")
+      return user.replaceFirstChar { it.titlecase() }
+    }
   }
 }

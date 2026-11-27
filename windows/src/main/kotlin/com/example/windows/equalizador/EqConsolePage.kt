@@ -46,7 +46,7 @@ import com.example.data.model.EqBand
 import com.example.data.model.EqPreset
 import com.example.data.model.EqSettings
 import com.example.ui.theme.Grid
-import com.example.windows.equalizador.LocalBarInset
+import com.example.ui.theme.LocalBarInset
 import com.example.windows.equalizador.AudioMotion
 import com.example.windows.equalizador.rememberReducedMotion
 internal const val HOLD_MS = 400L

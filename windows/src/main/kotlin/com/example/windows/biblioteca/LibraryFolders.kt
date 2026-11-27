@@ -32,6 +32,7 @@ import com.example.ui.components.TarkasAlertDialog
 import com.example.ui.components.TextAction
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
+import com.example.ui.theme.LocalBarInset
 import com.example.windows.res.*
 import javax.swing.JFileChooser
 import javax.swing.SwingUtilities
@@ -95,7 +96,7 @@ fun FoldersPane(lib: BibliotecaState, modifier: Modifier = Modifier) {
       }
       return
     }
-    LazyColumn(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = LocalBarInset.current)) {
       items(rows, key = { it.node.path }) { row ->
         val node = row.node
         val state = node.state(rules)

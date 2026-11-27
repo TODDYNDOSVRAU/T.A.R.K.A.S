@@ -73,6 +73,8 @@ import com.example.data.model.Track
 import com.example.ui.components.highlightClickable
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
+import com.example.ui.theme.LocalBarInset
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.input.pointer.isCtrlPressed as pCtrl
 import androidx.compose.ui.input.pointer.isShiftPressed as pShift
 import com.example.windows.res.*
@@ -80,6 +82,9 @@ import kotlinx.coroutines.launch
 import java.awt.datatransfer.DataFlavor
 import java.io.File
 import kotlin.math.roundToInt
+
+/** Test tag of the table's scrolling rows (LibraryPageLayoutTest). */
+internal const val TAG_ROWS = "library-rows"
 
 /** Two-language text for the desktop-only labels that have no Android resource (the language follows the system). */
 fun lt(en: String, pt: String): String = if (java.util.Locale.getDefault().language == "pt") pt else en
@@ -267,7 +272,8 @@ private fun Column(modifier: Modifier, content: @Composable androidx.compose.fou
 private fun androidx.compose.foundation.layout.ColumnScope.BoxedRows(
   tracks: List<Track>, state: LazyListState, row: @Composable (Int, Track) -> Unit
 ) {
-  LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = state) {
+  // The corner player floats over the bottom-left of the page: the last row scrolls up clear of it.
+  LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag(TAG_ROWS), state = state, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = LocalBarInset.current)) {
     itemsIndexed(tracks, key = { i, t -> "$i:${t.id}" }) { i, t -> row(i, t) }
   }
 }
@@ -400,9 +406,10 @@ private fun TableRow(
           track.title, style = GridText.Small, color = if (playing) colors.primary else colors.onSurface,
           maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).padding(start = Grid.u6)
         )
+        ExplicitMark(track, Modifier.padding(start = Grid.u6))
         if (favorite) Icon(Icons.Filled.Favorite, null, Modifier.padding(start = Grid.u6).width(Grid.u12).height(Grid.u12), tint = colors.primary)
       }
-      cell(Col.ARTIST, widths, track.artist)
+      cell(Col.ARTIST, widths, track.artistLabel())
       cell(Col.ALBUM, widths, track.album)
       cell(Col.DURATION, widths, formatDuration(track.durationMs), end = true)
       cell(Col.PLAYS, widths, if (plays > 0) plays.toString() else "", end = true)

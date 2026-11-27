@@ -97,7 +97,13 @@ import com.example.windows.res.pd_details_artist
 import com.example.windows.res.pd_details_duration
 import com.example.windows.res.pd_details_file
 import com.example.windows.res.pd_details_title
+import com.example.windows.res.pd_empty_action
+import com.example.windows.res.pd_empty_message
+import com.example.windows.res.pd_lyrics_idle
 import com.example.windows.res.pd_lyrics_loading
+import com.example.ui.components.PrimaryButton
+import com.example.windows.biblioteca.EmptyState
+import com.example.windows.biblioteca.displayArtist
 import com.example.windows.res.pd_open_dialog
 import com.example.windows.res.pd_open_files
 import com.example.windows.res.pd_pane_close
@@ -126,6 +132,7 @@ import com.example.windows.res.queue_header
 import com.example.windows.res.queue_remove
 import com.example.windows.res.queue_upcoming_header
 import com.example.windows.res.tr
+import com.example.windows.shell.IslandActivity
 import com.example.windows.shell.PanelContent
 import com.example.windows.shell.SidePane
 import com.example.windows.shell.Panels
@@ -168,6 +175,7 @@ object PlayerHost {
     val assets = TrackAssets(scope, WaveformReader(WaveformCache(File(File(System.getenv("APPDATA") ?: System.getProperty("user.home"), "TARKAS"), "waveforms"))))
     c = ctl; a = assets
     h = PlayerHooks(ctl, scope, assets.peaks)
+    IslandActivity.peaks = assets.peaks   // the Island's five bars
     scope.launch { combine(h!!.state.map { it.track }.distinctUntilChanged(), assets.art) { t, art -> t to art }.collect { (t, art) ->
       ShellBackdrop.set(art, t?.let { Color(it.colorHex or 0xFF000000) }) } }
     scope.launch { h!!.state.map { it.track }.distinctUntilChanged().collect { assets.follow(it) } }
@@ -195,10 +203,13 @@ object PlayerHost {
 
   /** Registers the now-playing screen in the shell slot of the Player tab. */
   fun register(slots: MutableMap<TarkasNavTab, PanelContent>) {
-    slots[TarkasNavTab.MUSIC] = PanelContent { s -> PlayerScreen(hooks(s), assets(s)) }
+    slots[TarkasNavTab.MUSIC] = PanelContent { s -> PlayerScreen(hooks(s), assets(s), onOpenLibrary = { s.selectTab(TarkasNavTab.LIBRARY) }) }
+    // D10: the compact player is the corner of every page; the old bar stays as the shell's fallback.
+    Panels.corner = CompactPlayerPanel
     Panels.transport = PanelContent { s -> MiniPlayer(s) }
     Panels.sidePlayer = SidePlayerPanel
-    Panels.queueStack = QueueStackPanel
+    // D6: the stack of queue cards lives in the expanded player now; the Home no longer gets it from here.
+    Panels.queueStack = null
   }
 
   /** The content of the shell's side pane for [kind]: queue, lyrics or track details. */
@@ -221,19 +232,35 @@ object PlayerHost {
 /** Window width from which the lyrics sit beside the cover (768 + 192 dp). */
 private val WIDE = Grid.u384 * 2 + Grid.u192
 
+/** What the lyrics area says: nothing playing, still reading, none found, or the lines themselves. */
+internal enum class LyricsStatus {
+  Idle, Loading, None, Ready;
+  companion object {
+    fun of(hasTrack: Boolean, settled: Boolean, lyrics: Lyrics?): LyricsStatus = when {
+      !hasTrack -> Idle
+      lyrics != null -> Ready
+      !settled -> Loading
+      else -> None
+    }
+  }
+}
+
+/** The cover of the page: 384 when the middle band holds it with two title lines and two artist lines under it, else 192. */
+internal fun pageCoverDp(bandHeightDp: Float): Int = if (bandHeightDp >= 384f + 12f + 96f) 384 else 192
+
 @Composable
-fun PlayerScreen(hooks: PlayerHooks, assets: TrackAssets) {
+fun PlayerScreen(hooks: PlayerHooks, assets: TrackAssets, onOpenLibrary: () -> Unit = {}) {
   val cs = MaterialTheme.colorScheme
   val t by hooks.state.collectAsState()
   val ui by hooks.controller.ui.collectAsState()
   val lyrics by assets.lyrics.collectAsState()
+  val lyricsReady by assets.lyricsReady.collectAsState()
   LaunchedEffect(t.track?.id) { assets.follow(t.track) }
   val art by assets.art.collectAsState()
   val sidePane by SidePane.current.collectAsState()
   val tint = t.track?.let { Color(it.colorHex or 0xFF000000) } ?: cs.primary
   BoxWithConstraints(Modifier.fillMaxSize()) {
     val wide = maxWidth >= WIDE
-    val tall = maxHeight >= Grid.u384 + Grid.u192 + Grid.u48
     // Drop one size step when the window is short, so the controls never fall off the bottom.
     val short = maxHeight < Grid.u384 + Grid.u96
     Row(Modifier.fillMaxSize()) {
@@ -249,16 +276,26 @@ fun PlayerScreen(hooks: PlayerHooks, assets: TrackAssets) {
           IconButton({ PlayerHost.paneToggler?.invoke(PlayerPane.QUEUE) }, Modifier.size(Grid.u48)) { Icon(Icons.Filled.QueueMusic, tr(Res.string.player_screen_queue), tint = if (sidePane?.id == PlayerPane.QUEUE.name) cs.primary else cs.onSurfaceVariant) }
         }
         // The middle band takes the room that is left; what is in it sits in the middle of it, not stuck to the top.
-        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Grid.u24), verticalAlignment = Alignment.CenterVertically) {
-          if (wide) {
-            Column(Modifier.width(Grid.u384), verticalArrangement = Arrangement.spacedBy(Grid.u12)) {
-              Cover(t.track, tint, art, if (tall) Grid.u384 else Grid.u192)
-              TrackInfo(t, ui.problem?.toString())
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+          val band = maxHeight
+          if (t.track == null) {
+            // Nothing playing is a state of its own: what it is, and the one thing to do about it. No cover, no lyrics pane.
+            EmptyState(
+              tr(Res.string.player_screen_nothing_playing), tr(Res.string.pd_empty_message),
+              Modifier.align(Alignment.Center).testTag("music_empty"), icon = Icons.Filled.MusicNote,
+            ) { PrimaryButton(tr(Res.string.pd_empty_action), onOpenLibrary, Modifier.testTag("music_empty_action")) }
+          } else Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(Grid.u24), verticalAlignment = Alignment.CenterVertically) {
+            if (wide) {
+              Column(Modifier.width(Grid.u384), verticalArrangement = Arrangement.spacedBy(Grid.u12)) {
+                // The cover steps down to 192 when the band cannot also hold the title and the artist under a 384 one.
+                Cover(t.track, tint, art, pageCoverDp(band.value).let { if (it == 384) Grid.u384 else Grid.u192 })
+                TrackInfo(t, ui.problem?.toString())
+              }
+              LyricsView(lyrics, lyricsReady, t, hooks, Modifier.weight(1f).fillMaxHeight())
+            } else {
+              Cover(t.track, tint, art, if (short) Grid.u96 else Grid.u192)
+              Column(Modifier.weight(1f)) { TrackInfo(t, ui.problem?.toString()) }
             }
-            LyricsView(lyrics, t, hooks, Modifier.weight(1f).fillMaxHeight())
-          } else {
-            Cover(t.track, tint, art, if (short) Grid.u96 else Grid.u192)
-            Column(Modifier.weight(1f)) { TrackInfo(t, ui.problem?.toString()) }
           }
         }
         SeekSection(hooks, t, Grid.u96, Modifier.fillMaxWidth())
@@ -285,7 +322,7 @@ internal fun TrackInfo(t: TransportState, problem: String?) {
   val cur = t.track
   Column(verticalArrangement = Arrangement.spacedBy(Grid.u6)) {
     Text(cur?.title ?: tr(Res.string.player_screen_nothing_playing), style = GridText.Title, color = cs.onBackground, maxLines = 2, overflow = TextOverflow.Ellipsis)
-    Text(cur?.let { listOf(it.artist, it.album).filter(String::isNotEmpty).joinToString(" · ") } ?: tr(Res.string.player_screen_pick_song),
+    Text(cur?.let { listOf(displayArtist(it.artist), it.album).filter(String::isNotEmpty).joinToString(" · ") } ?: tr(Res.string.player_screen_pick_song),
       style = GridText.Body, color = cs.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
     problem?.let { Text(it, style = GridText.Small, color = cs.primary) }
     t.error?.let { Text(it, style = GridText.Small, color = cs.primary) }
@@ -387,11 +424,15 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRectLine(c: Col
 // Lyrics -----------------------------------------------------------------------------------------------
 
 @Composable
-internal fun LyricsView(lyrics: Lyrics?, t: TransportState, hooks: PlayerHooks, modifier: Modifier) {
+internal fun LyricsView(lyrics: Lyrics?, settled: Boolean, t: TransportState, hooks: PlayerHooks, modifier: Modifier) {
   val cs = MaterialTheme.colorScheme
   if (lyrics == null) {
-    Box(modifier, contentAlignment = Alignment.Center) {
-      Text(tr(if (t.track == null) Res.string.pd_lyrics_loading else Res.string.lyrics_none), style = GridText.Body, color = cs.onSurfaceVariant)
+    val status = LyricsStatus.of(t.track != null, settled, null)
+    Box(modifier.testTag("lyrics_" + status.name.lowercase()), contentAlignment = Alignment.Center) {
+      Text(
+        tr(when (status) { LyricsStatus.Idle -> Res.string.pd_lyrics_idle; LyricsStatus.Loading -> Res.string.pd_lyrics_loading; else -> Res.string.lyrics_none }),
+        style = GridText.Body, color = cs.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(horizontal = Grid.u24),
+      )
     }
     return
   }
@@ -493,8 +534,9 @@ fun PlayerSidePane(hooks: PlayerHooks, assets: TrackAssets, kind: PlayerPane) {
       PlayerPane.QUEUE -> QueuePane(hooks)
       PlayerPane.LYRICS -> {
         val l by assets.lyrics.collectAsState()
+        val ready by assets.lyricsReady.collectAsState()
         val t by hooks.state.collectAsState()
-        LyricsView(l, t, hooks, Modifier.fillMaxSize())
+        LyricsView(l, ready, t, hooks, Modifier.fillMaxSize())
       }
       PlayerPane.DETAILS -> DetailsPane(hooks)
     }
@@ -568,7 +610,7 @@ internal fun QueuePane(hooks: PlayerHooks) {
             )
             Column(Modifier.weight(1f).clickable { c.playQueueItem(i) }) {
               Text(t.title, style = GridText.Body, color = cs.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-              if (t.artist.isNotEmpty()) Text(t.artist, style = GridText.Label, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+              if (t.artist.isNotEmpty()) Text(displayArtist(t.artist), style = GridText.Label, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             IconButton({ hooks.removeFromQueue(i) }, Modifier.size(Grid.u48)) { Icon(Icons.Filled.Close, remove, tint = cs.onSurfaceVariant) }
           }
@@ -597,7 +639,7 @@ private fun DetailsPane(hooks: PlayerHooks) {
   }
   val rows = listOf(
     tr(Res.string.pd_details_title) to cur.title,
-    tr(Res.string.pd_details_artist) to cur.artist,
+    tr(Res.string.pd_details_artist) to displayArtist(cur.artist),
     tr(Res.string.player_details_album) to cur.album,
     tr(Res.string.pd_details_duration) to SeekMath.label(if (t.durationMs > 0) t.durationMs else cur.durationMs),
     tr(Res.string.pd_details_file) to (cur.filePath ?: ""),

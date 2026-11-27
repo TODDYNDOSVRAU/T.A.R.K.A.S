@@ -4,6 +4,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -37,8 +39,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -89,10 +96,18 @@ object Panels {
   val slots: MutableMap<TarkasNavTab, PanelContent> = mutableMapOf()
   /** Top-band actions for each page. */
   val topActions: MutableMap<TarkasNavTab, TopActions> = mutableMapOf()
-  /** Legacy transport pill at the bottom (player area). Drawn only while [sidePlayer] is not registered. */
-  var transport: PanelContent? = null
-  /** Fixed player column at the left, full window height. Backed by state, so a late registration recomposes the shell. */
+  /**
+   * The bottom-left corner (owner D10, 2026-11-27): the compact mini-player on every page and, on the Home only, the
+   * floating art card above it. The player registers it and reads [LocalCornerInsets] to know which of the two to draw.
+   * While it is not registered, the shell draws [transport] there in a 384 x 96 glass pill.
+   */
+  var corner: PanelContent? by mutableStateOf(null)
+  /** Transport pill (player area), drawn in the corner while [corner] is not registered. */
+  var transport: PanelContent? by mutableStateOf(null)
+  /** Former player column. The shell no longer draws it (owner, 2026-11-27); kept so older registrations compile. */
   var sidePlayer: PanelContent? by mutableStateOf(null)
+  /** Replaces the route title at the top left for a page, such as the Home greeting. 384 wide when there is room. */
+  val topTitle: MutableMap<TarkasNavTab, PanelContent> = mutableStateMapOf()
   /** The player's stack of queue cards. The Home places and sizes it; the shell only keeps the registration. */
   var queueStack: PanelContent? by mutableStateOf(null)
   /** Ctrl+Q and Ctrl+L: the player registers what opens its queue and lyrics in the [SidePane]. */
@@ -118,34 +133,48 @@ object SidePane {
 }
 
 /**
- * The search. Its field lives in the [FloatingDock]; the Home reads [query] and shows the results. Ctrl+F on the
- * Biblioteca still bumps [requests], which focuses the field of the Biblioteca itself.
+ * The search lives in the Biblioteca (owner D1, 2026-11-27). Ctrl+F opens the Biblioteca and bumps [requests], which
+ * focuses its own field; the island has no field any more.
  */
 object ShellSearch {
   private val _requests = MutableStateFlow(0)
   val requests: StateFlow<Int> = _requests.asStateFlow()
   fun request() { _requests.value++ }
 
-  private val _query = MutableStateFlow("")
-  val query: StateFlow<String> = _query.asStateFlow()
-  private val _open = MutableStateFlow(false)
-  val isOpen: StateFlow<Boolean> = _open.asStateFlow()
-  private val _focus = MutableStateFlow(0)
-  /** Bumped by [openDock], so a second Ctrl+F refocuses a field that is already open. */
-  internal val focusRequests: StateFlow<Int> = _focus.asStateFlow()
+  /** Ctrl+F from any page: to the Biblioteca, its search focused. */
+  fun openLibrary(state: TarkasState) {
+    SidePane.close()
+    if (state.currentTab.value != TarkasNavTab.LIBRARY) state.selectTab(TarkasNavTab.LIBRARY)
+    request()
+  }
 
-  fun setQuery(q: String) { _query.value = q; if (q.isNotEmpty()) _open.value = true }
-  fun openDock() { _open.value = true; _focus.value++ }
-  /** Closes the field and clears the query; true if there was anything to close. */
-  fun close(): Boolean { val was = _open.value || _query.value.isNotEmpty(); _open.value = false; _query.value = ""; return was }
+  /** Former dock query. Always empty now; kept so the readers of the old contract compile until they move. */
+  val query: StateFlow<String> = MutableStateFlow("").asStateFlow()
+  /** Nothing to close any more; false, so Esc goes on to the next layer. */
+  fun close(): Boolean = false
 }
 
-/** Height of the top band that holds the dock. 72 = 48 + 24. */
-private val BandHeight = Grid.u48 + Grid.u24
-/** From this window width on, the side player gets 384 dp instead of 192. 1536 = 4 x 384. */
-private val WidePlayerWidth = Grid.u384 * 4
+/**
+ * What the shell tells the page about the bottom-left corner. [lane] is the width the corner takes from the left edge,
+ * [height] how much it takes from the bottom (24 dp margin included), [card] whether the art card is shown above the
+ * mini-player (Home only). The corner floats over the page; a page lays out around it ([LocalCornerInsets]) or pads its scrolling end with
+ * [LocalBarInset], which is [MiniPlayerInset] while the corner is shown.
+ */
+data class CornerInsets(val lane: Dp, val height: Dp, val card: Boolean)
 
-/** Side player, top band with the Floating Dock, main area and side pane, in the T.A.L. theme. */
+val LocalCornerInsets = staticCompositionLocalOf { CornerInsets(0.dp, 0.dp, false) }
+
+/** Height of the top band that holds the dock. 72 = 48 + 24. */
+internal val BandHeight = Grid.u48 + Grid.u24
+/** The mini-player: 384 x 96, 24 from the left and bottom edges. */
+internal val CornerWidth = Grid.u384
+internal val MiniPlayerHeight = Grid.u96
+/** Art card (192) plus the 12 gap above the mini-player. */
+internal val CardHeight = Grid.u192 + Grid.u12
+/** Bottom space every page keeps free for the mini-player: 96 + 24. */
+internal val MiniPlayerInset = MiniPlayerHeight + Grid.margin
+
+/** Top band with the Dynamic Island and Ajustes, main area with the corner player, side pane, in the T.A.L. theme. */
 @Composable
 fun TarkasShell(state: TarkasState, back: BackDispatcher, lifecycle: AppLifecycle) {
   val mode by state.themeMode.collectAsState()
@@ -165,44 +194,60 @@ fun TarkasShell(state: TarkasState, back: BackDispatcher, lifecycle: AppLifecycl
               while (true) {
                 val e = awaitPointerEvent(PointerEventPass.Initial)
                 if (e.type == PointerEventType.Press) e.changes.firstOrNull()?.let { ShellIsland.press(origin + it.position) }
+                // The silk lifts under the pointer (SilkBackdrop): it only reads where the pointer is.
+                when (e.type) {
+                  PointerEventType.Move, PointerEventType.Enter, PointerEventType.Press -> e.changes.firstOrNull()?.let {
+                    if (size.width > 0 && size.height > 0) ShellSilk.Pointer.at(it.position.x / size.width, it.position.y / size.height)
+                  }
+                  PointerEventType.Exit -> ShellSilk.Pointer.left()
+                  else -> {}
+                }
               }
             }
           },
       ) {
-        Backdrop()
+        val glassBackdrop = remember { GlassBackdrop() }
+        Backdrop(Modifier.recordsGlass(glassBackdrop, GlassPart.Back), still = reduce)
         val winW = maxWidth
-        val player = Panels.sidePlayer
-        val legacy = player == null && Panels.transport != null
-        val barInset = if (legacy) Grid.u96 + Grid.u6 else 0.dp
-        CompositionLocalProvider(LocalBarInset provides barInset) {
-          Row(Modifier.fillMaxSize()) {
-            if (player != null) {
-              Box(Modifier.width(if (winW >= WidePlayerWidth) Grid.u384 else Grid.u192).fillMaxHeight().background(glass()).testTag("side_player_slot")) {
-                player.Show(state)
+        val corner = Panels.corner
+        val transport = Panels.transport
+        // Música is the full player, with its own cover, progress and transport: the corner would repeat them over it.
+        val hasCorner = (corner != null || transport != null) && tab != TarkasNavTab.MUSIC
+        val card = tab == TarkasNavTab.HOME
+        val insets = if (!hasCorner) CornerInsets(0.dp, 0.dp, false)
+        else CornerInsets(CornerWidth + Grid.margin * 2, MiniPlayerInset + if (card) CardHeight else 0.dp, card)
+        // The page fills the whole height and the corner floats over it: no band is reserved at the bottom. Pages that
+        // scroll pad their own end by LocalBarInset so the last row can still leave the player.
+        CompositionLocalProvider(
+          LocalBarInset provides if (hasCorner) MiniPlayerInset else 0.dp,
+          LocalCornerInsets provides insets,
+          LocalGlassBackdrop provides glassBackdrop,
+        ) {
+          Row(Modifier.fillMaxSize().padding(top = BandHeight)) {
+            Box(Modifier.fillMaxHeight().weight(1f)) {
+              Box(Modifier.fillMaxSize().recordsGlass(glassBackdrop, GlassPart.Page).testTag("shell_content")) {
+                val panel = Panels.slots[tab]
+                if (panel != null) panel.Show(state) else Pending(tab)
               }
-              VerticalDivider(color = c.outlineVariant)
-            }
-            BoxWithConstraints(Modifier.fillMaxHeight().weight(1f)) {
-              val mainW = maxWidth
-              Box(Modifier.fillMaxSize().padding(top = BandHeight)) {
-                Box(Modifier.fillMaxSize().padding(bottom = barInset)) {
-                  val panel = Panels.slots[tab]
-                  if (panel != null) panel.Show(state) else Pending(tab)
-                }
-                Panels.overlay?.Show(state)
-                if (legacy) Panels.transport?.let { t ->
-                  Box(
-                    Modifier.align(Alignment.BottomCenter).padding(bottom = Grid.u6).width(Grid.u384).height(Grid.u96)
-                      .clip(Shapes.pill).background(glass()).border(Grid.hairline, c.onSurface.copy(alpha = 0.08f), Shapes.pill)
-                  ) { t.Show(state) }
-                }
+              if (hasCorner) Box(
+                Modifier.align(Alignment.BottomStart).padding(start = Grid.margin, bottom = Grid.margin)
+                  .width(CornerWidth).height(insets.height - Grid.margin).testTag("shell_corner"),
+                contentAlignment = Alignment.BottomStart,
+              ) {
+                if (corner != null) corner.Show(state)
+                else Box(
+                  Modifier.width(CornerWidth).height(MiniPlayerHeight)
+                    .clip(Shapes.pill).background(glass()).border(Grid.hairline, c.onSurface.copy(alpha = 0.08f), Shapes.pill),
+                ) { transport?.Show(state) }
               }
-              TopBand(state, tab, mainW, reduce)
+              Panels.overlay?.Show(state)
             }
             AnimatedVisibility(side != null, enter = expandHorizontally(tween(200)), exit = shrinkHorizontally(tween(150))) {
               side?.let { SidePaneView(it) }
             }
           }
+          // Window wide, after the main area: the island is centred on the window, whatever is open at the sides.
+          TopBand(state, tab, winW, reduce)
         }
         ToastHost(state.toaster)
       }
@@ -210,36 +255,60 @@ fun TarkasShell(state: TarkasState, back: BackDispatcher, lifecycle: AppLifecycl
   }
 }
 
-/** Main-area width under which the dock turns into its compact toggle. */
-internal val CompactDockBelow: Dp get() = DockEngine.reservedWidth(NavOrder.size + 1).dp + Grid.u48
+/** Window width under which the island turns into its compact toggle. 403.2 + 48 = 451.2 dp. */
+internal val CompactDockBelow: Dp get() = DockEngine.reservedWidth(DockPages.size).dp + Grid.u48
 
 /**
- * Where am I and where can I go: the dock at the top centre, the route title at the left when there is room for it,
- * the page's actions at the right. The band does not clip, so magnified tiles may reach over the top of the content.
+ * Where am I and where can I go: the island at the top centre of the window, the route title (or what the page puts
+ * there, such as the Home greeting) at the left when there is room for it, the page's actions and the one Ajustes
+ * button (Ctrl+,) at the right. The band does not clip, so magnified tiles may reach over the top of the content.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TopBand(state: TarkasState, tab: TarkasNavTab, mainW: Dp, reduce: Boolean) {
+private fun TopBand(state: TarkasState, tab: TarkasNavTab, winW: Dp, reduce: Boolean) {
   val c = MaterialTheme.colorScheme
-  val compact = mainW < CompactDockBelow
-  val dockW = if (compact) Grid.u192 + Grid.u96 else DockEngine.reservedWidth(NavOrder.size + 1).dp
-  val room = (mainW - dockW) / 2
-  Box(Modifier.fillMaxWidth()) {
+  val compact = winW < CompactDockBelow
+  val dockW = if (compact) Grid.u192 + Grid.u96 else DockEngine.reservedWidth(DockPages.size).dp
+  val room = (winW - dockW) / 2
+  val playing by state.isPlaying.collectAsState()
+  // Read only by the island's drawing, so the play position never recomposes the band.
+  val pos = state.positionMs.collectAsState()
+  val dur = state.durationMs.collectAsState()
+  val settingsLabel = stringResource(TarkasNavTab.SETTINGS.label)
+  Box(Modifier.fillMaxWidth().testTag("top_band")) {
     Row(Modifier.fillMaxWidth().height(BandHeight).padding(horizontal = Grid.margin), verticalAlignment = Alignment.CenterVertically) {
-      if (room >= Grid.u192 + Grid.margin) {
-        Text(stringResource(tab.label), style = GridText.Title, color = c.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(Grid.u192))
+      val titleW = when {
+        room >= Grid.u384 + Grid.margin -> Grid.u384
+        room >= Grid.u192 + Grid.margin -> Grid.u192
+        else -> 0.dp
+      }
+      if (titleW > 0.dp) Box(Modifier.width(titleW).testTag("top_title"), contentAlignment = Alignment.CenterStart) {
+        val custom = Panels.topTitle[tab]
+        if (custom != null) custom.Show(state)
+        else Text(stringResource(tab.label), style = GridText.Title, color = c.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
       }
       Box(Modifier.weight(1f))
-      Panels.topActions[tab]?.let { a ->
-        Row(horizontalArrangement = Arrangement.spacedBy(Grid.u12), verticalAlignment = Alignment.CenterVertically) { with(a) { Show(state) } }
+      Row(horizontalArrangement = Arrangement.spacedBy(Grid.u12), verticalAlignment = Alignment.CenterVertically) {
+        Panels.topActions[tab]?.let { a -> with(a) { Show(state) } }
+        TooltipArea(tooltip = { Tooltip("$settingsLabel  Ctrl+,") }, delayMillis = 400) {
+          val on = tab == TarkasNavTab.SETTINGS
+          IconButton(
+            onClick = { SidePane.close(); state.selectTab(TarkasNavTab.SETTINGS) },
+            modifier = Modifier.size(Grid.u48).testTag("top_settings").semantics { contentDescription = settingsLabel; selected = on },
+          ) {
+            Icon(Icons.Outlined.Settings, contentDescription = null, tint = if (on) c.primary else c.onSurfaceVariant, modifier = Modifier.size(Grid.u24))
+          }
+        }
       }
     }
     FloatingDock(
       current = tab,
       onSelect = { state.selectTab(it) },
-      onTyped = { if (state.currentTab.value != TarkasNavTab.HOME) { SidePane.close(); state.selectTab(TarkasNavTab.HOME) } },
       reduceMotion = reduce,
       compact = compact,
       modifier = Modifier.align(Alignment.TopCenter).padding(top = Grid.u6),
+      playing = playing,
+      fraction = { val d = dur.value; if (d > 0L) pos.value.toFloat() / d else 0f },
     )
   }
 }

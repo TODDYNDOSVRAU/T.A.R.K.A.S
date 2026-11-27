@@ -31,9 +31,6 @@ val LocalReducedMotion = compositionLocalOf { false }
 @Composable
 fun rememberReducedMotion(): Boolean = LocalReducedMotion.current
 
-/** Space the floating bars take at the bottom; the desktop has none, so it stays 0. */
-val LocalBarInset = compositionLocalOf { 0.dp }
-
 /** A page opened inside the tab: pushes in on the gel spring, leaves critically damped. */
 fun subPageTransition(forward: Boolean, reduced: Boolean): ContentTransform {
   if (reduced) return EnterTransition.None togetherWith ExitTransition.None

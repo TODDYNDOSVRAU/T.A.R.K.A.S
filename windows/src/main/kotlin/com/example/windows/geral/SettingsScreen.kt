@@ -40,6 +40,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.ui.theme.GridText
@@ -229,6 +233,12 @@ private fun settingsGroups(state: TarkasState, svc: GeralServices): List<Row> {
         }
       }
     },
+    Row("nickname apelido nome name greeting saudação", SettingsLayer.ESSENTIAL, Cat.LOOK) {
+      Column {
+        GroupHeader(w("Saudação", "Greeting"))
+        InsetGroup { NicknameRow(state) }
+      }
+    },
     Row("accessibility acessibilidade motion movimento", SettingsLayer.ESSENTIAL, Cat.LOOK) {
       Column {
         GroupHeader(w("Acessibilidade", "Accessibility"))
@@ -398,4 +408,72 @@ private const val EMPTY_EXPORT =
 private fun pickFile(mode: Int, name: String): File? {
   val d = FileDialog(null as java.awt.Frame?, if (mode == FileDialog.SAVE) "Salvar" else "Abrir", mode).apply { file = name; isVisible = true }
   return d.file?.let { File(d.directory, it) }
+}
+
+/** D8: the nickname the Início greeting uses. Empty keeps the Windows account name (shown as the placeholder). */
+@Composable
+private fun NicknameRow(state: TarkasState) {
+  val saved by state.nickname.collectAsState()
+  NicknameField(saved, TarkasState.greetingName("", System.getProperty("user.name")), state::setNickname)
+}
+
+/**
+ * Stateless so it can be tested. The text is kept locally and saved on Enter, on focus loss and when the page
+ * closes: one write per edit instead of one per keystroke.
+ */
+@Composable
+internal fun NicknameField(saved: String, fallback: String, onCommit: (String) -> Unit) {
+  val c = MaterialTheme.colorScheme
+  var text by remember(saved) { mutableStateOf(saved) }
+  val commit by androidx.compose.runtime.rememberUpdatedState(onCommit)
+  // One gate for the three save paths: a value is sent once, and nothing after the page is gone (the focus system
+  // reports a last blur after disposal, with the field's state already dropped).
+  val gate = remember { CommitGate(saved) }
+  remember(saved) { gate.sync(saved) }   // a value restored from elsewhere becomes the new baseline
+  fun save() = gate.offer(text) { commit(it) }
+  val saveOnClose by androidx.compose.runtime.rememberUpdatedState({ save() })
+  androidx.compose.runtime.DisposableEffect(Unit) { onDispose { saveOnClose(); gate.close() } }
+  val focus = androidx.compose.ui.platform.LocalFocusManager.current
+  Column(Modifier.fillMaxWidth().padding(horizontal = Grid.inset, vertical = Grid.u12), verticalArrangement = Arrangement.spacedBy(Grid.u6)) {
+    Text(w("Apelido", "Nickname"), style = GridText.Body, color = c.onSurface)
+    Text(
+      if (fallback.isEmpty()) w("Usado na saudação do Início. Opcional.", "Used by the Início greeting. Optional.")
+      else w("Usado na saudação do Início. Vazio usa o nome do Windows ($fallback).", "Used by the Início greeting. Empty uses the Windows name ($fallback)."),
+      style = GridText.Small, color = c.onSurfaceVariant
+    )
+    androidx.compose.foundation.layout.Row(
+      Modifier.fillMaxWidth().height(Grid.u48).clip(Grid.r12).background(c.surfaceContainerHighest).padding(horizontal = Grid.inset),
+      verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Grid.u12)
+    ) {
+      Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+        if (text.isEmpty()) Text(fallback.ifEmpty { w("Seu nome", "Your name") }, style = GridText.Body, color = c.onSurfaceVariant, maxLines = 1)
+        androidx.compose.foundation.text.BasicTextField(
+          value = text,
+          onValueChange = { text = it.filterNot(Char::isISOControl).take(TarkasState.NICKNAME_MAX) },
+          singleLine = true,
+          textStyle = GridText.Body.copy(color = c.onSurface),
+          cursorBrush = androidx.compose.ui.graphics.SolidColor(c.primary),
+          keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { save(); focus.clearFocus() }),
+          keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+          modifier = Modifier.fillMaxWidth().testTag("settings_nickname")
+            .onPreviewKeyEvent { e ->
+              if (e.type == androidx.compose.ui.input.key.KeyEventType.KeyDown && e.key == androidx.compose.ui.input.key.Key.Enter) {
+                save(); focus.clearFocus(); true
+              } else false
+            }
+            .onFocusChanged { if (!it.isFocused) save() }
+        )
+      }
+      // Characters left, in the metrics face, so the limit is never a surprise.
+      Text("${text.length}/${TarkasState.NICKNAME_MAX}", style = GridText.Label, color = c.onSurfaceVariant)
+    }
+  }
+}
+
+/** Sends a value only when it differs from the last one sent, and nothing once closed. */
+internal class CommitGate(private var last: String) {
+  private var open = true
+  fun offer(value: String, send: (String) -> Unit) { if (open && value != last) { last = value; send(value) } }
+  fun close() { open = false }
+  fun sync(saved: String) { last = saved }
 }

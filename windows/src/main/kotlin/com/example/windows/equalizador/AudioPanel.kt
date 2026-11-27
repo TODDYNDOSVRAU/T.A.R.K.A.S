@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import com.example.data.autoeq.AutoEqRepository
 import com.example.ui.viewmodel.TarkasNavTab
 import com.example.windows.player.PlayerHost
+import com.example.windows.shell.IslandActivity
 import com.example.windows.shell.PanelContent
 import com.example.windows.state.TarkasState
 import java.io.File
@@ -31,6 +32,20 @@ object AudioHost {
   }
 
   fun shutdown() { s?.saveEqNow() }
+
+  private val islandIcon = kotlinx.coroutines.flow.MutableStateFlow<androidx.compose.ui.graphics.vector.ImageVector?>(null)
+
+  /** Tells the Island which output the sound goes to; null is the Windows default. */
+  fun publishOutput(mixer: String?) { islandIcon.value = outputIcon(mixer) }
+
+  /**
+   * Registers the output icon of the collapsed Island from the saved choice, so it shows before the Áudio tab
+   * is ever opened (the Áudio state itself is built on first visit).
+   */
+  fun registerIsland(state: TarkasState) {
+    publishOutput(state.settings.get(AudioState.G, AudioState.K_OUTPUT)?.takeIf { it.isNotEmpty() })
+    IslandActivity.output = islandIcon
+  }
 
   fun register(slots: MutableMap<TarkasNavTab, PanelContent>) {
     slots[TarkasNavTab.AUDIO] = PanelContent { st -> AudioPanel(audio(st), st) }

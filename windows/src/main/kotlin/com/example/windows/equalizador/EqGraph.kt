@@ -62,10 +62,13 @@ private fun EqSettings.responseKey(): EqSettings = copy(
   virtualizerStrength = 0
 )
 
+/** Horizontal inset of the curve plot and of the graphic faders: they share it so a fader sits under its dot. */
+internal val PLOT_INSET = Grid.u24
+
 /**
  * The real frequency response of the whole chain (bands, tone shelves and preamp), computed from the
  * same filter maths the audio uses, over 31 Hz to 16 kHz on a log scale. The live spectrum sits behind
- * it; each band shows as a dot, for reading only. The plot is inset 12 dp on each side, so the x of a
+ * it; each band shows as a dot, for reading only. The plot is inset 24 dp on each side (PLOT_INSET), so the x of a
  * frequency here is the x of the same frequency in the band area under the card (graphic faders sit
  * exactly under their dots). A 24 dp axis row under the plot prints 31 / 250 / 2k / 16k.
  */
@@ -162,8 +165,8 @@ internal fun EqGraph(
   ) {
     Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
       Canvas(modifier = Modifier.fillMaxSize()) {
-        // The plot is inset 12 dp each side: the same x as the faders under the card.
-        inset(horizontal = Grid.inset.toPx(), vertical = 0f) {
+        // The plot is inset 24 dp each side: the same x as the faders under the card.
+        inset(horizontal = PLOT_INSET.toPx(), vertical = 0f) {
           val w = size.width
           val h = size.height
 
@@ -176,9 +179,16 @@ internal fun EqGraph(
           }
           // Each gain line says what it is, just above it at the left edge: +12 +6 0 -6 -12 dB.
           val labelStyle = EqType.Mono.copy(color = label)
-          listOf(12f, 6f, 0f, -6f, -12f).forEach { db ->
+          // A short plot (the curve at half height) keeps the labels that do not touch another: 0 first, then
+          // the ends, then +-6, so the zero line is always named.
+          val drawnY = ArrayList<Float>(5)
+          listOf(0f, 12f, -12f, 6f, -6f).forEach { db ->
             val text = measurer.measure(formatDb(db), labelStyle, maxLines = 1)
-            drawText(text, topLeft = Offset(Grid.u6.toPx(), dbToY(db, h) - text.size.height - Grid.hairline.toPx()))
+            val y = dbToY(db, h)
+            if (drawnY.none { kotlin.math.abs(it - y) < text.size.height + 2f }) {
+              drawText(text, topLeft = Offset(Grid.u6.toPx(), y - text.size.height - Grid.hairline.toPx()))
+              drawnY += y
+            }
           }
 
           // Live spectrum behind the curve (nothing while nothing plays)
@@ -256,15 +266,15 @@ internal fun EqGraph(
     // The axis row: 31 / 250 / 2k / 16k, each centred on its x in the plot, except the two ends: the
     // first starts at the 12 dp inset and the last ends at the right inset, so neither leaves the card.
     BoxWithConstraints(modifier = Modifier.fillMaxWidth().height(Grid.u24)) {
-      val plot = maxWidth - Grid.inset * 2
+      val plot = maxWidth - PLOT_INSET * 2
       val ticks = listOf("31" to 31f, "250" to 250f, "2k" to 2000f, "16k" to 16000f)
       ticks.forEachIndexed { position, (text, f) ->
         val first = position == 0
         val last = position == ticks.size - 1
         val x = when {
-          first -> Grid.inset
-          last -> maxWidth - Grid.inset - Grid.u48
-          else -> Grid.inset + plot * freqToX(f) - Grid.u24
+          first -> PLOT_INSET - Grid.u12
+          last -> maxWidth - PLOT_INSET + Grid.u12 - Grid.u48
+          else -> PLOT_INSET + plot * freqToX(f) - Grid.u24
         }
         Text(
           text,

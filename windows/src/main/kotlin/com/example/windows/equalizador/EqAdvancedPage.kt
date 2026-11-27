@@ -132,7 +132,7 @@ import com.example.ui.components.ListRow
 import com.example.ui.components.RadioRow
 import com.example.ui.components.SubPageHeader
 import com.example.ui.components.SwitchRow
-import com.example.windows.equalizador.LocalBarInset
+import com.example.ui.theme.LocalBarInset
 import com.example.windows.equalizador.AudioMotion
 import com.example.windows.equalizador.rememberReducedMotion
 import kotlinx.coroutines.delay

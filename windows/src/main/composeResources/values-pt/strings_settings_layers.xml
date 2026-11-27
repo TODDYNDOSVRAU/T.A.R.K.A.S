@@ -5,4 +5,5 @@
     <string name="settings_layer_advanced">Avançado</string>
     <string name="settings_layer_engineering">Engenharia</string>
     <string name="settings_search_empty">Nenhum ajuste corresponde a "%1$s". Confira a grafia ou limpe a busca.</string>
+    <string name="settings_search_clear">Limpar busca</string>
 </resources>

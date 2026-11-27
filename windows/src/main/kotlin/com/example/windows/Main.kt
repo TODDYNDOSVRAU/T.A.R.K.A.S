@@ -55,7 +55,7 @@ fun main(args: Array<String>) = application {
       is Command.Seek -> pc.seekBy(cmd.deltaMs)
       is Command.Volume -> pc.volumeBy(cmd.delta)
       // Ctrl+F: the Biblioteca keeps its own field; everywhere else the search of the dock opens.
-      Command.Search -> if (state.currentTab.value == com.example.ui.viewmodel.TarkasNavTab.LIBRARY) ShellSearch.request() else ShellSearch.openDock()
+      Command.Search -> ShellSearch.openLibrary(state)
       is Command.Go -> { SidePane.close(); state.selectTab(cmd.tab) }
       Command.Queue -> Panels.toggleQueue?.invoke() ?: return false
       Command.Lyrics -> Panels.toggleLyrics?.invoke() ?: return false
@@ -82,6 +82,8 @@ fun main(args: Array<String>) = application {
       PlayerHost.register(Panels.slots) // win-player
       com.example.windows.biblioteca.BibliotecaHost.register(Panels.slots) // win-biblioteca
       com.example.windows.equalizador.AudioHost.register(Panels.slots) // win-audio
+      com.example.windows.equalizador.AudioHost.registerIsland(state) // win-audio: output icon on the Island
+      com.example.windows.assistente.AssistentePanels.create(state).install(Panels.slots) // win-assistente: the ASSISTANT page
       win.addWindowFocusListener(object : java.awt.event.WindowAdapter() {
         override fun windowGainedFocus(e: java.awt.event.WindowEvent?) = lifecycle.setResumed(true)
         override fun windowLostFocus(e: java.awt.event.WindowEvent?) = lifecycle.setResumed(false)

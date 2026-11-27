@@ -60,6 +60,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
+import com.example.windows.biblioteca.displayArtist
 import com.example.windows.res.Res
 import com.example.windows.res.lyrics_title
 import com.example.windows.res.pd_pane_details
@@ -95,7 +96,7 @@ fun TransportBar(state: TarkasState) {
     Panels.toggleQueue = { toggle(PlayerPane.QUEUE) }
     Panels.toggleLyrics = { toggle(PlayerPane.LYRICS) }
     Panels.closeOverlay = ExpandedPlayer::close
-    if (Panels.overlay == null) Panels.overlay = PanelContent { s -> ExpandedPlayerPanel(PlayerHost.hooks(s), PlayerHost.assets(s)) }
+    if (Panels.overlay == null) Panels.overlay = PanelContent { s -> val reduced by s.reduceMotion.collectAsState(); ExpandedPlayerPanel(PlayerHost.hooks(s), PlayerHost.assets(s), reduced) }
   }
   Row(Modifier.fillMaxSize().padding(horizontal = Grid.margin), verticalAlignment = Alignment.CenterVertically) {
     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Grid.u12)) {
@@ -106,7 +107,7 @@ fun TransportBar(state: TarkasState) {
           BarCover(s, Modifier.size(Grid.u48).clip(Grid.r6).clickable(enabled = s.track != null) { ExpandedPlayer.toggle() })
           Column(Modifier.weight(1f)) {
             Text(s.track?.title ?: tr(Res.string.player_screen_nothing_playing), style = GridText.BodyStrong, color = cs.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(s.track?.artist.orEmpty(), style = GridText.Small, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(displayArtist(s.track?.artist.orEmpty()), style = GridText.Small, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
           }
         }
       }

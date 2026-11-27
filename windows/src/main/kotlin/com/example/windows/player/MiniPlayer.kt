@@ -40,6 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
 import com.example.ui.theme.Shapes
+import com.example.windows.biblioteca.displayArtist
 import com.example.windows.res.Res
 import com.example.windows.res.lyrics_title
 import com.example.windows.res.pd_pane_details
@@ -89,7 +90,7 @@ internal fun PlayerShellWiring(hooks: PlayerHooks, assets: TrackAssets) {
     Panels.toggleQueue = { toggle(PlayerPane.QUEUE) }
     Panels.toggleLyrics = { toggle(PlayerPane.LYRICS) }
     Panels.closeOverlay = ExpandedPlayer::close
-    if (Panels.overlay == null) Panels.overlay = PanelContent { s -> ExpandedPlayerPanel(PlayerHost.hooks(s), PlayerHost.assets(s)) }
+    if (Panels.overlay == null) Panels.overlay = PanelContent { s -> val reduced by s.reduceMotion.collectAsState(); ExpandedPlayerPanel(PlayerHost.hooks(s), PlayerHost.assets(s), reduced) }
   }
 }
 
@@ -116,7 +117,7 @@ internal fun MiniPlayerBody(hooks: PlayerHooks, assets: TrackAssets, modifier: M
           BarCover(s, Modifier.size(Grid.u48).clip(Shapes.pill))
           Column(Modifier.weight(1f)) {
             Text(s.track?.title ?: tr(Res.string.player_screen_nothing_playing), style = GridText.BodyStrong, color = cs.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(s.track?.artist.orEmpty(), style = GridText.Small, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(displayArtist(s.track?.artist.orEmpty()), style = GridText.Small, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
           }
         }
       }

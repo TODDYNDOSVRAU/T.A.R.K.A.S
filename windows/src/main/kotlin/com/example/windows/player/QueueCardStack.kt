@@ -67,6 +67,7 @@ import com.example.data.model.Track
 import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
 import com.example.windows.biblioteca.CoverLoader
+import com.example.windows.biblioteca.displayArtist
 import com.example.windows.res.Res
 import com.example.windows.res.stack_announce
 import com.example.windows.res.stack_empty
@@ -375,7 +376,7 @@ private fun CardText(track: Track, status: String, front: Boolean, shown: Boolea
       modifier = Modifier.rise(a0).semantics { liveRegion = LiveRegionMode.Polite }.testTag("stack_status"),
     )
     Text(track.title, style = GridText.BodyStrong, color = cs.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.rise(a1).testTag("stack_title"))
-    Text(track.artist, style = GridText.Small, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.rise(a2).testTag("stack_artist"))
+    Text(displayArtist(track.artist), style = GridText.Small, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.rise(a2).testTag("stack_artist"))
     Text(track.album, style = GridText.Small, color = cs.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.rise(a3).testTag("stack_album"))
   }
 }
