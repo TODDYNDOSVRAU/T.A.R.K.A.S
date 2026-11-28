@@ -290,8 +290,8 @@ fun LibraryScreen(lib: BibliotecaState, modifier: Modifier = Modifier) {
             )
             IconAction(Icons.Filled.PlayArrow, tr(Res.string.library_play), { actions.playAll(tracks) })
             IconAction(Icons.Filled.Shuffle, tr(Res.string.library_shuffle), { actions.playAll(tracks.shuffled()) })
-            IconAction(Icons.Filled.CreateNewFolder, lt("Add music folder", "Adicionar pasta de músicas"), { chooseFolder(lib) })
-            IconAction(Icons.Filled.FileOpen, lt("Add audio files", "Adicionar arquivos de áudio"), { chooseFiles(onFiles) })
+            IconAction(Icons.Filled.CreateNewFolder, lt("Add music folder", "Adicionar pasta de músicas"), { chooseFolder(lib) { lib.app.showNotice(it) } })
+            IconAction(Icons.Filled.FileOpen, lt("Add audio files", "Adicionar arquivos de áudio"), { chooseFiles(onFiles) { lib.app.showNotice(it) } })
             IconAction(Icons.Filled.Refresh, tr(Res.string.library_refresh), { lib.rescan() })
           }
           if (scanning) Text(
@@ -299,7 +299,7 @@ fun LibraryScreen(lib: BibliotecaState, modifier: Modifier = Modifier) {
             modifier = Modifier.padding(horizontal = Grid.u12)
           )
           when {
-            tracks.isEmpty() -> Box(Modifier.weight(1f).fillMaxWidth().padding(bottom = LocalBarInset.current)) { Empty(lib, source, query, everScanned, library.isEmpty(), { chooseFiles(onFiles) }, Modifier.fillMaxSize()) }
+            tracks.isEmpty() -> Box(Modifier.weight(1f).fillMaxWidth().padding(bottom = LocalBarInset.current)) { Empty(lib, source, query, everScanned, library.isEmpty(), onFiles, Modifier.fillMaxSize()) }
             else -> TrackTable(
               tracks, selection, { selection = it }, sort,
               { c -> sort = sort?.click(c) ?: SortSpec(c, c != Col.PLAYS) },
@@ -345,31 +345,27 @@ fun LibraryScreen(lib: BibliotecaState, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun Empty(lib: BibliotecaState, source: Source, query: String, everScanned: Boolean, libraryEmpty: Boolean, onAddFiles: () -> Unit, modifier: Modifier = Modifier) {
+private fun Empty(lib: BibliotecaState, source: Source, query: String, everScanned: Boolean, libraryEmpty: Boolean, onFiles: (List<File>) -> Unit, outer: Modifier = Modifier) {
   val roots by lib.roots.collectAsState()
+  val folder = rememberGlassFolderState()
+  // A press outside the Glass Folder closes it; the whole empty area watches for it.
+  val modifier = outer.glassFolderDismiss(folder)
   when {
     query.isNotBlank() -> EmptyState(tr(Res.string.library_search_empty_title), trNow(Res.string.library_search_empty_songs, query), modifier)
     source == Source.All && !everScanned && libraryEmpty -> EmptyState(tr(Res.string.library_loading_songs), "", modifier)
     source == Source.All -> if (roots.isEmpty()) EmptyState(
       lt("Your library is empty", "Sua biblioteca está vazia"),
       lt("Add a folder from this computer, or drop audio files and folders anywhere in this window.", "Adicione uma pasta deste computador ou solte arquivos e pastas de áudio em qualquer lugar desta janela."),
-      modifier, Icons.Filled.LibraryMusic
+      modifier
     ) {
-      Row(horizontalArrangement = Arrangement.spacedBy(Grid.u12)) {
-        PrimaryButton(lt("Add music folder…", "Adicionar pasta de músicas…"), { chooseFolder(lib) })
-        TonalButton(lt("Add audio files…", "Adicionar arquivos de áudio…"), onAddFiles)
-      }
+      LibraryFolderPicker(lib, roots, folder, onFiles)
     }
     else EmptyState(
       lt("No songs in your folders", "Nenhuma música nas suas pastas"),
       lt("${roots.size} folders are scanned and none has audio files the folder rules allow. Add another folder or scan again.", "${roots.size} pastas são verificadas e nenhuma tem arquivos de áudio permitidos pelas regras. Adicione outra pasta ou verifique de novo."),
-      modifier, Icons.Filled.LibraryMusic
+      modifier
     ) {
-      Row(horizontalArrangement = Arrangement.spacedBy(Grid.u12)) {
-        PrimaryButton(lt("Add music folder…", "Adicionar pasta de músicas…"), { chooseFolder(lib) })
-        TonalButton(lt("Add audio files…", "Adicionar arquivos de áudio…"), onAddFiles)
-        TonalButton(tr(Res.string.library_refresh), { lib.rescan() })
-      }
+      LibraryFolderPicker(lib, roots, folder, onFiles)
     }
     source == Source.Favorites -> EmptyState(tr(Res.string.library_favorites_empty_title), tr(Res.string.library_favorites_empty_message), modifier)
     source is Source.PlaylistOf -> EmptyState(tr(Res.string.library_playlist_empty_title), tr(Res.string.library_playlist_empty_message), modifier)

@@ -166,3 +166,14 @@ Read as the lowest visible intensity, not as off (`GlassEffect.None` and the fal
 | none light (0.55) | 14.88 | 4.61 | 7.24 | 4.57 |
 
 - **Open:** the accent `primary` as text on the pill (a playback problem in the artist line, the time while scrubbing) is 4.15 / 3.60 over the worst silk in the light theme (regular / clear), under 4.5. The play glyph is a graphic (3:1) and passes. Left as is, pending the owner's choice (a darker accent for text, or `onSurface` for the problem line).
+
+## Cards behind the art card of the Home (owner via win-geral, 2026-11-27)
+
+The playing cover keeps its 192 x 192 and its lean toward the pointer (`TiltCard`, untouched); the next two tracks of the queue sit smaller behind it, as in the owner's video. The Player page's `QueueCardStack` is unchanged (only `loadCover` and `CardCover` became `internal` to be shared).
+
+- **Where:** `player/ArtCardStack.kt`. `ArtCard` in `CompactPlayer.kt` wraps the same `TiltCard` in `ArtCardStack`; the corner's layout (card 24 from the pill, 12 gap, pill 384 x 96) does not move. The stack's own box is 192 + 45 dp wide so nothing grows the corner.
+- **Geometry (`ArtStackMath`, pure, tested):** the `Fan.Narrow` fan of the queue stack, reduced to the card: scale 1 / 0.93 / 0.86, centre shifted 24 / 45.6 dp to the right, sunk by `0.42 * (1 - scale)`, veiled with the page background 0 / 0.3 / 0.6. Hover opens the fan x1.3 with a tilt of 1.6 degrees per slot (`StackTuning.OpenFactor`).
+- **Which tracks:** `neighbors()` current + the next `MaxBack = 2` (same source as the Player page), so it follows queue, shuffle and repeat. The manual Next wraps at the end of the list whatever the repeat mode, so the last song shows the first one behind it. One song or an empty queue draws no card behind.
+- **Motion:** GPU-only (`graphicsLayer`), springs `0.72 / StackTuning.PoseK` per card keyed by the track id, so on Next the card behind rises to the front's place and on Previous the old current card slides back behind. Reduced motion places every card at once (`snap`).
+- **Click:** the sliver of a card behind plays that track (`playCard`, same call as the Player page); the front card still opens the expanded player.
+- **Evidence:** `ArtCardStackTest` (15 tests: numbers, corner unchanged, next / previous / wrap, click on the sliver, front click, hover, reduced motion) and `ArtCardStackRenderTest`, which writes light and dark prints at 1280 x 800 and 1920 x 1080 into `windows/build/art-stack-render/`, with a one-song baseline that proves the pixels behind the card.

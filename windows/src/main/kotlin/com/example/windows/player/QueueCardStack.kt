@@ -285,7 +285,7 @@ private fun FrameLoop(engine: QueueStackEngine) {
   }
 }
 
-private suspend fun loadCover(t: Track): ImageBitmap? = when (val p = CoverSource.pick(t)) {
+internal suspend fun loadCover(t: Track): ImageBitmap? = when (val p = CoverSource.pick(t)) {
   is CoverSource.Remote -> CoverLoader.load(p.url) ?: t.filePath?.let { f -> withContext(Dispatchers.IO) { CoverArt.load(File(f)) } }
   is CoverSource.Local -> withContext(Dispatchers.IO) { CoverArt.load(p.file) }
   CoverSource.None -> null
@@ -345,7 +345,7 @@ private fun StackCardView(
 }
 
 @Composable
-private fun CardCover(track: Track, art: ImageBitmap?, modifier: Modifier, shape: androidx.compose.ui.graphics.Shape) {
+internal fun CardCover(track: Track, art: ImageBitmap?, modifier: Modifier, shape: androidx.compose.ui.graphics.Shape) {
   if (art != null) {
     Image(art, null, modifier.clip(shape), contentScale = ContentScale.Crop, filterQuality = FilterQuality.High)
   } else {

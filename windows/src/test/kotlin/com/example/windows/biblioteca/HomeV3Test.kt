@@ -48,29 +48,25 @@ class HomeV3Test {
   @Test fun aWideWindowCentresTheColumnAndLeavesTheCornerTheFreeMargin() {
     val l = HomeLayout.lanes(2100.dp, corner)
     assertEquals((2100.dp - HomeLayout.ColumnMax) / 2, l.start)
-    assertEquals(l.start, l.lowerStart)
     assertEquals(l.start, l.end)
     assertTrue("the free margin must hold the lane", l.start >= corner.lane)
-    assertEquals(0.dp, l.lowerExtra)
   }
 
-  @Test fun aMediumWindowStartsTheLowerSectionsAfterTheLane() {
+  @Test fun aMediumWindowStartsTheWholeColumnAfterTheLane() {
     val l = HomeLayout.lanes(1366.dp, corner)
-    assertEquals(24.dp, l.start)
-    assertEquals(432.dp, l.lowerStart)
-    assertEquals(408.dp, l.lowerExtra)
+    assertEquals(432.dp, l.start)
     assertEquals(24.dp, l.end)
   }
 
   @Test fun aNarrowWindowOrAPageWithoutTheCardStepsAsideForNothing() {
     for (l in listOf(HomeLayout.lanes(900.dp, corner), HomeLayout.lanes(1366.dp, CornerInsets(432.dp, 120.dp, false)), HomeLayout.lanes(1366.dp, CornerInsets(0.dp, 0.dp, false)))) {
-      assertEquals(24.dp, l.start); assertEquals(24.dp, l.lowerStart); assertEquals(24.dp, l.end)
+      assertEquals(24.dp, l.start); assertEquals(24.dp, l.end)
     }
   }
 
   @Test fun theBreakpointIsInclusive() {
-    assertEquals(432.dp, HomeLayout.lanes(1024.dp, corner).lowerStart)
-    assertEquals(24.dp, HomeLayout.lanes(1023.dp, corner).lowerStart)
+    assertEquals(432.dp, HomeLayout.lanes(1024.dp, corner).start)
+    assertEquals(24.dp, HomeLayout.lanes(1023.dp, corner).start)
   }
 
   private fun seeded(): Pair<TarkasState, BibliotecaState> {
@@ -87,7 +83,7 @@ class HomeV3Test {
     return app to lib
   }
 
-  private fun lowerLefts(width: Int, insets: CornerInsets): List<Float> {
+  private fun sectionLefts(width: Int, insets: CornerInsets): List<Float> {
     val (_, lib) = seeded()
     var lefts = emptyList<Float>()
     runDesktopComposeUiTest(width, 4000) {
@@ -99,19 +95,19 @@ class HomeV3Test {
         }
       }
       waitForIdle(); Thread.sleep(1200); waitForIdle()
-      lefts = onAllNodesWithTag("home-lower").fetchSemanticsNodes().indices.map { onAllNodesWithTag("home-lower")[it].getBoundsInRoot().left.value }
+      lefts = onAllNodesWithTag(TAG_SECTION).fetchSemanticsNodes().indices.map { onAllNodesWithTag(TAG_SECTION)[it].getBoundsInRoot().left.value }
     }
     return lefts
   }
 
-  @Test fun onAMediumWindowTheLowerSectionsClearTheCornerLane() {
-    val lefts = lowerLefts(1366, corner)
-    assertTrue("the lower sections must be drawn", lefts.isNotEmpty())
-    lefts.forEach { assertTrue("lower section starts at $it, under 432", it >= 432f) }
+  @Test fun onAMediumWindowEverySectionClearsTheCornerLane() {
+    val lefts = sectionLefts(1366, corner)
+    assertTrue("the sections must be drawn", lefts.isNotEmpty())
+    lefts.forEach { assertTrue("section starts at $it, under 432", it >= 432f) }
   }
 
   @Test fun onANarrowWindowNothingStepsAside() {
-    val lefts = lowerLefts(900, corner)
+    val lefts = sectionLefts(900, corner)
     assertTrue(lefts.isNotEmpty())
     lefts.forEach { assertEquals(24f, it, 0.5f) }
   }

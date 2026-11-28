@@ -34,27 +34,6 @@ import com.example.ui.theme.Grid
 import com.example.ui.theme.GridText
 import com.example.ui.theme.LocalBarInset
 import com.example.windows.res.*
-import javax.swing.JFileChooser
-import javax.swing.SwingUtilities
-
-/** Opens the system folder chooser and adds the folder to the scanned ones. */
-fun chooseFolder(lib: BibliotecaState) {
-  SwingUtilities.invokeLater {
-    val chooser = JFileChooser().apply { fileSelectionMode = JFileChooser.DIRECTORIES_ONLY }
-    if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) lib.addRoot(chooser.selectedFile)
-  }
-}
-
-/** Opens the system chooser for audio files (and folders); [onPicked] gets what was chosen, the same as a drop on the window. */
-fun chooseFiles(onPicked: (List<java.io.File>) -> Unit) {
-  SwingUtilities.invokeLater {
-    val chooser = JFileChooser().apply {
-      fileSelectionMode = JFileChooser.FILES_AND_DIRECTORIES
-      isMultiSelectionEnabled = true
-    }
-    if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) onPicked(chooser.selectedFiles.toList())
-  }
-}
 
 /** Asks for a playlist name. [onDone] gets the text as typed; the store trims it and supplies a default when empty. */
 @Composable
@@ -84,7 +63,7 @@ fun FoldersPane(lib: BibliotecaState, modifier: Modifier = Modifier) {
         tr(Res.string.library_folders_title), style = GridText.BodyStrong, color = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier.weight(1f)
       )
-      IconAction(Icons.Filled.Add, tr(Res.string.library_import_file), { chooseFolder(lib) })
+      IconAction(Icons.Filled.Add, tr(Res.string.library_import_file), { chooseFolder(lib) { lib.app.showNotice(it) } })
     }
     Text(
       tr(Res.string.library_folders_note), style = GridText.Small, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -92,7 +71,7 @@ fun FoldersPane(lib: BibliotecaState, modifier: Modifier = Modifier) {
     )
     if (rows.isEmpty()) {
       EmptyState(tr(Res.string.library_folders_empty_title), tr(Res.string.library_folders_empty_message)) {
-        PrimaryButton(tr(Res.string.library_import_audio), { chooseFolder(lib) })
+        PrimaryButton(tr(Res.string.library_import_audio), { chooseFolder(lib) { lib.app.showNotice(it) } })
       }
       return
     }

@@ -35,7 +35,11 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.inset
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.drawText
@@ -45,8 +49,11 @@ import com.example.data.audio.dsp.EqDsp
 import com.example.data.model.EqSettings
 import com.example.ui.theme.Grid
 import com.example.windows.equalizador.rememberReducedMotion
+import org.jetbrains.skia.BlendMode
+import org.jetbrains.skia.Paint
+import org.jetbrains.skia.VertexMode
 /** Points along the frequency axis. Enough for a smooth curve at phone width, few enough to redo per frame. */
-private const val CURVE_POINTS = 128
+internal const val CURVE_POINTS = 128
 
 /** The curve card: 168 dp of plot and a 24 dp axis row, 192 dp in all. */
 
@@ -105,6 +112,9 @@ internal fun EqGraph(
   val from = remember { target.copyOf() }
   val morph = remember { Animatable(1f) }
   val lastChange = remember { longArrayOf(0L) }
+  // Reused every frame: the fill's vertex buffer and its paint (Zero-Allocation in the Canvas).
+  val strip = remember { FloatArray(FILL_STRIP_FLOATS) }
+  val fillPaint = remember { Paint().apply { isAntiAlias = true } }
   LaunchedEffect(target) {
     val now = System.nanoTime() / 1_000_000L
     val continuous = now - lastChange[0] < 160
@@ -169,6 +179,11 @@ internal fun EqGraph(
         inset(horizontal = PLOT_INSET.toPx(), vertical = 0f) {
           val w = size.width
           val h = size.height
+
+          // The curves are clipped to the plot rectangle (a plain scissor). A curve clamped to +-(range + 3) dB
+          // still lies outside [0, h]; unclipped it ran over the axis row and met the card's rounded clip, which
+          // the GPU rasterises in coverage blocks (the checkerboard seen in the 2026-11-27 video).
+          clipRect(0f, 0f, w, h) {
 
           // Grid: 0 dB, ±6 and ±12 dB; the 250 Hz and 2 kHz marks of the axis row
           listOf(-12f, -6f, 6f, 12f).forEach { db -> drawLine(grid, Offset(0f, dbToY(db, h)), Offset(w, dbToY(db, h)), 1f) }
@@ -240,17 +255,19 @@ internal fun EqGraph(
             val y = dbToY(db.coerceIn(-GRAPH_DB_RANGE - 3f, GRAPH_DB_RANGE + 3f), h)
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
           }
-          val fill = Path().apply {
-            addPath(path)
-            lineTo(w, dbToY(0f, h))
-            lineTo(0f, dbToY(0f, h))
-            close()
+          // The fill is a triangle strip, not a Path: it never goes through the path-mask rasteriser (see fillStrip).
+          fillStrip(shown, w, h, strip)
+          drawIntoCanvas { canvas ->
+            fillPaint.color = line.copy(alpha = 0.06f * dim).toArgb()
+            canvas.nativeCanvas.drawVertices(VertexMode.TRIANGLE_STRIP, strip, null, null, null, BlendMode.SRC_OVER, fillPaint)
           }
           // The curve is drawn in the text colour; the accent is kept for the band that is selected.
-          drawPath(fill, line.copy(alpha = 0.06f * dim))
           drawPath(path, line.copy(alpha = dim), style = Stroke(width = Grid.u6.toPx() / 3f, cap = StrokeCap.Round))
+          }
 
-          // Band nodes: small neutral dots, the selected one larger and in the accent
+          // Band nodes: small neutral dots, the selected one larger and in the accent (their y is already
+          // limited to +-range, so they stay inside the plot; drawn outside the clip so a band at the very
+          // ends of the axis is not cut in half)
           settings.bands.forEachIndexed { i, band ->
             val pos = nodePosition(curveKey, i, w, h)
             val isSel = i == selectedBand
@@ -290,6 +307,50 @@ internal fun EqGraph(
       }
     }
   }
+}
+
+/** Most vertices the fill strip can hold: one pair per curve point plus one pair per 0 dB crossing. */
+internal const val FILL_STRIP_VERTICES = 2 * (2 * CURVE_POINTS - 1)
+internal const val FILL_STRIP_FLOATS = FILL_STRIP_VERTICES * 2
+
+/**
+ * Writes the fill under the curve [db] (towards 0 dB) as a TRIANGLE_STRIP into [out] (x, y pairs) and returns the
+ * number of vertices that carry geometry; the rest of [out] repeats the last vertex (zero-area triangles), because
+ * Skia reads the whole array. Each curve point gives a pair (curve, 0 dB). Where the curve crosses 0 dB between two
+ * points, a pair of coincident vertices on the zero line is inserted at the crossing, so the strip turns into one
+ * triangle above and one below instead of a self-overlapping bow tie: every pixel is covered once, so the fill's
+ * low alpha is never blended twice. The y of the curve is limited to +-(range + 3) dB like the stroke; the caller
+ * clips to the plot.
+ */
+internal fun fillStrip(db: FloatArray, w: Float, h: Float, out: FloatArray): Int {
+  val zeroY = dbToY(0f, h)
+  var n = 0
+  var prevDb = 0f
+  var prevX = 0f
+  for (i in db.indices) {
+    val x = i / (db.size - 1f) * w
+    val d = db[i]
+    if (i > 0 && prevDb * d < 0f) {
+      val xc = prevX + (x - prevX) * (prevDb / (prevDb - d))
+      n = putVertex(out, n, xc, zeroY)
+      n = putVertex(out, n, xc, zeroY)
+    }
+    n = putVertex(out, n, x, dbToY(d.coerceIn(-GRAPH_DB_RANGE - 3f, GRAPH_DB_RANGE + 3f), h))
+    n = putVertex(out, n, x, zeroY)
+    prevDb = d
+    prevX = x
+  }
+  val used = n
+  val lastX = out[2 * (used - 1)]
+  val lastY = out[2 * (used - 1) + 1]
+  while (n < FILL_STRIP_VERTICES) n = putVertex(out, n, lastX, lastY)
+  return used
+}
+
+private fun putVertex(out: FloatArray, n: Int, x: Float, y: Float): Int {
+  out[2 * n] = x
+  out[2 * n + 1] = y
+  return n + 1
 }
 
 /** Where band [i] of [s] (a [responseKey]) is drawn: at its gain for peaks and shelves, on the curve for passes. */

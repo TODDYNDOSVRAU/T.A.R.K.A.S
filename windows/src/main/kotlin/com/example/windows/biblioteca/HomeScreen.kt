@@ -190,7 +190,8 @@ fun HomeScreen(lib: BibliotecaState, modifier: Modifier = Modifier, query: Strin
   val reduce by lib.app.reduceMotion.collectAsState()
   CompositionLocalProvider(LocalSnap provides reduce, LocalCoverFade provides !reduce) {
   BoxWithConstraints(modifier.fillMaxSize()) {
-    val stackWidth = queueWidth(maxWidth)
+    // The stack column is reserved only when a stack is drawn; otherwise the page owns the full width (and the lanes are measured on it).
+    val stackWidth = if (queueStack != null) queueWidth(maxWidth) else 0.dp
     val pageWidth = maxWidth - stackWidth
     Row(Modifier.fillMaxSize()) {
       if (debounced.isNotBlank()) {
@@ -207,9 +208,9 @@ fun HomeScreen(lib: BibliotecaState, modifier: Modifier = Modifier, query: Strin
         }
       } else {
         // The player's corner (bottom left) takes a lane from the left edge: wide windows centre the column in the free
-        // margin, medium ones start the lower sections after the lane, narrow ones have no card to step around.
-        val lanes = HomeLayout.lanes(pageWidth,LocalCornerInsets.current, end = if (stackWidth > 0.dp) Grid.u12 else Grid.margin)
-        val lowerPad = Modifier.padding(start = lanes.lowerExtra)
+        // margin, medium ones start the whole column after the lane, narrow ones have no card to step around. Every
+        // section below shares that one left edge (contentPadding); none adds an indent of its own.
+        val lanes = HomeLayout.lanes(pageWidth, LocalCornerInsets.current, end = if (stackWidth > 0.dp) Grid.u12 else Grid.margin)
         // Which carousels show: empty ones and ones that only repeat the one before are skipped, and four at most.
         val picks = mixes.filter { it.id != featured?.id }
         val mine = libraryAlbums.filter { it.id != featured?.id }
@@ -228,11 +229,10 @@ fun HomeScreen(lib: BibliotecaState, modifier: Modifier = Modifier, query: Strin
           contentPadding = PaddingValues(start = lanes.start, end = lanes.end, top = Grid.u12, bottom = Grid.u24)
         ) {
           // The greeting lives in the shell's top band (BibliotecaHost registers it as the page title).
-          if (library.isEmpty()) item(key = "empty") { EmptyHint(lib) }
-          featured?.let { f -> item(key = "hero") { Hero(lib, f) } }
-          // The last carousel and what follows it are the ones that end up beside the player's art card.
-          for ((i, rail) in plan.withIndex()) item(key = rail) {
-            Column(if (i >= plan.lastIndex) lowerPad.testTag("home-lower") else Modifier) {
+          if (library.isEmpty()) item(key = "empty") { Box(Modifier.testTag(TAG_SECTION)) { EmptyHint(lib) } }
+          featured?.let { f -> item(key = "hero") { Box(Modifier.testTag(TAG_SECTION)) { Hero(lib, f) } } }
+          for (rail in plan) item(key = rail) {
+            Column(Modifier.testTag(TAG_SECTION)) {
               when (rail) {
                 "now" -> Rail(lt("Continue listening", "Continuar ouvindo"), "now", listening, { it.id }, "now" in showAll, ::toggle) { t -> TrackCard(lib, t, listening) }
                 "mix" -> Rail(lt("Made for you", "Feito para você"), "mix", picks, { it.id }, "mix" in showAll, ::toggle) { e -> EntryCard(lib, e) }
@@ -243,7 +243,7 @@ fun HomeScreen(lib: BibliotecaState, modifier: Modifier = Modifier, query: Strin
             }
           }
           item(key = "new") {
-            Column(lowerPad.testTag("home-lower")) {
+            Column(Modifier.testTag(TAG_SECTION)) {
               Shelf(lt("Free catalogues", "Catálogos gratuitos"), "new", "new" in showAll, fresh.size > 1, ::toggle)
               OnlineState(trendA, trendJ, fresh.isEmpty()) { reload++ }
               // The albums rail above, when it is shown, already has these covers; this one lists the other songs.
@@ -252,7 +252,7 @@ fun HomeScreen(lib: BibliotecaState, modifier: Modifier = Modifier, query: Strin
               if (others.isNotEmpty()) Cards(others, "new" in showAll, { it.id }) { t -> TrackCard(lib, t, others) }
             }
           }
-          ui.current?.let { c -> item(key = "about") { Box(lowerPad.testTag("home-lower")) { AboutCard(c, library) } } }
+          ui.current?.let { c -> item(key = "about") { Box(Modifier.testTag(TAG_SECTION)) { AboutCard(c, library) } } }
         }
       }
       if (queueStack != null && stackWidth > 0.dp) {
@@ -264,6 +264,9 @@ fun HomeScreen(lib: BibliotecaState, modifier: Modifier = Modifier, query: Strin
   }
   }
 }
+
+/** Every top-level section of the Início (hero, carousels, catalogues, about): they all share one left edge. */
+internal const val TAG_SECTION = "home-section"
 
 /** True where the page must not animate (reduced motion): every transition snaps. */
 internal val LocalSnap = staticCompositionLocalOf { false }

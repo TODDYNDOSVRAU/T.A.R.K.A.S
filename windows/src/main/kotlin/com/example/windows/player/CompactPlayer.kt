@@ -95,16 +95,19 @@ private fun ArtCard(hooks: PlayerHooks, assets: TrackAssets, reduced: Boolean) {
   val t by hooks.steady.collectAsState()
   val art by assets.art.collectAsState()
   val shown = Shown(t.track, art)
-  TiltCard(Modifier.size(Grid.u192).testTag("art_card"), reduced = reduced, keyboard = true) {
-    AnimatedContent(
-      targetState = shown,
-      modifier = Modifier.fillMaxSize()
-        .pointerHoverIcon(if (t.track != null) PointerIcon.Hand else PointerIcon.Default)
-        .clickable(enabled = t.track != null) { ExpandedPlayer.show() },
-      contentKey = { it.track?.id },
-      transitionSpec = { fadeIn(tween(CompactMath.FadeMs)).togetherWith(fadeOut(tween(CompactMath.FadeMs))) },
-      label = "artCard",
-    ) { s -> BarCover(s, Modifier.fillMaxSize().testTag("art_card_cover")) }
+  // The playing cover keeps its 192 and its lean; the next tracks of the queue sit smaller behind it (ArtCardStack).
+  ArtCardStack(hooks, assets, reduced) {
+    TiltCard(Modifier.size(Grid.u192).testTag("art_card"), reduced = reduced, keyboard = true) {
+      AnimatedContent(
+        targetState = shown,
+        modifier = Modifier.fillMaxSize()
+          .pointerHoverIcon(if (t.track != null) PointerIcon.Hand else PointerIcon.Default)
+          .clickable(enabled = t.track != null) { ExpandedPlayer.show() },
+        contentKey = { it.track?.id },
+        transitionSpec = { fadeIn(tween(CompactMath.FadeMs)).togetherWith(fadeOut(tween(CompactMath.FadeMs))) },
+        label = "artCard",
+      ) { s -> BarCover(s, Modifier.fillMaxSize().testTag("art_card_cover")) }
+    }
   }
 }
 
